@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ video.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .info-box {
+        padding: 1rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+    }
+    
+    .info-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        font-size: 0.875rem;
+    }
+    
+    .info-label {
+        color: hsl(var(--muted-foreground));
+    }
+    
+    .video-player {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        overflow: hidden;
+    }
+    
+    .status-banner {
+        padding: 1rem;
+        border-radius: var(--radius);
+        margin-bottom: 2rem;
+        text-align: center;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    .status-pending { background: hsl(var(--muted)); }
+    .status-processing { background: #fef3c7; color: #92400e; }
+    .status-completed { background: #d1fae5; color: #065f46; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+            <h2>{{ video.title }}</h2>
+            <p style="color: hsl(var(--muted-foreground)); margin-top: 0.5rem; font-size: 0.875rem;">
+                Proyecto: <a href="{% url 'core:project_detail' video.project.id %}" style="color: inherit;">{{ video.project.name }}</a>
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            {% if video.status == 'pending' %}
+            <form method="post" action="{% url 'core:video_generate' video.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Generar</button>
+            </form>
+            {% elif video.status == 'processing' %}
+            <button onclick="checkStatus()" class="btn">Verificar</button>
+            {% endif %}
+            <a href="{% url 'core:video_delete' video.id %}" class="btn btn-destructive">Eliminar</a>
+            <a href="{% url 'core:project_detail' video.project.id %}" class="btn">Volver</a>
+        </div>
+    </div>
+    
+    <div class="status-banner status-{{ video.status }}">
+        {% if video.status == 'pending' %}Pendiente de generación
+        {% elif video.status == 'processing' %}En proceso...
+        {% elif video.status == 'completed' %}Completado
+        {% else %}Error
+        {% endif %}
+    </div>
+    
+    {% if video.status == 'completed' and signed_url %}
+    <div class="video-player">
+        <video controls style="width: 100%; display: block;">
+            <source src="{{ signed_url }}" type="video/mp4">
+        </video>
+    </div>
+    {% endif %}
+    
+    {% if video.error_message %}
+    <div style="background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem; font-size: 0.875rem;">
+        <strong>Error:</strong> {{ video.error_message }}
+    </div>
+    {% endif %}
+</div>
+
+<div class="info-grid">
+    <div class="info-box">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Información</h3>
+        <div class="info-item">
+            <span class="info-label">Tipo:</span>
+            <span>{% if video.type == 'heygen_avatar' %}HeyGen{% else %}Gemini{% endif %}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Estado:</span>
+            <span>{{ video.get_status_display }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Creado:</span>
+            <span>{{ video.created_at|date:"d/m/Y H:i" }}</span>
+        </div>
+        {% if video.completed_at %}
+        <div class="info-item">
+            <span class="info-label">Completado:</span>
+            <span>{{ video.completed_at|date:"d/m/Y H:i" }}</span>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="info-box">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Detalles</h3>
+        {% if video.duration %}
+        <div class="info-item">
+            <span class="info-label">Duración:</span>
+            <span>{{ video.duration }}s</span>
+        </div>
+        {% endif %}
+        {% if video.resolution %}
+        <div class="info-item">
+            <span class="info-label">Resolución:</span>
+            <span>{{ video.resolution }}</span>
+        </div>
+        {% endif %}
+        {% if video.external_id %}
+        <div class="info-item">
+            <span class="info-label">External ID:</span>
+            <span style="font-family: monospace; font-size: 0.75rem;">{{ video.external_id|truncatechars:20 }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Guión / Prompt</h3>
+    <div style="background: hsl(var(--muted)); padding: 1rem; border-radius: var(--radius); white-space: pre-wrap; font-size: 0.875rem;">{{ video.script }}</div>
+</div>
+
+<script>
+function checkStatus() {
+    fetch('{% url "core:video_status" video.id %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'completed' || data.status === 'error') {
+                location.reload();
+            } else {
+                alert('Sigue en proceso');
+            }
+        })
+        .catch(error => alert('Error al verificar'));
+}
+
+{% if video.status == 'processing' %}
+setInterval(() => checkStatus(), 30000);
+{% endif %}
+</script>
+{% endblock %}
+

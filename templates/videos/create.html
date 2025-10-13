@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+
+{% block title %}Crear Video - {{ project.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .type-selector {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .type-option {
+        flex: 1;
+        padding: 1rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .type-option:hover {
+        border-color: hsl(var(--foreground));
+    }
+    
+    .type-option.selected {
+        border-color: hsl(var(--foreground));
+        background: hsl(var(--muted));
+    }
+    
+    .type-option input[type="radio"] {
+        display: none;
+    }
+    
+    .type-icon {
+        font-size: 1.5rem;
+    }
+    
+    .type-info h3 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .type-info p {
+        font-size: 0.75rem;
+        color: hsl(var(--muted-foreground));
+        margin: 0;
+    }
+    
+    .config-section {
+        display: none;
+    }
+    
+    .config-section.active {
+        display: block;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Crear Video</h2>
+    <p style="color: hsl(var(--muted-foreground)); margin-bottom: 2rem;">Proyecto: <strong>{{ project.name }}</strong></p>
+    
+    <form method="post" id="videoForm">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label>Título</label>
+            <input type="text" name="title" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Tipo de Video</label>
+            <div class="type-selector">
+                <label class="type-option" for="type-heygen">
+                    <input type="radio" name="type" id="type-heygen" value="heygen_avatar" required>
+                    <div class="type-icon">👤</div>
+                    <div class="type-info">
+                        <h3>HeyGen Avatar</h3>
+                        <p>Avatar con voz personalizada</p>
+                    </div>
+                </label>
+                
+                <label class="type-option" for="type-gemini">
+                    <input type="radio" name="type" id="type-gemini" value="gemini_veo" required>
+                    <div class="type-icon">🎨</div>
+                    <div class="type-info">
+                        <h3>Gemini Veo</h3>
+                        <p>Video AI de Google</p>
+                    </div>
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label id="scriptLabel">Guión / Prompt</label>
+            <textarea name="script" required></textarea>
+        </div>
+        
+        <!-- Config HeyGen -->
+        <div id="heygen-config" class="config-section">
+            <h3 style="margin-bottom: 1rem;">Configuración HeyGen</h3>
+            
+            <div class="form-group">
+                <label>Avatar</label>
+                <select name="avatar_id" id="avatar-select">
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Voice</label>
+                <select name="voice_id" id="voice-select">
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Velocidad</label>
+                    <input type="number" name="voice_speed" value="1.0" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Tono (Pitch)</label>
+                    <input type="number" name="voice_pitch" value="50">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Emoción</label>
+                <select name="voice_emotion">
+                    <option value="Excited">Excited</option>
+                    <option value="Serious">Serious</option>
+                    <option value="Friendly">Friendly</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="has_background" style="width: auto; margin-right: 0.5rem;">
+                    Fondo personalizado
+                </label>
+            </div>
+            
+            <div class="form-group" id="background-url-group" style="display: none;">
+                <label>URL del Fondo</label>
+                <input type="url" name="background_url">
+            </div>
+        </div>
+        
+        <!-- Config Gemini -->
+        <div id="gemini-config" class="config-section">
+            <h3 style="margin-bottom: 1rem;">Configuración Gemini</h3>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duración (seg)</label>
+                    <input type="number" name="duration" value="5">
+                </div>
+                
+                <div class="form-group">
+                    <label>Aspect Ratio</label>
+                    <select name="aspect_ratio">
+                        <option value="16:9">16:9</option>
+                        <option value="9:16">9:16</option>
+                        <option value="1:1">1:1</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; margin-top: 2rem;">
+            <button type="submit" class="btn btn-primary">Crear</button>
+            <a href="{% url 'core:project_detail' project.id %}" class="btn">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<script>
+// Load avatars and voices
+async function loadHeyGenData() {
+    try {
+        // Load avatars
+        const avatarsResponse = await fetch('{% url "core:api_list_avatars" %}');
+        const avatarsData = await avatarsResponse.json();
+        
+        const avatarSelect = document.getElementById('avatar-select');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        
+        if (avatarsData.avatars && avatarsData.avatars.length > 0) {
+            avatarsData.avatars.forEach(avatar => {
+                const option = document.createElement('option');
+                option.value = avatar.avatar_id;
+                option.textContent = `${avatar.avatar_name || avatar.avatar_id}`;
+                avatarSelect.appendChild(option);
+            });
+        } else {
+            avatarSelect.innerHTML = '<option value="">No hay avatares disponibles</option>';
+        }
+        
+        // Load voices
+        const voicesResponse = await fetch('{% url "core:api_list_voices" %}');
+        const voicesData = await voicesResponse.json();
+        
+        const voiceSelect = document.getElementById('voice-select');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        
+        if (voicesData.voices && voicesData.voices.length > 0) {
+            voicesData.voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.voice_id;
+                option.textContent = `${voice.display_name || voice.name || voice.voice_id} (${voice.language || ''})`;
+                voiceSelect.appendChild(option);
+            });
+        } else {
+            voiceSelect.innerHTML = '<option value="">No hay voces disponibles</option>';
+        }
+    } catch (error) {
+        console.error('Error loading HeyGen data:', error);
+        document.getElementById('avatar-select').innerHTML = '<option value="">Error al cargar avatares</option>';
+        document.getElementById('voice-select').innerHTML = '<option value="">Error al cargar voces</option>';
+    }
+}
+
+// Type selection
+document.querySelectorAll('.type-option').forEach(option => {
+    option.addEventListener('click', function() {
+        document.querySelectorAll('.type-option').forEach(opt => opt.classList.remove('selected'));
+        this.classList.add('selected');
+        
+        const type = this.querySelector('input').value;
+        document.querySelectorAll('.config-section').forEach(section => section.classList.remove('active'));
+        
+        if (type === 'heygen_avatar') {
+            document.getElementById('heygen-config').classList.add('active');
+            // Load HeyGen data only once when needed
+            if (document.getElementById('avatar-select').options.length === 1) {
+                loadHeyGenData();
+            }
+        } else {
+            document.getElementById('gemini-config').classList.add('active');
+        }
+    });
+});
+
+document.querySelector('input[name="has_background"]')?.addEventListener('change', function(e) {
+    document.getElementById('background-url-group').style.display = e.target.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %}
+

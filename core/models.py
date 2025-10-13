@@ -1,0 +1,133 @@
+from django.db import models
+from django.utils import timezone
+
+
+class Project(models.Model):
+    """Modelo para proyectos que agrupan videos"""
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Proyecto'
+        verbose_name_plural = 'Proyectos'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def video_count(self):
+        """Retorna el número de videos en el proyecto"""
+        return self.videos.count()
+
+    @property
+    def completed_videos(self):
+        """Retorna videos completados"""
+        return self.videos.filter(status='completed').count()
+
+
+class Video(models.Model):
+    """Modelo para videos generados por IA"""
+    
+    VIDEO_TYPES = [
+        ('heygen_avatar', 'HeyGen Avatar'),
+        ('gemini_veo', 'Gemini Veo'),
+    ]
+    
+    VIDEO_STATUS = [
+        ('pending', 'Pendiente'),
+        ('processing', 'Procesando'),
+        ('completed', 'Completado'),
+        ('error', 'Error'),
+    ]
+    
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='videos'
+    )
+    title = models.CharField(max_length=255)
+    type = models.CharField(max_length=20, choices=VIDEO_TYPES)
+    status = models.CharField(
+        max_length=20,
+        choices=VIDEO_STATUS,
+        default='pending'
+    )
+    
+    # Contenido y configuración
+    script = models.TextField(help_text='Guión del video')
+    config = models.JSONField(
+        default=dict,
+        help_text='Configuración específica (avatar_id, voice_id, background, etc.)'
+    )
+    
+    # Almacenamiento
+    gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta del video en Google Cloud Storage'
+    )
+    
+    # Metadatos del video
+    duration = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Duración en segundos'
+    )
+    resolution = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text='Resolución del video (ej: 1280x720)'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        help_text='Metadata adicional de la API'
+    )
+    
+    # Control de errores
+    error_message = models.TextField(blank=True, null=True)
+    
+    # API response tracking
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='ID del video en la plataforma externa (HeyGen, Gemini)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Video'
+        verbose_name_plural = 'Videos'
+
+    def __str__(self):
+        return f"{self.title} ({self.get_type_display()})"
+
+    def mark_as_processing(self):
+        """Marca el video como procesando"""
+        self.status = 'processing'
+        self.save(update_fields=['status', 'updated_at'])
+
+    def mark_as_completed(self, gcs_path=None, metadata=None):
+        """Marca el video como completado"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        if gcs_path:
+            self.gcs_path = gcs_path
+        if metadata:
+            self.metadata = metadata
+        self.save(update_fields=['status', 'completed_at', 'gcs_path', 'metadata', 'updated_at'])
+
+    def mark_as_error(self, error_message):
+        """Marca el video con error"""
+        self.status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['status', 'error_message', 'updated_at'])

@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} - Atenea{% endblock %}
+
+{% block extra_css %}
+<style>
+    .videos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1rem;
+    }
+    
+    .video-card {
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        overflow: hidden;
+    }
+    
+    .video-header {
+        padding: 1rem;
+        background: hsl(var(--muted));
+        border-bottom: 1px solid hsl(var(--border));
+    }
+    
+    .video-body {
+        padding: 1rem;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+    }
+    
+    .badge-pending { background: hsl(var(--muted)); }
+    .badge-processing { background: #fef3c7; color: #92400e; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-error { background: #fee2e2; color: #991b1b; }
+    
+    .stats-inline {
+        display: flex;
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    
+    .stat-box {
+        flex: 1;
+        padding: 1rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+            <h2>{{ project.name }}</h2>
+            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; margin-top: 0.5rem;">
+                Creado {{ project.created_at|date:"d/m/Y" }}
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary">+ Video</a>
+            <a href="{% url 'core:project_delete' project.id %}" class="btn btn-destructive">Eliminar</a>
+            <a href="{% url 'core:dashboard' %}" class="btn">Volver</a>
+        </div>
+    </div>
+    
+    <div class="stats-inline">
+        <div class="stat-box">
+            <div style="font-size: 1.5rem; font-weight: 700;">{{ project.video_count }}</div>
+            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Videos</div>
+        </div>
+        <div class="stat-box">
+            <div style="font-size: 1.5rem; font-weight: 700;">{{ project.completed_videos }}</div>
+            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Completados</div>
+        </div>
+        <div class="stat-box">
+            <div style="font-size: 1.5rem; font-weight: 700;">{{ videos|length|add:'-'|add:project.completed_videos|default:0 }}</div>
+            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">En Proceso</div>
+        </div>
+    </div>
+</div>
+
+{% if videos %}
+<div class="videos-grid">
+    {% for video in videos %}
+    <div class="video-card">
+        <div class="video-header">
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">{{ video.title }}</h3>
+            <span class="badge">{% if video.type == 'heygen_avatar' %}HeyGen{% else %}Gemini{% endif %}</span>
+            <span class="badge badge-{{ video.status }}">{{ video.get_status_display }}</span>
+        </div>
+        <div class="video-body">
+            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; margin-bottom: 1rem;">
+                {{ video.script|truncatewords:12 }}
+            </p>
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="{% url 'core:video_detail' video.id %}" class="btn" style="flex: 1;">Ver</a>
+                {% if video.status == 'pending' %}
+                <form method="post" action="{% url 'core:video_generate' video.id %}" style="flex: 1;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Generar</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 4rem 2rem; color: hsl(var(--muted-foreground));">
+    <h3>Sin videos</h3>
+    <p>Crea tu primer video</p>
+    <br>
+    <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary">+ Crear Video</a>
+</div>
+{% endif %}
+{% endblock %}
+

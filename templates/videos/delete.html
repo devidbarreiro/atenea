@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Eliminar Video{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 2rem auto;">
+    <h2>Confirmar Eliminación</h2>
+    
+    <p style="margin: 1.5rem 0;">
+        ¿Eliminar video <strong>"{{ video.title }}"</strong>?
+    </p>
+    
+    <div style="background: hsl(var(--muted)); padding: 1rem; border-radius: var(--radius); margin: 1.5rem 0; border: 1px solid hsl(var(--border)); font-size: 0.875rem;">
+        <strong>Info:</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>Proyecto: {{ video.project.name }}</li>
+            <li>Tipo: {% if video.type == 'heygen_avatar' %}HeyGen{% else %}Gemini{% endif %}</li>
+            <li>Estado: {{ video.get_status_display }}</li>
+        </ul>
+    </div>
+    
+    <form method="post" style="display: flex; gap: 0.5rem;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-destructive">Eliminar</button>
+        <a href="{% url 'core:video_detail' video.id %}" class="btn">Cancelar</a>
+    </form>
+</div>
+{% endblock %}
+

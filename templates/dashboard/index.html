@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Atenea{% endblock %}
+
+{% block extra_css %}
+<style>
+    .header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-inline {
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+    }
+    
+    .stat-item {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: hsl(var(--muted-foreground));
+    }
+    
+    .projects-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1rem;
+    }
+    
+    .project-card {
+        padding: 1.5rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        transition: border-color 0.2s;
+    }
+    
+    .project-card:hover {
+        border-color: hsl(var(--foreground));
+    }
+    
+    .project-card h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+    }
+    
+    .project-meta {
+        font-size: 0.875rem;
+        color: hsl(var(--muted-foreground));
+        margin-bottom: 1rem;
+    }
+    
+    .project-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 6rem 2rem;
+        border: 2px dashed hsl(var(--border));
+        border-radius: var(--radius);
+        color: hsl(var(--muted-foreground));
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+    
+    .empty-state h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: hsl(var(--foreground));
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-state p {
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+    <h2 style="margin-bottom: 0.5rem;">Dashboard</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="stats-inline">
+            <div class="stat-item">
+                <span class="stat-value">{{ projects.count }}</span>
+                <span class="stat-label">proyectos</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ total_videos }}</span>
+                <span class="stat-label">videos</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ completed_videos }}</span>
+                <span class="stat-label">completados</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ processing_videos }}</span>
+                <span class="stat-label">procesando</span>
+            </div>
+        </div>
+        <a href="{% url 'core:project_create' %}" class="btn btn-primary">Nuevo Proyecto</a>
+    </div>
+</div>
+
+{% if projects %}
+<div class="projects-grid">
+    {% for project in projects %}
+    <div class="project-card">
+        <h3>{{ project.name }}</h3>
+        <div class="project-meta">
+            <div>{{ project.video_count }} video{{ project.video_count|pluralize }}</div>
+            <div>{{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</div>
+            <div>{{ project.created_at|date:"d/m/Y" }}</div>
+        </div>
+        <div class="project-actions">
+            <a href="{% url 'core:project_detail' project.id %}" class="btn" style="flex: 1;">Ver</a>
+            <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary" style="flex: 1;">+ Video</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-state-icon">📁</div>
+    <h3>No hay proyectos</h3>
+    <p>Crea tu primer proyecto para comenzar a generar videos con IA</p>
+    <a href="{% url 'core:project_create' %}" class="btn btn-primary">Crear Primer Proyecto</a>
+</div>
+{% endif %}
+{% endblock %}
+
