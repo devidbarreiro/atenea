@@ -17,22 +17,27 @@ class GCSStorageManager:
     def upload_from_url(self, url: str, destination_path: str) -> str:
         """Descarga un archivo desde URL y lo sube a GCS"""
         try:
-            logger.info(f"Descargando desde {url}")
-            response = requests.get(url, stream=True)
+            logger.info(f"[GCS] Descargando archivo desde: {url}")
+            response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
             
+            content_length = len(response.content)
+            logger.info(f"[GCS] Archivo descargado: {content_length / (1024*1024):.2f} MB")
+            
             blob = self.bucket.blob(destination_path)
+            logger.info(f"[GCS] Subiendo a: {destination_path}")
+            
             blob.upload_from_string(
                 response.content,
                 content_type=response.headers.get('content-type', 'video/mp4')
             )
             
             gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{destination_path}"
-            logger.info(f"Subido a {gcs_path}")
+            logger.info(f"[GCS] ✅ Archivo subido exitosamente: {gcs_path}")
             return gcs_path
             
         except Exception as e:
-            logger.error(f"Error al subir: {str(e)}")
+            logger.error(f"[GCS] ❌ Error al subir archivo: {str(e)}")
             raise
     
     def upload_file(self, local_path: str, destination_path: str) -> str:
@@ -42,11 +47,42 @@ class GCSStorageManager:
             blob.upload_from_filename(local_path)
             
             gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{destination_path}"
-            logger.info(f"Subido a {gcs_path}")
+            logger.info(f"[GCS] Subido a {gcs_path}")
             return gcs_path
             
         except Exception as e:
-            logger.error(f"Error: {str(e)}")
+            logger.error(f"[GCS] Error: {str(e)}")
+            raise
+    
+    def upload_from_bytes(self, file_content: bytes, destination_path: str, content_type: str = 'image/jpeg') -> str:
+        """Sube contenido desde bytes a GCS"""
+        try:
+            logger.info(f"[GCS] Subiendo {len(file_content)} bytes a: {destination_path}")
+            
+            blob = self.bucket.blob(destination_path)
+            blob.upload_from_string(file_content, content_type=content_type)
+            
+            gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{destination_path}"
+            logger.info(f"[GCS] ✅ Subido exitosamente: {gcs_path}")
+            return gcs_path
+            
+        except Exception as e:
+            logger.error(f"[GCS] ❌ Error: {str(e)}")
+            raise
+    
+    def upload_django_file(self, django_file, destination_path: str) -> str:
+        """Sube un archivo de Django (UploadedFile) a GCS"""
+        try:
+            logger.info(f"[GCS] Subiendo archivo Django: {django_file.name} ({django_file.size} bytes)")
+            
+            # Leer contenido del archivo
+            file_content = django_file.read()
+            content_type = django_file.content_type or 'application/octet-stream'
+            
+            return self.upload_from_bytes(file_content, destination_path, content_type)
+            
+        except Exception as e:
+            logger.error(f"[GCS] ❌ Error al subir archivo Django: {str(e)}")
             raise
     
     def get_signed_url(self, gcs_path: str, expiration: int = 3600) -> str:
