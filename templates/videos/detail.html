@@ -4,168 +4,523 @@
 
 {% block extra_css %}
 <style>
-    .info-grid {
+    .detail-container {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
+        grid-template-columns: 1fr 380px;
+        gap: 1.5rem;
+        margin-top: 1rem;
     }
     
-    .info-box {
-        padding: 1rem;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
+    @media (max-width: 1024px) {
+        .detail-container {
+            grid-template-columns: 1fr;
+        }
     }
     
-    .info-item {
+    .main-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .video-header-compact {
         display: flex;
         justify-content: space-between;
-        padding: 0.5rem 0;
-        font-size: 0.875rem;
+        align-items: flex-start;
+        gap: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid hsl(var(--border));
     }
     
-    .info-label {
+    .video-title-section {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .video-title-section h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        line-height: 1.2;
+    }
+    
+    .video-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        font-size: 0.875rem;
         color: hsl(var(--muted-foreground));
     }
     
-    .video-player {
-        width: 100%;
-        max-width: 800px;
-        margin: 0 auto;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        overflow: hidden;
+    .actions-group {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
     }
     
-    .status-banner {
-        padding: 1rem;
+    .video-player-container {
+        position: relative;
+        width: 100%;
         border-radius: var(--radius);
-        margin-bottom: 2rem;
-        text-align: center;
+        overflow: hidden;
+        background: black;
+        border: 1px solid hsl(var(--border));
+    }
+    
+    .video-player-container video {
+        width: 100%;
+        display: block;
+    }
+    
+    .video-placeholder {
+        aspect-ratio: 16/9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: hsl(var(--muted));
+        color: hsl(var(--muted-foreground));
+        gap: 1rem;
+    }
+    
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius);
         font-size: 0.875rem;
         font-weight: 500;
     }
     
-    .status-pending { background: hsl(var(--muted)); }
-    .status-processing { background: #fef3c7; color: #92400e; }
-    .status-completed { background: #d1fae5; color: #065f46; }
-    .status-error { background: #fee2e2; color: #991b1b; }
+    .status-badge-pending {
+        background: hsl(var(--muted));
+        color: hsl(var(--muted-foreground));
+    }
+    
+    .status-badge-processing {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    
+    .status-badge-completed {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    
+    .status-badge-error {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    
+    .info-card {
+        background: white;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        padding: 1.25rem;
+    }
+    
+    .info-card-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: hsl(var(--muted-foreground));
+        margin: 0 0 1rem 0;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        font-size: 0.875rem;
+    }
+    
+    .info-row:not(:last-child) {
+        border-bottom: 1px solid hsl(var(--muted));
+    }
+    
+    .info-label {
+        color: hsl(var(--muted-foreground));
+        font-weight: 500;
+    }
+    
+    .info-value {
+        color: hsl(var(--foreground));
+        text-align: right;
+        font-family: ui-monospace, monospace;
+        font-size: 0.8125rem;
+    }
+    
+    .script-box {
+        background: white;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        padding: 1.25rem;
+    }
+    
+    .script-content {
+        background: hsl(var(--muted));
+        padding: 1rem;
+        border-radius: calc(var(--radius) - 2px);
+        white-space: pre-wrap;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: hsl(var(--foreground));
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .type-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        background: hsl(var(--foreground));
+        color: hsl(var(--background));
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .alert-error {
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        padding: 1rem;
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+        display: flex;
+        align-items: start;
+        gap: 0.75rem;
+    }
+    
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .config-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    
+    .config-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .config-item-label {
+        font-size: 0.75rem;
+        color: hsl(var(--muted-foreground));
+        font-weight: 500;
+    }
+    
+    .config-item-value {
+        font-size: 0.875rem;
+        color: hsl(var(--foreground));
+        font-family: ui-monospace, monospace;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: start;">
-        <div>
-            <h2>{{ video.title }}</h2>
-            <p style="color: hsl(var(--muted-foreground)); margin-top: 0.5rem; font-size: 0.875rem;">
-                Proyecto: <a href="{% url 'core:project_detail' video.project.id %}" style="color: inherit;">{{ video.project.name }}</a>
-            </p>
-        </div>
-        <div style="display: flex; gap: 0.5rem;">
-            {% if video.status == 'pending' %}
-            <form method="post" action="{% url 'core:video_generate' video.id %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-primary">Generar</button>
-            </form>
-            {% elif video.status == 'processing' %}
-            <button onclick="checkStatus()" class="btn">Verificar</button>
-            {% endif %}
-            <a href="{% url 'core:video_delete' video.id %}" class="btn btn-destructive">Eliminar</a>
-            <a href="{% url 'core:project_detail' video.project.id %}" class="btn">Volver</a>
-        </div>
-    </div>
-    
-    <div class="status-banner status-{{ video.status }}">
-        {% if video.status == 'pending' %}Pendiente de generación
-        {% elif video.status == 'processing' %}En proceso...
-        {% elif video.status == 'completed' %}Completado
-        {% else %}Error
-        {% endif %}
-    </div>
-    
-    {% if video.status == 'completed' and signed_url %}
-    <div class="video-player">
-        <video controls style="width: 100%; display: block;">
-            <source src="{{ signed_url }}" type="video/mp4">
-        </video>
-    </div>
-    {% endif %}
-    
-    {% if video.error_message %}
-    <div style="background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem; font-size: 0.875rem;">
-        <strong>Error:</strong> {{ video.error_message }}
-    </div>
-    {% endif %}
-</div>
-
-<div class="info-grid">
-    <div class="info-box">
-        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Información</h3>
-        <div class="info-item">
-            <span class="info-label">Tipo:</span>
-            <span>{% if video.type == 'heygen_avatar' %}HeyGen{% else %}Gemini{% endif %}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Estado:</span>
-            <span>{{ video.get_status_display }}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Creado:</span>
+<div class="video-header-compact">
+    <div class="video-title-section">
+        <h1>{{ video.title }}</h1>
+        <div class="video-meta">
+            <span class="type-badge">
+                {% if video.type == 'heygen_avatar_v2' %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    HeyGen Avatar V2
+                {% elif video.type == 'heygen_avatar_iv' %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    HeyGen Avatar IV
+                {% else %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                    Gemini Veo
+                {% endif %}
+            </span>
+            <span>•</span>
+            <a href="{% url 'core:project_detail' video.project.id %}" style="color: inherit; text-decoration: none;">
+                {{ video.project.name }}
+            </a>
+            <span>•</span>
             <span>{{ video.created_at|date:"d/m/Y H:i" }}</span>
         </div>
-        {% if video.completed_at %}
-        <div class="info-item">
-            <span class="info-label">Completado:</span>
-            <span>{{ video.completed_at|date:"d/m/Y H:i" }}</span>
-        </div>
+    </div>
+    <div class="actions-group">
+        {% if video.status == 'pending' %}
+        <form method="post" action="{% url 'core:video_generate' video.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Generar
+            </button>
+        </form>
+        {% elif video.status == 'processing' %}
+        <button onclick="checkStatus()" class="btn btn-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Verificar
+        </button>
         {% endif %}
+        <a href="{% url 'core:video_delete' video.id %}" class="btn btn-destructive btn-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        </a>
+    </div>
+</div>
+
+{% if video.error_message %}
+<div class="alert-error">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <div>
+        <strong>Error al generar el video</strong>
+        <p style="margin: 0.25rem 0 0 0;">{{ video.error_message }}</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="detail-container">
+    <div class="main-content">
+        <!-- Video Player -->
+        <div class="video-player-container">
+            {% if video.status == 'completed' and signed_url %}
+            <video controls>
+                <source src="{{ signed_url }}" type="video/mp4">
+            </video>
+            {% else %}
+            <div class="video-placeholder">
+                {% if video.status == 'pending' %}
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <p style="margin: 0; font-weight: 500;">Pendiente de generación</p>
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem;">Haz clic en "Generar" para crear el video</p>
+                {% elif video.status == 'processing' %}
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 2s linear infinite;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <p style="margin: 0; font-weight: 500;">Video en proceso</p>
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem;">Esto puede tardar varios minutos...</p>
+                {% else %}
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p style="margin: 0; font-weight: 500;">Error al procesar</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Script -->
+        <div class="script-box">
+            <h2 class="info-card-title">Guión / Prompt</h2>
+            <div class="script-content">{{ video.script }}</div>
+        </div>
     </div>
     
-    <div class="info-box">
-        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Detalles</h3>
-        {% if video.duration %}
-        <div class="info-item">
-            <span class="info-label">Duración:</span>
-            <span>{{ video.duration }}s</span>
+    <div class="sidebar">
+        <!-- Status -->
+        <div class="info-card">
+            <h2 class="info-card-title">Estado</h2>
+            <div style="display: flex; justify-content: center;">
+                <span class="status-badge status-badge-{{ video.status }}">
+                    {% if video.status == 'pending' %}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                        </svg>
+                        Pendiente
+                    {% elif video.status == 'processing' %}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        En proceso
+                    {% elif video.status == 'completed' %}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        Completado
+                    {% else %}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                        Error
+                    {% endif %}
+                </span>
+            </div>
         </div>
-        {% endif %}
-        {% if video.resolution %}
-        <div class="info-item">
-            <span class="info-label">Resolución:</span>
-            <span>{{ video.resolution }}</span>
+        
+        <!-- Detalles -->
+        <div class="info-card">
+            <h2 class="info-card-title">Detalles</h2>
+            <div>
+                {% if video.duration %}
+                <div class="info-row">
+                    <span class="info-label">Duración</span>
+                    <span class="info-value">{{ video.duration }}s</span>
+                </div>
+                {% endif %}
+                {% if video.resolution %}
+                <div class="info-row">
+                    <span class="info-label">Resolución</span>
+                    <span class="info-value">{{ video.resolution }}</span>
+                </div>
+                {% endif %}
+                <div class="info-row">
+                    <span class="info-label">Creado</span>
+                    <span class="info-value">{{ video.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+                {% if video.updated_at and video.status == 'completed' %}
+                <div class="info-row">
+                    <span class="info-label">Completado</span>
+                    <span class="info-value">{{ video.updated_at|date:"d/m/Y H:i" }}</span>
+                </div>
+                {% endif %}
+                {% if video.external_id %}
+                <div class="info-row">
+                    <span class="info-label">ID Externo</span>
+                    <span class="info-value">{{ video.external_id|truncatechars:12 }}</span>
+                </div>
+                {% endif %}
+            </div>
         </div>
-        {% endif %}
-        {% if video.external_id %}
-        <div class="info-item">
-            <span class="info-label">External ID:</span>
-            <span style="font-family: monospace; font-size: 0.75rem;">{{ video.external_id|truncatechars:20 }}</span>
+        
+        <!-- Configuración -->
+        {% if video.config %}
+        <div class="info-card">
+            <h2 class="info-card-title">Configuración</h2>
+            <div class="config-grid">
+                {% if video.type == 'heygen_avatar_v2' or video.type == 'heygen_avatar_iv' %}
+                <div class="config-item">
+                    <span class="config-item-label">Avatar ID</span>
+                    <span class="config-item-value">{{ video.config.avatar_id|truncatechars:15 }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-item-label">Voice ID</span>
+                    <span class="config-item-value">{{ video.config.voice_id|truncatechars:15 }}</span>
+                </div>
+                {% endif %}
+                
+                {% if video.type == 'heygen_avatar_v2' %}
+                {% if video.config.has_background %}
+                <div class="config-item">
+                    <span class="config-item-label">Fondo</span>
+                    <span class="config-item-value">Personalizado</span>
+                </div>
+                {% endif %}
+                <div class="config-item">
+                    <span class="config-item-label">Velocidad</span>
+                    <span class="config-item-value">{{ video.config.voice_speed }}x</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-item-label">Tono</span>
+                    <span class="config-item-value">{{ video.config.voice_pitch }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-item-label">Emoción</span>
+                    <span class="config-item-value">{{ video.config.voice_emotion }}</span>
+                </div>
+                {% elif video.type == 'heygen_avatar_iv' %}
+                <div class="config-item">
+                    <span class="config-item-label">Orientación</span>
+                    <span class="config-item-value">{{ video.config.video_orientation|capfirst }}</span>
+                </div>
+                {% elif video.type == 'gemini_veo' %}
+                <div class="config-item">
+                    <span class="config-item-label">Duración</span>
+                    <span class="config-item-value">{{ video.config.duration }}s</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-item-label">Aspect Ratio</span>
+                    <span class="config-item-value">{{ video.config.aspect_ratio }}</span>
+                </div>
+                {% endif %}
+            </div>
         </div>
         {% endif %}
     </div>
 </div>
 
-<div class="card">
-    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Guión / Prompt</h3>
-    <div style="background: hsl(var(--muted)); padding: 1rem; border-radius: var(--radius); white-space: pre-wrap; font-size: 0.875rem;">{{ video.script }}</div>
-</div>
+<style>
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
 
 <script>
+let pollCount = 0;
+
 function checkStatus() {
+    pollCount++;
+    console.log(`[POLLING #${pollCount}] Consultando estado del video...`);
+    
     fetch('{% url "core:video_status" video.id %}')
         .then(response => response.json())
         .then(data => {
-            if (data.status === 'completed' || data.status === 'error') {
+            console.log(`[POLLING #${pollCount}] Respuesta:`, data);
+            
+            if (data.status === 'completed') {
+                console.log('[POLLING] ✅ Video completado! Recargando página...');
+                location.reload();
+            } else if (data.status === 'error') {
+                console.log('[POLLING] ❌ Video con error! Recargando página...');
                 location.reload();
             } else {
-                alert('Sigue en proceso');
+                console.log(`[POLLING] ⏳ Video en estado: ${data.status}. Esperando 30s para siguiente consulta...`);
             }
         })
-        .catch(error => alert('Error al verificar'));
+        .catch(error => {
+            console.error(`[POLLING #${pollCount}] ❌ Error:`, error);
+        });
 }
 
-{% if video.status == 'processing' %}
-setInterval(() => checkStatus(), 30000);
-{% endif %}
+// Auto-polling si el video está en proceso
+if ('{{ video.status }}' === 'processing') {
+    console.log('[POLLING] Iniciando polling automático cada 30 segundos...');
+    // Primera consulta inmediata
+    checkStatus();
+    // Luego cada 30 segundos
+    setInterval(() => checkStatus(), 30000);
+}
 </script>
 {% endblock %}
-

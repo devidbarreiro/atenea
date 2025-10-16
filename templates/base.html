@@ -206,6 +206,48 @@
             min-height: 120px;
         }
         
+        .breadcrumbs {
+            padding: 1rem 0 0.5rem;
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+        }
+        
+        .breadcrumbs ol {
+            display: flex;
+            flex-wrap: wrap;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .breadcrumbs li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .breadcrumbs a {
+            color: hsl(var(--muted-foreground));
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .breadcrumbs a:hover {
+            color: hsl(var(--foreground));
+        }
+        
+        .breadcrumbs li:not(:last-child)::after {
+            content: "/";
+            color: hsl(var(--border));
+        }
+        
+        .breadcrumbs li:last-child {
+            color: hsl(var(--foreground));
+            font-weight: 500;
+        }
+        
         {% block extra_css %}{% endblock %}
     </style>
 </head>
@@ -231,6 +273,23 @@
     {% endif %}
     
     <div class="container">
+        {% if breadcrumbs %}
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <ol>
+                <li><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+                {% for crumb in breadcrumbs %}
+                <li>
+                    {% if crumb.url %}
+                    <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+                    {% else %}
+                    {{ crumb.label }}
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ol>
+        </nav>
+        {% endif %}
+        
         {% block content %}{% endblock %}
     </div>
     

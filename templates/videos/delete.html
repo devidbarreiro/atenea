@@ -14,7 +14,7 @@
         <strong>Info:</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li>Proyecto: {{ video.project.name }}</li>
-            <li>Tipo: {% if video.type == 'heygen_avatar' %}HeyGen{% else %}Gemini{% endif %}</li>
+            <li>Tipo: {% if video.type == 'heygen_avatar_v2' %}HeyGen Avatar V2{% elif video.type == 'heygen_avatar_iv' %}HeyGen Avatar IV{% else %}Gemini Veo{% endif %}</li>
             <li>Estado: {{ video.get_status_display }}</li>
         </ul>
     </div>
