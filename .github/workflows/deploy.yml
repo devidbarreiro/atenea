@@ -90,35 +90,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # deploy:
-  #   name: Deploy to Production
-  #   runs-on: ubuntu-latest
-  #   needs: build-and-push
-  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #   
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #     
-  #     # Aquí puedes agregar los pasos específicos de despliegue según tu plataforma:
-  #     # - Google Cloud Run
-  #     # - AWS ECS/Fargate
-  #     # - Azure Container Instances
-  #     # - DigitalOcean App Platform
-  #     # - Kubernetes
-  #     # - etc.
-  #     
-  #     # Ejemplo para Google Cloud Run:
-  #     # - name: Deploy to Cloud Run
-  #     #   uses: google-github-actions/deploy-cloudrun@v2
-  #     #   with:
-  #     #     service: atenea
-  #     #     region: us-central1
-  #     #     image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-  #     #     env_vars: |
-  #     #       SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
-  #     #       HEYGEN_API_KEY=${{ secrets.HEYGEN_API_KEY }}
-  #     #       GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-  #     #     secrets: |
-  #     #       GCS_CREDENTIALS=${{ secrets.GCS_CREDENTIALS }}
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            cd ~/atenea
+            git pull origin main
+            docker compose build
+            docker compose run --rm migrate
+            docker compose up -d
+            docker system prune -f
 
