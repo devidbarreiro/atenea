@@ -31,7 +31,8 @@ class Video(models.Model):
     """Modelo para videos generados por IA"""
     
     VIDEO_TYPES = [
-        ('heygen_avatar', 'HeyGen Avatar'),
+        ('heygen_avatar_v2', 'HeyGen Avatar V2'),
+        ('heygen_avatar_iv', 'HeyGen Avatar IV'),
         ('gemini_veo', 'Gemini Veo'),
     ]
     
