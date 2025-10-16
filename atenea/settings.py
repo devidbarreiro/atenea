@@ -130,7 +130,7 @@ GCS_BUCKET_NAME = config('GCS_BUCKET_NAME', default='devid-bucket-0001')
 GCS_PROJECT_ID = config('GCS_PROJECT_ID', default='proeduca-472312')
 GOOGLE_APPLICATION_CREDENTIALS = config(
     'GOOGLE_APPLICATION_CREDENTIALS',
-    default=str(BASE_DIR / 'proeduca-472312-4cae9909afa3.json')
+    default=str(BASE_DIR / 'credentials.json')
 )
 
 # Set the credentials path as environment variable for Google Cloud SDK
