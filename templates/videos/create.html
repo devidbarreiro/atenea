@@ -71,7 +71,7 @@
     <h2>Crear Video</h2>
     <p style="color: hsl(var(--muted-foreground)); margin-bottom: 2rem;">Proyecto: <strong>{{ project.name }}</strong></p>
     
-    <form method="post" id="videoForm">
+    <form method="post" id="videoForm" enctype="multipart/form-data">
         {% csrf_token %}
         
         <div class="form-group">
@@ -81,13 +81,22 @@
         
         <div class="form-group">
             <label>Tipo de Video</label>
-            <div class="type-selector">
-                <label class="type-option" for="type-heygen">
-                    <input type="radio" name="type" id="type-heygen" value="heygen_avatar" required>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+                <label class="type-option" for="type-heygen-v2">
+                    <input type="radio" name="type" id="type-heygen-v2" value="heygen_avatar_v2" required>
                     <div class="type-icon">👤</div>
                     <div class="type-info">
-                        <h3>HeyGen Avatar</h3>
-                        <p>Avatar con voz personalizada</p>
+                        <h3>HeyGen Avatar V2</h3>
+                        <p>Avatar con controles avanzados</p>
+                    </div>
+                </label>
+                
+                <label class="type-option" for="type-heygen-iv">
+                    <input type="radio" name="type" id="type-heygen-iv" value="heygen_avatar_iv" required>
+                    <div class="type-icon">🎭</div>
+                    <div class="type-info">
+                        <h3>HeyGen Avatar IV</h3>
+                        <p>Avatar interactivo mejorado</p>
                     </div>
                 </label>
                 
@@ -107,9 +116,9 @@
             <textarea name="script" required></textarea>
         </div>
         
-        <!-- Config HeyGen -->
-        <div id="heygen-config" class="config-section">
-            <h3 style="margin-bottom: 1rem;">Configuración HeyGen</h3>
+        <!-- Config HeyGen V2 -->
+        <div id="heygen-v2-config" class="config-section">
+            <h3 style="margin-bottom: 1rem;">Configuración HeyGen Avatar V2</h3>
             
             <div class="form-group">
                 <label>Avatar</label>
@@ -156,6 +165,78 @@
             <div class="form-group" id="background-url-group" style="display: none;">
                 <label>URL del Fondo</label>
                 <input type="url" name="background_url">
+            </div>
+        </div>
+        
+        <!-- Config HeyGen Avatar IV -->
+        <div id="heygen-iv-config" class="config-section">
+            <h3 style="margin-bottom: 1rem;">Configuración HeyGen Avatar IV</h3>
+            
+            <div class="form-group">
+                <label>Fuente de Imagen *</label>
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="radio" name="image_source" value="upload" checked style="width: auto;">
+                        <span>Subir nueva imagen</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="radio" name="image_source" value="existing" style="width: auto;">
+                        <span>Usar imagen existente</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="upload-image-section" class="form-group">
+                <label>Subir Imagen *</label>
+                <input type="file" 
+                       name="avatar_image" 
+                       id="avatar-image-iv" 
+                       accept="image/jpeg,image/jpg,image/png"
+                       style="padding: 0.5rem;">
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                    Sube una foto para crear tu avatar personalizado (JPG o PNG)
+                </small>
+                <div id="image-preview" style="margin-top: 1rem; display: none;">
+                    <img id="preview-img" src="" alt="Preview" style="max-width: 200px; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+                </div>
+            </div>
+            
+            <div id="existing-image-section" class="form-group" style="display: none;">
+                <label>Seleccionar Imagen Existente *</label>
+                <select name="existing_image_key" id="existing-image-select">
+                    <option value="">Cargando imágenes...</option>
+                </select>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                    Selecciona una imagen que ya hayas subido a HeyGen
+                </small>
+                <div id="existing-image-preview" style="margin-top: 1rem; display: none;">
+                    <img id="existing-preview-img" src="" alt="Preview" style="max-width: 200px; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Voice *</label>
+                <select name="voice_id" id="voice-select-iv">
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Orientación del Video</label>
+                    <select name="video_orientation">
+                        <option value="portrait">Portrait (Vertical)</option>
+                        <option value="landscape">Landscape (Horizontal)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Ajuste de Imagen</label>
+                    <select name="fit">
+                        <option value="cover">Cover (Llenar)</option>
+                        <option value="contain">Contain (Ajustar)</option>
+                    </select>
+                </div>
             </div>
         </div>
         
@@ -242,11 +323,17 @@ document.querySelectorAll('.type-option').forEach(option => {
         const type = this.querySelector('input').value;
         document.querySelectorAll('.config-section').forEach(section => section.classList.remove('active'));
         
-        if (type === 'heygen_avatar') {
-            document.getElementById('heygen-config').classList.add('active');
+        if (type === 'heygen_avatar_v2') {
+            document.getElementById('heygen-v2-config').classList.add('active');
             // Load HeyGen data only once when needed
             if (document.getElementById('avatar-select').options.length === 1) {
                 loadHeyGenData();
+            }
+        } else if (type === 'heygen_avatar_iv') {
+            document.getElementById('heygen-iv-config').classList.add('active');
+            // Load HeyGen voices for IV
+            if (document.getElementById('voice-select-iv').options.length === 1) {
+                loadHeyGenDataIV();
             }
         } else {
             document.getElementById('gemini-config').classList.add('active');
@@ -254,8 +341,184 @@ document.querySelectorAll('.type-option').forEach(option => {
     });
 });
 
+// Load HeyGen data for Avatar IV (voces e imágenes existentes)
+async function loadHeyGenDataIV() {
+    try {
+        // Load voices
+        const voicesResponse = await fetch('{% url "core:api_list_voices" %}');
+        const voicesData = await voicesResponse.json();
+        
+        const voiceSelect = document.getElementById('voice-select-iv');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        
+        if (voicesData.voices && voicesData.voices.length > 0) {
+            voicesData.voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.voice_id;
+                option.textContent = `${voice.display_name || voice.name || voice.voice_id} (${voice.language || ''})`;
+                voiceSelect.appendChild(option);
+            });
+        } else {
+            voiceSelect.innerHTML = '<option value="">No hay voces disponibles</option>';
+        }
+        
+        // Load existing images
+        const assetsResponse = await fetch('{% url "core:api_list_image_assets" %}');
+        const assetsData = await assetsResponse.json();
+        
+        const imageSelect = document.getElementById('existing-image-select');
+        imageSelect.innerHTML = '<option value="">Selecciona una imagen</option>';
+        
+        if (assetsData.assets && assetsData.assets.length > 0) {
+            assetsData.assets.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.id;
+                option.dataset.imageKey = asset.image_key || asset.id;
+                option.dataset.url = asset.url;
+                option.textContent = asset.name || asset.id;
+                imageSelect.appendChild(option);
+            });
+        } else {
+            imageSelect.innerHTML = '<option value="">No hay imágenes disponibles</option>';
+        }
+    } catch (error) {
+        console.error('Error loading HeyGen data for IV:', error);
+        document.getElementById('voice-select-iv').innerHTML = '<option value="">Error al cargar voces</option>';
+        document.getElementById('existing-image-select').innerHTML = '<option value="">Error al cargar imágenes</option>';
+    }
+}
+
+// Toggle between upload and existing image
+document.querySelectorAll('input[name="image_source"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const uploadSection = document.getElementById('upload-image-section');
+        const existingSection = document.getElementById('existing-image-section');
+        
+        if (this.value === 'upload') {
+            uploadSection.style.display = 'block';
+            existingSection.style.display = 'none';
+        } else {
+            uploadSection.style.display = 'none';
+            existingSection.style.display = 'block';
+        }
+    });
+});
+
+// Preview for existing image selection
+document.getElementById('existing-image-select')?.addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const url = selectedOption.dataset.url;
+    
+    if (url && url !== 'null' && url !== 'undefined') {
+        const preview = document.getElementById('existing-image-preview');
+        const previewImg = document.getElementById('existing-preview-img');
+        previewImg.src = url;
+        preview.style.display = 'block';
+    } else {
+        document.getElementById('existing-image-preview').style.display = 'none';
+    }
+});
+
+// Image preview for Avatar IV
+document.getElementById('avatar-image-iv')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const preview = document.getElementById('image-preview');
+            const previewImg = document.getElementById('preview-img');
+            previewImg.src = event.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
 document.querySelector('input[name="has_background"]')?.addEventListener('change', function(e) {
     document.getElementById('background-url-group').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// Deshabilitar campos inactivos antes de enviar el formulario
+document.querySelector('form').addEventListener('submit', function(e) {
+    // Obtener el tipo de video seleccionado
+    const selectedType = document.querySelector('input[name="type"]:checked');
+    if (!selectedType) {
+        e.preventDefault();
+        alert('Por favor, selecciona un tipo de video');
+        return;
+    }
+    
+    const videoType = selectedType.value;
+    
+    // Deshabilitar campos según el tipo de video
+    if (videoType === 'heygen_avatar_v2') {
+        // Deshabilitar campos de Avatar IV y Gemini
+        document.querySelectorAll('#heygen-iv-config input, #heygen-iv-config select').forEach(field => {
+            field.disabled = true;
+        });
+        document.querySelectorAll('#gemini-config input, #gemini-config select, #gemini-config textarea').forEach(field => {
+            field.disabled = true;
+        });
+        
+        // Validar campos requeridos de V2
+        const avatarId = document.getElementById('avatar-select').value;
+        const voiceId = document.getElementById('voice-select').value;
+        if (!avatarId || !voiceId) {
+            e.preventDefault();
+            alert('Por favor, selecciona un avatar y una voz');
+            return;
+        }
+    } else if (videoType === 'heygen_avatar_iv') {
+        // Deshabilitar campos de V2 y Gemini
+        document.querySelectorAll('#heygen-v2-config input, #heygen-v2-config select').forEach(field => {
+            field.disabled = true;
+        });
+        document.querySelectorAll('#gemini-config input, #gemini-config select, #gemini-config textarea').forEach(field => {
+            field.disabled = true;
+        });
+        
+        // Validar campos requeridos de IV
+        const imageSource = document.querySelector('input[name="image_source"]:checked').value;
+        const voiceId = document.getElementById('voice-select-iv').value;
+        
+        if (imageSource === 'upload') {
+            const avatarImage = document.getElementById('avatar-image-iv').files[0];
+            if (!avatarImage || !voiceId) {
+                e.preventDefault();
+                alert('Por favor, sube una imagen y selecciona una voz');
+                return;
+            }
+        } else {
+            const existingImage = document.getElementById('existing-image-select').value;
+            if (!existingImage || !voiceId) {
+                e.preventDefault();
+                alert('Por favor, selecciona una imagen existente y una voz');
+                return;
+            }
+        }
+    } else if (videoType === 'gemini_veo') {
+        // Deshabilitar campos de V2 y IV
+        document.querySelectorAll('#heygen-v2-config input, #heygen-v2-config select').forEach(field => {
+            field.disabled = true;
+        });
+        document.querySelectorAll('#heygen-iv-config input, #heygen-iv-config select').forEach(field => {
+            field.disabled = true;
+        });
+    }
+    
+    console.log('Formulario enviado - Tipo:', videoType);
+    if (videoType === 'heygen_avatar_v2') {
+        console.log('Avatar ID:', document.getElementById('avatar-select').value);
+        console.log('Voice ID:', document.getElementById('voice-select').value);
+    } else if (videoType === 'heygen_avatar_iv') {
+        const imageSource = document.querySelector('input[name="image_source"]:checked').value;
+        if (imageSource === 'upload') {
+            console.log('Avatar Image (upload):', document.getElementById('avatar-image-iv').files[0]?.name);
+        } else {
+            console.log('Avatar Image (existing):', document.getElementById('existing-image-select').value);
+        }
+        console.log('Voice ID:', document.getElementById('voice-select-iv').value);
+    }
 });
 </script>
 {% endblock %}

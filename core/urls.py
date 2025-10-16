@@ -22,5 +22,6 @@ urlpatterns = [
     # API endpoints for AJAX
     path('api/avatars/', views.api_list_avatars, name='api_list_avatars'),
     path('api/voices/', views.api_list_voices, name='api_list_voices'),
+    path('api/image-assets/', views.api_list_image_assets, name='api_list_image_assets'),
 ]
 

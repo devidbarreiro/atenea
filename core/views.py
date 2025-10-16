@@ -37,17 +37,40 @@ def project_create(request):
         else:
             messages.error(request, 'El nombre del proyecto es requerido')
     
-    return render(request, 'projects/create.html')
+    context = {
+        'breadcrumbs': [
+            {'label': 'Nuevo Proyecto', 'url': None}
+        ]
+    }
+    return render(request, 'projects/create.html', context)
 
 
 def project_detail(request, project_id):
     """Detalle de un proyecto con sus videos"""
     project = get_object_or_404(Project, id=project_id)
-    videos = project.videos.all()
+    videos = project.videos.all().order_by('-created_at')
+    
+    # Generar URLs firmadas para videos completados
+    videos_with_urls = []
+    for video in videos:
+        video_data = {
+            'video': video,
+            'signed_url': None
+        }
+        if video.status == 'completed' and video.gcs_path:
+            try:
+                video_data['signed_url'] = gcs_storage.get_signed_url(video.gcs_path, expiration=3600)
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para video {video.id}: {str(e)}")
+        videos_with_urls.append(video_data)
     
     context = {
         'project': project,
         'videos': videos,
+        'videos_with_urls': videos_with_urls,
+        'breadcrumbs': [
+            {'label': project.name, 'url': None}
+        ]
     }
     
     return render(request, 'projects/detail.html', context)
@@ -63,7 +86,14 @@ def project_delete(request, project_id):
         messages.success(request, f'Proyecto "{project_name}" eliminado')
         return redirect('core:dashboard')
     
-    return render(request, 'projects/delete.html', {'project': project})
+    context = {
+        'project': project,
+        'breadcrumbs': [
+            {'label': project.name, 'url': f'/projects/{project.id}/'},
+            {'label': 'Eliminar', 'url': None}
+        ]
+    }
+    return render(request, 'projects/delete.html', context)
 
 
 def video_create(request, project_id):
@@ -78,16 +108,86 @@ def video_create(request, project_id):
         # Configuración según el tipo de video
         config = {}
         
-        if video_type == 'heygen_avatar':
+        if video_type == 'heygen_avatar_v2':
+            avatar_id = request.POST.get('avatar_id')
+            voice_id = request.POST.get('voice_id')
+            
+            # Validar campos requeridos
+            if not avatar_id or not voice_id:
+                messages.error(request, 'Avatar y Voice son campos requeridos para HeyGen Avatar V2')
+                return redirect('core:video_create', project_id=project_id)
+            
             config = {
-                'avatar_id': request.POST.get('avatar_id'),
-                'voice_id': request.POST.get('voice_id'),
+                'avatar_id': avatar_id,
+                'voice_id': voice_id,
                 'has_background': request.POST.get('has_background') == 'on',
                 'background_url': request.POST.get('background_url', ''),
                 'voice_speed': float(request.POST.get('voice_speed', 1.0)),
                 'voice_pitch': int(request.POST.get('voice_pitch', 50)),
                 'voice_emotion': request.POST.get('voice_emotion', 'Excited'),
             }
+            logger.info(f"Video V2 creado con avatar_id={avatar_id}, voice_id={voice_id}")
+        elif video_type == 'heygen_avatar_iv':
+            voice_id = request.POST.get('voice_id')
+            image_source = request.POST.get('image_source', 'upload')
+            
+            # Validar voice_id requerido
+            if not voice_id:
+                messages.error(request, 'Voice es requerido para HeyGen Avatar IV')
+                return redirect('core:video_create', project_id=project_id)
+            
+            config = {
+                'voice_id': voice_id,
+                'video_orientation': request.POST.get('video_orientation', 'portrait'),
+                'fit': request.POST.get('fit', 'cover'),
+            }
+            
+            if image_source == 'upload':
+                # Usuario sube nueva imagen
+                avatar_image = request.FILES.get('avatar_image')
+                
+                if not avatar_image:
+                    messages.error(request, 'Debes subir una imagen')
+                    return redirect('core:video_create', project_id=project_id)
+                
+                # Subir imagen a GCS inmediatamente
+                import os
+                from datetime import datetime
+                
+                # Generar path en GCS: avatar_images/project_id/timestamp_filename
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = avatar_image.name.replace(' ', '_')
+                gcs_destination = f"avatar_images/project_{project.id}/{timestamp}_{safe_filename}"
+                
+                try:
+                    logger.info(f"Subiendo nueva imagen de avatar a GCS: {safe_filename}")
+                    gcs_path = gcs_storage.upload_django_file(avatar_image, gcs_destination)
+                    logger.info(f"Imagen subida exitosamente a GCS: {gcs_path}")
+                    
+                    config['gcs_avatar_path'] = gcs_path
+                    config['image_filename'] = avatar_image.name
+                    config['image_source'] = 'upload'
+                    
+                    logger.info(f"Video IV creado con nueva imagen={avatar_image.name}, voice_id={voice_id}")
+                except Exception as e:
+                    logger.error(f"Error al subir imagen a GCS: {str(e)}")
+                    messages.error(request, f'Error al subir imagen: {str(e)}')
+                    return redirect('core:video_create', project_id=project_id)
+            else:
+                # Usuario usa imagen existente de HeyGen
+                existing_image_key = request.POST.get('existing_image_key')
+                
+                if not existing_image_key:
+                    messages.error(request, 'Debes seleccionar una imagen existente')
+                    return redirect('core:video_create', project_id=project_id)
+                
+                # Guardar el image_key directamente (no necesita subir)
+                # Nota: HeyGen API list_assets retorna 'id', no 'image_key' directamente
+                # Así que guardamos el id y luego lo buscaremos
+                config['existing_image_id'] = existing_image_key
+                config['image_source'] = 'existing'
+                
+                logger.info(f"Video IV creado con imagen existente (ID: {existing_image_key}), voice_id={voice_id}")
         elif video_type == 'gemini_veo':
             config = {
                 'duration': int(request.POST.get('duration', 5)),
@@ -107,6 +207,10 @@ def video_create(request, project_id):
     
     context = {
         'project': project,
+        'breadcrumbs': [
+            {'label': project.name, 'url': f'/projects/{project.id}/'},
+            {'label': 'Nuevo Video', 'url': None}
+        ]
     }
     
     return render(request, 'videos/create.html', context)
@@ -127,6 +231,10 @@ def video_detail(request, video_id):
     context = {
         'video': video,
         'signed_url': signed_url,
+        'breadcrumbs': [
+            {'label': video.project.name, 'url': f'/projects/{video.project.id}/'},
+            {'label': video.title, 'url': None}
+        ]
     }
     
     return render(request, 'videos/detail.html', context)
@@ -150,7 +258,15 @@ def video_delete(request, video_id):
         messages.success(request, f'Video "{video_title}" eliminado')
         return redirect('core:project_detail', project_id=project_id)
     
-    return render(request, 'videos/delete.html', {'video': video})
+    context = {
+        'video': video,
+        'breadcrumbs': [
+            {'label': video.project.name, 'url': f'/projects/{video.project.id}/'},
+            {'label': video.title, 'url': f'/videos/{video.id}/'},
+            {'label': 'Eliminar', 'url': None}
+        ]
+    }
+    return render(request, 'videos/delete.html', context)
 
 
 @require_http_methods(["POST"])
@@ -166,30 +282,92 @@ def video_generate(request, video_id):
     try:
         video.mark_as_processing()
         
-        if video.type == 'heygen_avatar':
+        if video.type in ['heygen_avatar_v2', 'heygen_avatar_iv']:
             # Validar API key
             if not settings.HEYGEN_API_KEY:
                 raise ValueError('HEYGEN_API_KEY no está configurada')
             
-            # Validar configuración requerida
-            if not video.config.get('avatar_id'):
-                raise ValueError('Avatar ID es requerido')
-            if not video.config.get('voice_id'):
-                raise ValueError('Voice ID es requerido')
-            
             client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
             
-            response = client.generate_video(
-                script=video.script,
-                title=video.title,
-                avatar_id=video.config.get('avatar_id'),
-                voice_id=video.config.get('voice_id'),
-                has_background=video.config.get('has_background', False),
-                background_url=video.config.get('background_url'),
-                voice_speed=video.config.get('voice_speed', 1.0),
-                voice_pitch=video.config.get('voice_pitch', 50),
-                voice_emotion=video.config.get('voice_emotion', 'Excited'),
-            )
+            if video.type == 'heygen_avatar_v2':
+                # Validar configuración requerida V2
+                if not video.config.get('avatar_id'):
+                    raise ValueError('Avatar ID es requerido')
+                if not video.config.get('voice_id'):
+                    raise ValueError('Voice ID es requerido')
+                
+                response = client.generate_video(
+                    script=video.script,
+                    title=video.title,
+                    avatar_id=video.config.get('avatar_id'),
+                    voice_id=video.config.get('voice_id'),
+                    has_background=video.config.get('has_background', False),
+                    background_url=video.config.get('background_url'),
+                    voice_speed=video.config.get('voice_speed', 1.0),
+                    voice_pitch=video.config.get('voice_pitch', 50),
+                    voice_emotion=video.config.get('voice_emotion', 'Excited'),
+                )
+            else:  # heygen_avatar_iv
+                # Validar configuración requerida IV
+                if not video.config.get('voice_id'):
+                    raise ValueError('Voice ID es requerido')
+                
+                image_source = video.config.get('image_source', 'upload')
+                
+                if image_source == 'upload':
+                    # Usuario subió nueva imagen, obtener desde GCS
+                    if not video.config.get('gcs_avatar_path'):
+                        raise ValueError('Imagen de avatar es requerida')
+                    
+                    gcs_avatar_path = video.config.get('gcs_avatar_path')
+                    
+                    # Obtener URL firmada del avatar desde GCS
+                    logger.info(f"Obteniendo URL firmada de GCS: {gcs_avatar_path}")
+                    avatar_url = gcs_storage.get_signed_url(gcs_avatar_path, expiration=600)  # 10 minutos
+                    logger.info(f"URL firmada obtenida")
+                    
+                    # Subir imagen desde GCS a HeyGen (detecta tipo automáticamente)
+                    logger.info(f"Subiendo imagen a HeyGen desde GCS (detección automática de tipo)")
+                    image_key = client.upload_asset_from_url(avatar_url)
+                    logger.info(f"Imagen subida exitosamente a HeyGen. Image key: {image_key}")
+                    
+                    # Guardar el image_key en la configuración
+                    video.config['image_key'] = image_key
+                    video.save()
+                else:
+                    # Usuario usa imagen existente, obtener image_key de la lista
+                    if not video.config.get('existing_image_id'):
+                        raise ValueError('ID de imagen existente es requerido')
+                    
+                    existing_image_id = video.config.get('existing_image_id')
+                    logger.info(f"Buscando image_key para asset ID: {existing_image_id}")
+                    
+                    # Listar assets para encontrar el image_key
+                    assets = client.list_image_assets()
+                    image_key = None
+                    
+                    for asset in assets:
+                        if asset.get('id') == existing_image_id:
+                            image_key = asset.get('image_key') or asset.get('id')
+                            logger.info(f"Image key encontrado: {image_key}")
+                            break
+                    
+                    if not image_key:
+                        raise ValueError(f'No se encontró el asset con ID: {existing_image_id}')
+                    
+                    # Guardar el image_key en la configuración
+                    video.config['image_key'] = image_key
+                    video.save()
+                
+                # Generar video con el image_key
+                response = client.generate_avatar_iv_video(
+                    script=video.script,
+                    image_key=image_key,
+                    voice_id=video.config.get('voice_id'),
+                    title=video.title,
+                    video_orientation=video.config.get('video_orientation', 'portrait'),
+                    fit=video.config.get('fit', 'cover'),
+                )
             
             # Guardar el external_id
             video.external_id = response.get('data', {}).get('video_id')
@@ -234,7 +412,10 @@ def video_status(request, video_id):
     """Consulta el estado de un video en la API externa"""
     video = get_object_or_404(Video, id=video_id)
     
+    logger.info(f"[POLLING] Recibida consulta de estado para video ID: {video.id} (external_id: {video.external_id})")
+    
     if not video.external_id:
+        logger.warning(f"[POLLING] Video {video.id} no tiene external_id")
         return JsonResponse({
             'error': 'Video no tiene external_id',
             'status': video.status
@@ -242,6 +423,7 @@ def video_status(request, video_id):
     
     # Si ya está completado o con error, no consultar de nuevo
     if video.status in ['completed', 'error']:
+        logger.info(f"[POLLING] Video {video.id} ya está en estado final: {video.status}")
         return JsonResponse({
             'status': video.status,
             'message': 'Video ya procesado',
@@ -249,19 +431,25 @@ def video_status(request, video_id):
         })
     
     try:
-        if video.type == 'heygen_avatar':
+        if video.type in ['heygen_avatar_v2', 'heygen_avatar_iv']:
             if not settings.HEYGEN_API_KEY:
+                logger.error("[POLLING] HEYGEN_API_KEY no configurada")
                 return JsonResponse({'error': 'HEYGEN_API_KEY no configurada'}, status=400)
             
             client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
             status_data = client.get_video_status(video.external_id)
             
+            api_status = status_data.get('status')
+            logger.info(f"[POLLING] HeyGen responde - Video {video.id}: status={api_status}")
+            
             # Actualizar estado si está completado
-            if status_data.get('status') == 'completed':
+            if api_status == 'completed':
                 video_url = status_data.get('video_url')
+                logger.info(f"[POLLING] Video {video.id} completado! URL: {video_url}")
+                
                 if video_url:
                     try:
-                        # Descargar y subir a GCS
+                        logger.info(f"[POLLING] Descargando video {video.id} desde HeyGen...")
                         gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
                         gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
                         
@@ -270,26 +458,34 @@ def video_status(request, video_id):
                             'duration': status_data.get('duration'),
                             'video_url_original': video_url,
                             'thumbnail': status_data.get('thumbnail'),
+                            'caption_url': status_data.get('caption_url'),
                         }
                         
                         video.mark_as_completed(
                             gcs_path=gcs_full_path,
                             metadata=metadata
                         )
-                        logger.info(f"Video {video.id} completado y subido a GCS")
+                        logger.info(f"[POLLING] ✅ Video {video.id} completado y guardado en GCS: {gcs_full_path}")
                     except Exception as e:
-                        logger.error(f"Error al subir a GCS: {str(e)}")
+                        logger.error(f"[POLLING] ❌ Error al subir video {video.id} a GCS: {str(e)}")
                         video.mark_as_error(f"Error al subir a storage: {str(e)}")
+                else:
+                    logger.warning(f"[POLLING] Video {video.id} completado pero sin video_url")
             
-            elif status_data.get('status') == 'failed' or status_data.get('error'):
+            elif api_status == 'failed' or status_data.get('error'):
                 error_msg = status_data.get('error', 'Video generation failed')
+                logger.error(f"[POLLING] ❌ Video {video.id} falló: {error_msg}")
                 video.mark_as_error(error_msg)
-                logger.error(f"Video {video.id} failed: {error_msg}")
+            
+            elif api_status == 'processing':
+                logger.info(f"[POLLING] ⏳ Video {video.id} aún procesando...")
             
         elif video.type == 'gemini_veo':
             if not settings.GEMINI_API_KEY:
+                logger.error("[POLLING] GEMINI_API_KEY no configurada")
                 return JsonResponse({'error': 'GEMINI_API_KEY no configurada'}, status=400)
             
+            logger.info(f"[POLLING] Consultando Gemini Veo para video {video.id}")
             client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
             status_data = client.get_video_status(video.external_id)
         
@@ -300,7 +496,7 @@ def video_status(request, video_id):
         })
         
     except Exception as e:
-        logger.error(f"Error al consultar estado: {str(e)}")
+        logger.error(f"[POLLING] ❌ Error al consultar estado de video {video.id}: {str(e)}")
         return JsonResponse({
             'error': str(e),
             'status': video.status
@@ -348,4 +544,25 @@ def api_list_voices(request):
         return JsonResponse({
             'error': str(e),
             'voices': []
+        }, status=500)
+
+
+@require_http_methods(["GET"])
+def api_list_image_assets(request):
+    """Lista imágenes (assets) disponibles en HeyGen"""
+    if not settings.HEYGEN_API_KEY:
+        return JsonResponse({
+            'error': 'HEYGEN_API_KEY no configurada',
+            'assets': []
+        }, status=400)
+    
+    try:
+        client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
+        assets = client.list_image_assets()
+        return JsonResponse({'assets': assets})
+    except Exception as e:
+        logger.error(f"Error al listar image assets: {str(e)}")
+        return JsonResponse({
+            'error': str(e),
+            'assets': []
         }, status=500)
