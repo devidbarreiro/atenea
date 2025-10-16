@@ -3,6 +3,7 @@ from google.cloud import storage
 from django.conf import settings
 import logging
 import requests
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +12,22 @@ class GCSStorageManager:
     """Gestor para Google Cloud Storage"""
     
     def __init__(self):
-        self.client = storage.Client(project=settings.GCS_PROJECT_ID)
-        self.bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
+        self._client = None
+        self._bucket = None
+    
+    @property
+    def client(self):
+        """Lazy initialization del cliente de GCS"""
+        if self._client is None:
+            self._client = storage.Client(project=settings.GCS_PROJECT_ID)
+        return self._client
+    
+    @property
+    def bucket(self):
+        """Lazy initialization del bucket de GCS"""
+        if self._bucket is None:
+            self._bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
+        return self._bucket
     
     def upload_from_url(self, url: str, destination_path: str) -> str:
         """Descarga un archivo desde URL y lo sube a GCS"""
