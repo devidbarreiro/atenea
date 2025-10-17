@@ -29,6 +29,53 @@ class GCSStorageManager:
             self._bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
         return self._bucket
     
+    def copy_from_gcs(self, source_gcs_uri: str, destination_path: str) -> str:
+        """
+        Copia un archivo desde otro bucket de GCS a nuestro bucket
+        
+        Args:
+            source_gcs_uri: URI de GCS completa (gs://bucket/path)
+            destination_path: Path destino en nuestro bucket
+        
+        Returns:
+            URI completa del archivo copiado
+        """
+        try:
+            # Parsear la URI de origen: gs://bucket_name/path/to/file
+            source_parts = source_gcs_uri.replace('gs://', '').split('/', 1)
+            source_bucket_name = source_parts[0]
+            source_blob_name = source_parts[1] if len(source_parts) > 1 else ''
+            
+            logger.info(f"[GCS] Copiando desde: {source_gcs_uri}")
+            logger.info(f"[GCS] Bucket origen: {source_bucket_name}, Path: {source_blob_name}")
+            
+            # Obtener el blob de origen
+            source_bucket = self.client.bucket(source_bucket_name)
+            source_blob = source_bucket.blob(source_blob_name)
+            
+            # Copiar al bucket destino
+            destination_bucket = self.bucket
+            destination_blob = destination_bucket.blob(destination_path)
+            
+            logger.info(f"[GCS] Copiando a: {destination_path}")
+            
+            # Realizar la copia
+            rewrite_token = None
+            while True:
+                rewrite_token, bytes_rewritten, bytes_to_rewrite = destination_blob.rewrite(
+                    source_blob, token=rewrite_token
+                )
+                if rewrite_token is None:
+                    break
+            
+            gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{destination_path}"
+            logger.info(f"[GCS] ✅ Archivo copiado exitosamente: {gcs_path}")
+            return gcs_path
+            
+        except Exception as e:
+            logger.error(f"[GCS] ❌ Error al copiar archivo: {str(e)}")
+            raise
+    
     def upload_from_url(self, url: str, destination_path: str) -> str:
         """Descarga un archivo desde URL y lo sube a GCS"""
         try:
@@ -83,6 +130,22 @@ class GCSStorageManager:
             
         except Exception as e:
             logger.error(f"[GCS] ❌ Error: {str(e)}")
+            raise
+    
+    def upload_base64(self, base64_string: str, destination_path: str, content_type: str = 'video/mp4') -> str:
+        """Sube contenido desde string base64 a GCS"""
+        try:
+            import base64
+            
+            logger.info(f"[GCS] Decodificando base64 y subiendo a: {destination_path}")
+            
+            # Decodificar base64
+            file_content = base64.b64decode(base64_string)
+            
+            return self.upload_from_bytes(file_content, destination_path, content_type)
+            
+        except Exception as e:
+            logger.error(f"[GCS] ❌ Error al subir base64: {str(e)}")
             raise
     
     def upload_django_file(self, django_file, destination_path: str) -> str:

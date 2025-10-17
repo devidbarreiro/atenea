@@ -488,6 +488,67 @@ def video_status(request, video_id):
             logger.info(f"[POLLING] Consultando Gemini Veo para video {video.id}")
             client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
             status_data = client.get_video_status(video.external_id)
+            
+            api_status = status_data.get('status')
+            logger.info(f"[POLLING] Gemini Veo responde - Video {video.id}: status={api_status}")
+            
+            # Actualizar estado si está completado
+            if api_status == 'completed':
+                video_url = status_data.get('video_url')
+                logger.info(f"[POLLING] Video {video.id} completado! Video data disponible")
+                
+                if video_url:
+                    try:
+                        # Veo devuelve una URI de GCS (gs://...) o bytes en base64
+                        if video_url.startswith('gs://'):
+                            # Es una URI de GCS, copiar el archivo a nuestro bucket
+                            logger.info(f"[POLLING] Video ya está en GCS: {video_url}")
+                            # Copiar desde el bucket de Veo a nuestro bucket
+                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                            gcs_full_path = gcs_storage.copy_from_gcs(video_url, gcs_path)
+                            logger.info(f"[POLLING] Video copiado a nuestro bucket: {gcs_full_path}")
+                        elif video_url.startswith('http'):
+                            # Es una URL HTTP (poco probable con Veo)
+                            logger.info(f"[POLLING] Descargando video {video.id} desde URL...")
+                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                            gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                        else:
+                            # Es base64, guardar directamente
+                            logger.warning(f"[POLLING] Video en base64, guardando...")
+                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                            gcs_full_path = gcs_storage.upload_base64(video_url, gcs_path)
+                            logger.info(f"[POLLING] Video guardado desde base64: {gcs_full_path}")
+                        
+                        # Extraer metadata adicional
+                        metadata = {
+                            'video_url_original': video_url,
+                            'videos': status_data.get('videos', []),
+                            'rai_filtered_count': status_data.get('rai_filtered_count', 0),
+                            'operation_data': status_data.get('operation_data', {}),
+                        }
+                        
+                        if gcs_full_path:
+                            video.mark_as_completed(
+                                gcs_path=gcs_full_path,
+                                metadata=metadata
+                            )
+                            logger.info(f"[POLLING] ✅ Video {video.id} completado y guardado en GCS: {gcs_full_path}")
+                        else:
+                            video.mark_as_error("Video completado pero no se pudo guardar en GCS")
+                    except Exception as e:
+                        logger.error(f"[POLLING] ❌ Error al procesar video {video.id}: {str(e)}")
+                        video.mark_as_error(f"Error al procesar video: {str(e)}")
+                else:
+                    logger.warning(f"[POLLING] Video {video.id} completado pero sin video_url")
+                    video.mark_as_error("Video completado pero sin URL")
+            
+            elif api_status == 'failed' or api_status == 'error':
+                error_msg = status_data.get('error', 'Video generation failed')
+                logger.error(f"[POLLING] ❌ Video {video.id} falló: {error_msg}")
+                video.mark_as_error(error_msg)
+            
+            elif api_status == 'processing':
+                logger.info(f"[POLLING] ⏳ Video {video.id} aún procesando...")
         
         return JsonResponse({
             'status': video.status,
