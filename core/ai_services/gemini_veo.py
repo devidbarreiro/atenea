@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class GeminiVeoClient:
     """Cliente para Gemini Veo 2 (Vertex AI Video Generation)"""
     
-    def __init__(self, api_key: str = None, project_id: str = "proeduca-472312", location: str = "us-central1"):
+    def __init__(self, api_key: str = None, project_id: str = "proeduca-472312", location: str = "us-central1", model_name: str = "veo-2.0-generate-001"):
         """
         Inicializa el cliente de Veo 2
         
@@ -19,17 +19,19 @@ class GeminiVeoClient:
             api_key: No se usa, mantiene compatibilidad con la interfaz
             project_id: ID del proyecto de Google Cloud
             location: Región del endpoint (us-central1, europe-west4, etc.)
+            model_name: Modelo a usar (veo-2.0-generate-001 o veo-2.0-generate-exp)
         """
         self.project_id = project_id
         self.location = location
         self.base_url = f"https://{location}-aiplatform.googleapis.com/v1"
-        self.model_name = "veo-2.0-generate-001"
+        self.model_name = model_name
         
         # Obtener credenciales con los scopes correctos para Vertex AI
         scopes = ['https://www.googleapis.com/auth/cloud-platform']
         self.credentials, _ = default(scopes=scopes)
         
         logger.info(f"Cliente Veo 2 inicializado: {project_id} @ {location}")
+        logger.info(f"Modelo: {model_name}")
         logger.info(f"Scopes configurados: {scopes}")
     
     def _get_access_token(self) -> str:
@@ -121,6 +123,10 @@ class GeminiVeoClient:
             
             # Fase 2: Agregar imágenes de referencia si se proporcionan
             if reference_images and len(reference_images) > 0:
+                # IMPORTANTE: referenceImages requiere duración de 8 segundos (validado en formulario)
+                if duration != 8:
+                    logger.warning(f"⚠️  Imágenes de referencia con duración {duration}s (debería ser 8s)")
+                
                 ref_images_payload = []
                 for idx, ref_img in enumerate(reference_images):
                     ref_image_obj = {

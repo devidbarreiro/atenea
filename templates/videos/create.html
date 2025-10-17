@@ -244,12 +244,24 @@
         <div id="gemini-config" class="config-section">
             <h3 style="margin-bottom: 1rem;">Configuración Gemini Veo 2</h3>
             
+            <!-- Selector de Modelo -->
+            <div class="form-group" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid hsl(var(--border));">
+                <label>Modelo *</label>
+                <select name="veo_model" id="veo-model-select" required>
+                    <option value="veo-2.0-generate-001">Veo 2.0 (Estándar) - GA</option>
+                    <option value="veo-2.0-generate-exp">Veo 2.0 Experimental - Soporta imágenes de referencia</option>
+                </select>
+                <small id="model-description" style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                    Modelo estándar para generación de video de alta calidad
+                </small>
+            </div>
+            
             <!-- Parámetros básicos -->
             <div class="form-row">
                 <div class="form-group">
                     <label>Duración (seg) *</label>
-                    <input type="number" name="duration" value="8" min="5" max="8" required>
-                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                    <input type="number" name="duration" id="veo-duration" value="8" min="5" max="8" required>
+                    <small id="duration-hint" style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
                         Entre 5 y 8 segundos. Recomendado: 8
                     </small>
                 </div>
@@ -259,7 +271,6 @@
                     <select name="aspect_ratio" required>
                         <option value="16:9">16:9 (Horizontal)</option>
                         <option value="9:16">9:16 (Vertical)</option>
-                        <option value="1:1">1:1 (Cuadrado)</option>
                     </select>
                 </div>
             </div>
@@ -342,14 +353,16 @@
                     </div>
                 </div>
                 
-                <!-- Imágenes de Referencia -->
-                <div class="form-group" style="margin-top: 1.5rem;">
+                <!-- Imágenes de Referencia (solo experimental) -->
+                <div id="reference-images-section" class="form-group" style="margin-top: 1.5rem; display: none;">
                     <label style="display: flex; align-items: center; gap: 0.5rem;">
                         <span>Imágenes de Referencia</span>
                         <span style="font-weight: normal; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">- Opcional (Máx. 3)</span>
+                        <span style="background: #fef3c7; color: #92400e; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;">EXPERIMENTAL</span>
                     </label>
                     <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-bottom: 1rem;">
-                        🎭 Sube imágenes para mantener consistencia de personajes, objetos o estilo visual.
+                        🎭 Sube imágenes para mantener consistencia de personajes, objetos o estilo visual.<br>
+                        ⚠️ <strong>Requiere duración de 8 segundos</strong>
                     </small>
                     
                     <!-- Referencia 1 -->
@@ -606,6 +619,45 @@ document.getElementById('veo-input-image')?.addEventListener('change', function(
             preview.style.display = 'block';
         };
         reader.readAsDataURL(file);
+    }
+});
+
+// Manejo del cambio de modelo Veo
+document.getElementById('veo-model-select')?.addEventListener('change', function(e) {
+    const model = e.target.value;
+    const referenceSection = document.getElementById('reference-images-section');
+    const modelDescription = document.getElementById('model-description');
+    const durationInput = document.getElementById('veo-duration');
+    const durationHint = document.getElementById('duration-hint');
+    
+    if (model === 'veo-2.0-generate-exp') {
+        // Modelo experimental: mostrar imágenes de referencia
+        referenceSection.style.display = 'block';
+        modelDescription.innerHTML = '🔬 <strong>Modelo experimental</strong> con soporte para imágenes de referencia. Permite mantener personajes/objetos consistentes.';
+        modelDescription.style.color = '#92400e';
+        modelDescription.style.background = '#fef3c7';
+        modelDescription.style.padding = '0.5rem';
+        modelDescription.style.borderRadius = '0.25rem';
+        
+        // Forzar duración de 8 segundos para imágenes de referencia
+        durationInput.value = 8;
+        durationInput.min = 8;
+        durationInput.max = 8;
+        durationHint.innerHTML = '⚠️ <strong>Duración fija de 8 segundos</strong> requerida para imágenes de referencia';
+        durationHint.style.color = '#92400e';
+    } else {
+        // Modelo estándar: ocultar imágenes de referencia
+        referenceSection.style.display = 'none';
+        modelDescription.innerHTML = 'Modelo estándar para generación de video de alta calidad';
+        modelDescription.style.color = 'hsl(var(--muted-foreground))';
+        modelDescription.style.background = 'transparent';
+        modelDescription.style.padding = '0';
+        
+        // Restaurar rango de duración normal
+        durationInput.min = 5;
+        durationInput.max = 8;
+        durationHint.innerHTML = 'Entre 5 y 8 segundos. Recomendado: 8';
+        durationHint.style.color = 'hsl(var(--muted-foreground))';
     }
 });
 

@@ -191,6 +191,7 @@ def video_create(request, project_id):
         elif video_type == 'gemini_veo':
             # Capturar todos los parámetros de Veo 2
             config = {
+                'veo_model': request.POST.get('veo_model', 'veo-2.0-generate-001'),
                 'duration': int(request.POST.get('duration', 8)),
                 'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
                 'sample_count': int(request.POST.get('sample_count', 1)),
@@ -468,7 +469,11 @@ def video_generate(request, video_id):
             if not settings.GEMINI_API_KEY:
                 raise ValueError('GEMINI_API_KEY no está configurada')
             
-            client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
+            # Usar el modelo especificado en la configuración
+            model_name = video.config.get('veo_model', 'veo-2.0-generate-001')
+            logger.info(f"🎬 Usando modelo: {model_name}")
+            
+            client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY, model_name=model_name)
             
             # Preparar storageUri para que Veo guarde directamente en nuestro bucket
             storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
