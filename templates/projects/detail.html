@@ -62,8 +62,9 @@
         overflow: hidden;
         transition: box-shadow 0.2s;
         background: white;
+        cursor: pointer;
     }
-    
+
     .video-card:hover {
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
@@ -114,10 +115,15 @@
     
     .video-thumbnail-overlay {
         position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
-        display: flex;
-        gap: 0.5rem;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+    }
+    
+    .video-thumbnail-overlay > * {
+        pointer-events: auto;
     }
     
     .video-header {
@@ -179,6 +185,188 @@
     .hidden {
         display: none !important;
     }
+    
+    /* Dropdown styles */
+    .dropdown {
+        position: relative;
+        display: inline-block;
+    }
+    
+    .dropdown-menu {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: calc(100% + 0.25rem);
+        background: white;
+        border: 1px solid hsl(var(--border));
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        min-width: 180px;
+        max-width: 250px;
+        z-index: 1000;
+        padding: 0.5rem 0;
+    }
+    
+    .dropdown-menu.show {
+        display: block;
+    }
+
+    /* Dropdown específico para vista de lista - se abre hacia arriba */
+    .videos-list .dropdown-menu,
+    .dropdown-menu-list {
+        bottom: calc(100% + 0.75rem);
+        top: auto;
+        right: 0;
+        left: auto;
+        transform: none;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+        z-index: 1001;
+        min-width: 200px;
+    }
+    
+    .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+        color: hsl(var(--foreground));
+        text-decoration: none;
+        transition: background-color 0.15s;
+        cursor: pointer;
+    }
+    
+    .dropdown-item:hover {
+        background: hsl(var(--muted));
+    }
+    
+    .dropdown-item svg {
+        flex-shrink: 0;
+    }
+    
+    .dropdown-item-danger {
+        color: #dc2626;
+    }
+    
+    .dropdown-item-danger:hover {
+        background: #fee2e2;
+    }
+    
+    .btn-icon {
+        padding: 0.375rem !important;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(4px);
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-icon:hover {
+        background: white;
+    }
+
+    .btn-danger {
+        background: #dc2626 !important;
+        color: white !important;
+    }
+
+    .btn-danger:hover {
+        background: #b91c1c !important;
+        color: white !important;
+    }
+    
+    /* Modal styles */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+        animation: fadeIn 0.2s ease;
+    }
+    
+    .modal-overlay.show {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 480px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: slideUp 0.3s ease;
+    }
+    
+    .modal-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .modal-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: #fee2e2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .modal-icon svg {
+        color: #dc2626;
+    }
+    
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        color: hsl(var(--foreground));
+    }
+    
+    .modal-description {
+        font-size: 0.875rem;
+        color: hsl(var(--muted-foreground));
+        line-height: 1.5;
+        margin: 0;
+    }
+    
+    .modal-footer {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+        margin-top: 2rem;
+    }
+    
+    .modal-footer .btn {
+        padding: 0.625rem 1.25rem;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
 </style>
 {% endblock %}
 
@@ -286,7 +474,35 @@
             </div>
             {% endif %}
             <div class="video-thumbnail-overlay">
-                <span class="badge badge-{{ video.status }}">{{ video.get_status_display }}</span>
+                <span class="badge badge-{{ video.status }}" style="margin: 0.75rem;">{{ video.get_status_display }}</span>
+                <div class="dropdown" style="position: absolute; top: 0.75rem; right: 0.75rem;">
+                    <button class="btn btn-icon" onclick="event.stopPropagation(); toggleDropdown('dropdown-{{ video.id }}');">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="1"></circle>
+                            <circle cx="12" cy="5" r="1"></circle>
+                            <circle cx="12" cy="19" r="1"></circle>
+                        </svg>
+                    </button>
+                    <div class="dropdown-menu" id="dropdown-{{ video.id }}">
+                        {% if video.status == 'completed' and signed_url %}
+                        <a href="{{ signed_url }}" download="{{ video.title }}.mp4" class="dropdown-item" onclick="event.stopPropagation();">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Descargar
+                        </a>
+                        {% endif %}
+                        <a href="#" class="dropdown-item dropdown-item-danger" onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('{{ video.id }}', '{{ video.title|escapejs }}');">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            Eliminar
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="video-header">
@@ -315,7 +531,7 @@
 <div id="videos-list-view" class="videos-list hidden">
     {% for item in videos_with_urls %}
     {% with video=item.video signed_url=item.signed_url %}
-    <div class="video-card">
+    <div class="video-card" style="position: relative;">
         <div class="video-header">
             <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">{{ video.title }}</h3>
             <div style="margin-top: 0.5rem;">
@@ -327,14 +543,20 @@
             <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; flex: 1;">
                 {{ video.script|truncatewords:20 }}
             </p>
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <a href="{% url 'core:video_detail' video.id %}" class="btn">Ver</a>
                 {% if video.status == 'pending' %}
-                <form method="post" action="{% url 'core:video_generate' video.id %}">
+                <form method="post" action="{% url 'core:video_generate' video.id %}" style="flex: 1;">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-primary">Generar</button>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Generar</button>
                 </form>
                 {% endif %}
+                <button class="btn btn-icon btn-danger" onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('{{ video.id }}', '{{ video.title|escapejs }}');" title="Eliminar video">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
             </div>
         </div>
     </div>
@@ -349,6 +571,36 @@
     <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary">+ Crear Video</a>
 </div>
 {% endif %}
+
+<!-- Modal de confirmación para eliminar video -->
+<div id="deleteModal" class="modal-overlay" onclick="if(event.target === this) closeDeleteModal();">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div>
+                <h3 class="modal-title">Eliminar video</h3>
+                <p class="modal-description">
+                    ¿Estás seguro de que quieres eliminar "<strong id="modalVideoTitle"></strong>"?
+                    Esta acción no se puede deshacer.
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="closeDeleteModal()">Cancelar</button>
+            <form id="deleteForm" method="post" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-destructive">Eliminar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -387,6 +639,58 @@ function setView(view) {
         listView.classList.remove('hidden');
     }
 }
+
+// Dropdown menu
+function toggleDropdown(dropdownId) {
+    const dropdown = document.getElementById(dropdownId);
+    dropdown.classList.toggle('show');
+}
+
+// Cerrar dropdown al hacer clic fuera
+window.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown')) {
+        const dropdowns = document.querySelectorAll('.dropdown-menu');
+        dropdowns.forEach(dropdown => {
+            if (dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+            }
+        });
+    }
+});
+
+// Modal de eliminación
+function openDeleteModal(videoId, videoTitle) {
+    const modal = document.getElementById('deleteModal');
+    const titleElement = document.getElementById('modalVideoTitle');
+    const form = document.getElementById('deleteForm');
+    
+    titleElement.textContent = videoTitle;
+    form.action = `/videos/${videoId}/delete/`;
+    
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    // Cerrar todos los dropdowns cuando se abre el modal
+    const dropdowns = document.querySelectorAll('.dropdown-menu');
+    dropdowns.forEach(dropdown => {
+        if (dropdown.classList.contains('show')) {
+            dropdown.classList.remove('show');
+        }
+    });
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById('deleteModal');
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+// Cerrar modal con ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeDeleteModal();
+    }
+});
 </script>
 {% endblock %}
 
