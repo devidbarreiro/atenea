@@ -321,6 +321,100 @@
                     Google Gemini optimizará tu prompt para mejores resultados
                 </small>
             </div>
+            
+            <!-- Opciones Avanzadas (Fase 2) -->
+            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid hsl(var(--border));">
+                <h3 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600;">🎨 Opciones Avanzadas</h3>
+                
+                <!-- Imagen-a-Video -->
+                <div class="form-group">
+                    <label>Imagen Inicial (Imagen-a-Video) <span style="font-weight: normal; color: hsl(var(--muted-foreground));">- Opcional</span></label>
+                    <input type="file" 
+                           name="input_image" 
+                           id="veo-input-image" 
+                           accept="image/jpeg,image/jpg,image/png"
+                           style="padding: 0.5rem;">
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                        🎬 Sube una imagen para generar un video a partir de ella. El prompt describe cómo debe moverse/animarse.
+                    </small>
+                    <div id="input-image-preview" style="margin-top: 1rem; display: none;">
+                        <img id="input-preview-img" src="" alt="Preview" style="max-width: 300px; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+                    </div>
+                </div>
+                
+                <!-- Imágenes de Referencia -->
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span>Imágenes de Referencia</span>
+                        <span style="font-weight: normal; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">- Opcional (Máx. 3)</span>
+                    </label>
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-bottom: 1rem;">
+                        🎭 Sube imágenes para mantener consistencia de personajes, objetos o estilo visual.
+                    </small>
+                    
+                    <!-- Referencia 1 -->
+                    <div class="form-row" style="align-items: end; margin-bottom: 0.75rem;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Imagen 1</label>
+                            <input type="file" 
+                                   name="reference_image_1" 
+                                   id="ref-image-1"
+                                   accept="image/jpeg,image/jpg,image/png"
+                                   style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Tipo</label>
+                            <select name="reference_type_1" id="ref-type-1">
+                                <option value="asset">Asset (Personaje/Objeto)</option>
+                                <option value="style">Style (Estilo Visual)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Referencia 2 -->
+                    <div class="form-row" style="align-items: end; margin-bottom: 0.75rem;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Imagen 2</label>
+                            <input type="file" 
+                                   name="reference_image_2" 
+                                   id="ref-image-2"
+                                   accept="image/jpeg,image/jpg,image/png"
+                                   style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Tipo</label>
+                            <select name="reference_type_2" id="ref-type-2">
+                                <option value="asset">Asset (Personaje/Objeto)</option>
+                                <option value="style">Style (Estilo Visual)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Referencia 3 -->
+                    <div class="form-row" style="align-items: end;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Imagen 3</label>
+                            <input type="file" 
+                                   name="reference_image_3" 
+                                   id="ref-image-3"
+                                   accept="image/jpeg,image/jpg,image/png"
+                                   style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.875rem;">Tipo</label>
+                            <select name="reference_type_3" id="ref-type-3">
+                                <option value="asset">Asset (Personaje/Objeto)</option>
+                                <option value="style">Style (Estilo Visual)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.75rem;">
+                        💡 <strong>Asset:</strong> Para mantener personajes/objetos consistentes<br>
+                        💡 <strong>Style:</strong> Para aplicar un estilo visual (solo 1 permitida)
+                    </small>
+                </div>
+            </div>
         </div>
         
         <div style="display: flex; gap: 0.5rem; margin-top: 2rem;">
@@ -498,6 +592,21 @@ document.getElementById('avatar-image-iv')?.addEventListener('change', function(
 
 document.querySelector('input[name="has_background"]')?.addEventListener('change', function(e) {
     document.getElementById('background-url-group').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// Preview para imagen inicial de Veo 2
+document.getElementById('veo-input-image')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const preview = document.getElementById('input-image-preview');
+            const previewImg = document.getElementById('input-preview-img');
+            previewImg.src = event.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
 });
 
 // Deshabilitar campos inactivos antes de enviar el formulario

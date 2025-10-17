@@ -200,7 +200,7 @@ def video_create(request, project_id):
                 'compression_quality': request.POST.get('compression_quality', 'optimized'),
             }
             
-            # Seed es opcional, solo agregarlo si se proporciona
+            # Seed es opcional
             seed_value = request.POST.get('seed', '')
             if seed_value and seed_value.isdigit():
                 config['seed'] = int(seed_value)
@@ -208,6 +208,59 @@ def video_create(request, project_id):
             # Limpiar negative_prompt vacío
             if not config['negative_prompt']:
                 config.pop('negative_prompt')
+            
+            # FASE 2: Imagen inicial (imagen-a-video)
+            input_image = request.FILES.get('input_image')
+            if input_image:
+                import os
+                from datetime import datetime
+                
+                # Subir imagen inicial a GCS
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = input_image.name.replace(' ', '_')
+                gcs_destination = f"veo_input_images/project_{project.id}/{timestamp}_{safe_filename}"
+                
+                try:
+                    logger.info(f"Subiendo imagen inicial para Veo 2: {safe_filename}")
+                    gcs_path = gcs_storage.upload_django_file(input_image, gcs_destination)
+                    config['input_image_gcs_uri'] = gcs_path
+                    config['input_image_mime_type'] = input_image.content_type or 'image/jpeg'
+                    logger.info(f"✅ Imagen inicial subida: {gcs_path}")
+                except Exception as e:
+                    logger.error(f"Error al subir imagen inicial: {str(e)}")
+                    messages.error(request, f'Error al subir imagen: {str(e)}')
+                    return redirect('core:video_create', project_id=project_id)
+            
+            # FASE 2: Imágenes de referencia (máximo 3 asset o 1 style)
+            reference_images = []
+            for i in range(1, 4):  # Máximo 3 imágenes de referencia
+                ref_image = request.FILES.get(f'reference_image_{i}')
+                ref_type = request.POST.get(f'reference_type_{i}', 'asset')
+                
+                if ref_image:
+                    import os
+                    from datetime import datetime
+                    
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    safe_filename = ref_image.name.replace(' ', '_')
+                    gcs_destination = f"veo_reference_images/project_{project.id}/{timestamp}_{i}_{safe_filename}"
+                    
+                    try:
+                        logger.info(f"Subiendo imagen de referencia {i} ({ref_type}): {safe_filename}")
+                        gcs_path = gcs_storage.upload_django_file(ref_image, gcs_destination)
+                        reference_images.append({
+                            'gcs_uri': gcs_path,
+                            'reference_type': ref_type,
+                            'mime_type': ref_image.content_type or 'image/jpeg'
+                        })
+                        logger.info(f"✅ Imagen de referencia {i} subida: {gcs_path}")
+                    except Exception as e:
+                        logger.error(f"Error al subir imagen de referencia {i}: {str(e)}")
+                        # No bloqueamos la creación si falla una imagen de referencia
+            
+            if reference_images:
+                config['reference_images'] = reference_images
+                logger.info(f"🎭 {len(reference_images)} imagen(es) de referencia configuradas")
             
             logger.info(f"Video Veo 2 creado con config: {config}")
         
@@ -420,19 +473,33 @@ def video_generate(request, video_id):
             # Preparar storageUri para que Veo guarde directamente en nuestro bucket
             storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
             
-            response = client.generate_video(
-                prompt=video.script,
-                title=video.title,
-                duration=video.config.get('duration', 8),
-                aspect_ratio=video.config.get('aspect_ratio', '16:9'),
-                sample_count=video.config.get('sample_count', 1),
-                negative_prompt=video.config.get('negative_prompt'),
-                enhance_prompt=video.config.get('enhance_prompt', True),
-                person_generation=video.config.get('person_generation', 'allow_adult'),
-                compression_quality=video.config.get('compression_quality', 'optimized'),
-                seed=video.config.get('seed'),
-                storage_uri=storage_uri,
-            )
+            # Preparar parámetros avanzados (Fase 2)
+            generate_params = {
+                'prompt': video.script,
+                'title': video.title,
+                'duration': video.config.get('duration', 8),
+                'aspect_ratio': video.config.get('aspect_ratio', '16:9'),
+                'sample_count': video.config.get('sample_count', 1),
+                'negative_prompt': video.config.get('negative_prompt'),
+                'enhance_prompt': video.config.get('enhance_prompt', True),
+                'person_generation': video.config.get('person_generation', 'allow_adult'),
+                'compression_quality': video.config.get('compression_quality', 'optimized'),
+                'seed': video.config.get('seed'),
+                'storage_uri': storage_uri,
+            }
+            
+            # Fase 2: Imagen inicial (imagen-a-video)
+            if video.config.get('input_image_gcs_uri'):
+                generate_params['input_image_gcs_uri'] = video.config['input_image_gcs_uri']
+                generate_params['input_image_mime_type'] = video.config.get('input_image_mime_type', 'image/jpeg')
+                logger.info(f"🎨 Generando video desde imagen: {video.config['input_image_gcs_uri']}")
+            
+            # Fase 2: Imágenes de referencia
+            if video.config.get('reference_images'):
+                generate_params['reference_images'] = video.config['reference_images']
+                logger.info(f"🎭 Usando {len(video.config['reference_images'])} imagen(es) de referencia")
+            
+            response = client.generate_video(**generate_params)
             
             video.external_id = response.get('video_id')
             video.save()

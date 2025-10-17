@@ -51,6 +51,11 @@ class GeminiVeoClient:
         compression_quality: str = "optimized",
         seed: int = None,
         storage_uri: str = None,
+        # Funcionalidades avanzadas (Fase 2)
+        input_image_gcs_uri: str = None,
+        input_image_base64: str = None,
+        input_image_mime_type: str = "image/jpeg",
+        reference_images: list = None,  # [{gcs_uri/base64, reference_type: asset/style, mime_type}]
         **kwargs
     ) -> dict:
         """
@@ -68,6 +73,15 @@ class GeminiVeoClient:
             compression_quality: "optimized" (default), "lossless"
             seed: Seed para reproducibilidad (0-4294967295)
             storage_uri: URI de GCS donde guardar (ej: gs://bucket/path/)
+            
+            # Funcionalidades avanzadas (Fase 2):
+            input_image_gcs_uri: URI de GCS de imagen inicial para imagen-a-video
+            input_image_base64: String base64 de imagen inicial (alternativa a gcs_uri)
+            input_image_mime_type: Tipo MIME de la imagen ("image/jpeg" o "image/png")
+            reference_images: Lista de imágenes de referencia para consistencia
+                             Formato: [{"gcs_uri": "...", "reference_type": "asset/style", "mime_type": "..."}]
+                             Máximo: 3 imágenes "asset" o 1 imagen "style"
+                             Solo disponible en veo-2.0-generate-exp
         
         Returns:
             dict con 'video_id' (operation name) y otros metadatos
@@ -86,14 +100,52 @@ class GeminiVeoClient:
             )
             
             # Preparar el payload según la documentación de Vertex AI
-            payload = {
-                "instances": [
-                    {
-                        "prompt": prompt
+            instance = {
+                "prompt": prompt
+            }
+            
+            # Fase 2: Agregar imagen inicial si se proporciona (imagen-a-video)
+            if input_image_gcs_uri or input_image_base64:
+                image_data = {
+                    "mimeType": input_image_mime_type
+                }
+                
+                if input_image_gcs_uri:
+                    image_data["gcsUri"] = input_image_gcs_uri
+                    logger.info(f"🎨 Imagen-a-Video: {input_image_gcs_uri}")
+                elif input_image_base64:
+                    image_data["bytesBase64Encoded"] = input_image_base64
+                    logger.info(f"🎨 Imagen-a-Video: imagen base64 ({len(input_image_base64)} chars)")
+                
+                instance["image"] = image_data
+            
+            # Fase 2: Agregar imágenes de referencia si se proporcionan
+            if reference_images and len(reference_images) > 0:
+                ref_images_payload = []
+                for idx, ref_img in enumerate(reference_images):
+                    ref_image_obj = {
+                        "image": {
+                            "mimeType": ref_img.get("mime_type", "image/jpeg")
+                        },
+                        "referenceType": ref_img.get("reference_type", "asset")
                     }
-                ],
+                    
+                    if ref_img.get("gcs_uri"):
+                        ref_image_obj["image"]["gcsUri"] = ref_img["gcs_uri"]
+                    elif ref_img.get("base64"):
+                        ref_image_obj["image"]["bytesBase64Encoded"] = ref_img["base64"]
+                    
+                    ref_images_payload.append(ref_image_obj)
+                
+                instance["referenceImages"] = ref_images_payload
+                logger.info(f"🎭 Imágenes de referencia: {len(ref_images_payload)} imagen(es)")
+                for idx, ref in enumerate(reference_images):
+                    logger.info(f"   Ref {idx + 1}: tipo={ref.get('reference_type', 'asset')}")
+            
+            payload = {
+                "instances": [instance],
                 "parameters": {
-                    "durationSeconds": duration,  # ¡ESTO ES LO QUE FALTABA!
+                    "durationSeconds": duration,
                     "aspectRatio": aspect_ratio,
                     "sampleCount": sample_count,
                     "personGeneration": person_generation,
