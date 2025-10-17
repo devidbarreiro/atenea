@@ -240,24 +240,86 @@
             </div>
         </div>
         
-        <!-- Config Gemini -->
+        <!-- Config Gemini Veo 2 -->
         <div id="gemini-config" class="config-section">
-            <h3 style="margin-bottom: 1rem;">Configuración Gemini</h3>
+            <h3 style="margin-bottom: 1rem;">Configuración Gemini Veo 2</h3>
             
+            <!-- Parámetros básicos -->
             <div class="form-row">
                 <div class="form-group">
-                    <label>Duración (seg)</label>
-                    <input type="number" name="duration" value="5">
+                    <label>Duración (seg) *</label>
+                    <input type="number" name="duration" value="8" min="5" max="8" required>
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                        Entre 5 y 8 segundos. Recomendado: 8
+                    </small>
                 </div>
                 
                 <div class="form-group">
-                    <label>Aspect Ratio</label>
-                    <select name="aspect_ratio">
-                        <option value="16:9">16:9</option>
-                        <option value="9:16">9:16</option>
-                        <option value="1:1">1:1</option>
+                    <label>Aspect Ratio *</label>
+                    <select name="aspect_ratio" required>
+                        <option value="16:9">16:9 (Horizontal)</option>
+                        <option value="9:16">9:16 (Vertical)</option>
+                        <option value="1:1">1:1 (Cuadrado)</option>
                     </select>
                 </div>
+            </div>
+            
+            <!-- Generación múltiple y calidad -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Cantidad de Videos</label>
+                    <input type="number" name="sample_count" value="1" min="1" max="4">
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                        Generar de 1 a 4 videos simultáneamente
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Calidad de Compresión</label>
+                    <select name="compression_quality">
+                        <option value="optimized">Optimizada (Más rápido)</option>
+                        <option value="lossless">Sin pérdida (Más lento)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Negative Prompt -->
+            <div class="form-group">
+                <label>Negative Prompt (Opcional)</label>
+                <textarea name="negative_prompt" rows="2" placeholder="Describe lo que NO quieres ver en el video, ej: 'iluminación cenital, colores vivos, personas'"></textarea>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                    Especifica elementos que quieres evitar en la generación
+                </small>
+            </div>
+            
+            <!-- Controles avanzados -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Generación de Personas</label>
+                    <select name="person_generation">
+                        <option value="allow_adult">Permitir adultos</option>
+                        <option value="dont_allow">No permitir personas</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Seed (Opcional)</label>
+                    <input type="number" name="seed" placeholder="Ej: 42" min="0" max="4294967295">
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                        Para reproducibilidad (0-4294967295)
+                    </small>
+                </div>
+            </div>
+            
+            <!-- Enhance Prompt -->
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="enhance_prompt" value="true" checked style="width: auto; margin: 0;">
+                    <span>Mejorar prompt automáticamente con Gemini</span>
+                </label>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem; margin-left: 1.75rem;">
+                    Google Gemini optimizará tu prompt para mejores resultados
+                </small>
             </div>
         </div>
         

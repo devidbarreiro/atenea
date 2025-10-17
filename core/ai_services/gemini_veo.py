@@ -42,8 +42,15 @@ class GeminiVeoClient:
         self,
         prompt: str,
         title: str = "Untitled Video",
-        duration: int = 5,
+        duration: int = 8,
         aspect_ratio: str = "16:9",
+        sample_count: int = 1,
+        negative_prompt: str = None,
+        enhance_prompt: bool = True,
+        person_generation: str = "allow_adult",
+        compression_quality: str = "optimized",
+        seed: int = None,
+        storage_uri: str = None,
         **kwargs
     ) -> dict:
         """
@@ -52,8 +59,15 @@ class GeminiVeoClient:
         Args:
             prompt: Descripción del video a generar
             title: Título del video (para referencia local)
-            duration: Duración en segundos (5-8)
-            aspect_ratio: Relación de aspecto (16:9, 9:16, 1:1)
+            duration: Duración en segundos (5-8 para Veo 2, default: 8)
+            aspect_ratio: Relación de aspecto ("16:9", "9:16", "1:1")
+            sample_count: Número de videos a generar (1-4)
+            negative_prompt: Descripción de lo que NO quieres en el video
+            enhance_prompt: Usar Gemini para mejorar el prompt (default: True)
+            person_generation: "allow_adult" (default), "dont_allow"
+            compression_quality: "optimized" (default), "lossless"
+            seed: Seed para reproducibilidad (0-4294967295)
+            storage_uri: URI de GCS donde guardar (ej: gs://bucket/path/)
         
         Returns:
             dict con 'video_id' (operation name) y otros metadatos
@@ -62,6 +76,7 @@ class GeminiVeoClient:
             logger.info(f"Generando video con Gemini Veo 2: {title}")
             logger.info(f"Prompt: {prompt[:100]}...")
             logger.info(f"Duración: {duration}s, Aspect Ratio: {aspect_ratio}")
+            logger.info(f"Sample Count: {sample_count}, Quality: {compression_quality}")
             
             # Endpoint para predictLongRunning
             endpoint = (
@@ -78,11 +93,27 @@ class GeminiVeoClient:
                     }
                 ],
                 "parameters": {
-                    "sampleCount": 1,
+                    "durationSeconds": duration,  # ¡ESTO ES LO QUE FALTABA!
                     "aspectRatio": aspect_ratio,
-                    "personGeneration": "allow_all"
+                    "sampleCount": sample_count,
+                    "personGeneration": person_generation,
+                    "compressionQuality": compression_quality,
+                    "enhancePrompt": enhance_prompt
                 }
             }
+            
+            # Agregar parámetros opcionales si están presentes
+            if negative_prompt:
+                payload["parameters"]["negativePrompt"] = negative_prompt
+                logger.info(f"Negative prompt: {negative_prompt[:100]}...")
+            
+            if seed is not None:
+                payload["parameters"]["seed"] = seed
+                logger.info(f"Seed: {seed}")
+            
+            if storage_uri:
+                payload["parameters"]["storageUri"] = storage_uri
+                logger.info(f"Storage URI: {storage_uri}")
             
             # Headers con autenticación
             headers = {
@@ -122,7 +153,36 @@ class GeminiVeoClient:
                 logger.info(f"✅ Video iniciado. Operation: {operation_name}")
                 return result
             else:
-                error_msg = f"Error {response.status_code}: {response.text}"
+                # Parsear el error de Google
+                error_msg = response.text
+                error_data = None
+                
+                try:
+                    error_data = response.json()
+                    if 'error' in error_data:
+                        error_detail = error_data['error']
+                        error_code = error_detail.get('code', response.status_code)
+                        error_message = error_detail.get('message', error_msg)
+                        
+                        # Detectar errores específicos de contenido sensible
+                        if 'sensitive words' in error_message.lower() or 'responsible ai' in error_message.lower():
+                            logger.error(f"🚫 Contenido bloqueado por filtro de IA Responsable")
+                            logger.error(f"   Mensaje: {error_message}")
+                            raise ValueError(
+                                f"❌ Tu prompt fue bloqueado por el filtro de contenido de Google.\n\n"
+                                f"Motivo: {error_message}\n\n"
+                                f"💡 Sugerencias:\n"
+                                f"- Evita nombres de personas famosas o marcas\n"
+                                f"- Reformula para ser más descriptivo y menos específico\n"
+                                f"- Evita contenido violento, sexual o controversial\n"
+                                f"- Usa términos artísticos y técnicos\n\n"
+                                f"Si crees que es un error, contacta a Google con el código de soporte en los logs."
+                            )
+                        
+                        error_msg = f"Error {error_code}: {error_message}"
+                except:
+                    pass
+                
                 logger.error(f"❌ Error en Veo 2: {error_msg}")
                 raise Exception(error_msg)
             

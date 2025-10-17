@@ -189,10 +189,27 @@ def video_create(request, project_id):
                 
                 logger.info(f"Video IV creado con imagen existente (ID: {existing_image_key}), voice_id={voice_id}")
         elif video_type == 'gemini_veo':
+            # Capturar todos los parámetros de Veo 2
             config = {
-                'duration': int(request.POST.get('duration', 5)),
+                'duration': int(request.POST.get('duration', 8)),
                 'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
+                'sample_count': int(request.POST.get('sample_count', 1)),
+                'negative_prompt': request.POST.get('negative_prompt', ''),
+                'enhance_prompt': request.POST.get('enhance_prompt', 'true').lower() == 'true',
+                'person_generation': request.POST.get('person_generation', 'allow_adult'),
+                'compression_quality': request.POST.get('compression_quality', 'optimized'),
             }
+            
+            # Seed es opcional, solo agregarlo si se proporciona
+            seed_value = request.POST.get('seed', '')
+            if seed_value and seed_value.isdigit():
+                config['seed'] = int(seed_value)
+            
+            # Limpiar negative_prompt vacío
+            if not config['negative_prompt']:
+                config.pop('negative_prompt')
+            
+            logger.info(f"Video Veo 2 creado con config: {config}")
         
         video = Video.objects.create(
             project=project,
@@ -381,16 +398,27 @@ def video_generate(request, video_id):
             
             client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
             
+            # Preparar storageUri para que Veo guarde directamente en nuestro bucket
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
+            
             response = client.generate_video(
                 prompt=video.script,
                 title=video.title,
-                duration=video.config.get('duration', 5),
+                duration=video.config.get('duration', 8),
                 aspect_ratio=video.config.get('aspect_ratio', '16:9'),
+                sample_count=video.config.get('sample_count', 1),
+                negative_prompt=video.config.get('negative_prompt'),
+                enhance_prompt=video.config.get('enhance_prompt', True),
+                person_generation=video.config.get('person_generation', 'allow_adult'),
+                compression_quality=video.config.get('compression_quality', 'optimized'),
+                seed=video.config.get('seed'),
+                storage_uri=storage_uri,
             )
             
             video.external_id = response.get('video_id')
             video.save()
             
+            logger.info(f"Video Veo 2 configurado para guardarse en: {storage_uri}")
             messages.success(request, 'Video enviado a Gemini Veo para procesamiento')
         
         logger.info(f"Video {video.id} enviado. External ID: {video.external_id}")
@@ -501,12 +529,19 @@ def video_status(request, video_id):
                     try:
                         # Veo devuelve una URI de GCS (gs://...) o bytes en base64
                         if video_url.startswith('gs://'):
-                            # Es una URI de GCS, copiar el archivo a nuestro bucket
                             logger.info(f"[POLLING] Video ya está en GCS: {video_url}")
-                            # Copiar desde el bucket de Veo a nuestro bucket
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.copy_from_gcs(video_url, gcs_path)
-                            logger.info(f"[POLLING] Video copiado a nuestro bucket: {gcs_full_path}")
+                            
+                            # Verificar si ya está en nuestro bucket (storageUri fue usado)
+                            if video_url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
+                                # Ya está en nuestro bucket, no necesitamos copiar
+                                gcs_full_path = video_url
+                                logger.info(f"[POLLING] ✅ Video ya en nuestro bucket: {gcs_full_path}")
+                            else:
+                                # Está en bucket de Veo, copiar a nuestro bucket
+                                logger.info(f"[POLLING] Copiando desde bucket externo...")
+                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                                gcs_full_path = gcs_storage.copy_from_gcs(video_url, gcs_path)
+                                logger.info(f"[POLLING] Video copiado a nuestro bucket: {gcs_full_path}")
                         elif video_url.startswith('http'):
                             # Es una URL HTTP (poco probable con Veo)
                             logger.info(f"[POLLING] Descargando video {video.id} desde URL...")
