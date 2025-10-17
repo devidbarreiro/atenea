@@ -245,6 +245,25 @@ def video_detail(request, video_id):
         except Exception as e:
             logger.error(f"Error al generar URL firmada: {str(e)}")
     
+    # Generar URLs firmadas para TODOS los videos si existen en metadata
+    if video.status == 'completed' and video.metadata.get('all_videos'):
+        try:
+            all_videos_with_urls = []
+            for video_data in video.metadata['all_videos']:
+                gcs_path = video_data.get('gcs_path')
+                if gcs_path:
+                    signed = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+                    all_videos_with_urls.append({
+                        'index': video_data.get('index', 0),
+                        'gcs_path': gcs_path,
+                        'signed_url': signed,
+                        'mime_type': video_data.get('mime_type', 'video/mp4')
+                    })
+            # Actualizar metadata temporalmente con URLs firmadas (solo para esta request)
+            video.metadata['all_videos'] = all_videos_with_urls
+        except Exception as e:
+            logger.error(f"Error al generar URLs firmadas para múltiples videos: {str(e)}")
+    
     context = {
         'video': video,
         'signed_url': signed_url,
@@ -523,59 +542,85 @@ def video_status(request, video_id):
             # Actualizar estado si está completado
             if api_status == 'completed':
                 video_url = status_data.get('video_url')
-                logger.info(f"[POLLING] Video {video.id} completado! Video data disponible")
+                all_video_urls = status_data.get('all_video_urls', [])
+                num_videos = len(all_video_urls)
                 
-                if video_url:
+                logger.info(f"[POLLING] Video {video.id} completado! {num_videos} video(s) generado(s)")
+                
+                if video_url and all_video_urls:
                     try:
-                        # Veo devuelve una URI de GCS (gs://...) o bytes en base64
-                        if video_url.startswith('gs://'):
-                            logger.info(f"[POLLING] Video ya está en GCS: {video_url}")
-                            
-                            # Verificar si ya está en nuestro bucket (storageUri fue usado)
-                            if video_url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
-                                # Ya está en nuestro bucket, no necesitamos copiar
-                                gcs_full_path = video_url
-                                logger.info(f"[POLLING] ✅ Video ya en nuestro bucket: {gcs_full_path}")
-                            else:
-                                # Está en bucket de Veo, copiar a nuestro bucket
-                                logger.info(f"[POLLING] Copiando desde bucket externo...")
-                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                                gcs_full_path = gcs_storage.copy_from_gcs(video_url, gcs_path)
-                                logger.info(f"[POLLING] Video copiado a nuestro bucket: {gcs_full_path}")
-                        elif video_url.startswith('http'):
-                            # Es una URL HTTP (poco probable con Veo)
-                            logger.info(f"[POLLING] Descargando video {video.id} desde URL...")
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
-                        else:
-                            # Es base64, guardar directamente
-                            logger.warning(f"[POLLING] Video en base64, guardando...")
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.upload_base64(video_url, gcs_path)
-                            logger.info(f"[POLLING] Video guardado desde base64: {gcs_full_path}")
+                        # Procesar TODOS los videos generados
+                        all_gcs_paths = []
                         
-                        # Extraer metadata adicional
+                        for idx, video_data in enumerate(all_video_urls):
+                            url = video_data['url']
+                            logger.info(f"[POLLING] Procesando video {idx + 1}/{num_videos}...")
+                            
+                            # Determinar el nombre del archivo
+                            if num_videos == 1:
+                                filename = "video.mp4"
+                            else:
+                                filename = f"video_{idx + 1}.mp4"
+                            
+                            # Procesar según el tipo de URL
+                            if url.startswith('gs://'):
+                                # Verificar si ya está en nuestro bucket
+                                if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
+                                    gcs_full_path = url
+                                    logger.info(f"[POLLING]    ✅ Ya en nuestro bucket: {gcs_full_path}")
+                                else:
+                                    # Copiar desde bucket externo
+                                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                    gcs_full_path = gcs_storage.copy_from_gcs(url, gcs_path)
+                                    logger.info(f"[POLLING]    ✅ Copiado: {gcs_full_path}")
+                            elif url.startswith('http'):
+                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                gcs_full_path = gcs_storage.upload_from_url(url, gcs_path)
+                                logger.info(f"[POLLING]    ✅ Descargado: {gcs_full_path}")
+                            else:
+                                # Base64
+                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                gcs_full_path = gcs_storage.upload_base64(url, gcs_path)
+                                logger.info(f"[POLLING]    ✅ Guardado desde base64: {gcs_full_path}")
+                            
+                            all_gcs_paths.append({
+                                'index': idx,
+                                'gcs_path': gcs_full_path,
+                                'original_url': url,
+                                'mime_type': video_data.get('mime_type', 'video/mp4')
+                            })
+                        
+                        # Metadata completa
                         metadata = {
-                            'video_url_original': video_url,
-                            'videos': status_data.get('videos', []),
+                            'sample_count': num_videos,
+                            'all_videos': all_gcs_paths,  # TODOS los videos con sus paths
                             'rai_filtered_count': status_data.get('rai_filtered_count', 0),
+                            'videos_raw': status_data.get('videos', []),
                             'operation_data': status_data.get('operation_data', {}),
                         }
                         
-                        if gcs_full_path:
-                            video.mark_as_completed(
-                                gcs_path=gcs_full_path,
-                                metadata=metadata
-                            )
-                            logger.info(f"[POLLING] ✅ Video {video.id} completado y guardado en GCS: {gcs_full_path}")
+                        # Guardar el primer video en gcs_path (compatibilidad)
+                        primary_gcs_path = all_gcs_paths[0]['gcs_path']
+                        
+                        video.mark_as_completed(
+                            gcs_path=primary_gcs_path,
+                            metadata=metadata
+                        )
+                        
+                        if num_videos > 1:
+                            logger.info(f"[POLLING] ✅ {num_videos} videos completados y guardados!")
+                            logger.info(f"[POLLING]    Principal: {primary_gcs_path}")
+                            for i, vp in enumerate(all_gcs_paths[1:], 1):
+                                logger.info(f"[POLLING]    Video {i + 1}: {vp['gcs_path']}")
                         else:
-                            video.mark_as_error("Video completado pero no se pudo guardar en GCS")
+                            logger.info(f"[POLLING] ✅ Video completado: {primary_gcs_path}")
+                            
                     except Exception as e:
-                        logger.error(f"[POLLING] ❌ Error al procesar video {video.id}: {str(e)}")
-                        video.mark_as_error(f"Error al procesar video: {str(e)}")
+                        logger.error(f"[POLLING] ❌ Error al procesar videos: {str(e)}")
+                        video.mark_as_error(f"Error al procesar videos: {str(e)}")
                 else:
-                    logger.warning(f"[POLLING] Video {video.id} completado pero sin video_url")
-                    video.mark_as_error("Video completado pero sin URL")
+                    logger.warning(f"[POLLING] Video {video.id} completado pero sin datos de video")
+                    video.mark_as_error("Video completado pero sin datos de video")
             
             elif api_status == 'failed' or api_status == 'error':
                 error_msg = status_data.get('error', 'Video generation failed')

@@ -252,17 +252,32 @@ class GeminiVeoClient:
                         rai_filtered_count = response_data.get('raiMediaFilteredCount', 0)
                         
                         video_url = None
+                        all_video_urls = []
+                        
                         if videos and len(videos) > 0:
                             # Veo devuelve un array de videos con gcsUri o bytesBase64Encoded
-                            first_video = videos[0]
-                            video_url = first_video.get('gcsUri') or first_video.get('bytesBase64Encoded')
+                            for idx, video in enumerate(videos):
+                                url = video.get('gcsUri') or video.get('bytesBase64Encoded')
+                                if url:
+                                    all_video_urls.append({
+                                        'index': idx,
+                                        'url': url,
+                                        'mime_type': video.get('mimeType', 'video/mp4')
+                                    })
+                            
+                            # El primer video es el principal
+                            if all_video_urls:
+                                video_url = all_video_urls[0]['url']
                         
-                        logger.info(f"✅ Video completado! URL: {video_url}")
-                        logger.info(f"Videos generados: {len(videos)}, Filtrados: {rai_filtered_count}")
+                        logger.info(f"✅ Video completado!")
+                        logger.info(f"   Videos generados: {len(all_video_urls)}, Filtrados: {rai_filtered_count}")
+                        if len(all_video_urls) > 1:
+                            logger.info(f"   📹 Multi-generación: {len(all_video_urls)} videos disponibles")
                         
                         return {
                             'status': 'completed',
-                            'video_url': video_url,
+                            'video_url': video_url,  # Primer video (compatibilidad)
+                            'all_video_urls': all_video_urls,  # TODOS los videos
                             'operation_data': operation_data,
                             'videos': videos,
                             'rai_filtered_count': rai_filtered_count
