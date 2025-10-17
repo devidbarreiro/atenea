@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -42,6 +43,12 @@
             align-items: center;
         }
         
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        
         .navbar h1 {
             font-size: 1.25rem;
             font-weight: 600;
@@ -51,6 +58,29 @@
         .navbar h1 a {
             color: inherit;
             text-decoration: none;
+        }
+        
+        .navbar-breadcrumbs {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+        }
+        
+        .navbar-breadcrumbs a {
+            color: hsl(var(--muted-foreground));
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .navbar-breadcrumbs a:hover {
+            color: hsl(var(--foreground));
+        }
+        
+        .navbar-breadcrumbs span {
+            color: hsl(var(--foreground));
+            font-weight: 500;
         }
         
         .navbar nav {
@@ -206,47 +236,6 @@
             min-height: 120px;
         }
         
-        .breadcrumbs {
-            padding: 1rem 0 0.5rem;
-            font-size: 0.875rem;
-            color: hsl(var(--muted-foreground));
-        }
-        
-        .breadcrumbs ol {
-            display: flex;
-            flex-wrap: wrap;
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            gap: 0.5rem;
-            align-items: center;
-        }
-        
-        .breadcrumbs li {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .breadcrumbs a {
-            color: hsl(var(--muted-foreground));
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        
-        .breadcrumbs a:hover {
-            color: hsl(var(--foreground));
-        }
-        
-        .breadcrumbs li:not(:last-child)::after {
-            content: "/";
-            color: hsl(var(--border));
-        }
-        
-        .breadcrumbs li:last-child {
-            color: hsl(var(--foreground));
-            font-weight: 500;
-        }
         
         {% block extra_css %}{% endblock %}
     </style>
@@ -254,7 +243,27 @@
 <body>
     <nav class="navbar">
         <div class="navbar-content">
-            <h1><a href="{% url 'core:dashboard' %}">Atenea</a></h1>
+            <div class="navbar-left">
+                <h1>
+                    <a href="{% url 'core:dashboard' %}" style="display: flex; align-items: center;">
+                        <img src="{% static 'img/logo.png' %}" alt="Atenea" style="height: 20px; width: auto; object-fit: contain; object-position: center;">
+                    </a>
+                </h1>
+                {% if breadcrumbs %}
+                <div class="navbar-breadcrumbs">
+                    {% for crumb in breadcrumbs %}
+                        {% if crumb.url %}
+                            <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        {% else %}
+                            <span>{{ crumb.label }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
             <nav>
                 <a href="{% url 'core:dashboard' %}">Dashboard</a>
                 <a href="/admin/">Admin</a>
@@ -273,23 +282,6 @@
     {% endif %}
     
     <div class="container">
-        {% if breadcrumbs %}
-        <nav class="breadcrumbs" aria-label="Breadcrumb">
-            <ol>
-                <li><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
-                {% for crumb in breadcrumbs %}
-                <li>
-                    {% if crumb.url %}
-                    <a href="{{ crumb.url }}">{{ crumb.label }}</a>
-                    {% else %}
-                    {{ crumb.label }}
-                    {% endif %}
-                </li>
-                {% endfor %}
-            </ol>
-        </nav>
-        {% endif %}
-        
         {% block content %}{% endblock %}
     </div>
     

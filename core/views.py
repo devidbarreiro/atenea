@@ -318,9 +318,38 @@ def video_detail(request, video_id):
         except Exception as e:
             logger.error(f"Error al generar URLs firmadas para múltiples videos: {str(e)}")
     
+    # Generar URLs firmadas para imágenes de referencia si existen
+    reference_images_with_urls = []
+    if video.config.get('reference_images'):
+        try:
+            for idx, ref_img in enumerate(video.config['reference_images']):
+                gcs_uri = ref_img.get('gcs_uri')
+                if gcs_uri:
+                    signed = gcs_storage.get_signed_url(gcs_uri, expiration=3600)
+                    reference_images_with_urls.append({
+                        'index': idx,
+                        'gcs_uri': gcs_uri,
+                        'signed_url': signed,
+                        'reference_type': ref_img.get('reference_type', 'asset'),
+                        'mime_type': ref_img.get('mime_type', 'image/jpeg')
+                    })
+            logger.info(f"Generadas {len(reference_images_with_urls)} URLs firmadas para imágenes de referencia")
+        except Exception as e:
+            logger.error(f"Error al generar URLs firmadas para imágenes de referencia: {str(e)}")
+    
+    # Generar URL firmada para imagen inicial si existe
+    input_image_url = None
+    if video.config.get('input_image_gcs_uri'):
+        try:
+            input_image_url = gcs_storage.get_signed_url(video.config['input_image_gcs_uri'], expiration=3600)
+        except Exception as e:
+            logger.error(f"Error al generar URL firmada para imagen inicial: {str(e)}")
+    
     context = {
         'video': video,
         'signed_url': signed_url,
+        'reference_images': reference_images_with_urls,
+        'input_image_url': input_image_url,
         'breadcrumbs': [
             {'label': video.project.name, 'url': f'/projects/{video.project.id}/'},
             {'label': video.title, 'url': None}
