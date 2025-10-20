@@ -472,17 +472,17 @@
 <div class="detail-container">
     <div class="main-content">
         <!-- Video Player(s) -->
-        {% if video.status == 'completed' and video.metadata.all_videos %}
+        {% if video.status == 'completed' and all_videos %}
             <!-- Multi-video generado -->
-            {% if video.metadata.all_videos|length > 1 %}
+            {% if all_videos|length > 1 %}
                 <div class="info-card" style="margin-bottom: 1rem;">
-                    <h2 class="info-card-title">Videos Generados ({{ video.metadata.all_videos|length }})</h2>
+                    <h2 class="info-card-title">Videos Generados ({{ all_videos|length }})</h2>
                     <p style="margin: 0; font-size: 0.875rem; color: hsl(var(--muted-foreground));">
-                        Se generaron {{ video.metadata.all_videos|length }} videos para esta solicitud
+                        Se generaron {{ all_videos|length }} videos para esta solicitud
                     </p>
                 </div>
                 <div class="multi-video-grid">
-                    {% for video_item in video.metadata.all_videos %}
+                    {% for video_item in all_videos %}
                     <div class="video-item">
                         <div class="video-player-container">
                             <div class="video-item-label">Video {{ forloop.counter }}</div>

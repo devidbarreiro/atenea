@@ -300,9 +300,9 @@ def video_detail(request, video_id):
             logger.error(f"Error al generar URL firmada: {str(e)}")
     
     # Generar URLs firmadas para TODOS los videos si existen en metadata
+    all_videos_with_urls = []
     if video.status == 'completed' and video.metadata.get('all_videos'):
         try:
-            all_videos_with_urls = []
             for video_data in video.metadata['all_videos']:
                 gcs_path = video_data.get('gcs_path')
                 if gcs_path:
@@ -313,8 +313,6 @@ def video_detail(request, video_id):
                         'signed_url': signed,
                         'mime_type': video_data.get('mime_type', 'video/mp4')
                     })
-            # Actualizar metadata temporalmente con URLs firmadas (solo para esta request)
-            video.metadata['all_videos'] = all_videos_with_urls
         except Exception as e:
             logger.error(f"Error al generar URLs firmadas para múltiples videos: {str(e)}")
     
@@ -348,6 +346,7 @@ def video_detail(request, video_id):
     context = {
         'video': video,
         'signed_url': signed_url,
+        'all_videos': all_videos_with_urls,
         'reference_images': reference_images_with_urls,
         'input_image_url': input_image_url,
         'breadcrumbs': [
