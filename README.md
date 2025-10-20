@@ -101,7 +101,7 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 # Google Cloud Storage
 GCS_BUCKET_NAME=devid-bucket-0001
 GCS_PROJECT_ID=proeduca-472312
-GOOGLE_APPLICATION_CREDENTIALS=proeduca-472312-4cae9909afa3.json
+GOOGLE_APPLICATION_CREDENTIALS=credentials.json
 
 # API Keys
 HEYGEN_API_KEY=tu-api-key-de-heygen
