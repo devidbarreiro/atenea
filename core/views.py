@@ -189,10 +189,81 @@ def video_create(request, project_id):
                 
                 logger.info(f"Video IV creado con imagen existente (ID: {existing_image_key}), voice_id={voice_id}")
         elif video_type == 'gemini_veo':
+            # Capturar todos los parámetros de Veo 2
             config = {
-                'duration': int(request.POST.get('duration', 5)),
+                'veo_model': request.POST.get('veo_model', 'veo-2.0-generate-001'),
+                'duration': int(request.POST.get('duration', 8)),
                 'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
+                'sample_count': int(request.POST.get('sample_count', 1)),
+                'negative_prompt': request.POST.get('negative_prompt', ''),
+                'enhance_prompt': request.POST.get('enhance_prompt', 'true').lower() == 'true',
+                'person_generation': request.POST.get('person_generation', 'allow_adult'),
+                'compression_quality': request.POST.get('compression_quality', 'optimized'),
             }
+            
+            # Seed es opcional
+            seed_value = request.POST.get('seed', '')
+            if seed_value and seed_value.isdigit():
+                config['seed'] = int(seed_value)
+            
+            # Limpiar negative_prompt vacío
+            if not config['negative_prompt']:
+                config.pop('negative_prompt')
+            
+            # FASE 2: Imagen inicial (imagen-a-video)
+            input_image = request.FILES.get('input_image')
+            if input_image:
+                import os
+                from datetime import datetime
+                
+                # Subir imagen inicial a GCS
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = input_image.name.replace(' ', '_')
+                gcs_destination = f"veo_input_images/project_{project.id}/{timestamp}_{safe_filename}"
+                
+                try:
+                    logger.info(f"Subiendo imagen inicial para Veo 2: {safe_filename}")
+                    gcs_path = gcs_storage.upload_django_file(input_image, gcs_destination)
+                    config['input_image_gcs_uri'] = gcs_path
+                    config['input_image_mime_type'] = input_image.content_type or 'image/jpeg'
+                    logger.info(f"✅ Imagen inicial subida: {gcs_path}")
+                except Exception as e:
+                    logger.error(f"Error al subir imagen inicial: {str(e)}")
+                    messages.error(request, f'Error al subir imagen: {str(e)}')
+                    return redirect('core:video_create', project_id=project_id)
+            
+            # FASE 2: Imágenes de referencia (máximo 3 asset o 1 style)
+            reference_images = []
+            for i in range(1, 4):  # Máximo 3 imágenes de referencia
+                ref_image = request.FILES.get(f'reference_image_{i}')
+                ref_type = request.POST.get(f'reference_type_{i}', 'asset')
+                
+                if ref_image:
+                    import os
+                    from datetime import datetime
+                    
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    safe_filename = ref_image.name.replace(' ', '_')
+                    gcs_destination = f"veo_reference_images/project_{project.id}/{timestamp}_{i}_{safe_filename}"
+                    
+                    try:
+                        logger.info(f"Subiendo imagen de referencia {i} ({ref_type}): {safe_filename}")
+                        gcs_path = gcs_storage.upload_django_file(ref_image, gcs_destination)
+                        reference_images.append({
+                            'gcs_uri': gcs_path,
+                            'reference_type': ref_type,
+                            'mime_type': ref_image.content_type or 'image/jpeg'
+                        })
+                        logger.info(f"✅ Imagen de referencia {i} subida: {gcs_path}")
+                    except Exception as e:
+                        logger.error(f"Error al subir imagen de referencia {i}: {str(e)}")
+                        # No bloqueamos la creación si falla una imagen de referencia
+            
+            if reference_images:
+                config['reference_images'] = reference_images
+                logger.info(f"🎭 {len(reference_images)} imagen(es) de referencia configuradas")
+            
+            logger.info(f"Video Veo 2 creado con config: {config}")
         
         video = Video.objects.create(
             project=project,
@@ -228,9 +299,56 @@ def video_detail(request, video_id):
         except Exception as e:
             logger.error(f"Error al generar URL firmada: {str(e)}")
     
+    # Generar URLs firmadas para TODOS los videos si existen en metadata
+    all_videos_with_urls = []
+    if video.status == 'completed' and video.metadata.get('all_videos'):
+        try:
+            for video_data in video.metadata['all_videos']:
+                gcs_path = video_data.get('gcs_path')
+                if gcs_path:
+                    signed = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+                    all_videos_with_urls.append({
+                        'index': video_data.get('index', 0),
+                        'gcs_path': gcs_path,
+                        'signed_url': signed,
+                        'mime_type': video_data.get('mime_type', 'video/mp4')
+                    })
+        except Exception as e:
+            logger.error(f"Error al generar URLs firmadas para múltiples videos: {str(e)}")
+    
+    # Generar URLs firmadas para imágenes de referencia si existen
+    reference_images_with_urls = []
+    if video.config.get('reference_images'):
+        try:
+            for idx, ref_img in enumerate(video.config['reference_images']):
+                gcs_uri = ref_img.get('gcs_uri')
+                if gcs_uri:
+                    signed = gcs_storage.get_signed_url(gcs_uri, expiration=3600)
+                    reference_images_with_urls.append({
+                        'index': idx,
+                        'gcs_uri': gcs_uri,
+                        'signed_url': signed,
+                        'reference_type': ref_img.get('reference_type', 'asset'),
+                        'mime_type': ref_img.get('mime_type', 'image/jpeg')
+                    })
+            logger.info(f"Generadas {len(reference_images_with_urls)} URLs firmadas para imágenes de referencia")
+        except Exception as e:
+            logger.error(f"Error al generar URLs firmadas para imágenes de referencia: {str(e)}")
+    
+    # Generar URL firmada para imagen inicial si existe
+    input_image_url = None
+    if video.config.get('input_image_gcs_uri'):
+        try:
+            input_image_url = gcs_storage.get_signed_url(video.config['input_image_gcs_uri'], expiration=3600)
+        except Exception as e:
+            logger.error(f"Error al generar URL firmada para imagen inicial: {str(e)}")
+    
     context = {
         'video': video,
         'signed_url': signed_url,
+        'all_videos': all_videos_with_urls,
+        'reference_images': reference_images_with_urls,
+        'input_image_url': input_image_url,
         'breadcrumbs': [
             {'label': video.project.name, 'url': f'/projects/{video.project.id}/'},
             {'label': video.title, 'url': None}
@@ -379,18 +497,47 @@ def video_generate(request, video_id):
             if not settings.GEMINI_API_KEY:
                 raise ValueError('GEMINI_API_KEY no está configurada')
             
-            client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
+            # Usar el modelo especificado en la configuración
+            model_name = video.config.get('veo_model', 'veo-2.0-generate-001')
+            logger.info(f"🎬 Usando modelo: {model_name}")
             
-            response = client.generate_video(
-                prompt=video.script,
-                title=video.title,
-                duration=video.config.get('duration', 5),
-                aspect_ratio=video.config.get('aspect_ratio', '16:9'),
-            )
+            client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY, model_name=model_name)
+            
+            # Preparar storageUri para que Veo guarde directamente en nuestro bucket
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
+            
+            # Preparar parámetros avanzados (Fase 2)
+            generate_params = {
+                'prompt': video.script,
+                'title': video.title,
+                'duration': video.config.get('duration', 8),
+                'aspect_ratio': video.config.get('aspect_ratio', '16:9'),
+                'sample_count': video.config.get('sample_count', 1),
+                'negative_prompt': video.config.get('negative_prompt'),
+                'enhance_prompt': video.config.get('enhance_prompt', True),
+                'person_generation': video.config.get('person_generation', 'allow_adult'),
+                'compression_quality': video.config.get('compression_quality', 'optimized'),
+                'seed': video.config.get('seed'),
+                'storage_uri': storage_uri,
+            }
+            
+            # Fase 2: Imagen inicial (imagen-a-video)
+            if video.config.get('input_image_gcs_uri'):
+                generate_params['input_image_gcs_uri'] = video.config['input_image_gcs_uri']
+                generate_params['input_image_mime_type'] = video.config.get('input_image_mime_type', 'image/jpeg')
+                logger.info(f"🎨 Generando video desde imagen: {video.config['input_image_gcs_uri']}")
+            
+            # Fase 2: Imágenes de referencia
+            if video.config.get('reference_images'):
+                generate_params['reference_images'] = video.config['reference_images']
+                logger.info(f"🎭 Usando {len(video.config['reference_images'])} imagen(es) de referencia")
+            
+            response = client.generate_video(**generate_params)
             
             video.external_id = response.get('video_id')
             video.save()
             
+            logger.info(f"Video Veo 2 configurado para guardarse en: {storage_uri}")
             messages.success(request, 'Video enviado a Gemini Veo para procesamiento')
         
         logger.info(f"Video {video.id} enviado. External ID: {video.external_id}")
@@ -495,52 +642,85 @@ def video_status(request, video_id):
             # Actualizar estado si está completado
             if api_status == 'completed':
                 video_url = status_data.get('video_url')
-                logger.info(f"[POLLING] Video {video.id} completado! Video data disponible")
+                all_video_urls = status_data.get('all_video_urls', [])
+                num_videos = len(all_video_urls)
                 
-                if video_url:
+                logger.info(f"[POLLING] Video {video.id} completado! {num_videos} video(s) generado(s)")
+                
+                if video_url and all_video_urls:
                     try:
-                        # Veo devuelve una URI de GCS (gs://...) o bytes en base64
-                        if video_url.startswith('gs://'):
-                            # Es una URI de GCS, copiar el archivo a nuestro bucket
-                            logger.info(f"[POLLING] Video ya está en GCS: {video_url}")
-                            # Copiar desde el bucket de Veo a nuestro bucket
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.copy_from_gcs(video_url, gcs_path)
-                            logger.info(f"[POLLING] Video copiado a nuestro bucket: {gcs_full_path}")
-                        elif video_url.startswith('http'):
-                            # Es una URL HTTP (poco probable con Veo)
-                            logger.info(f"[POLLING] Descargando video {video.id} desde URL...")
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
-                        else:
-                            # Es base64, guardar directamente
-                            logger.warning(f"[POLLING] Video en base64, guardando...")
-                            gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
-                            gcs_full_path = gcs_storage.upload_base64(video_url, gcs_path)
-                            logger.info(f"[POLLING] Video guardado desde base64: {gcs_full_path}")
+                        # Procesar TODOS los videos generados
+                        all_gcs_paths = []
                         
-                        # Extraer metadata adicional
+                        for idx, video_data in enumerate(all_video_urls):
+                            url = video_data['url']
+                            logger.info(f"[POLLING] Procesando video {idx + 1}/{num_videos}...")
+                            
+                            # Determinar el nombre del archivo
+                            if num_videos == 1:
+                                filename = "video.mp4"
+                            else:
+                                filename = f"video_{idx + 1}.mp4"
+                            
+                            # Procesar según el tipo de URL
+                            if url.startswith('gs://'):
+                                # Verificar si ya está en nuestro bucket
+                                if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
+                                    gcs_full_path = url
+                                    logger.info(f"[POLLING]    ✅ Ya en nuestro bucket: {gcs_full_path}")
+                                else:
+                                    # Copiar desde bucket externo
+                                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                    gcs_full_path = gcs_storage.copy_from_gcs(url, gcs_path)
+                                    logger.info(f"[POLLING]    ✅ Copiado: {gcs_full_path}")
+                            elif url.startswith('http'):
+                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                gcs_full_path = gcs_storage.upload_from_url(url, gcs_path)
+                                logger.info(f"[POLLING]    ✅ Descargado: {gcs_full_path}")
+                            else:
+                                # Base64
+                                gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                                gcs_full_path = gcs_storage.upload_base64(url, gcs_path)
+                                logger.info(f"[POLLING]    ✅ Guardado desde base64: {gcs_full_path}")
+                            
+                            all_gcs_paths.append({
+                                'index': idx,
+                                'gcs_path': gcs_full_path,
+                                'original_url': url,
+                                'mime_type': video_data.get('mime_type', 'video/mp4')
+                            })
+                        
+                        # Metadata completa
                         metadata = {
-                            'video_url_original': video_url,
-                            'videos': status_data.get('videos', []),
+                            'sample_count': num_videos,
+                            'all_videos': all_gcs_paths,  # TODOS los videos con sus paths
                             'rai_filtered_count': status_data.get('rai_filtered_count', 0),
+                            'videos_raw': status_data.get('videos', []),
                             'operation_data': status_data.get('operation_data', {}),
                         }
                         
-                        if gcs_full_path:
-                            video.mark_as_completed(
-                                gcs_path=gcs_full_path,
-                                metadata=metadata
-                            )
-                            logger.info(f"[POLLING] ✅ Video {video.id} completado y guardado en GCS: {gcs_full_path}")
+                        # Guardar el primer video en gcs_path (compatibilidad)
+                        primary_gcs_path = all_gcs_paths[0]['gcs_path']
+                        
+                        video.mark_as_completed(
+                            gcs_path=primary_gcs_path,
+                            metadata=metadata
+                        )
+                        
+                        if num_videos > 1:
+                            logger.info(f"[POLLING] ✅ {num_videos} videos completados y guardados!")
+                            logger.info(f"[POLLING]    Principal: {primary_gcs_path}")
+                            for i, vp in enumerate(all_gcs_paths[1:], 1):
+                                logger.info(f"[POLLING]    Video {i + 1}: {vp['gcs_path']}")
                         else:
-                            video.mark_as_error("Video completado pero no se pudo guardar en GCS")
+                            logger.info(f"[POLLING] ✅ Video completado: {primary_gcs_path}")
+                            
                     except Exception as e:
-                        logger.error(f"[POLLING] ❌ Error al procesar video {video.id}: {str(e)}")
-                        video.mark_as_error(f"Error al procesar video: {str(e)}")
+                        logger.error(f"[POLLING] ❌ Error al procesar videos: {str(e)}")
+                        video.mark_as_error(f"Error al procesar videos: {str(e)}")
                 else:
-                    logger.warning(f"[POLLING] Video {video.id} completado pero sin video_url")
-                    video.mark_as_error("Video completado pero sin URL")
+                    logger.warning(f"[POLLING] Video {video.id} completado pero sin datos de video")
+                    video.mark_as_error("Video completado pero sin datos de video")
             
             elif api_status == 'failed' or api_status == 'error':
                 error_msg = status_data.get('error', 'Video generation failed')

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class GeminiVeoClient:
     """Cliente para Gemini Veo 2 (Vertex AI Video Generation)"""
     
-    def __init__(self, api_key: str = None, project_id: str = "proeduca-472312", location: str = "us-central1"):
+    def __init__(self, api_key: str = None, project_id: str = "proeduca-472312", location: str = "us-central1", model_name: str = "veo-2.0-generate-001"):
         """
         Inicializa el cliente de Veo 2
         
@@ -19,17 +19,19 @@ class GeminiVeoClient:
             api_key: No se usa, mantiene compatibilidad con la interfaz
             project_id: ID del proyecto de Google Cloud
             location: Región del endpoint (us-central1, europe-west4, etc.)
+            model_name: Modelo a usar (veo-2.0-generate-001 o veo-2.0-generate-exp)
         """
         self.project_id = project_id
         self.location = location
         self.base_url = f"https://{location}-aiplatform.googleapis.com/v1"
-        self.model_name = "veo-2.0-generate-001"
+        self.model_name = model_name
         
         # Obtener credenciales con los scopes correctos para Vertex AI
         scopes = ['https://www.googleapis.com/auth/cloud-platform']
         self.credentials, _ = default(scopes=scopes)
         
         logger.info(f"Cliente Veo 2 inicializado: {project_id} @ {location}")
+        logger.info(f"Modelo: {model_name}")
         logger.info(f"Scopes configurados: {scopes}")
     
     def _get_access_token(self) -> str:
@@ -42,8 +44,20 @@ class GeminiVeoClient:
         self,
         prompt: str,
         title: str = "Untitled Video",
-        duration: int = 5,
+        duration: int = 8,
         aspect_ratio: str = "16:9",
+        sample_count: int = 1,
+        negative_prompt: str = None,
+        enhance_prompt: bool = True,
+        person_generation: str = "allow_adult",
+        compression_quality: str = "optimized",
+        seed: int = None,
+        storage_uri: str = None,
+        # Funcionalidades avanzadas (Fase 2)
+        input_image_gcs_uri: str = None,
+        input_image_base64: str = None,
+        input_image_mime_type: str = "image/jpeg",
+        reference_images: list = None,  # [{gcs_uri/base64, reference_type: asset/style, mime_type}]
         **kwargs
     ) -> dict:
         """
@@ -52,8 +66,24 @@ class GeminiVeoClient:
         Args:
             prompt: Descripción del video a generar
             title: Título del video (para referencia local)
-            duration: Duración en segundos (5-8)
-            aspect_ratio: Relación de aspecto (16:9, 9:16, 1:1)
+            duration: Duración en segundos (5-8 para Veo 2, default: 8)
+            aspect_ratio: Relación de aspecto ("16:9", "9:16", "1:1")
+            sample_count: Número de videos a generar (1-4)
+            negative_prompt: Descripción de lo que NO quieres en el video
+            enhance_prompt: Usar Gemini para mejorar el prompt (default: True)
+            person_generation: "allow_adult" (default), "dont_allow"
+            compression_quality: "optimized" (default), "lossless"
+            seed: Seed para reproducibilidad (0-4294967295)
+            storage_uri: URI de GCS donde guardar (ej: gs://bucket/path/)
+            
+            # Funcionalidades avanzadas (Fase 2):
+            input_image_gcs_uri: URI de GCS de imagen inicial para imagen-a-video
+            input_image_base64: String base64 de imagen inicial (alternativa a gcs_uri)
+            input_image_mime_type: Tipo MIME de la imagen ("image/jpeg" o "image/png")
+            reference_images: Lista de imágenes de referencia para consistencia
+                             Formato: [{"gcs_uri": "...", "reference_type": "asset/style", "mime_type": "..."}]
+                             Máximo: 3 imágenes "asset" o 1 imagen "style"
+                             Solo disponible en veo-2.0-generate-exp
         
         Returns:
             dict con 'video_id' (operation name) y otros metadatos
@@ -62,6 +92,7 @@ class GeminiVeoClient:
             logger.info(f"Generando video con Gemini Veo 2: {title}")
             logger.info(f"Prompt: {prompt[:100]}...")
             logger.info(f"Duración: {duration}s, Aspect Ratio: {aspect_ratio}")
+            logger.info(f"Sample Count: {sample_count}, Quality: {compression_quality}")
             
             # Endpoint para predictLongRunning
             endpoint = (
@@ -71,18 +102,76 @@ class GeminiVeoClient:
             )
             
             # Preparar el payload según la documentación de Vertex AI
-            payload = {
-                "instances": [
-                    {
-                        "prompt": prompt
+            instance = {
+                "prompt": prompt
+            }
+            
+            # Fase 2: Agregar imagen inicial si se proporciona (imagen-a-video)
+            if input_image_gcs_uri or input_image_base64:
+                image_data = {
+                    "mimeType": input_image_mime_type
+                }
+                
+                if input_image_gcs_uri:
+                    image_data["gcsUri"] = input_image_gcs_uri
+                    logger.info(f"🎨 Imagen-a-Video: {input_image_gcs_uri}")
+                elif input_image_base64:
+                    image_data["bytesBase64Encoded"] = input_image_base64
+                    logger.info(f"🎨 Imagen-a-Video: imagen base64 ({len(input_image_base64)} chars)")
+                
+                instance["image"] = image_data
+            
+            # Fase 2: Agregar imágenes de referencia si se proporcionan
+            if reference_images and len(reference_images) > 0:
+                # IMPORTANTE: referenceImages requiere duración de 8 segundos (validado en formulario)
+                if duration != 8:
+                    logger.warning(f"⚠️  Imágenes de referencia con duración {duration}s (debería ser 8s)")
+                
+                ref_images_payload = []
+                for idx, ref_img in enumerate(reference_images):
+                    ref_image_obj = {
+                        "image": {
+                            "mimeType": ref_img.get("mime_type", "image/jpeg")
+                        },
+                        "referenceType": ref_img.get("reference_type", "asset")
                     }
-                ],
+                    
+                    if ref_img.get("gcs_uri"):
+                        ref_image_obj["image"]["gcsUri"] = ref_img["gcs_uri"]
+                    elif ref_img.get("base64"):
+                        ref_image_obj["image"]["bytesBase64Encoded"] = ref_img["base64"]
+                    
+                    ref_images_payload.append(ref_image_obj)
+                
+                instance["referenceImages"] = ref_images_payload
+                logger.info(f"🎭 Imágenes de referencia: {len(ref_images_payload)} imagen(es)")
+                for idx, ref in enumerate(reference_images):
+                    logger.info(f"   Ref {idx + 1}: tipo={ref.get('reference_type', 'asset')}")
+            
+            payload = {
+                "instances": [instance],
                 "parameters": {
-                    "sampleCount": 1,
+                    "durationSeconds": duration,
                     "aspectRatio": aspect_ratio,
-                    "personGeneration": "allow_all"
+                    "sampleCount": sample_count,
+                    "personGeneration": person_generation,
+                    "compressionQuality": compression_quality,
+                    "enhancePrompt": enhance_prompt
                 }
             }
+            
+            # Agregar parámetros opcionales si están presentes
+            if negative_prompt:
+                payload["parameters"]["negativePrompt"] = negative_prompt
+                logger.info(f"Negative prompt: {negative_prompt[:100]}...")
+            
+            if seed is not None:
+                payload["parameters"]["seed"] = seed
+                logger.info(f"Seed: {seed}")
+            
+            if storage_uri:
+                payload["parameters"]["storageUri"] = storage_uri
+                logger.info(f"Storage URI: {storage_uri}")
             
             # Headers con autenticación
             headers = {
@@ -122,7 +211,36 @@ class GeminiVeoClient:
                 logger.info(f"✅ Video iniciado. Operation: {operation_name}")
                 return result
             else:
-                error_msg = f"Error {response.status_code}: {response.text}"
+                # Parsear el error de Google
+                error_msg = response.text
+                error_data = None
+                
+                try:
+                    error_data = response.json()
+                    if 'error' in error_data:
+                        error_detail = error_data['error']
+                        error_code = error_detail.get('code', response.status_code)
+                        error_message = error_detail.get('message', error_msg)
+                        
+                        # Detectar errores específicos de contenido sensible
+                        if 'sensitive words' in error_message.lower() or 'responsible ai' in error_message.lower():
+                            logger.error(f"🚫 Contenido bloqueado por filtro de IA Responsable")
+                            logger.error(f"   Mensaje: {error_message}")
+                            raise ValueError(
+                                f"❌ Tu prompt fue bloqueado por el filtro de contenido de Google.\n\n"
+                                f"Motivo: {error_message}\n\n"
+                                f"💡 Sugerencias:\n"
+                                f"- Evita nombres de personas famosas o marcas\n"
+                                f"- Reformula para ser más descriptivo y menos específico\n"
+                                f"- Evita contenido violento, sexual o controversial\n"
+                                f"- Usa términos artísticos y técnicos\n\n"
+                                f"Si crees que es un error, contacta a Google con el código de soporte en los logs."
+                            )
+                        
+                        error_msg = f"Error {error_code}: {error_message}"
+                except:
+                    pass
+                
                 logger.error(f"❌ Error en Veo 2: {error_msg}")
                 raise Exception(error_msg)
             
@@ -192,17 +310,32 @@ class GeminiVeoClient:
                         rai_filtered_count = response_data.get('raiMediaFilteredCount', 0)
                         
                         video_url = None
+                        all_video_urls = []
+                        
                         if videos and len(videos) > 0:
                             # Veo devuelve un array de videos con gcsUri o bytesBase64Encoded
-                            first_video = videos[0]
-                            video_url = first_video.get('gcsUri') or first_video.get('bytesBase64Encoded')
+                            for idx, video in enumerate(videos):
+                                url = video.get('gcsUri') or video.get('bytesBase64Encoded')
+                                if url:
+                                    all_video_urls.append({
+                                        'index': idx,
+                                        'url': url,
+                                        'mime_type': video.get('mimeType', 'video/mp4')
+                                    })
+                            
+                            # El primer video es el principal
+                            if all_video_urls:
+                                video_url = all_video_urls[0]['url']
                         
-                        logger.info(f"✅ Video completado! URL: {video_url}")
-                        logger.info(f"Videos generados: {len(videos)}, Filtrados: {rai_filtered_count}")
+                        logger.info(f"✅ Video completado!")
+                        logger.info(f"   Videos generados: {len(all_video_urls)}, Filtrados: {rai_filtered_count}")
+                        if len(all_video_urls) > 1:
+                            logger.info(f"   📹 Multi-generación: {len(all_video_urls)} videos disponibles")
                         
                         return {
                             'status': 'completed',
-                            'video_url': video_url,
+                            'video_url': video_url,  # Primer video (compatibilidad)
+                            'all_video_urls': all_video_urls,  # TODOS los videos
                             'operation_data': operation_data,
                             'videos': videos,
                             'rai_filtered_count': rai_filtered_count
