@@ -28,7 +28,7 @@ jobs:
         
     - name: Run tests
       env:
-        CI: 'true'  # Activa el modo CI para usar SECRET_KEY temporal
+        SECRET_KEY: ${{ secrets.SECRET_KEY_CI }}
       run: |
         python manage.py test
 

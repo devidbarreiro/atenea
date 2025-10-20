@@ -22,17 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Detecta si estamos en entorno de CI/Testing
-import sys
-IS_TESTING = 'test' in sys.argv or os.getenv('CI') == 'true'
-
-# En CI: usa clave temporal para tests (no hay datos reales)
 # En desarrollo: lee de .env
-# En producción: lee de variables de entorno del servidor (falla si no existe)
-SECRET_KEY = config(
-    'SECRET_KEY',
-    default='django-insecure-x=6fw5)$+i(ovexm$r(#wf8%1$qlbou-z+%!oyed=kho%*1t+p' if IS_TESTING else None
-)
+# En CI: lee de GitHub Secrets (SECRET_KEY_CI)
+# En producción: lee de variables de entorno del servidor
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
