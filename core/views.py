@@ -16,6 +16,7 @@ from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
 
 from .models import Project, Video
+from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm
 from .services import ProjectService, VideoService, APIService, ValidationException, ServiceException
 import logging
 
@@ -237,6 +238,24 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     """Crear nuevo video"""
     template_name = 'videos/create.html'
     
+    def get_form_class(self):
+        """Determinar formulario según el tipo de video"""
+        # Si es GET request, mostrar formulario base
+        if self.request.method == 'GET':
+            return VideoBaseForm
+        
+        # Para POST, determinar tipo desde los datos del formulario
+        video_type = self.request.POST.get('type')
+        if video_type == 'heygen_avatar_v2':
+            return HeyGenAvatarV2Form
+        elif video_type == 'heygen_avatar_iv':
+            return HeyGenAvatarIVForm
+        elif video_type == 'gemini_veo':
+            return GeminiVeoVideoForm
+        else:
+            # Fallback al formulario base si el tipo no es reconocido
+            return VideoBaseForm
+    
     def get_project(self):
         """Obtener proyecto del contexto"""
         project_id = self.kwargs['project_id']
@@ -411,7 +430,6 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             config['reference_images'] = uploaded_refs
         
         return config
-
 
 class VideoDeleteView(BreadcrumbMixin, DeleteView):
     """Eliminar video"""
