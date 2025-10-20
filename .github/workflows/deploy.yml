@@ -1,9 +1,8 @@
-name: Build and Deploy
+name: Build and Deploy to Production
 
-# Solo se ejecuta cuando se hace push a la rama main
-# Esto incluye:
-# - Push directo a main
-# - Merge de PRs a main
+# Se ejecuta automáticamente cuando:
+# - Se hace merge de un PR a main
+# - Se hace push directo a main
 on:
   push:
     branches: [ main ]

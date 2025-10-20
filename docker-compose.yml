@@ -1,64 +1,87 @@
 version: '3.8'
 
+# Docker Compose para PRODUCCIÓN
+# Las variables vienen del .env en el servidor de producción
+
 services:
   db:
     image: postgres:15-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=atenea
-      - POSTGRES_USER=atenea
-      - POSTGRES_PASSWORD=atenea_password
-    ports:
-      - "5432:5432"
+      - POSTGRES_DB=${POSTGRES_DB:-atenea}
+      - POSTGRES_USER=${POSTGRES_USER:-atenea}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - atenea-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U atenea"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atenea}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: always
 
   web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    command: gunicorn atenea.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
     volumes:
-      - .:/app
       - static_volume:/app/static
       - media_volume:/app/media
       - logs_volume:/app/logs
-      # Montar credenciales de GCS si existen
-      - ./proeduca-472312-4cae9909afa3.json:/app/credentials.json:ro
+      # Credenciales de GCS desde el servidor
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     ports:
       - "8000:8000"
     env_file:
-      - .env  # Lee todas las variables del .env (SECRET_KEY, API keys, etc.)
+      - .env
     environment:
-      - DATABASE_URL=postgresql://atenea:atenea_password@db:5432/atenea
-      # GCS credentials path dentro del contenedor
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
+    networks:
+      - atenea-network
+    restart: always
 
-  # Servicio para ejecutar migraciones
+  # Servicio para ejecutar migraciones (ejecutar manualmente)
   migrate:
-    build: .
-    command: python manage.py migrate
+    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    command: python manage.py migrate --noinput
     volumes:
-      - .:/app
-      - ./credentials.json:/app/credentials.json:ro
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://atenea:atenea_password@db:5432/atenea
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - atenea-network
+    profiles:
+      - tools  # No se ejecuta por defecto, solo con: docker-compose run migrate
+
+  # Recolectar archivos estáticos (ejecutar manualmente)
+  collectstatic:
+    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    command: python manage.py collectstatic --noinput
+    volumes:
+      - static_volume:/app/static
+    env_file:
+      - .env
+    networks:
+      - atenea-network
+    profiles:
+      - tools  # No se ejecuta por defecto, solo con: docker-compose run collectstatic
+
+networks:
+  atenea-network:
+    driver: bridge
 
 volumes:
   postgres_data:
   static_volume:
   media_volume:
   logs_volume:
-
