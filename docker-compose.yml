@@ -25,12 +25,16 @@ services:
       - static_volume:/app/static
       - media_volume:/app/media
       - logs_volume:/app/logs
+      # Montar credenciales de GCS si existen
+      - ./proeduca-472312-4cae9909afa3.json:/app/credentials.json:ro
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - .env  # Lee todas las variables del .env (SECRET_KEY, API keys, etc.)
     environment:
       - DATABASE_URL=postgresql://atenea:atenea_password@db:5432/atenea
+      # GCS credentials path dentro del contenedor
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     depends_on:
       db:
         condition: service_healthy
@@ -42,10 +46,12 @@ services:
     command: python manage.py migrate
     volumes:
       - .:/app
+      - ./credentials.json:/app/credentials.json:ro
     env_file:
       - .env
     environment:
       - DATABASE_URL=postgresql://atenea:atenea_password@db:5432/atenea
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     depends_on:
       db:
         condition: service_healthy
