@@ -1,6 +1,20 @@
 from django.db import models
 from django.utils import timezone
 
+# Constantes para choices
+VIDEO_TYPES = [
+    ('heygen_avatar_v2', 'HeyGen Avatar V2'),
+    ('heygen_avatar_iv', 'HeyGen Avatar IV'),
+    ('gemini_veo', 'Gemini Veo'),
+]
+
+VIDEO_STATUS = [
+    ('pending', 'Pendiente'),
+    ('processing', 'Procesando'),
+    ('completed', 'Completado'),
+    ('error', 'Error'),
+]
+
 
 class Project(models.Model):
     """Modelo para proyectos que agrupan videos"""
@@ -29,19 +43,6 @@ class Project(models.Model):
 
 class Video(models.Model):
     """Modelo para videos generados por IA"""
-    
-    VIDEO_TYPES = [
-        ('heygen_avatar_v2', 'HeyGen Avatar V2'),
-        ('heygen_avatar_iv', 'HeyGen Avatar IV'),
-        ('gemini_veo', 'Gemini Veo'),
-    ]
-    
-    VIDEO_STATUS = [
-        ('pending', 'Pendiente'),
-        ('processing', 'Procesando'),
-        ('completed', 'Completado'),
-        ('error', 'Error'),
-    ]
     
     project = models.ForeignKey(
         Project,
