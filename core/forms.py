@@ -256,30 +256,48 @@ class HeyGenAvatarIVForm(VideoBaseForm):
 
 
 class GeminiVeoVideoForm(VideoBaseForm):
-    """Formulario para videos Gemini Veo 2"""
+    """Formulario para videos Gemini Veo (todos los modelos)"""
     
     veo_model = forms.ChoiceField(
         choices=[
-            ('veo-2.0-generate-001', 'Veo 2.0'),
+            ('Veo 2.0', [
+                ('veo-2.0-generate-001', 'Veo 2.0 - Estable (con lastFrame y video extension)'),
+                ('veo-2.0-generate-exp', 'Veo 2.0 Experimental - Imágenes de referencia (asset/style)'),
+                ('veo-2.0-generate-preview', 'Veo 2.0 Preview - Edición con máscaras'),
+            ]),
+            ('Veo 3.0', [
+                ('veo-3.0-generate-001', 'Veo 3.0 - Con audio y 1080p'),
+                ('veo-3.0-fast-generate-001', 'Veo 3.0 Fast - Generación rápida con audio'),
+                ('veo-3.0-generate-preview', 'Veo 3.0 Preview - Con lastFrame y video extension'),
+                ('veo-3.0-fast-generate-preview', 'Veo 3.0 Fast Preview - Rápido'),
+            ]),
+            ('Veo 3.1 (Recomendado)', [
+                ('veo-3.1-generate-preview', 'Veo 3.1 Preview - Última versión con todas las características'),
+                ('veo-3.1-fast-generate-preview', 'Veo 3.1 Fast - Más rápido con todas las características'),
+            ]),
         ],
-        initial='veo-2.0-generate-001',
+        initial='veo-3.1-generate-preview',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'onchange': 'updateVeoModelFeatures(this.value)',
+        }),
+        label='Modelo Veo',
+        help_text='Selecciona el modelo de Veo a usar'
+    )
+    
+    duration = forms.ChoiceField(
+        choices=[
+            (4, '4 segundos (solo Veo 3/3.1)'),
+            (5, '5 segundos'),
+            (6, '6 segundos (solo Veo 3/3.1)'),
+            (8, '8 segundos (recomendado)'),
+        ],
+        initial=8,
         widget=forms.Select(attrs={
             'class': 'form-control',
         }),
-        label='Modelo Veo',
-        help_text='Versión del modelo Gemini Veo'
-    )
-    
-    duration = forms.IntegerField(
-        initial=8,
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'min': '1',
-            'max': '10',
-        }),
-        label='Duración (segundos)',
-        help_text='Duración del video en segundos (1-10)'
+        label='Duración',
+        help_text='Duración del video. Veo 2: 5-8s, Veo 3/3.1: 4,6,8s'
     )
     
     aspect_ratio = forms.ChoiceField(
@@ -344,8 +362,8 @@ class GeminiVeoVideoForm(VideoBaseForm):
     
     compression_quality = forms.ChoiceField(
         choices=[
-            ('optimized', 'Optimizada'),
-            ('high', 'Alta'),
+            ('optimized', 'Optimizada (recomendado)'),
+            ('lossless', 'Sin pérdida (más pesado)'),
         ],
         initial='optimized',
         widget=forms.Select(attrs={
@@ -353,6 +371,43 @@ class GeminiVeoVideoForm(VideoBaseForm):
         }),
         label='Calidad de Compresión',
         help_text='Calidad del video resultante'
+    )
+    
+    # Veo 3/3.1 Features
+    generate_audio = forms.BooleanField(
+        initial=True,
+        required=False,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'form-check-input',
+        }),
+        label='Generar Audio',
+        help_text='Genera audio para el video (solo Veo 3/3.1)'
+    )
+    
+    resolution = forms.ChoiceField(
+        choices=[
+            ('720p', '720p (1280x720)'),
+            ('1080p', '1080p (1920x1080 - más lento)'),
+        ],
+        initial='720p',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Resolución',
+        help_text='Resolución del video (solo Veo 3/3.1)'
+    )
+    
+    resize_mode = forms.ChoiceField(
+        choices=[
+            ('pad', 'Pad - Agregar relleno'),
+            ('crop', 'Crop - Recortar'),
+        ],
+        initial='pad',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Modo de Redimensión',
+        help_text='Cómo ajustar la imagen de entrada (solo Veo 3 image-to-video)'
     )
     
     seed = forms.IntegerField(
@@ -390,15 +445,15 @@ class GeminiVeoVideoForm(VideoBaseForm):
     reference_type_1 = forms.ChoiceField(
         choices=[
             ('asset', 'Recurso/Asset'),
-            ('style', 'Estilo'),
-            ('character', 'Personaje'),
+            ('style', 'Estilo (solo Veo 2.0-exp)'),
         ],
         initial='asset',
         required=False,
         widget=forms.Select(attrs={
             'class': 'form-control',
         }),
-        label='Tipo de Referencia 1'
+        label='Tipo de Referencia 1',
+        help_text='Veo 3.1 solo soporta "asset", no "style"'
     )
     
     reference_image_2 = forms.ImageField(
@@ -414,15 +469,15 @@ class GeminiVeoVideoForm(VideoBaseForm):
     reference_type_2 = forms.ChoiceField(
         choices=[
             ('asset', 'Recurso/Asset'),
-            ('style', 'Estilo'),
-            ('character', 'Personaje'),
+            ('style', 'Estilo (solo Veo 2.0-exp)'),
         ],
         initial='asset',
         required=False,
         widget=forms.Select(attrs={
             'class': 'form-control',
         }),
-        label='Tipo de Referencia 2'
+        label='Tipo de Referencia 2',
+        help_text='Veo 3.1 solo soporta "asset", no "style"'
     )
     
     reference_image_3 = forms.ImageField(
@@ -438,14 +493,59 @@ class GeminiVeoVideoForm(VideoBaseForm):
     reference_type_3 = forms.ChoiceField(
         choices=[
             ('asset', 'Recurso/Asset'),
-            ('style', 'Estilo'),
-            ('character', 'Personaje'),
+            ('style', 'Estilo (solo Veo 2.0-exp)'),
         ],
         initial='asset',
         required=False,
         widget=forms.Select(attrs={
             'class': 'form-control',
         }),
-        label='Tipo de Referencia 3'
+        label='Tipo de Referencia 3',
+        help_text='Veo 3.1 solo soporta "asset", no "style"'
+    )
+    
+    # Advanced Features
+    last_frame_image = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen del Último Frame (Fill-in-the-blank)',
+        help_text='Opcional: Imagen del último fotograma para rellenar espacio intermedio (veo-2.0-generate-001, veo-3.0-generate-preview, veo-3.1-*)'
+    )
+    
+    video_extension = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'video/*',
+        }),
+        label='Video para Extender',
+        help_text='Opcional: Video generado por Veo para ampliar duración (veo-2.0-generate-001, veo-3.0-generate-preview)'
+    )
+    
+    mask_image = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen de Máscara',
+        help_text='Opcional: Máscara para añadir/quitar objetos del video (solo veo-2.0-generate-preview)'
+    )
+    
+    mask_mode = forms.ChoiceField(
+        choices=[
+            ('background', 'Background - Fondo'),
+            ('foreground', 'Foreground - Primer plano'),
+        ],
+        initial='background',
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Modo de Máscara',
+        help_text='Qué parte del video afecta la máscara'
     )
 
