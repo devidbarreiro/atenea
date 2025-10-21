@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ image.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="flex-between">
+        <div>
+            <h2>{{ image.title }}</h2>
+            <p style="color: hsl(var(--muted-foreground));">
+                Proyecto: <a href="{% url 'core:project_detail' image.project.id %}">{{ image.project.name }}</a>
+            </p>
+        </div>
+        <div>
+            {% if image.status == 'pending' %}
+                <form method="post" action="{% url 'core:image_generate' image.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button-primary">🚀 Generar Imagen</button>
+                </form>
+            {% elif image.status == 'processing' %}
+                <span class="badge badge-warning">⏳ Procesando...</span>
+            {% elif image.status == 'completed' %}
+                <span class="badge badge-success">✅ Completada</span>
+            {% elif image.status == 'error' %}
+                <span class="badge badge-danger">❌ Error</span>
+            {% endif %}
+            
+            <a href="{% url 'core:image_delete' image.id %}" class="button-danger">Eliminar</a>
+        </div>
+    </div>
+    
+    <hr>
+    
+    <!-- Estado de generación -->
+    <div class="info-grid">
+        <div class="info-item">
+            <span class="info-label">Estado</span>
+            <span class="info-value">{{ image.get_status_display }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Tipo</span>
+            <span class="info-value">{{ image.get_type_display }}</span>
+        </div>
+        {% if image.aspect_ratio %}
+        <div class="info-item">
+            <span class="info-label">Aspect Ratio</span>
+            <span class="info-value">{{ image.aspect_ratio }}</span>
+        </div>
+        {% endif %}
+        {% if image.width and image.height %}
+        <div class="info-item">
+            <span class="info-label">Dimensiones</span>
+            <span class="info-value">{{ image.width }}×{{ image.height }} px</span>
+        </div>
+        {% endif %}
+        <div class="info-item">
+            <span class="info-label">Creado</span>
+            <span class="info-value">{{ image.created_at|date:"d/m/Y H:i" }}</span>
+        </div>
+    </div>
+    
+    {% if image.status == 'error' %}
+    <div class="alert alert-danger">
+        <strong>Error:</strong> {{ image.error_message }}
+    </div>
+    {% endif %}
+    
+    <!-- Prompt -->
+    <div style="margin-top: 2rem;">
+        <h3>Prompt</h3>
+        <div style="padding: 1rem; background: hsl(var(--muted)); border-radius: var(--radius); white-space: pre-wrap;">{{ image.prompt }}</div>
+    </div>
+    
+    <!-- Imágenes de entrada (si aplica) -->
+    {% if input_images_urls %}
+    <div style="margin-top: 2rem;">
+        <h3>Imágenes de Entrada</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            {% for img_data in input_images_urls %}
+            <div>
+                <img src="{{ img_data.signed_url }}" alt="Imagen de entrada {{ img_data.index|add:1 }}" style="width: 100%; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+                <small style="display: block; margin-top: 0.5rem; text-align: center;">Entrada {{ img_data.index|add:1 }}</small>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Imagen generada -->
+    {% if image.status == 'completed' and signed_url %}
+    <div style="margin-top: 2rem;">
+        <h3>Imagen Generada</h3>
+        <div style="text-align: center; margin-top: 1rem;">
+            <img src="{{ signed_url }}" alt="{{ image.title }}" style="max-width: 100%; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+        </div>
+        <div style="text-align: center; margin-top: 1rem;">
+            <a href="{{ signed_url }}" download="{{ image.title }}.png" class="button-secondary">⬇️ Descargar Imagen</a>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Respuesta de texto (si aplica) -->
+    {% if image.metadata.text_response %}
+    <div style="margin-top: 2rem;">
+        <h3>Respuesta de Texto</h3>
+        <div style="padding: 1rem; background: hsl(var(--muted)); border-radius: var(--radius); white-space: pre-wrap;">{{ image.metadata.text_response }}</div>
+    </div>
+    {% endif %}
+    
+    <!-- Detalles técnicos -->
+    <details style="margin-top: 2rem;">
+        <summary style="cursor: pointer; font-weight: 600;">Detalles Técnicos</summary>
+        <div style="margin-top: 1rem; padding: 1rem; background: hsl(var(--muted)); border-radius: var(--radius);">
+            <p><strong>ID:</strong> {{ image.id }}</p>
+            <p><strong>External ID:</strong> {{ image.external_id|default:"N/A" }}</p>
+            <p><strong>GCS Path:</strong> {{ image.gcs_path|default:"N/A" }}</p>
+            <p><strong>Actualizado:</strong> {{ image.updated_at|date:"d/m/Y H:i:s" }}</p>
+            {% if image.completed_at %}
+            <p><strong>Completado:</strong> {{ image.completed_at|date:"d/m/Y H:i:s" }}</p>
+            {% endif %}
+            
+            <p style="margin-top: 1rem;"><strong>Configuración:</strong></p>
+            <pre style="background: hsl(var(--background)); padding: 1rem; border-radius: var(--radius); overflow-x: auto; font-size: 0.8rem;">{{ image.config|pprint }}</pre>
+        </div>
+    </details>
+</div>
+{% endblock %}
+

@@ -15,9 +15,9 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
 
-from .models import Project, Video
-from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm
-from .services import ProjectService, VideoService, APIService, ValidationException, ServiceException
+from .models import Project, Video, Image
+from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, GeminiImageForm
+from .services import ProjectService, VideoService, ImageService, APIService, ValidationException, ServiceException, ImageGenerationException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,9 @@ class ServiceMixin:
     def get_video_service(self):
         return VideoService()
     
+    def get_image_service(self):
+        return ImageService()
+    
     def get_api_service(self):
         return APIService()
 
@@ -84,9 +87,10 @@ class DashboardView(ListView):
         
         # Agregar estadísticas
         context.update({
-        'total_videos': Video.objects.count(),
-        'completed_videos': Video.objects.filter(status='completed').count(),
-        'processing_videos': Video.objects.filter(status='processing').count(),
+            'total_videos': Video.objects.count(),
+            'total_images': Image.objects.count(),
+            'completed_videos': Video.objects.filter(status='completed').count(),
+            'processing_videos': Video.objects.filter(status='processing').count(),
         })
         
         return context
@@ -140,8 +144,34 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
                     'signed_url': None
                 })
         
+        # Obtener imágenes del proyecto
+        images = self.object.images.select_related('project').order_by('-created_at')
+        
+        # Generar URLs firmadas para imágenes completadas
+        image_service = self.get_image_service()
+        images_with_urls = []
+        
+        for image in images:
+            if image.status == 'completed' and image.gcs_path:
+                try:
+                    image_data = image_service.get_image_with_signed_url(image)
+                    images_with_urls.append(image_data)
+                except Exception as e:
+                    # Si falla, agregar sin URL firmada
+                    images_with_urls.append({
+                        'image': image,
+                        'signed_url': None
+                    })
+            else:
+                images_with_urls.append({
+                    'image': image,
+                    'signed_url': None
+                })
+        
         context['videos'] = videos
         context['videos_with_urls'] = videos_with_urls
+        context['images'] = images
+        context['images_with_urls'] = images_with_urls
         
         return context
 
@@ -582,3 +612,212 @@ class ListImageAssetsView(ServiceMixin, View):
                 'error': str(e),
                 'assets': []
             }, status=500)
+
+
+# ====================
+# IMAGE VIEWS
+# ====================
+
+class ImageDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de una imagen"""
+    model = Image
+    template_name = 'images/detail.html'
+    context_object_name = 'image'
+    pk_url_kwarg = 'image_id'
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {'label': self.object.title, 'url': None}
+        ]
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Usar servicio para obtener URLs firmadas
+        image_service = self.get_image_service()
+        image_data = image_service.get_image_with_signed_url(self.object)
+        
+        context.update(image_data)
+        return context
+
+
+class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+    """Crear nueva imagen"""
+    template_name = 'images/create.html'
+    form_class = GeminiImageForm
+    
+    def get_project(self):
+        """Obtener proyecto del contexto"""
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {
+                'label': project.name, 
+                'url': reverse('core:project_detail', args=[project.pk])
+            },
+            {'label': 'Nueva Imagen', 'url': None}
+        ]
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de imagen"""
+        project = self.get_project()
+        image_service = self.get_image_service()
+        
+        # Obtener datos básicos
+        title = request.POST.get('title')
+        image_type = request.POST.get('type')
+        prompt = request.POST.get('prompt')
+        
+        # Validaciones básicas
+        if not all([title, image_type, prompt]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            # Configuración según el tipo de imagen
+            config = self._build_image_config(request, image_type, project, image_service)
+            
+            # Crear imagen usando servicio
+            image = image_service.create_image(
+                project=project,
+                title=title,
+                image_type=image_type,
+                prompt=prompt,
+                config=config
+            )
+            
+            messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
+            return redirect('core:image_detail', image_id=image.pk)
+            
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+    
+    def _build_image_config(self, request, image_type, project, image_service):
+        """Construir configuración según el tipo de imagen"""
+        # Configuración común
+        config = {
+            'aspect_ratio': request.POST.get('aspect_ratio', '1:1'),
+        }
+        
+        # Response modalities
+        response_modalities_choice = request.POST.get('response_modalities', 'image_only')
+        if response_modalities_choice == 'image_only':
+            config['response_modalities'] = ['Image']
+        else:
+            config['response_modalities'] = ['Text', 'Image']
+        
+        # Configuración según tipo
+        if image_type == 'text_to_image':
+            # No se necesita configuración adicional
+            pass
+        
+        elif image_type == 'image_to_image':
+            # Subir imagen de entrada
+            input_image = request.FILES.get('input_image')
+            if not input_image:
+                raise ValidationException('Imagen de entrada es requerida para image-to-image')
+            
+            upload_result = image_service.upload_input_image(input_image, project)
+            config['input_image_gcs_path'] = upload_result['gcs_path']
+            config['input_image_mime_type'] = upload_result['mime_type']
+        
+        elif image_type == 'multi_image':
+            # Subir múltiples imágenes de entrada
+            input_images = []
+            for i in range(1, 4):
+                img_file = request.FILES.get(f'input_image_{i}')
+                if img_file:
+                    input_images.append(img_file)
+            
+            if len(input_images) < 2:
+                raise ValidationException('Se requieren al menos 2 imágenes para composición')
+            
+            uploaded_images = image_service.upload_multiple_input_images(input_images, project)
+            config['input_images'] = uploaded_images
+        
+        return config
+
+
+class ImageDeleteView(BreadcrumbMixin, DeleteView):
+    """Eliminar imagen"""
+    model = Image
+    template_name = 'images/delete.html'
+    context_object_name = 'image'
+    pk_url_kwarg = 'image_id'
+    
+    def get_success_url(self):
+        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {
+                'label': self.object.title, 
+                'url': reverse('core:image_detail', args=[self.object.pk])
+            },
+            {'label': 'Eliminar', 'url': None}
+        ]
+    
+    def delete(self, request, *args, **kwargs):
+        """Override para eliminar archivo de GCS"""
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        
+        # Eliminar de GCS si existe
+        if self.object.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                gcs_storage.delete_file(self.object.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al eliminar archivo: {e}")
+        
+        image_title = self.object.title
+        self.object.delete()
+        
+        messages.success(request, f'Imagen "{image_title}" eliminada')
+        return redirect(success_url)
+
+
+# ====================
+# IMAGE ACTIONS
+# ====================
+
+class ImageGenerateView(ServiceMixin, View):
+    """Generar imagen usando Gemini API"""
+    
+    def post(self, request, image_id):
+        image = get_object_or_404(Image, pk=image_id)
+        image_service = self.get_image_service()
+        
+        try:
+            gcs_path = image_service.generate_image(image)
+            messages.success(
+                request, 
+                'Imagen generada exitosamente.'
+            )
+        except (ValidationException, ImageGenerationException) as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+        
+        return redirect('core:image_detail', image_id=image.pk)

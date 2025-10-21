@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Crear Imagen - {{ project.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .type-selector {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .type-option {
+        flex: 1;
+        padding: 1rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .type-option:hover {
+        border-color: hsl(var(--foreground));
+    }
+    
+    .type-option.selected {
+        border-color: hsl(var(--foreground));
+        background: hsl(var(--muted));
+    }
+    
+    .type-option input[type="radio"] {
+        display: none;
+    }
+    
+    .type-icon {
+        font-size: 1.5rem;
+    }
+    
+    .type-info h3 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .type-info p {
+        font-size: 0.75rem;
+        color: hsl(var(--muted-foreground));
+        margin: 0;
+    }
+    
+    .config-section {
+        display: none;
+    }
+    
+    .config-section.active {
+        display: block;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .aspect-ratio-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .aspect-option {
+        padding: 0.75rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+    }
+    
+    .aspect-option:hover {
+        border-color: hsl(var(--foreground));
+    }
+    
+    .aspect-option.selected {
+        border-color: hsl(var(--foreground));
+        background: hsl(var(--muted));
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Crear Imagen con Gemini</h2>
+    <p style="color: hsl(var(--muted-foreground)); margin-bottom: 2rem;">Proyecto: <strong>{{ project.name }}</strong></p>
+    
+    <form method="post" id="imageForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label>Título</label>
+            <input type="text" name="title" required placeholder="Ej: Logo empresarial, Foto de producto, Arte conceptual...">
+        </div>
+        
+        <div class="form-group">
+            <label>Tipo de Generación</label>
+            <div class="type-selector">
+                <label class="type-option selected" for="text_to_image">
+                    <input type="radio" name="type" value="text_to_image" id="text_to_image" checked>
+                    <span class="type-icon">✨</span>
+                    <div class="type-info">
+                        <h3>Texto a Imagen</h3>
+                        <p>Genera imagen desde descripción</p>
+                    </div>
+                </label>
+                
+                <label class="type-option" for="image_to_image">
+                    <input type="radio" name="type" value="image_to_image" id="image_to_image">
+                    <span class="type-icon">🎨</span>
+                    <div class="type-info">
+                        <h3>Imagen a Imagen</h3>
+                        <p>Edita una imagen existente</p>
+                    </div>
+                </label>
+                
+                <label class="type-option" for="multi_image">
+                    <input type="radio" name="type" value="multi_image" id="multi_image">
+                    <span class="type-icon">🖼️</span>
+                    <div class="type-info">
+                        <h3>Múltiples Imágenes</h3>
+                        <p>Composición de 2-3 imágenes</p>
+                    </div>
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>Prompt / Descripción</label>
+            <textarea name="prompt" rows="5" required placeholder="Describe la imagen que quieres generar o las modificaciones que deseas hacer..."></textarea>
+            <small>Sé específico y descriptivo. Puedes incluir detalles sobre estilo, colores, iluminación, etc.</small>
+        </div>
+        
+        <div class="form-group">
+            <label>Aspect Ratio</label>
+            <div class="aspect-ratio-grid">
+                <label class="aspect-option selected" for="ar_1_1">
+                    <input type="radio" name="aspect_ratio" value="1:1" id="ar_1_1" checked>
+                    <div>1:1</div>
+                    <small>1024×1024</small>
+                </label>
+                <label class="aspect-option" for="ar_16_9">
+                    <input type="radio" name="aspect_ratio" value="16:9" id="ar_16_9">
+                    <div>16:9</div>
+                    <small>1344×768</small>
+                </label>
+                <label class="aspect-option" for="ar_9_16">
+                    <input type="radio" name="aspect_ratio" value="9:16" id="ar_9_16">
+                    <div>9:16</div>
+                    <small>768×1344</small>
+                </label>
+                <label class="aspect-option" for="ar_4_3">
+                    <input type="radio" name="aspect_ratio" value="4:3" id="ar_4_3">
+                    <div>4:3</div>
+                    <small>1184×864</small>
+                </label>
+                <label class="aspect-option" for="ar_3_4">
+                    <input type="radio" name="aspect_ratio" value="3:4" id="ar_3_4">
+                    <div>3:4</div>
+                    <small>864×1184</small>
+                </label>
+                <label class="aspect-option" for="ar_21_9">
+                    <input type="radio" name="aspect_ratio" value="21:9" id="ar_21_9">
+                    <div>21:9</div>
+                    <small>1536×672</small>
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>Modalidades de Respuesta</label>
+            <div style="display: flex; gap: 1rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="radio" name="response_modalities" value="image_only" checked>
+                    <span>Solo Imagen</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="radio" name="response_modalities" value="text_and_image">
+                    <span>Texto e Imagen</span>
+                </label>
+            </div>
+            <small>Recibir solo la imagen o imagen con texto explicativo</small>
+        </div>
+        
+        <!-- Campos específicos para image_to_image -->
+        <div id="image_to_image_config" class="config-section">
+            <div class="form-group">
+                <label>Imagen de Entrada</label>
+                <input type="file" name="input_image" accept="image/*">
+                <small>Sube la imagen que quieres editar</small>
+            </div>
+        </div>
+        
+        <!-- Campos específicos para multi_image -->
+        <div id="multi_image_config" class="config-section">
+            <div class="form-group">
+                <label>Imagen de Entrada 1 <span style="color: red;">*</span></label>
+                <input type="file" name="input_image_1" accept="image/*">
+            </div>
+            
+            <div class="form-group">
+                <label>Imagen de Entrada 2 <span style="color: red;">*</span></label>
+                <input type="file" name="input_image_2" accept="image/*">
+            </div>
+            
+            <div class="form-group">
+                <label>Imagen de Entrada 3 (Opcional)</label>
+                <input type="file" name="input_image_3" accept="image/*">
+            </div>
+            
+            <small>Se requieren al menos 2 imágenes para composición</small>
+        </div>
+        
+        <div class="button-group">
+            <button type="submit" class="button-primary">Crear Imagen</button>
+            <a href="{% url 'core:project_detail' project.id %}" class="button-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function updateImageTypeFields(type) {
+    // Ocultar todas las secciones de configuración
+    document.querySelectorAll('.config-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    // Mostrar la sección correspondiente
+    if (type === 'image_to_image') {
+        document.getElementById('image_to_image_config').classList.add('active');
+    } else if (type === 'multi_image') {
+        document.getElementById('multi_image_config').classList.add('active');
+    }
+}
+
+// Manejar selección de tipo de imagen
+document.querySelectorAll('.type-option input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        // Actualizar visual
+        document.querySelectorAll('.type-option').forEach(opt => opt.classList.remove('selected'));
+        this.closest('.type-option').classList.add('selected');
+        
+        // Actualizar campos visibles
+        updateImageTypeFields(this.value);
+    });
+});
+
+// Manejar selección de aspect ratio
+document.querySelectorAll('.aspect-option input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('.aspect-option').forEach(opt => opt.classList.remove('selected'));
+        this.closest('.aspect-option').classList.add('selected');
+    });
+});
+
+// Hacer clic en la etiqueta cambia el radio
+document.querySelectorAll('.type-option, .aspect-option').forEach(label => {
+    label.addEventListener('click', function() {
+        const radio = this.querySelector('input[type="radio"]');
+        if (radio) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+        }
+    });
+});
+</script>
+{% endblock %}
+

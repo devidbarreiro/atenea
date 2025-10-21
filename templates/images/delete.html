@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Eliminar Imagen - {{ image.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Eliminar Imagen</h2>
+    
+    <div class="alert alert-danger">
+        <strong>⚠️ ¡Atención!</strong> Esta acción no se puede deshacer.
+    </div>
+    
+    <p>¿Estás seguro de que deseas eliminar la imagen <strong>"{{ image.title }}"</strong>?</p>
+    
+    <div class="info-grid" style="margin: 2rem 0;">
+        <div class="info-item">
+            <span class="info-label">Título</span>
+            <span class="info-value">{{ image.title }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Tipo</span>
+            <span class="info-value">{{ image.get_type_display }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Estado</span>
+            <span class="info-value">{{ image.get_status_display }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Proyecto</span>
+            <span class="info-value">{{ image.project.name }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Creado</span>
+            <span class="info-value">{{ image.created_at|date:"d/m/Y H:i" }}</span>
+        </div>
+    </div>
+    
+    {% if image.status == 'completed' %}
+    <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
+        ℹ️ Esta imagen está completada. Se eliminará tanto el registro como el archivo almacenado en Google Cloud Storage.
+    </p>
+    {% endif %}
+    
+    <form method="post">
+        {% csrf_token %}
+        <div class="button-group">
+            <button type="submit" class="button-danger">Sí, Eliminar Imagen</button>
+            <a href="{% url 'core:image_detail' image.id %}" class="button-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

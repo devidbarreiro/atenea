@@ -108,6 +108,10 @@
                 <span class="stat-label">videos</span>
             </div>
             <div class="stat-item">
+                <span class="stat-value">{{ total_images }}</span>
+                <span class="stat-label">imágenes</span>
+            </div>
+            <div class="stat-item">
                 <span class="stat-value">{{ completed_videos }}</span>
                 <span class="stat-label">completados</span>
             </div>
@@ -126,13 +130,14 @@
     <div class="project-card">
         <h3>{{ project.name }}</h3>
         <div class="project-meta">
-            <div>{{ project.video_count }} video{{ project.video_count|pluralize }}</div>
+            <div>{{ project.video_count }} video{{ project.video_count|pluralize }}, {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</div>
             <div>{{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</div>
             <div>{{ project.created_at|date:"d/m/Y" }}</div>
         </div>
         <div class="project-actions">
             <a href="{% url 'core:project_detail' project.id %}" class="btn" style="flex: 1;">Ver</a>
             <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary" style="flex: 1;">+ Video</a>
+            <a href="{% url 'core:image_create' project.id %}" class="btn btn-primary" style="flex: 1;">+ Imagen</a>
         </div>
     </div>
     {% endfor %}
