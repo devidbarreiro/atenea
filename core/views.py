@@ -71,7 +71,7 @@ class ServiceMixin:
 # DASHBOARD
 # ====================
 
-class DashboardView(ListView):
+class DashboardView(ServiceMixin, ListView):
     """Vista principal del dashboard"""
     model = Project
     template_name = 'dashboard/index.html'
@@ -92,6 +92,53 @@ class DashboardView(ListView):
             'completed_videos': Video.objects.filter(status='completed').count(),
             'processing_videos': Video.objects.filter(status='processing').count(),
         })
+        
+        # Obtener todos los videos recientes
+        videos = Video.objects.select_related('project').order_by('-created_at')[:20]
+        video_service = self.get_video_service()
+        videos_with_urls = []
+        
+        for video in videos:
+            if video.status == 'completed' and video.gcs_path:
+                try:
+                    video_data = video_service.get_video_with_signed_urls(video)
+                    videos_with_urls.append(video_data)
+                except Exception as e:
+                    videos_with_urls.append({
+                        'video': video,
+                        'signed_url': None
+                    })
+            else:
+                videos_with_urls.append({
+                    'video': video,
+                    'signed_url': None
+                })
+        
+        # Obtener todas las imágenes recientes
+        images = Image.objects.select_related('project').order_by('-created_at')[:20]
+        image_service = self.get_image_service()
+        images_with_urls = []
+        
+        for image in images:
+            if image.status == 'completed' and image.gcs_path:
+                try:
+                    image_data = image_service.get_image_with_signed_url(image)
+                    images_with_urls.append(image_data)
+                except Exception as e:
+                    images_with_urls.append({
+                        'image': image,
+                        'signed_url': None
+                    })
+            else:
+                images_with_urls.append({
+                    'image': image,
+                    'signed_url': None
+                })
+        
+        context['videos'] = videos
+        context['videos_with_urls'] = videos_with_urls
+        context['images'] = images
+        context['images_with_urls'] = images_with_urls
         
         return context
 
