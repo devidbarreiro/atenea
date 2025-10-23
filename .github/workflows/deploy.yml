@@ -28,7 +28,15 @@ jobs:
         
     - name: Run tests
       env:
-        SECRET_KEY: ${{ secrets.SECRET_KEY_CI }}
+        SECRET_KEY: ${{ secrets.SECRET_KEY_CI || 'test-secret-key-for-ci' }}
+        USE_SQLITE: 'True'
+        DEBUG: 'False'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
+        GCS_BUCKET_NAME: 'test-bucket'
+        GCS_PROJECT_ID: 'test-project'
+        GOOGLE_APPLICATION_CREDENTIALS: '/tmp/fake-credentials.json'
+        HEYGEN_API_KEY: 'test-key'
+        GEMINI_API_KEY: 'test-key'
       run: |
         python manage.py test
 
