@@ -5,190 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Atenea{% endblock %}</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX - Interactividad sin JavaScript -->
+    <script src="https://unpkg.com/htmx.org@1.9.10" 
+            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
+            crossorigin="anonymous"></script>
+    
+    <!-- Alpine.js - Componentes reactivos -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    
     <style>
-        :root {
-            --background: 0 0% 100%;
-            --foreground: 0 0% 3.9%;
-            --muted: 0 0% 96.1%;
-            --muted-foreground: 0 0% 45.1%;
-            --border: 0 0% 89.8%;
-            --ring: 0 0% 3.9%;
-            --radius: 0.5rem;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            line-height: 1.6;
-            color: hsl(var(--foreground));
-            background: hsl(var(--background));
-        }
-        
-        .navbar {
-            border-bottom: 1px solid hsl(var(--border));
-            background: hsl(var(--background));
-        }
-        
-        .navbar-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .navbar-left {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-        }
-        
-        .navbar h1 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: hsl(var(--foreground));
-        }
-        
-        .navbar h1 a {
-            color: inherit;
-            text-decoration: none;
-        }
-        
-        .navbar-breadcrumbs {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-            color: hsl(var(--muted-foreground));
-        }
-        
-        .navbar-breadcrumbs a {
-            color: hsl(var(--muted-foreground));
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        
-        .navbar-breadcrumbs a:hover {
-            color: hsl(var(--foreground));
-        }
-        
-        .navbar-breadcrumbs span {
-            color: hsl(var(--foreground));
-            font-weight: 500;
-        }
-        
-        .navbar nav {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-        
-        .navbar a {
-            color: hsl(var(--muted-foreground));
-            text-decoration: none;
-            font-size: 0.875rem;
-            transition: color 0.2s;
-        }
-        
-        .navbar a:hover {
-            color: hsl(var(--foreground));
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            border-radius: var(--radius);
-            border: 1px solid hsl(var(--border));
-            background: hsl(var(--background));
-            color: hsl(var(--foreground));
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .btn:hover {
-            background: hsl(var(--muted));
-        }
-        
-        .btn-primary {
-            background: hsl(var(--foreground));
-            color: hsl(var(--background));
-            border-color: hsl(var(--foreground));
-        }
-        
-        .btn-primary:hover {
-            opacity: 0.9;
-        }
-        
-        .btn-destructive {
-            background: transparent;
-            color: #dc2626;
-            border-color: #dc2626;
-        }
-        
-        .btn-destructive:hover {
-            background: #dc2626;
-            color: white;
-        }
-        
-        .card {
-            background: hsl(var(--background));
-            border: 1px solid hsl(var(--border));
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        .card h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-        
-        .messages {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            z-index: 1000;
-            max-width: 400px;
-        }
-        
-        .message {
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: var(--radius);
-            border: 1px solid hsl(var(--border));
-            background: hsl(var(--background));
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            animation: slideIn 0.3s ease;
-        }
-        
-        .message.success {
-            border-color: #16a34a;
-            color: #16a34a;
-        }
-        
-        .message.error {
-            border-color: #dc2626;
-            color: #dc2626;
-        }
-        
+        /* Solo CSS necesario para animaciones */
         @keyframes slideIn {
             from {
                 transform: translateX(400px);
@@ -200,102 +30,95 @@
             }
         }
         
-        .form-group {
-            margin-bottom: 1.5rem;
+        .message {
+            animation: slideIn 0.3s ease;
         }
         
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
+        [x-cloak] { 
+            display: none !important; 
         }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.5rem 0.75rem;
-            border: 1px solid hsl(var(--border));
-            border-radius: var(--radius);
-            font-size: 0.875rem;
-            background: hsl(var(--background));
-            transition: border-color 0.2s;
-        }
-        
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: hsl(var(--ring));
-            box-shadow: 0 0 0 3px hsl(var(--muted));
-        }
-        
-        .form-group textarea {
-            resize: vertical;
-            min-height: 120px;
-        }
-        
         
         {% block extra_css %}{% endblock %}
     </style>
 </head>
-<body>
-    <nav class="navbar">
-        <div class="navbar-content">
-            <div class="navbar-left">
-                <h1>
-                    <a href="{% url 'core:dashboard' %}" style="display: flex; align-items: center;">
-                        <img src="{% static 'img/logo.png' %}" alt="Atenea" style="height: 20px; width: auto; object-fit: contain; object-position: center;">
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{% url 'core:dashboard' %}" class="flex items-center space-x-2 text-xl font-bold text-gray-900 hover:text-gray-700">
+                        <span>🎨</span>
+                        <span>Atenea</span>
                     </a>
-                </h1>
-                {% if breadcrumbs %}
-                <div class="navbar-breadcrumbs">
-                    {% for crumb in breadcrumbs %}
-                        {% if crumb.url %}
-                            <a href="{{ crumb.url }}">{{ crumb.label }}</a>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        {% else %}
-                            <span>{{ crumb.label }}</span>
-                        {% endif %}
-                    {% endfor %}
+                    
+                    {% if breadcrumbs %}
+                    <div class="hidden md:flex ml-6 items-center space-x-2 text-sm text-gray-500">
+                        {% for crumb in breadcrumbs %}
+                            {% if crumb.url %}
+                                <a href="{{ crumb.url }}" class="hover:text-gray-700">{{ crumb.label }}</a>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            {% else %}
+                                <span class="font-medium text-gray-900">{{ crumb.label }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
+                
+                <div class="flex items-center space-x-4">
+                    <a href="{% url 'core:dashboard' %}" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        Dashboard
+                    </a>
+                    <a href="/admin/" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        Admin
+                    </a>
+                </div>
             </div>
-            <nav>
-                <a href="{% url 'core:dashboard' %}">Dashboard</a>
-                <a href="/admin/">Admin</a>
-            </nav>
         </div>
     </nav>
     
+    <!-- Mensajes Flash -->
     {% if messages %}
-    <div class="messages">
+    <div class="fixed top-20 right-4 z-50 space-y-2 max-w-md">
         {% for message in messages %}
-        <div class="message {{ message.tags }}">
-            {{ message }}
+        <div class="message shadow-lg rounded-lg p-4 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
+            <div class="flex items-center">
+                {% if message.tags == 'success' %}
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                {% elif message.tags == 'error' %}
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                </svg>
+                {% endif %}
+                <span>{{ message }}</span>
+            </div>
         </div>
         {% endfor %}
     </div>
     {% endif %}
     
-    <div class="container">
+    <!-- Contenido Principal -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {% block content %}{% endblock %}
-    </div>
+    </main>
     
     {% block extra_js %}{% endblock %}
     
     <script>
+        // Auto-dismiss messages después de 5 segundos
         setTimeout(() => {
             const messages = document.querySelectorAll('.message');
             messages.forEach(msg => {
-                msg.style.animation = 'slideIn 0.3s ease reverse';
+                msg.style.transition = 'opacity 0.3s ease';
+                msg.style.opacity = '0';
                 setTimeout(() => msg.remove(), 300);
             });
         }, 5000);
     </script>
 </body>
 </html>
-

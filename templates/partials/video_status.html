@@ -1,0 +1,31 @@
+<div 
+    hx-get="{% url 'core:video_status_partial' video.id %}" 
+    hx-trigger="every 5s"
+    hx-swap="outerHTML">
+    
+    {% if video.status == 'completed' %}
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-green-500 text-white flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Completado
+        </span>
+    {% elif video.status == 'processing' %}
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-yellow-500 text-white flex items-center gap-2">
+            <span class="animate-spin">⚙️</span>
+            Procesando...
+        </span>
+    {% elif video.status == 'error' %}
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-red-500 text-white flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Error
+        </span>
+    {% else %}
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-500 text-white">
+            Pendiente
+        </span>
+    {% endif %}
+</div>
+

@@ -2,387 +2,183 @@
 
 {% block title %}Dashboard - Atenea{% endblock %}
 
-{% block extra_css %}
-<style>
-    .header-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-    }
-    
-    .stats-inline {
-        display: flex;
-        gap: 2rem;
-        align-items: center;
-    }
-    
-    .stat-item {
-        display: flex;
-        align-items: baseline;
-        gap: 0.5rem;
-    }
-    
-    .stat-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-    
-    .stat-label {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-    }
-    
-    .projects-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1rem;
-    }
-    
-    .project-card {
-        padding: 1.5rem;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        transition: border-color 0.2s;
-    }
-    
-    .project-card:hover {
-        border-color: hsl(var(--foreground));
-    }
-    
-    .project-card h3 {
-        font-size: 1.125rem;
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-    }
-    
-    .project-meta {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        margin-bottom: 1rem;
-    }
-    
-    .project-actions {
-        display: flex;
-        gap: 0.5rem;
-    }
-    
-    .empty-state {
-        text-align: center;
-        padding: 6rem 2rem;
-        border: 2px dashed hsl(var(--border));
-        border-radius: var(--radius);
-        color: hsl(var(--muted-foreground));
-    }
-    
-    .empty-state-icon {
-        font-size: 4rem;
-        margin-bottom: 1rem;
-        opacity: 0.3;
-    }
-    
-    .empty-state h3 {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: hsl(var(--foreground));
-        margin-bottom: 0.5rem;
-    }
-    
-    .empty-state p {
-        margin-bottom: 1.5rem;
-    }
-
-    /* Estilos para vista de cuadrícula y lista */
-    .content-section {
-        margin-top: 2rem;
-    }
-
-    .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-
-    .view-toggle {
-        display: flex;
-        gap: 0.5rem;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        padding: 0.25rem;
-    }
-
-    .view-toggle button {
-        padding: 0.5rem 0.75rem;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        border-radius: calc(var(--radius) - 2px);
-        transition: background-color 0.2s;
-    }
-
-    .view-toggle button.active {
-        background: hsl(var(--accent));
-    }
-
-    /* Vista cuadrícula */
-    .media-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 1.5rem;
-    }
-
-    .media-card {
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        overflow: hidden;
-        transition: border-color 0.2s;
-        cursor: pointer;
-        background: hsl(var(--card));
-    }
-
-    .media-card:hover {
-        border-color: hsl(var(--foreground));
-    }
-
-    .media-thumbnail {
-        position: relative;
-        width: 100%;
-        height: 180px;
-        background: hsl(var(--muted));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-
-    .media-thumbnail img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .media-thumbnail video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .media-status-badge {
-        position: absolute;
-        top: 0.5rem;
-        left: 0.5rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: calc(var(--radius) - 2px);
-        font-size: 0.75rem;
-        font-weight: 500;
-    }
-
-    .status-completed { background: hsl(142, 76%, 36%); color: white; }
-    .status-processing { background: hsl(45, 93%, 47%); color: white; }
-    .status-pending { background: hsl(215, 16%, 47%); color: white; }
-    .status-error { background: hsl(0, 72%, 51%); color: white; }
-
-    .media-info {
-        padding: 1rem;
-    }
-
-    .media-title {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .media-project {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        margin-bottom: 0.5rem;
-    }
-
-    .media-meta {
-        font-size: 0.75rem;
-        color: hsl(var(--muted-foreground));
-        display: flex;
-        justify-content: space-between;
-    }
-
-    /* Vista lista */
-    .media-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-
-    .media-list-item {
-        display: flex;
-        gap: 1rem;
-        padding: 1rem;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        transition: border-color 0.2s;
-        cursor: pointer;
-        background: hsl(var(--card));
-    }
-
-    .media-list-item:hover {
-        border-color: hsl(var(--foreground));
-    }
-
-    .media-list-thumbnail {
-        width: 120px;
-        height: 80px;
-        background: hsl(var(--muted));
-        border-radius: calc(var(--radius) - 2px);
-        overflow: hidden;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .media-list-thumbnail img,
-    .media-list-thumbnail video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .media-list-content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-
-    .media-list-title {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-    }
-
-    .media-list-details {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-    }
-
-    .media-list-status {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .play-icon {
-        position: absolute;
-        width: 48px;
-        height: 48px;
-        background: rgba(0, 0, 0, 0.7);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 1.5rem;
-    }
-
-    .hidden {
-        display: none;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div style="margin-bottom: 1.5rem;">
-    <h2 style="margin-bottom: 0.5rem;">Dashboard</h2>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="stats-inline">
-            <div class="stat-item">
-                <span class="stat-value">{{ projects.count }}</span>
-                <span class="stat-label">proyectos</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-value">{{ total_videos }}</span>
-                <span class="stat-label">videos</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-value">{{ total_images }}</span>
-                <span class="stat-label">imágenes</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-value">{{ completed_videos }}</span>
-                <span class="stat-label">completados</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-value">{{ processing_videos }}</span>
-                <span class="stat-label">procesando</span>
-            </div>
+<!-- Header con estadísticas -->
+<div class="mb-8">
+    <h1 class="text-4xl font-bold mb-2">Dashboard</h1>
+    <p class="text-gray-600">Gestiona tus proyectos de generación de contenido IA</p>
+</div>
+
+<!-- Estadísticas -->
+<div class="stats shadow w-full mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure text-primary">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
         </div>
-        <a href="{% url 'core:project_create' %}" class="btn btn-primary">Nuevo Proyecto</a>
+        <div class="stat-title text-sm text-gray-600">Proyectos</div>
+        <div class="stat-value text-3xl font-bold text-primary">{{ projects.count }}</div>
+        <div class="stat-desc text-xs text-gray-500">Total de proyectos</div>
+    </div>
+    
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure text-secondary">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+        </div>
+        <div class="stat-title text-sm text-gray-600">Videos</div>
+        <div class="stat-value text-3xl font-bold text-blue-600">{{ total_videos }}</div>
+        <div class="stat-desc text-xs text-gray-500">{{ completed_videos }} completados</div>
+    </div>
+    
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure text-accent">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+        </div>
+        <div class="stat-title text-sm text-gray-600">Imágenes</div>
+        <div class="stat-value text-3xl font-bold text-purple-600">{{ total_images }}</div>
+        <div class="stat-desc text-xs text-gray-500">Generadas con IA</div>
+    </div>
+    
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure text-success">
+            <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+        </div>
+        <div class="stat-title text-sm text-gray-600">Completados</div>
+        <div class="stat-value text-3xl font-bold text-green-600">{{ completed_videos }}</div>
+        <div class="stat-desc text-xs text-gray-500">Listos para usar</div>
+    </div>
+    
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure text-warning">
+            <div class="loading loading-spinner loading-lg text-yellow-600"></div>
+        </div>
+        <div class="stat-title text-sm text-gray-600">Procesando</div>
+        <div class="stat-value text-3xl font-bold text-yellow-600">{{ processing_videos }}</div>
+        <div class="stat-desc text-xs text-gray-500">En cola</div>
     </div>
 </div>
 
-{% if projects %}
-<div class="projects-grid">
-    {% for project in projects %}
-    <div class="project-card">
-        <h3>{{ project.name }}</h3>
-        <div class="project-meta">
-            <div>{{ project.video_count }} video{{ project.video_count|pluralize }}, {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</div>
-            <div>{{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</div>
-            <div>{{ project.created_at|date:"d/m/Y" }}</div>
+<!-- Proyectos -->
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Proyectos</h2>
+        <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md">
+            Nuevo Proyecto
+        </a>
+    </div>
+
+    {% if projects %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for project in projects %}
+        <div class="card bg-white shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-200 rounded-lg overflow-hidden">
+            <div class="card-body p-6">
+                <h2 class="card-title text-xl font-bold mb-2">
+                    {{ project.name }}
+                    {% if project.video_count > 0 %}
+                    <div class="badge badge-secondary bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ project.video_count }}</div>
+                    {% endif %}
+                </h2>
+                
+                <div class="text-sm text-gray-600 space-y-1 mb-4">
+                    <p>📹 {{ project.video_count }} video{{ project.video_count|pluralize }}</p>
+                    <p>🖼️ {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</p>
+                    <p>✅ {{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</p>
+                    <p class="text-xs text-gray-400">📅 {{ project.created_at|date:"d/m/Y" }}</p>
+                </div>
+                
+                <div class="card-actions justify-end mt-4 flex gap-2">
+                    <a href="{% url 'core:project_detail' project.id %}" 
+                       class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
+                        Ver Proyecto
+                    </a>
+                    <a href="{% url 'core:video_create' project.id %}" 
+                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
+                        + Video
+                    </a>
+                    <a href="{% url 'core:image_create' project.id %}" 
+                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
+                        + Imagen
+                    </a>
+                </div>
+            </div>
         </div>
-        <div class="project-actions">
-            <a href="{% url 'core:project_detail' project.id %}" class="btn" style="flex: 1;">Ver</a>
-            <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary" style="flex: 1;">+ Video</a>
-            <a href="{% url 'core:image_create' project.id %}" class="btn btn-primary" style="flex: 1;">+ Imagen</a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Estado vacío -->
+    <div class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+        <div class="hero-content text-center">
+            <div class="max-w-md">
+                <div class="text-6xl mb-4 opacity-30">📁</div>
+                <h1 class="text-3xl font-bold text-gray-800">No hay proyectos</h1>
+                <p class="py-6 text-gray-600">
+                    Crea tu primer proyecto para comenzar a generar videos e imágenes con IA
+                </p>
+                <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md">
+                    Crear Primer Proyecto
+                </a>
+            </div>
         </div>
     </div>
-    {% endfor %}
+    {% endif %}
 </div>
-{% else %}
-<div class="empty-state">
-    <div class="empty-state-icon">📁</div>
-    <h3>No hay proyectos</h3>
-    <p>Crea tu primer proyecto para comenzar a generar videos con IA</p>
-    <a href="{% url 'core:project_create' %}" class="btn btn-primary">Crear Primer Proyecto</a>
-</div>
-{% endif %}
 
-<!-- Sección de Videos -->
+<!-- Videos Recientes -->
 {% if videos %}
-<div class="content-section">
-    <div class="section-header">
-        <h3>Videos Recientes</h3>
-        <div class="view-toggle">
-            <button class="active" onclick="toggleView('videos', 'grid')" id="videos-grid-btn">
-                <span>⊞</span> Cuadrícula
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Videos Recientes</h2>
+        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+            <button 
+                @click="view = 'grid'; 
+                        document.getElementById('videos-grid-view').classList.remove('hidden'); 
+                        document.getElementById('videos-list-view').classList.add('hidden')"
+                :class="view === 'grid' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                ⊞ Cuadrícula
             </button>
-            <button onclick="toggleView('videos', 'list')" id="videos-list-btn">
-                <span>☰</span> Lista
+            <button 
+                @click="view = 'list'; 
+                        document.getElementById('videos-grid-view').classList.add('hidden'); 
+                        document.getElementById('videos-list-view').classList.remove('hidden')"
+                :class="view === 'list' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                ☰ Lista
             </button>
         </div>
     </div>
     
     <!-- Vista Cuadrícula Videos -->
-    <div id="videos-grid-view" class="media-grid">
+    <div id="videos-grid-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {% for video_data in videos_with_urls %}
         {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="media-card">
-            <div class="media-thumbnail">
-                <span class="media-status-badge status-{{ video.status }}">
+        <a href="{% url 'core:video_detail' video.id %}" class="card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
+            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if video.status == 'completed' %}bg-green-500 text-white
+                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif video.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
                     {{ video.get_status_display }}
                 </span>
                 {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata"></video>
-                    <div class="play-icon">▶</div>
+                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
+                    <div class="absolute w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl">▶</div>
                 {% else %}
-                    <span style="font-size: 3rem; opacity: 0.3;">🎬</span>
+                    <span class="text-5xl opacity-30">🎬</span>
                 {% endif %}
             </div>
-            <div class="media-info">
-                <div class="media-title">{{ video.title }}</div>
-                <div class="media-project">📁 {{ video.project.name }}</div>
-                <div class="media-meta">
+            <div class="p-4">
+                <div class="font-semibold mb-1 truncate">{{ video.title }}</div>
+                <div class="text-sm text-gray-500 mb-2">📁 {{ video.project.name }}</div>
+                <div class="flex justify-between text-xs text-gray-400">
                     <span>{{ video.get_type_display }}</span>
                     <span>{{ video.created_at|date:"d/m/Y" }}</span>
                 </div>
@@ -393,27 +189,31 @@
     </div>
 
     <!-- Vista Lista Videos -->
-    <div id="videos-list-view" class="media-list hidden">
+    <div id="videos-list-view" class="hidden space-y-3">
         {% for video_data in videos_with_urls %}
         {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="media-list-item">
-            <div class="media-list-thumbnail">
+        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
                 {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata"></video>
+                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
                 {% else %}
-                    <span style="font-size: 2rem; opacity: 0.3;">🎬</span>
+                    <span class="text-3xl opacity-30">🎬</span>
                 {% endif %}
             </div>
-            <div class="media-list-content">
-                <div class="media-list-title">{{ video.title }}</div>
-                <div class="media-list-details">
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="font-semibold">{{ video.title }}</div>
+                <div class="text-sm text-gray-500">
                     <span>📁 {{ video.project.name }}</span>
-                    <span style="margin-left: 1rem;">{{ video.get_type_display }}</span>
-                    <span style="margin-left: 1rem;">{{ video.created_at|date:"d/m/Y H:i" }}</span>
+                    <span class="ml-4">{{ video.get_type_display }}</span>
+                    <span class="ml-4">{{ video.created_at|date:"d/m/Y H:i" }}</span>
                 </div>
             </div>
-            <div class="media-list-status">
-                <span class="media-status-badge status-{{ video.status }}">
+            <div class="flex items-center">
+                <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if video.status == 'completed' %}bg-green-500 text-white
+                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif video.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
                     {{ video.get_status_display }}
                 </span>
             </div>
@@ -424,40 +224,54 @@
 </div>
 {% endif %}
 
-<!-- Sección de Imágenes -->
+<!-- Imágenes Recientes -->
 {% if images %}
-<div class="content-section">
-    <div class="section-header">
-        <h3>Imágenes Recientes</h3>
-        <div class="view-toggle">
-            <button class="active" onclick="toggleView('images', 'grid')" id="images-grid-btn">
-                <span>⊞</span> Cuadrícula
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Imágenes Recientes</h2>
+        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+            <button 
+                @click="view = 'grid'; 
+                        document.getElementById('images-grid-view').classList.remove('hidden'); 
+                        document.getElementById('images-list-view').classList.add('hidden')"
+                :class="view === 'grid' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                ⊞ Cuadrícula
             </button>
-            <button onclick="toggleView('images', 'list')" id="images-list-btn">
-                <span>☰</span> Lista
+            <button 
+                @click="view = 'list'; 
+                        document.getElementById('images-grid-view').classList.add('hidden'); 
+                        document.getElementById('images-list-view').classList.remove('hidden')"
+                :class="view === 'list' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                ☰ Lista
             </button>
         </div>
     </div>
     
     <!-- Vista Cuadrícula Imágenes -->
-    <div id="images-grid-view" class="media-grid">
+    <div id="images-grid-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {% for image_data in images_with_urls %}
         {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="media-card">
-            <div class="media-thumbnail">
-                <span class="media-status-badge status-{{ image.status }}">
+        <a href="{% url 'core:image_detail' image.id %}" class="card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
+            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if image.status == 'completed' %}bg-green-500 text-white
+                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif image.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
                     {{ image.get_status_display }}
                 </span>
                 {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}">
+                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
                 {% else %}
-                    <span style="font-size: 3rem; opacity: 0.3;">🖼️</span>
+                    <span class="text-5xl opacity-30">🖼️</span>
                 {% endif %}
             </div>
-            <div class="media-info">
-                <div class="media-title">{{ image.title }}</div>
-                <div class="media-project">📁 {{ image.project.name }}</div>
-                <div class="media-meta">
+            <div class="p-4">
+                <div class="font-semibold mb-1 truncate">{{ image.title }}</div>
+                <div class="text-sm text-gray-500 mb-2">📁 {{ image.project.name }}</div>
+                <div class="flex justify-between text-xs text-gray-400">
                     <span>{{ image.get_type_display }}</span>
                     <span>{{ image.created_at|date:"d/m/Y" }}</span>
                 </div>
@@ -468,27 +282,31 @@
     </div>
 
     <!-- Vista Lista Imágenes -->
-    <div id="images-list-view" class="media-list hidden">
+    <div id="images-list-view" class="hidden space-y-3">
         {% for image_data in images_with_urls %}
         {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="media-list-item">
-            <div class="media-list-thumbnail">
+        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
                 {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}">
+                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
                 {% else %}
-                    <span style="font-size: 2rem; opacity: 0.3;">🖼️</span>
+                    <span class="text-3xl opacity-30">🖼️</span>
                 {% endif %}
             </div>
-            <div class="media-list-content">
-                <div class="media-list-title">{{ image.title }}</div>
-                <div class="media-list-details">
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="font-semibold">{{ image.title }}</div>
+                <div class="text-sm text-gray-500">
                     <span>📁 {{ image.project.name }}</span>
-                    <span style="margin-left: 1rem;">{{ image.get_type_display }}</span>
-                    <span style="margin-left: 1rem;">{{ image.created_at|date:"d/m/Y H:i" }}</span>
+                    <span class="ml-4">{{ image.get_type_display }}</span>
+                    <span class="ml-4">{{ image.created_at|date:"d/m/Y H:i" }}</span>
                 </div>
             </div>
-            <div class="media-list-status">
-                <span class="media-status-badge status-{{ image.status }}">
+            <div class="flex items-center">
+                <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if image.status == 'completed' %}bg-green-500 text-white
+                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif image.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
                     {{ image.get_status_display }}
                 </span>
             </div>
@@ -498,26 +316,4 @@
     </div>
 </div>
 {% endif %}
-
-<script>
-function toggleView(mediaType, viewType) {
-    const gridView = document.getElementById(`${mediaType}-grid-view`);
-    const listView = document.getElementById(`${mediaType}-list-view`);
-    const gridBtn = document.getElementById(`${mediaType}-grid-btn`);
-    const listBtn = document.getElementById(`${mediaType}-list-btn`);
-    
-    if (viewType === 'grid') {
-        gridView.classList.remove('hidden');
-        listView.classList.add('hidden');
-        gridBtn.classList.add('active');
-        listBtn.classList.remove('active');
-    } else {
-        gridView.classList.add('hidden');
-        listView.classList.remove('hidden');
-        gridBtn.classList.remove('active');
-        listBtn.classList.add('active');
-    }
-}
-</script>
 {% endblock %}
-
