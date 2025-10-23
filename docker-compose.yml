@@ -22,7 +22,7 @@ services:
     restart: always
 
   web:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    build: .
     command: gunicorn atenea.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
     volumes:
       - static_volume:/app/static
@@ -46,7 +46,7 @@ services:
 
   # Servicio para ejecutar migraciones (ejecutar manualmente)
   migrate:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    build: .
     command: python manage.py migrate --noinput
     volumes:
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
@@ -65,7 +65,7 @@ services:
 
   # Recolectar archivos estáticos (ejecutar manualmente)
   collectstatic:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-main}
+    build: .
     command: python manage.py collectstatic --noinput
     volumes:
       - static_volume:/app/static
