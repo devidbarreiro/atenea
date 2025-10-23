@@ -82,7 +82,7 @@
         
         <div class="form-group">
             <label>Tipo de Video</label>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
                 <label class="type-option" for="type-heygen-v2">
                     <input type="radio" name="type" id="type-heygen-v2" value="heygen_avatar_v2" required>
                     <div class="type-icon">👤</div>
@@ -107,6 +107,15 @@
                     <div class="type-info">
                         <h3>Gemini Veo</h3>
                         <p>Video AI de Google</p>
+                    </div>
+                </label>
+                
+                <label class="type-option" for="type-sora">
+                    <input type="radio" name="type" id="type-sora" value="sora" required>
+                    <div class="type-icon">🚀</div>
+                    <div class="type-info">
+                        <h3>OpenAI Sora</h3>
+                        <p>Generación rápida y flexible</p>
                     </div>
                 </label>
             </div>
@@ -534,6 +543,122 @@
             </div>
         </div>
         
+        <!-- Config OpenAI Sora -->
+        <div id="sora-config" class="config-section">
+            <h3 style="margin-bottom: 1rem;">Configuración OpenAI Sora</h3>
+            
+            <!-- Modelo Sora -->
+            <div class="form-group">
+                <label>Modelo *</label>
+                <select name="sora_model" id="sora-model-select" required>
+                    <option value="sora-2">Sora 2 - Rápido 🚀 (Exploración y Redes Sociales)</option>
+                    <option value="sora-2-pro">Sora 2 Pro - Alta Calidad 💎 (Producción Profesional)</option>
+                </select>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                    <strong>Sora 2:</strong> Velocidad y flexibilidad para iteración rápida<br>
+                    <strong>Sora 2 Pro:</strong> Mayor calidad para marketing y cine
+                </small>
+            </div>
+            
+            <!-- Duración y Resolución -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duración *</label>
+                    <select name="duration" id="sora-duration" required>
+                        <option value="4">4 segundos</option>
+                        <option value="8" selected>8 segundos</option>
+                        <option value="12">12 segundos</option>
+                    </select>
+                    <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                        Duraciones permitidas: 4, 8 o 12 segundos
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Resolución *</label>
+                    <select name="size" id="sora-size" required>
+                        <option value="1280x720" selected>1280x720 - Horizontal 16:9 📺 (YouTube, TV)</option>
+                        <option value="720x1280">720x1280 - Vertical 9:16 📱 (TikTok, Stories)</option>
+                        <option value="1024x1024">1024x1024 - Cuadrado 1:1 ⬜ (Instagram)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Imagen de Referencia -->
+            <div class="form-group" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid hsl(var(--border));">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" 
+                           name="use_input_reference" 
+                           id="sora-use-reference"
+                           style="width: auto; margin: 0;">
+                    <span>Usar Imagen de Referencia (Image-to-Video)</span>
+                </label>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem; margin-left: 1.75rem;">
+                    🖼️ Genera el video a partir de una imagen inicial. El prompt describe cómo debe moverse o animarse.
+                </small>
+            </div>
+            
+            <div id="sora-reference-section" class="form-group" style="display: none; margin-top: 1rem;">
+                <label>Imagen de Referencia *</label>
+                <input type="file" 
+                       name="input_reference" 
+                       id="sora-input-reference" 
+                       accept="image/jpeg,image/png,image/webp"
+                       style="padding: 0.5rem;">
+                <div style="margin-top: 0.5rem; padding: 0.75rem; background: hsl(var(--destructive) / 0.1); border-radius: var(--radius); border-left: 3px solid hsl(var(--destructive));">
+                    <p style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem 0; color: hsl(var(--destructive));">
+                        ⚠️ IMPORTANTE: La imagen DEBE tener exactamente las mismas dimensiones que la resolución seleccionada
+                    </p>
+                    <ul style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0; padding-left: 1.25rem;">
+                        <li><strong>1280x720:</strong> La imagen debe ser exactamente 1280x720 píxeles</li>
+                        <li><strong>720x1280:</strong> La imagen debe ser exactamente 720x1280 píxeles</li>
+                        <li><strong>1024x1024:</strong> La imagen debe ser exactamente 1024x1024 píxeles</li>
+                    </ul>
+                </div>
+                <small style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+                    ✅ Formatos: JPEG, PNG, WEBP<br>
+                    ✅ Tamaño máximo: 10 MB<br>
+                    ❌ <strong>NO</strong> debe contener caras humanas
+                </small>
+                <div id="sora-image-preview" style="margin-top: 1rem; display: none;">
+                    <img id="sora-preview-img" src="" alt="Preview" style="max-width: 300px; border-radius: var(--radius); border: 1px solid hsl(var(--border));">
+                    <p id="sora-image-dimensions" style="font-size: 0.875rem; margin-top: 0.5rem; font-weight: 600;"></p>
+                </div>
+            </div>
+            
+            <!-- Restricciones de contenido -->
+            <div style="margin-top: 1.5rem; padding: 1rem; background: hsl(var(--muted)); border-radius: var(--radius); border-left: 3px solid hsl(var(--destructive));">
+                <h4 style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--destructive));">
+                    🚫 Restricciones de Contenido Sora
+                </h4>
+                <ul style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0; padding-left: 1.25rem;">
+                    <li>Solo contenido apto para menores de 18 años</li>
+                    <li>NO personas reales (celebridades, figuras públicas)</li>
+                    <li>NO personajes con copyright ni música con copyright</li>
+                    <li>NO imágenes con caras humanas como referencia</li>
+                    <li>NO contenido violento, explícito o político</li>
+                </ul>
+            </div>
+            
+            <!-- Tips para prompts efectivos -->
+            <div style="margin-top: 1rem; padding: 1rem; background: hsl(var(--muted)); border-radius: var(--radius); border-left: 3px solid hsl(var(--primary));">
+                <h4 style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem;">
+                    💡 Tips para Prompts Efectivos
+                </h4>
+                <ul style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0; padding-left: 1.25rem;">
+                    <li><strong>Tipo de plano:</strong> "Wide shot", "Close-up", "Medium shot"</li>
+                    <li><strong>Sujeto:</strong> Qué hay en la escena</li>
+                    <li><strong>Acción:</strong> Qué está haciendo</li>
+                    <li><strong>Escenario:</strong> Dónde ocurre</li>
+                    <li><strong>Iluminación:</strong> "Golden hour", "soft light", "dramatic shadows"</li>
+                    <li><strong>Movimiento:</strong> "Camera slowly pans", "static shot"</li>
+                </ul>
+                <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.75rem; margin-bottom: 0;">
+                    <strong>Ejemplo:</strong> "Wide shot of a child flying a red kite in a grassy park, golden hour sunlight, camera slowly pans upward, cinematic 4k"
+                </p>
+            </div>
+        </div>
+        
         <div style="display: flex; gap: 0.5rem; margin-top: 2rem;">
             <button type="submit" class="btn btn-primary">Crear</button>
             <a href="{% url 'core:project_detail' project.id %}" class="btn">Cancelar</a>
@@ -608,6 +733,8 @@ document.querySelectorAll('.type-option').forEach(option => {
             if (document.getElementById('voice-select-iv').options.length === 1) {
                 loadHeyGenDataIV();
             }
+        } else if (type === 'sora') {
+            document.getElementById('sora-config').classList.add('active');
         } else {
             document.getElementById('gemini-config').classList.add('active');
         }
@@ -800,6 +927,38 @@ document.querySelector('form').addEventListener('submit', function(e) {
         document.querySelectorAll('#heygen-iv-config input, #heygen-iv-config select').forEach(field => {
             field.disabled = true;
         });
+        document.querySelectorAll('#sora-config input, #sora-config select').forEach(field => {
+            field.disabled = true;
+        });
+    } else if (videoType === 'sora') {
+        // Deshabilitar campos de otros tipos
+        document.querySelectorAll('#heygen-v2-config input, #heygen-v2-config select').forEach(field => {
+            field.disabled = true;
+        });
+        document.querySelectorAll('#heygen-iv-config input, #heygen-iv-config select').forEach(field => {
+            field.disabled = true;
+        });
+        document.querySelectorAll('#gemini-config input, #gemini-config select, #gemini-config textarea').forEach(field => {
+            field.disabled = true;
+        });
+        
+        // Validar Sora: si usa referencia, debe tener imagen
+        const useReference = document.getElementById('sora-use-reference').checked;
+        if (useReference) {
+            const referenceImage = document.getElementById('sora-input-reference').files[0];
+            if (!referenceImage) {
+                e.preventDefault();
+                alert('Por favor, sube una imagen de referencia o desmarca la opción');
+                return;
+            }
+        }
+    }
+    
+    // Deshabilitar campos de Sora si no es el tipo seleccionado
+    if (videoType !== 'sora') {
+        document.querySelectorAll('#sora-config input, #sora-config select').forEach(field => {
+            field.disabled = true;
+        });
     }
     
     console.log('Formulario enviado - Tipo:', videoType);
@@ -823,6 +982,80 @@ document.querySelector('form').addEventListener('submit', function(e) {
                 return;
             }
         }
+    }
+});
+
+// Sora: Toggle imagen de referencia
+document.getElementById('sora-use-reference')?.addEventListener('change', function(e) {
+    const referenceSection = document.getElementById('sora-reference-section');
+    const referenceInput = document.getElementById('sora-input-reference');
+    
+    if (e.target.checked) {
+        referenceSection.style.display = 'block';
+        referenceInput.required = true;
+    } else {
+        referenceSection.style.display = 'none';
+        referenceInput.required = false;
+        referenceInput.value = '';
+        document.getElementById('sora-image-preview').style.display = 'none';
+    }
+});
+
+// Sora: Preview de imagen de referencia con validación de dimensiones
+document.getElementById('sora-input-reference')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        // Validar tamaño (10 MB máximo)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('La imagen no debe superar los 10 MB');
+            this.value = '';
+            return;
+        }
+        
+        // Mostrar preview y verificar dimensiones
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                const preview = document.getElementById('sora-image-preview');
+                const previewImg = document.getElementById('sora-preview-img');
+                const dimensionsText = document.getElementById('sora-image-dimensions');
+                
+                previewImg.src = event.target.result;
+                preview.style.display = 'block';
+                
+                // Obtener resolución seleccionada
+                const selectedSize = document.getElementById('sora-size').value;
+                const [expectedWidth, expectedHeight] = selectedSize.split('x').map(Number);
+                
+                // Mostrar dimensiones con indicador de validez
+                const actualDimensions = `${img.width}x${img.height}`;
+                const isValid = img.width === expectedWidth && img.height === expectedHeight;
+                
+                if (isValid) {
+                    dimensionsText.innerHTML = `✅ Dimensiones: ${actualDimensions} (Correcto para ${selectedSize})`;
+                    dimensionsText.style.color = 'hsl(var(--success))';
+                } else {
+                    dimensionsText.innerHTML = `❌ Dimensiones: ${actualDimensions} (Se requiere ${selectedSize})`;
+                    dimensionsText.style.color = 'hsl(var(--destructive))';
+                }
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Actualizar validación cuando cambia la resolución
+document.getElementById('sora-size')?.addEventListener('change', function() {
+    const referenceInput = document.getElementById('sora-input-reference');
+    const dimensionsText = document.getElementById('sora-image-dimensions');
+    
+    // Si hay una imagen cargada, re-validar dimensiones
+    if (referenceInput.files.length > 0 && dimensionsText.textContent) {
+        // Forzar re-validación
+        const event = new Event('change');
+        referenceInput.dispatchEvent(event);
     }
 });
 </script>
