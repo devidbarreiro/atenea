@@ -2,758 +2,257 @@
 
 {% block title %}{{ project.name }} - Atenea{% endblock %}
 
-{% block extra_css %}
-<style>
-    .view-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        flex-wrap: nowrap;
-    }
-    
-    .view-controls .filter-btn {
-        margin-right: 0.5rem;
-        flex-shrink: 0;
-    }
-    
-    .view-controls .view-toggle {
-        margin-left: auto;
-        flex-shrink: 0;
-    }
-    
-    .view-toggle {
-        display: flex;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        overflow: hidden;
-    }
-    
-    .view-btn {
-        padding: 0.5rem 1rem;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .view-btn:hover {
-        background: hsl(var(--muted));
-    }
-    
-    .view-btn.active {
-        background: hsl(var(--foreground));
-        color: hsl(var(--background));
-    }
-    
-    .view-btn:not(:last-child) {
-        border-right: 1px solid hsl(var(--border));
-    }
-
-    .filter-btn {
-        padding: 0.5rem 1rem;
-        background: transparent;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        cursor: pointer;
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        transition: all 0.2s;
-    }
-
-    .filter-btn:hover {
-        background: hsl(var(--muted));
-    }
-
-    .filter-btn.active {
-        background: hsl(var(--foreground));
-        color: hsl(var(--background));
-        border-color: hsl(var(--foreground));
-    }
-
-    /* Estilos del dashboard para badges de estado */
-    .media-status-badge {
-        position: absolute;
-        top: 0.5rem;
-        left: 0.5rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: calc(var(--radius) - 2px);
-        font-size: 0.75rem;
-        font-weight: 500;
-        z-index: 10;
-    }
-
-    .status-completed { background: hsl(142, 76%, 36%); color: white; }
-    .status-processing { background: hsl(45, 93%, 47%); color: white; }
-    .status-pending { background: hsl(215, 16%, 47%); color: white; }
-    .status-error { background: hsl(0, 72%, 51%); color: white; }
-
-    .media-card {
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        overflow: hidden;
-        transition: border-color 0.2s;
-        cursor: pointer;
-        background: hsl(var(--card));
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-
-    .media-card:hover {
-        border-color: hsl(var(--foreground));
-    }
-
-    .media-thumbnail {
-        position: relative;
-        width: 100%;
-        height: 180px;
-        background: hsl(var(--muted));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-
-    .media-thumbnail img,
-    .media-thumbnail video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .play-overlay {
-        position: absolute;
-        width: 60px;
-        height: 60px;
-        background: rgba(0, 0, 0, 0.7);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-        transition: background 0.2s;
-    }
-
-    .media-card:hover .play-overlay {
-        background: rgba(0, 0, 0, 0.9);
-    }
-    
-    .videos-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1rem;
-    }
-    
-    .videos-list {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    .video-card {
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        overflow: hidden;
-        transition: box-shadow 0.2s;
-        background: white;
-        cursor: pointer;
-    }
-
-    .video-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    
-    .video-thumbnail {
-        aspect-ratio: 16/9;
-        background: hsl(var(--muted));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .video-thumbnail video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    
-    .video-thumbnail-icon {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-        color: hsl(var(--muted-foreground));
-    }
-    
-    .video-thumbnail-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-    }
-    
-    .video-thumbnail-overlay > * {
-        pointer-events: auto;
-    }
-    
-    .video-header {
-        padding: 1rem;
-        border-bottom: 1px solid hsl(var(--border));
-    }
-    
-    .video-body {
-        padding: 1rem;
-    }
-
-    /* List view specific styles */
-    .videos-list .video-card {
-        display: flex;
-        flex-direction: row;
-    }
-    
-    .videos-list .video-header {
-        min-width: 300px;
-        border-bottom: none;
-        border-right: 1px solid hsl(var(--border));
-    }
-    
-    .videos-list .video-body {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .badge {
-        display: inline-block;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
-        border-radius: 0.25rem;
-        font-weight: 500;
-        margin-right: 0.5rem;
-    }
-    
-    .badge-pending { background: hsl(var(--muted)); }
-    .badge-processing { background: #fef3c7; color: #92400e; }
-    .badge-completed { background: #d1fae5; color: #065f46; }
-    .badge-error { background: #fee2e2; color: #991b1b; }
-    
-    .stats-inline {
-        display: flex;
-        gap: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .stat-box {
-        flex: 1;
-        padding: 1rem;
-        border: 1px solid hsl(var(--border));
-        border-radius: var(--radius);
-        text-align: center;
-    }
-    
-    .hidden {
-        display: none !important;
-    }
-    
-    /* Dropdown styles */
-    .dropdown {
-        position: relative;
-        display: inline-block;
-    }
-    
-    .dropdown-menu {
-        display: none;
-        position: absolute;
-        right: 0;
-        top: calc(100% + 0.25rem);
-        background: white;
-        border: 1px solid hsl(var(--border));
-        border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        min-width: 180px;
-        max-width: 250px;
-        z-index: 1000;
-        padding: 0.5rem 0;
-    }
-    
-    .dropdown-menu.show {
-        display: block;
-    }
-    
-    .dropdown-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.625rem 1rem;
-        font-size: 0.875rem;
-        color: hsl(var(--foreground));
-        text-decoration: none;
-        transition: background-color 0.15s;
-        cursor: pointer;
-    }
-    
-    .dropdown-item:hover {
-        background: hsl(var(--muted));
-    }
-    
-    .dropdown-item-danger {
-        color: #dc2626;
-    }
-    
-    .dropdown-item-danger:hover {
-        background: #fee2e2;
-    }
-    
-    .btn-icon {
-        padding: 0.375rem !important;
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(4px);
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .btn-icon:hover {
-        background: white;
-    }
-
-    .btn-danger {
-        background: #dc2626 !important;
-        color: white !important;
-    }
-
-    .btn-danger:hover {
-        background: #b91c1c !important;
-        color: white !important;
-    }
-    
-    /* Modal styles */
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(4px);
-        z-index: 9999;
-        animation: fadeIn 0.2s ease;
-    }
-    
-    .modal-overlay.show {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .modal-content {
-        background: white;
-        border-radius: 12px;
-        padding: 2rem;
-        max-width: 480px;
-        width: 90%;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        animation: slideUp 0.3s ease;
-    }
-    
-    .modal-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .modal-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: #fee2e2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    
-    .modal-icon svg {
-        color: #dc2626;
-    }
-    
-    .modal-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem 0;
-        color: hsl(var(--foreground));
-    }
-    
-    .modal-description {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        line-height: 1.5;
-        margin: 0;
-    }
-    
-    .modal-footer {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: flex-end;
-        margin-top: 2rem;
-    }
-    
-    .modal-footer .btn {
-        padding: 0.625rem 1.25rem;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-    
-    @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: start;">
+<!-- Header del Proyecto -->
+<div class="mb-8">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-            <h2>{{ project.name }}</h2>
-            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem; margin-top: 0.5rem;">
-                Creado {{ project.created_at|date:"d/m/Y" }}
-            </p>
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">{{ project.name }}</h1>
+            {% if project.description %}
+            <p class="text-gray-600">{{ project.description }}</p>
+            {% endif %}
         </div>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary">+ Video</a>
-            <a href="{% url 'core:image_create' project.id %}" class="btn btn-primary">+ Imagen</a>
-            <a href="{% url 'core:project_delete' project.id %}" class="btn btn-destructive">Eliminar</a>
-            <a href="{% url 'core:dashboard' %}" class="btn">Volver</a>
-        </div>
-    </div>
-    
-    <div class="stats-inline">
-        <div class="stat-box">
-            <div style="font-size: 1.5rem; font-weight: 700;">{{ videos|length|add:images|length }}</div>
-            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Total Items</div>
-        </div>
-        <div class="stat-box">
-            <div style="font-size: 1.5rem; font-weight: 700;">{{ project.video_count }}</div>
-            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Videos</div>
-        </div>
-        <div class="stat-box">
-            <div style="font-size: 1.5rem; font-weight: 700;">{{ project.image_count }}</div>
-            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Imágenes</div>
-        </div>
-        <div class="stat-box">
-            <div style="font-size: 1.5rem; font-weight: 700;">{{ project.completed_videos|add:project.completed_images }}</div>
-            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Completados</div>
+        <div class="flex gap-2">
+            <a href="{% url 'core:video_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                + Video
+            </a>
+            <a href="{% url 'core:image_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                + Imagen
+            </a>
+            <a href="{% url 'core:project_delete' project.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                Eliminar
+            </a>
+            <a href="{% url 'core:dashboard' %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                Volver
+            </a>
         </div>
     </div>
-</div>
 
-{% if videos or images %}
-<div class="view-controls">
-    <button class="filter-btn active" data-filter="all" onclick="filterItems('all')">
-        Todos ({{ videos|length|add:images|length }})
-    </button>
-    <button class="filter-btn" data-filter="video" onclick="filterItems('video')">
-        🎬 Videos ({{ videos|length }})
-    </button>
-    <button class="filter-btn" data-filter="image" onclick="filterItems('image')">
-        🖼️ Imágenes ({{ images|length }})
-    </button>
-    
-    <div class="view-toggle">
-        <button class="view-btn active" data-view="grid">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-            Cuadrícula
-        </button>
-        <button class="view-btn" data-view="list">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="8" y1="6" x2="21" y2="6"></line>
-                <line x1="8" y1="12" x2="21" y2="12"></line>
-                <line x1="8" y1="18" x2="21" y2="18"></line>
-                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-            Lista
-        </button>
+    <!-- Estadísticas del Proyecto -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div class="text-sm text-gray-600 mb-1">Videos</div>
+            <div class="text-3xl font-bold text-blue-600">{{ project.video_count }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ project.completed_videos }} completados</div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div class="text-sm text-gray-600 mb-1">Imágenes</div>
+            <div class="text-3xl font-bold text-purple-600">{{ project.image_count }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ project.completed_images }} completadas</div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div class="text-sm text-gray-600 mb-1">Total Media</div>
+            <div class="text-3xl font-bold text-gray-900">{{ project.video_count|add:project.image_count }}</div>
+            <div class="text-xs text-gray-500 mt-1">Videos + Imágenes</div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div class="text-sm text-gray-600 mb-1">Creado</div>
+            <div class="text-3xl font-bold text-gray-900">{{ project.created_at|date:"d" }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ project.created_at|date:"M Y" }}</div>
+        </div>
     </div>
 </div>
 
-{# Vista de Cuadrícula #}
-<div id="media-grid-view" class="videos-grid">
-    {% for item in videos_with_urls %}
-        <div class="media-item" data-type="video">
-            {% include 'includes/media_card.html' with item=item.video item_type='video' signed_url=item.signed_url view_mode='grid' %}
+<!-- Videos Section -->
+{% if videos %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Videos</h2>
+        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+            <button 
+                @click="view = 'grid'; 
+                        document.getElementById('videos-grid').classList.remove('hidden'); 
+                        document.getElementById('videos-list').classList.add('hidden')"
+                :class="view === 'grid' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                ⊞ Cuadrícula
+            </button>
+            <button 
+                @click="view = 'list'; 
+                        document.getElementById('videos-grid').classList.add('hidden'); 
+                        document.getElementById('videos-list').classList.remove('hidden')"
+                :class="view === 'list' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                ☰ Lista
+            </button>
         </div>
-    {% endfor %}
+    </div>
     
-    {% for item in images_with_urls %}
-        <div class="media-item" data-type="image">
-            {% include 'includes/media_card.html' with item=item.image item_type='image' signed_url=item.signed_url view_mode='grid' %}
-        </div>
-    {% endfor %}
-</div>
+    <!-- Vista Cuadrícula -->
+    <div id="videos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {% for video_data in videos_with_urls %}
+        {% with video=video_data.video %}
+        <a href="{% url 'core:video_detail' video.id %}" class="bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
+            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
+                    {% if video.status == 'completed' %}bg-green-500 text-white
+                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif video.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
+                    {{ video.get_status_display }}
+                </span>
+                {% if video.status == 'completed' and video_data.signed_url %}
+                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
+                    <div class="absolute w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl">▶</div>
+                {% else %}
+                    <span class="text-5xl opacity-30">🎬</span>
+                {% endif %}
+            </div>
+            <div class="p-4">
+                <div class="font-semibold mb-1 truncate text-gray-900">{{ video.title }}</div>
+                <div class="text-sm text-gray-500 mb-2">{{ video.get_type_display }}</div>
+                <div class="flex justify-between text-xs text-gray-400">
+                    <span>{{ video.created_at|date:"d/m/Y" }}</span>
+                    <span>{{ video.created_at|date:"H:i" }}</span>
+                </div>
+            </div>
+        </a>
+        {% endwith %}
+        {% endfor %}
+    </div>
 
-{# Vista de Lista #}
-<div id="media-list-view" class="videos-list hidden">
-    {% for item in videos_with_urls %}
-        <div class="media-item" data-type="video">
-            {% include 'includes/media_card.html' with item=item.video item_type='video' signed_url=item.signed_url view_mode='list' %}
-        </div>
-    {% endfor %}
-    
-    {% for item in images_with_urls %}
-        <div class="media-item" data-type="image">
-            {% include 'includes/media_card.html' with item=item.image item_type='image' signed_url=item.signed_url view_mode='list' %}
-        </div>
-    {% endfor %}
+    <!-- Vista Lista -->
+    <div id="videos-list" class="hidden space-y-3">
+        {% for video_data in videos_with_urls %}
+        {% with video=video_data.video %}
+        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
+                {% if video.status == 'completed' and video_data.signed_url %}
+                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
+                {% else %}
+                    <span class="text-3xl opacity-30">🎬</span>
+                {% endif %}
+            </div>
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="font-semibold text-gray-900">{{ video.title }}</div>
+                <div class="text-sm text-gray-500">
+                    <span>{{ video.get_type_display }}</span>
+                    <span class="ml-4">{{ video.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+            </div>
+            <div class="flex items-center">
+                <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if video.status == 'completed' %}bg-green-500 text-white
+                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif video.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
+                    {{ video.get_status_display }}
+                </span>
+            </div>
+        </a>
+        {% endwith %}
+        {% endfor %}
+    </div>
 </div>
 {% else %}
-<div class="card" style="text-align: center; padding: 4rem 2rem; color: hsl(var(--muted-foreground));">
-    <h3>Sin contenido</h3>
-    <p>Crea tu primer video o imagen</p>
-    <br>
-    <div style="display: flex; gap: 0.5rem; justify-content: center;">
-        <a href="{% url 'core:video_create' project.id %}" class="btn btn-primary">+ Crear Video</a>
-        <a href="{% url 'core:image_create' project.id %}" class="btn btn-primary">+ Crear Imagen</a>
-    </div>
+<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
+    <div class="text-6xl mb-4 opacity-30">🎬</div>
+    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay videos</h3>
+    <p class="text-gray-600 mb-4">Comienza creando tu primer video con IA</p>
+    <a href="{% url 'core:video_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
+        Crear Video
+    </a>
 </div>
 {% endif %}
 
-<!-- Modal de confirmación para eliminar video -->
-<div id="deleteModalVideo" class="modal-overlay" onclick="if(event.target === this) closeDeleteModalVideo();">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-            </div>
-            <div>
-                <h3 class="modal-title">Eliminar video</h3>
-                <p class="modal-description">
-                    ¿Estás seguro de que quieres eliminar "<strong id="modalVideoTitle"></strong>"?
-                    Esta acción no se puede deshacer.
-                </p>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn" onclick="closeDeleteModalVideo()">Cancelar</button>
-            <form id="deleteFormVideo" method="post" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-destructive">Eliminar</button>
-            </form>
+<!-- Images Section -->
+{% if images %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Imágenes</h2>
+        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+            <button 
+                @click="view = 'grid'; 
+                        document.getElementById('images-grid').classList.remove('hidden'); 
+                        document.getElementById('images-list').classList.add('hidden')"
+                :class="view === 'grid' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                ⊞ Cuadrícula
+            </button>
+            <button 
+                @click="view = 'list'; 
+                        document.getElementById('images-grid').classList.add('hidden'); 
+                        document.getElementById('images-list').classList.remove('hidden')"
+                :class="view === 'list' ? 'bg-gray-100' : ''"
+                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                ☰ Lista
+            </button>
         </div>
     </div>
-</div>
+    
+    <!-- Vista Cuadrícula -->
+    <div id="images-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {% for image_data in images_with_urls %}
+        {% with image=image_data.image %}
+        <a href="{% url 'core:image_detail' image.id %}" class="bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
+            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
+                    {% if image.status == 'completed' %}bg-green-500 text-white
+                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif image.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
+                    {{ image.get_status_display }}
+                </span>
+                {% if image.status == 'completed' and image_data.signed_url %}
+                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
+                {% else %}
+                    <span class="text-5xl opacity-30">🖼️</span>
+                {% endif %}
+            </div>
+            <div class="p-4">
+                <div class="font-semibold mb-1 truncate text-gray-900">{{ image.title }}</div>
+                <div class="text-sm text-gray-500 mb-2">{{ image.get_type_display }}</div>
+                <div class="flex justify-between text-xs text-gray-400">
+                    <span>{{ image.created_at|date:"d/m/Y" }}</span>
+                    <span>{{ image.created_at|date:"H:i" }}</span>
+                </div>
+            </div>
+        </a>
+        {% endwith %}
+        {% endfor %}
+    </div>
 
-<!-- Modal de confirmación para eliminar imagen -->
-<div id="deleteModalImage" class="modal-overlay" onclick="if(event.target === this) closeDeleteModalImage();">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
+    <!-- Vista Lista -->
+    <div id="images-list" class="hidden space-y-3">
+        {% for image_data in images_with_urls %}
+        {% with image=image_data.image %}
+        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
+                {% if image.status == 'completed' and image_data.signed_url %}
+                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
+                {% else %}
+                    <span class="text-3xl opacity-30">🖼️</span>
+                {% endif %}
             </div>
-            <div>
-                <h3 class="modal-title">Eliminar imagen</h3>
-                <p class="modal-description">
-                    ¿Estás seguro de que quieres eliminar "<strong id="modalImageTitle"></strong>"?
-                    Esta acción no se puede deshacer.
-                </p>
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="font-semibold text-gray-900">{{ image.title }}</div>
+                <div class="text-sm text-gray-500">
+                    <span>{{ image.get_type_display }}</span>
+                    <span class="ml-4">{{ image.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn" onclick="closeDeleteModalImage()">Cancelar</button>
-            <form id="deleteFormImage" method="post" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-destructive">Eliminar</button>
-            </form>
-        </div>
+            <div class="flex items-center">
+                <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if image.status == 'completed' %}bg-green-500 text-white
+                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif image.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
+                    {{ image.get_status_display }}
+                </span>
+            </div>
+        </a>
+        {% endwith %}
+        {% endfor %}
     </div>
 </div>
-
+{% else %}
+<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
+    <div class="text-6xl mb-4 opacity-30">🖼️</div>
+    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay imágenes</h3>
+    <p class="text-gray-600 mb-4">Comienza creando tu primera imagen con IA</p>
+    <a href="{% url 'core:image_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
+        Crear Imagen
+    </a>
+</div>
+{% endif %}
 {% endblock %}
-
-{% block extra_js %}
-<script>
-// View toggle functionality
-const viewButtons = document.querySelectorAll('.view-btn');
-const gridView = document.getElementById('media-grid-view');
-const listView = document.getElementById('media-list-view');
-
-// Load saved preference or default to grid
-const savedView = localStorage.getItem('projectViewMode') || 'grid';
-setView(savedView);
-
-viewButtons.forEach(btn => {
-    btn.addEventListener('click', function() {
-        const view = this.dataset.view;
-        setView(view);
-        localStorage.setItem('projectViewMode', view);
-    });
-});
-
-function setView(view) {
-    viewButtons.forEach(btn => {
-        if (btn.dataset.view === view) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-    
-    if (view === 'grid') {
-        gridView.classList.remove('hidden');
-        listView.classList.add('hidden');
-    } else {
-        gridView.classList.add('hidden');
-        listView.classList.remove('hidden');
-    }
-}
-
-// Filter functionality
-function filterItems(type) {
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    const mediaItems = document.querySelectorAll('.media-item');
-    
-    // Update active filter button
-    filterButtons.forEach(btn => {
-        if (btn.dataset.filter === type) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-    
-    // Filter items
-    mediaItems.forEach(item => {
-        const itemType = item.dataset.type;
-        if (type === 'all' || itemType === type) {
-            item.style.display = '';
-        } else {
-            item.style.display = 'none';
-        }
-    });
-    
-    // Save filter preference
-    localStorage.setItem('projectFilterType', type);
-}
-
-// Load saved filter preference
-const savedFilter = localStorage.getItem('projectFilterType') || 'all';
-if (savedFilter !== 'all') {
-    filterItems(savedFilter);
-}
-
-// Dropdown menu
-function toggleDropdown(dropdownId) {
-    const dropdown = document.getElementById(dropdownId);
-    dropdown.classList.toggle('show');
-}
-
-// Cerrar dropdown al hacer clic fuera
-window.addEventListener('click', function(e) {
-    if (!e.target.closest('.dropdown')) {
-        const dropdowns = document.querySelectorAll('.dropdown-menu');
-        dropdowns.forEach(dropdown => {
-            if (dropdown.classList.contains('show')) {
-                dropdown.classList.remove('show');
-            }
-        });
-    }
-});
-
-// Modal de eliminación de video
-function openDeleteModalVideo(videoId, videoTitle) {
-    const modal = document.getElementById('deleteModalVideo');
-    const titleElement = document.getElementById('modalVideoTitle');
-    const form = document.getElementById('deleteFormVideo');
-    
-    titleElement.textContent = videoTitle;
-    form.action = `/videos/${videoId}/delete/`;
-    
-    modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
-    
-    closeAllDropdowns();
-}
-
-function closeDeleteModalVideo() {
-    const modal = document.getElementById('deleteModalVideo');
-    modal.classList.remove('show');
-    document.body.style.overflow = '';
-}
-
-// Modal de eliminación de imagen
-function openDeleteModalImage(imageId, imageTitle) {
-    const modal = document.getElementById('deleteModalImage');
-    const titleElement = document.getElementById('modalImageTitle');
-    const form = document.getElementById('deleteFormImage');
-    
-    titleElement.textContent = imageTitle;
-    form.action = `/images/${imageId}/delete/`;
-    
-    modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
-    
-    closeAllDropdowns();
-}
-
-function closeDeleteModalImage() {
-    const modal = document.getElementById('deleteModalImage');
-    modal.classList.remove('show');
-    document.body.style.overflow = '';
-}
-
-function closeAllDropdowns() {
-    const dropdowns = document.querySelectorAll('.dropdown-menu');
-    dropdowns.forEach(dropdown => {
-        if (dropdown.classList.contains('show')) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// Cerrar modales con ESC
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        closeDeleteModalVideo();
-        closeDeleteModalImage();
-    }
-});
-</script>
-{% endblock %}
-

@@ -1,1003 +1,154 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ video.title }}{% endblock %}
-
-{% block extra_css %}
-<style>
-    .page-header {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.75rem 0;
-        margin-bottom: 1.5rem;
-    }
-    
-    .header-left {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        flex: 1;
-        min-width: 0;
-    }
-    
-    .header-date {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-    }
-    
-    .header-actions {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        flex-shrink: 0;
-    }
-    
-    .btn-sm {
-        padding: 0.375rem 0.875rem;
-        font-size: 0.8125rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-    }
-    
-    .btn-icon {
-        padding: 0.375rem !important;
-    }
-    
-    .dropdown {
-        position: relative;
-        display: inline-block;
-        flex-shrink: 0;
-    }
-    
-    .dropdown-menu {
-        display: none;
-        position: absolute;
-        right: 0;
-        top: calc(100% + 0.5rem);
-        background: white;
-        border: 1px solid hsl(var(--border));
-        border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        min-width: 180px;
-        z-index: 1000;
-        padding: 0.5rem 0;
-    }
-    
-    .dropdown-menu.show {
-        display: block;
-    }
-    
-    .dropdown-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.625rem 1rem;
-        font-size: 0.875rem;
-        color: hsl(var(--foreground));
-        text-decoration: none;
-        transition: background-color 0.15s;
-        cursor: pointer;
-    }
-    
-    .dropdown-item:hover {
-        background: hsl(var(--muted));
-    }
-    
-    .dropdown-item svg {
-        flex-shrink: 0;
-    }
-    
-    .dropdown-item-danger {
-        color: #dc2626;
-    }
-    
-    .dropdown-item-danger:hover {
-        background: #fee2e2;
-    }
-    
-    .detail-container {
-        display: grid;
-        grid-template-columns: 1fr 320px;
-        gap: 2rem;
-        margin-top: 1.5rem;
-        align-items: start;
-    }
-    
-    @media (max-width: 1024px) {
-        .detail-container {
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-        }
-    }
-    
-    .main-content {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        min-width: 0;
-    }
-    
-    .sidebar {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        position: sticky;
-        top: 1rem;
-        height: fit-content;
-    }
-    
-    
-    .video-player-container {
-        position: relative;
-        width: 100%;
-        border-radius: 12px;
-        overflow: hidden;
-        background: #000;
-        border: 2px solid hsl(var(--border));
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-        max-height: 600px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .video-player-container video {
-        width: 100%;
-        height: 100%;
-        max-height: 600px;
-        display: block;
-        object-fit: contain;
-    }
-    
-    .video-placeholder {
-        aspect-ratio: 16/9;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: hsl(var(--muted));
-        color: hsl(var(--muted-foreground));
-        gap: 1rem;
-    }
-    
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.375rem 0.875rem;
-        border-radius: var(--radius);
-        font-size: 0.8125rem;
-        font-weight: 500;
-    }
-    
-    .status-badge-pending {
-        background: hsl(var(--muted));
-        color: hsl(var(--muted-foreground));
-    }
-    
-    .status-badge-processing {
-        background: #fef3c7;
-        color: #92400e;
-    }
-    
-    .status-badge-completed {
-        background: #d1fae5;
-        color: #065f46;
-    }
-    
-    .status-badge-error {
-        background: #fee2e2;
-        color: #991b1b;
-    }
-    
-    .info-card {
-        background: white;
-        border: 1px solid hsl(var(--border));
-        border-radius: 12px;
-        padding: 1.25rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        transition: all 0.2s ease;
-    }
-    
-    .info-card:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-        transform: translateY(-1px);
-    }
-    
-    .info-card-title {
-        font-size: 0.8rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: hsl(var(--muted-foreground));
-        margin: 0 0 1.25rem 0;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .info-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 0;
-        font-size: 0.875rem;
-    }
-    
-    .info-row:not(:last-child) {
-        border-bottom: 1px solid hsl(var(--muted));
-    }
-    
-    .info-label {
-        color: hsl(var(--muted-foreground));
-        font-weight: 500;
-    }
-    
-    .info-value {
-        color: hsl(var(--foreground));
-        text-align: right;
-        font-family: ui-monospace, monospace;
-        font-size: 0.8125rem;
-    }
-    
-    .script-box {
-        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid hsl(var(--border));
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-    }
-    
-    .script-content {
-        background: white;
-        padding: 1.25rem;
-        border-radius: 8px;
-        white-space: pre-wrap;
-        font-size: 0.9rem;
-        line-height: 1.6;
-        color: hsl(var(--foreground));
-        border: 1px solid hsl(var(--border));
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
-    }
-    
-    .script-content::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    .script-content::-webkit-scrollbar-track {
-        background: hsl(var(--muted));
-    }
-    
-    .script-content::-webkit-scrollbar-thumb {
-        background: hsl(var(--border));
-        border-radius: 3px;
-    }
-    
-    .type-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.25rem 0.75rem;
-        background: hsl(var(--foreground));
-        color: hsl(var(--background));
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 500;
-    }
-    
-    .alert-error {
-        background: #fee2e2;
-        border: 1px solid #fecaca;
-        color: #991b1b;
-        padding: 1rem;
-        border-radius: var(--radius);
-        font-size: 0.875rem;
-        display: flex;
-        align-items: start;
-        gap: 0.75rem;
-    }
-    
-    .btn-icon {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .config-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.75rem;
-    }
-    
-    .config-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-    
-    .config-item-label {
-        font-size: 0.75rem;
-        color: hsl(var(--muted-foreground));
-        font-weight: 500;
-    }
-    
-    .config-item-value {
-        font-size: 0.875rem;
-        color: hsl(var(--foreground));
-        font-family: ui-monospace, monospace;
-    }
-    
-    .multi-video-grid {
-        display: grid;
-        gap: 1.25rem;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    }
-    
-    .multi-video-grid .video-player-container {
-        max-height: 450px;
-    }
-    
-    .multi-video-grid .video-player-container video {
-        max-height: 450px;
-    }
-    
-    .video-item {
-        position: relative;
-    }
-    
-    .video-item-label {
-        position: absolute;
-        top: 0.75rem;
-        left: 0.75rem;
-        background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
-        backdrop-filter: blur(8px);
-        color: white;
-        padding: 0.375rem 0.875rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        z-index: 10;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-</style>
-{% endblock %}
+{% block title %}{{ video.title }} - Atenea{% endblock %}
 
 {% block content %}
-
-<div class="page-header">
-    <div class="header-left">
-        <span class="status-badge status-badge-{{ video.status }}">
-            {% if video.status == 'pending' %}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                </svg>
-                Pendiente
-            {% elif video.status == 'processing' %}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                En proceso
-            {% elif video.status == 'completed' %}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Completado
-            {% else %}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                Error
-            {% endif %}
-        </span>
-        <span class="header-date">{{ video.created_at|date:"d/m/Y H:i" }}</span>
-
-        <div class="dropdown">
-            <button class="btn btn-sm btn-icon" id="dropdownMenuButton" onclick="event.stopPropagation(); toggleDropdown();">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="1"></circle>
-                    <circle cx="12" cy="5" r="1"></circle>
-                    <circle cx="12" cy="19" r="1"></circle>
-                </svg>
-            </button>
-            <div class="dropdown-menu" id="dropdownMenu">
-                <a href="#" class="dropdown-item" onclick="alert('Función editar próximamente'); return false;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Editar
-                </a>
-                {% if video.status == 'completed' and signed_url %}
-                <a href="{{ signed_url }}" download="{{ video.title }}.mp4" class="dropdown-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Descargar
-                </a>
-                {% endif %}
-                 <a href="#" class="dropdown-item dropdown-item-danger" onclick="event.preventDefault(); openDeleteModal();">
-                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                         <polyline points="3 6 5 6 21 6"></polyline>
-                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                     </svg>
-                     Eliminar
-                 </a>
-            </div>
-        </div>
-    </div>
-    <div class="header-actions">
-        {% if video.status == 'pending' %}
-        <form method="post" action="{% url 'core:video_generate' video.id %}" style="display: inline;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-primary btn-sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                Generar
-            </button>
-        </form>
-        {% elif video.status == 'processing' %}
-        <button onclick="checkStatus()" class="btn btn-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-            </svg>
-            Verificar
-        </button>
-        {% endif %}
-        
-    </div>
-</div>
-
-{% if video.error_message %}
-<div class="alert-error">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-    </svg>
-    <div>
-        <strong>Error al generar el video</strong>
-        <p style="margin: 0.25rem 0 0 0;">{{ video.error_message }}</p>
-    </div>
-</div>
-{% endif %}
-
-<div class="detail-container">
-    <div class="main-content">
-        <!-- Video Player(s) -->
-        {% if video.status == 'completed' and all_videos %}
-            <!-- Multi-video generado -->
-            {% if all_videos|length > 1 %}
-                <div class="info-card" style="margin-bottom: 1rem;">
-                    <h2 class="info-card-title">Videos Generados ({{ all_videos|length }})</h2>
-                    <p style="margin: 0; font-size: 0.875rem; color: hsl(var(--muted-foreground));">
-                        Se generaron {{ all_videos|length }} videos para esta solicitud
-                    </p>
-                </div>
-                <div class="multi-video-grid">
-                    {% for video_item in all_videos %}
-                    <div class="video-item">
-                        <div class="video-player-container">
-                            <div class="video-item-label">Video {{ forloop.counter }}</div>
-                            <video controls preload="metadata">
-                                <source src="{{ video_item.signed_url }}" type="{{ video_item.mime_type }}">
-                            </video>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <!-- Un solo video -->
-                <div class="video-player-container">
-                    {% if signed_url %}
-                    <video controls>
-                        <source src="{{ signed_url }}" type="video/mp4">
-                    </video>
-                    {% endif %}
-                </div>
-            {% endif %}
-        {% elif video.status == 'completed' and signed_url %}
-            <!-- Fallback para videos sin metadata.all_videos -->
-            <div class="video-player-container">
-                <video controls>
-                    <source src="{{ signed_url }}" type="video/mp4">
-                </video>
-            </div>
-        {% else %}
-            <!-- Placeholder para estados no completados -->
-            <div class="video-player-container">
-                <div class="video-placeholder">
-                    {% if video.status == 'pending' %}
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                        <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                    <p style="margin: 0; font-weight: 500;">Pendiente de generación</p>
-                    <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem;">Haz clic en "Generar" para crear el video</p>
-                    {% elif video.status == 'processing' %}
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 2s linear infinite;">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    <p style="margin: 0; font-weight: 500;">Video en proceso</p>
-                    <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem;">Esto puede tardar varios minutos...</p>
-                    {% else %}
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                    <p style="margin: 0; font-weight: 500;">Error al procesar</p>
-                    {% endif %}
-                </div>
-            </div>
-        {% endif %}
-        
-        <!-- Script -->
-        <div class="script-box">
-            <h2 class="info-card-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                Guión / Prompt
-            </h2>
-            <div class="script-content">{{ video.script }}</div>
-        </div>
-        
-        <!-- Imágenes usadas en la generación -->
-        {% if input_image_url or reference_images %}
-        <div class="info-card">
-            <h2 class="info-card-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                    <polyline points="21 15 16 10 5 21"></polyline>
-                </svg>
-                Imágenes de Generación
-            </h2>
-            
-            <!-- Imagen Inicial (Imagen-a-Video) -->
-            {% if input_image_url %}
-            <div style="margin-bottom: 1rem;">
-                <h3 style="font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">
-                    📸 Imagen Inicial
-                </h3>
-                <div style="border: 1px solid hsl(var(--border)); border-radius: var(--radius); overflow: hidden; max-width: 280px;">
-                    <img src="{{ input_image_url }}" alt="Imagen inicial" style="width: 100%; display: block;">
-                </div>
-                <small style="color: hsl(var(--muted-foreground)); font-size: 0.7rem; display: block; margin-top: 0.375rem;">
-                    Imagen-a-Video
-                </small>
-            </div>
-            {% endif %}
-            
-            <!-- Imágenes de Referencia -->
-            {% if reference_images %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
             <div>
-                <h3 style="font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">
-                    🎭 Referencias
-                    <span style="background: #fef3c7; color: #92400e; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.5625rem; font-weight: 600; margin-left: 0.5rem;">EXP</span>
-                </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.625rem;">
-                    {% for ref_img in reference_images %}
-                    <div style="border: 1px solid hsl(var(--border)); border-radius: var(--radius); overflow: hidden;">
-                        <img src="{{ ref_img.signed_url }}" alt="Referencia {{ forloop.counter }}" style="width: 100%; display: block; aspect-ratio: 1; object-fit: cover;">
-                        <div style="padding: 0.375rem 0.5rem; background: hsl(var(--muted)); font-size: 0.65rem;">
-                            <div style="font-weight: 600; margin-bottom: 0.125rem;">Ref {{ forloop.counter }}</div>
-                            <div style="color: hsl(var(--muted-foreground));">
-                                {% if ref_img.reference_type == 'asset' %}
-                                    Asset
-                                {% elif ref_img.reference_type == 'style' %}
-                                    Style
-                                {% else %}
-                                    {{ ref_img.reference_type|title }}
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ video.title }}</h1>
+                <div class="flex items-center gap-4 text-sm text-gray-600">
+                    <span>📁 {{ video.project.name }}</span>
+                    <span>•</span>
+                    <span>{{ video.get_type_display }}</span>
+                    <span>•</span>
+                    <span>{{ video.created_at|date:"d/m/Y H:i" }}</span>
                 </div>
-                <small style="color: hsl(var(--muted-foreground)); font-size: 0.7rem; display: block; margin-top: 0.5rem;">
-                    Para consistencia visual
-                </small>
             </div>
-            {% endif %}
+            <div class="flex gap-2">
+                {% if video.status == 'pending' or video.status == 'error' %}
+                <form method="post" action="{% url 'core:video_generate' video.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-green-500 text-white hover:bg-green-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        {% if video.status == 'error' %}Reintentar{% else %}Generar{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{% url 'core:video_delete' video.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Eliminar
+                </a>
+                <a href="{% url 'core:project_detail' video.project.id %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Volver
+                </a>
+            </div>
         </div>
-        {% endif %}
+
+        <!-- Estado -->
+        <div class="inline-flex items-center gap-2">
+            {% include 'partials/video_status.html' %}
+        </div>
     </div>
-    
-    <div class="sidebar">
-        <!-- Status -->
-        <div class="info-card">
-            <h2 class="info-card-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                Estado
-            </h2>
-            <div style="display: flex; justify-content: center;">
-                <span class="status-badge status-badge-{{ video.status }}">
-                    {% if video.status == 'pending' %}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                        </svg>
-                        Pendiente
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Video Player / Preview -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div class="aspect-video bg-gray-900 flex items-center justify-center relative">
+                    {% if video.status == 'completed' and signed_url %}
+                        <video 
+                            src="{{ signed_url }}" 
+                            controls 
+                            class="w-full h-full"
+                            preload="metadata">
+                        </video>
                     {% elif video.status == 'processing' %}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                        En proceso
-                    {% elif video.status == 'completed' %}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        Completado
+                        <div class="text-center text-white">
+                            <div class="animate-spin text-6xl mb-4">⚙️</div>
+                            <p class="text-xl">Procesando video...</p>
+                            <p class="text-sm text-gray-400 mt-2">Esto puede tomar varios minutos</p>
+                        </div>
+                    {% elif video.status == 'error' %}
+                        <div class="text-center text-white">
+                            <div class="text-6xl mb-4">❌</div>
+                            <p class="text-xl">Error al generar video</p>
+                            {% if video.error_message %}
+                            <p class="text-sm text-red-400 mt-2 max-w-md">{{ video.error_message }}</p>
+                            {% endif %}
+                        </div>
                     {% else %}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="15" y1="9" x2="9" y2="15"></line>
-                            <line x1="9" y1="9" x2="15" y2="15"></line>
-                        </svg>
-                        Error
+                        <div class="text-center text-white">
+                            <div class="text-6xl mb-4">🎬</div>
+                            <p class="text-xl">Video pendiente</p>
+                            <p class="text-sm text-gray-400 mt-2">Haz clic en "Generar" para crear el video</p>
+                        </div>
                     {% endif %}
-                </span>
-            </div>
-        </div>
-        
-        <!-- Detalles -->
-        <div class="info-card">
-            <h2 class="info-card-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                Detalles
-            </h2>
-            <div>
-                {% if video.duration %}
-                <div class="info-row">
-                    <span class="info-label">Duración</span>
-                    <span class="info-value">{{ video.duration }}s</span>
                 </div>
-                {% endif %}
-                {% if video.resolution %}
-                <div class="info-row">
-                    <span class="info-label">Resolución</span>
-                    <span class="info-value">{{ video.resolution }}</span>
-                </div>
-                {% endif %}
-                <div class="info-row">
-                    <span class="info-label">Creado</span>
-                    <span class="info-value">{{ video.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-                {% if video.updated_at and video.status == 'completed' %}
-                <div class="info-row">
-                    <span class="info-label">Completado</span>
-                    <span class="info-value">{{ video.updated_at|date:"d/m/Y H:i" }}</span>
-                </div>
-                {% endif %}
-                {% if video.external_id %}
-                <div class="info-row">
-                    <span class="info-label">ID Externo</span>
-                    <span class="info-value">{{ video.external_id|truncatechars:12 }}</span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <!-- Configuración -->
-        {% if video.config %}
-        <div class="info-card">
-            <h2 class="info-card-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                </svg>
-                Configuración
-            </h2>
-            <div class="config-grid">
-                {% if video.type == 'heygen_avatar_v2' or video.type == 'heygen_avatar_iv' %}
-                <div class="config-item">
-                    <span class="config-item-label">Avatar ID</span>
-                    <span class="config-item-value">{{ video.config.avatar_id|truncatechars:15 }}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Voice ID</span>
-                    <span class="config-item-value">{{ video.config.voice_id|truncatechars:15 }}</span>
-                </div>
-                {% endif %}
                 
-                {% if video.type == 'heygen_avatar_v2' %}
-                {% if video.config.has_background %}
-                <div class="config-item">
-                    <span class="config-item-label">Fondo</span>
-                    <span class="config-item-value">Personalizado</span>
+                {% if video.status == 'completed' and signed_url %}
+                <div class="p-4 bg-gray-50 border-t border-gray-200">
+                    <a href="{{ signed_url }}" download="{{ video.title }}.mp4" class="inline-flex items-center gap-2 bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Descargar Video
+                    </a>
                 </div>
-                {% endif %}
-                <div class="config-item">
-                    <span class="config-item-label">Velocidad</span>
-                    <span class="config-item-value">{{ video.config.voice_speed }}x</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Tono</span>
-                    <span class="config-item-value">{{ video.config.voice_pitch }}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Emoción</span>
-                    <span class="config-item-value">{{ video.config.voice_emotion }}</span>
-                </div>
-                {% elif video.type == 'heygen_avatar_iv' %}
-                <div class="config-item">
-                    <span class="config-item-label">Orientación</span>
-                    <span class="config-item-value">{{ video.config.video_orientation|capfirst }}</span>
-                </div>
-                {% elif video.type == 'gemini_veo' %}
-                <div class="config-item">
-                    <span class="config-item-label">Modelo</span>
-                    <span class="config-item-value" style="font-size: 0.7rem;">
-                        {% if video.config.veo_model == 'veo-2.0-generate-exp' %}
-                            🔬 Experimental
-                        {% else %}
-                            ✓ Estándar
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Duración</span>
-                    <span class="config-item-value">{{ video.config.duration }}s</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Aspect Ratio</span>
-                    <span class="config-item-value">{{ video.config.aspect_ratio }}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-item-label">Videos</span>
-                    <span class="config-item-value">{{ video.config.sample_count|default:1 }}</span>
-                </div>
-                {% if video.config.compression_quality %}
-                <div class="config-item">
-                    <span class="config-item-label">Calidad</span>
-                    <span class="config-item-value">{{ video.config.compression_quality|capfirst }}</span>
-                </div>
-                {% endif %}
-                {% if video.config.input_image_gcs_uri %}
-                <div class="config-item" style="grid-column: 1 / -1;">
-                    <span class="config-item-label">🎨 Imagen-a-Video</span>
-                    <span class="config-item-value" style="color: #059669;">Sí</span>
-                </div>
-                {% endif %}
-                {% if reference_images %}
-                <div class="config-item" style="grid-column: 1 / -1;">
-                    <span class="config-item-label">🎭 Referencias</span>
-                    <span class="config-item-value" style="color: #d97706;">{{ reference_images|length }} imagen(es)</span>
-                </div>
-                {% endif %}
-                {% if video.config.seed %}
-                <div class="config-item">
-                    <span class="config-item-label">Seed</span>
-                    <span class="config-item-value">{{ video.config.seed }}</span>
-                </div>
-                {% endif %}
                 {% endif %}
             </div>
         </div>
-        {% endif %}
-    </div>
-</div>
 
-<!-- Modal de confirmación para eliminar -->
-<div id="deleteModal" class="modal-overlay" onclick="if(event.target === this) closeDeleteModal();">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div class="modal-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
+        <!-- Detalles / Configuración -->
+        <div class="space-y-6">
+            <!-- Información General -->
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Información General</h3>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <div class="text-gray-600 mb-1">ID</div>
+                        <div class="font-mono text-gray-900">{{ video.id }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 mb-1">Estado</div>
+                        <div class="font-medium">{{ video.get_status_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 mb-1">Tipo</div>
+                        <div class="font-medium">{{ video.get_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 mb-1">Creado</div>
+                        <div class="font-medium">{{ video.created_at|date:"d/m/Y H:i" }}</div>
+                    </div>
+                    {% if video.completed_at %}
+                    <div>
+                        <div class="text-gray-600 mb-1">Completado</div>
+                        <div class="font-medium">{{ video.completed_at|date:"d/m/Y H:i" }}</div>
+                    </div>
+                    {% endif %}
+                    {% if video.gcs_path %}
+                    <div>
+                        <div class="text-gray-600 mb-1">Almacenamiento</div>
+                        <div class="text-xs font-mono text-gray-600 break-all">{{ video.gcs_path }}</div>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            <div>
-                <h3 class="modal-title">Eliminar video</h3>
-                <p class="modal-description">
-                    ¿Estás seguro de que quieres eliminar "<strong>{{ video.title }}</strong>"? 
-                    Esta acción no se puede deshacer.
-                </p>
+
+            <!-- Configuración -->
+            {% if video.config %}
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Configuración</h3>
+                <div class="space-y-2 text-sm">
+                    {% for key, value in video.config.items %}
+                    <div class="flex justify-between py-2 border-b border-gray-100 last:border-0">
+                        <span class="text-gray-600">{{ key|title }}</span>
+                        <span class="font-medium text-gray-900 text-right max-w-[60%] truncate">{{ value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn" onclick="closeDeleteModal()">Cancelar</button>
-            <form method="post" action="{% url 'core:video_delete' video.id %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-destructive">Eliminar</button>
-            </form>
+            {% endif %}
+
+            <!-- Prompt -->
+            {% if video.prompt %}
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Prompt</h3>
+                <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ video.prompt }}</p>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
-
-<style>
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    
-    /* Modal styles */
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(4px);
-        z-index: 9999;
-        animation: fadeIn 0.2s ease;
-    }
-    
-    .modal-overlay.show {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .modal-content {
-        background: white;
-        border-radius: 12px;
-        padding: 2rem;
-        max-width: 480px;
-        width: 90%;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        animation: slideUp 0.3s ease;
-    }
-    
-    .modal-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .modal-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: #fee2e2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    
-    .modal-icon svg {
-        color: #dc2626;
-    }
-    
-    .modal-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem 0;
-        color: hsl(var(--foreground));
-    }
-    
-    .modal-description {
-        font-size: 0.875rem;
-        color: hsl(var(--muted-foreground));
-        line-height: 1.5;
-        margin: 0;
-    }
-    
-    .modal-footer {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: flex-end;
-        margin-top: 2rem;
-    }
-    
-    .modal-footer .btn {
-        padding: 0.625rem 1.25rem;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-    
-    @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-</style>
-
-<script>
-// Dropdown menu
-function toggleDropdown() {
-    const dropdown = document.getElementById('dropdownMenu');
-    dropdown.classList.toggle('show');
-}
-
-// Cerrar dropdown al hacer clic fuera
-window.addEventListener('click', function(e) {
-    if (!e.target.closest('.dropdown')) {
-        const dropdown = document.getElementById('dropdownMenu');
-        if (dropdown && dropdown.classList.contains('show')) {
-            dropdown.classList.remove('show');
-        }
-    }
-});
-
-// Modal de eliminación
-function openDeleteModal() {
-    const modal = document.getElementById('deleteModal');
-    modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeDeleteModal() {
-    const modal = document.getElementById('deleteModal');
-    modal.classList.remove('show');
-    document.body.style.overflow = '';
-}
-
-// Cerrar modal con ESC
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        closeDeleteModal();
-    }
-});
-
-let pollCount = 0;
-
-function checkStatus() {
-    pollCount++;
-    console.log(`[POLLING #${pollCount}] Consultando estado del video...`);
-    
-    fetch('{% url "core:video_status" video.id %}')
-        .then(response => response.json())
-        .then(data => {
-            console.log(`[POLLING #${pollCount}] Respuesta:`, data);
-            
-            if (data.status === 'completed') {
-                console.log('[POLLING] ✅ Video completado! Recargando página...');
-                location.reload();
-            } else if (data.status === 'error') {
-                console.log('[POLLING] ❌ Video con error! Recargando página...');
-                location.reload();
-            } else {
-                console.log(`[POLLING] ⏳ Video en estado: ${data.status}. Esperando 30s para siguiente consulta...`);
-            }
-        })
-        .catch(error => {
-            console.error(`[POLLING #${pollCount}] ❌ Error:`, error);
-        });
-}
-
-// Auto-polling si el video está en proceso
-if ('{{ video.status }}' === 'processing') {
-    console.log('[POLLING] Iniciando polling automático cada 30 segundos...');
-    // Primera consulta inmediata
-    checkStatus();
-    // Luego cada 30 segundos
-    setInterval(() => checkStatus(), 30000);
-}
-</script>
 {% endblock %}
