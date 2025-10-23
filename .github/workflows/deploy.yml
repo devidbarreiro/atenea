@@ -28,7 +28,15 @@ jobs:
         
     - name: Run tests
       env:
-        SECRET_KEY: ${{ secrets.SECRET_KEY_CI }}
+        SECRET_KEY: ${{ secrets.SECRET_KEY_CI || 'test-secret-key-for-ci' }}
+        USE_SQLITE: 'True'
+        DEBUG: 'False'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
+        GCS_BUCKET_NAME: 'test-bucket'
+        GCS_PROJECT_ID: 'test-project'
+        GOOGLE_APPLICATION_CREDENTIALS: '/tmp/fake-credentials.json'
+        HEYGEN_API_KEY: 'test-key'
+        GEMINI_API_KEY: 'test-key'
       run: |
         python manage.py test
 
@@ -74,8 +82,18 @@ jobs:
     name: Deploy to Production Server
     
     steps:
-    - name: Deploy to server
-      run: |
-        echo "Deploying to production server..."
-        # Aquí irían los comandos para desplegar en tu servidor
-        # Por ejemplo, SSH, Docker Compose, etc.
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 22
+        script: |
+          cd ~/dev/atenea
+          git pull origin main
+          sudo docker-compose down
+          sudo docker-compose up --build -d
+          sudo docker-compose run --rm migrate
+          sudo docker system prune -f
+          echo "✅ Deploy completado! La aplicación está disponible en http://34.173.86.27:8000"
