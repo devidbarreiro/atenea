@@ -894,3 +894,29 @@ class ImageGenerateView(ServiceMixin, View):
             messages.error(request, f'Error inesperado: {str(e)}')
         
         return redirect('core:image_detail', image_id=image.pk)
+
+
+# ====================
+# VISTAS PARCIALES HTMX
+# ====================
+
+class VideoStatusPartialView(View):
+    """Vista parcial para actualizar estado de video con HTMX"""
+    
+    def get(self, request, video_id):
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        video = get_object_or_404(Video, pk=video_id)
+        html = render_to_string('partials/video_status.html', {'video': video})
+        return HttpResponse(html)
+
+
+class ImageStatusPartialView(View):
+    """Vista parcial para actualizar estado de imagen con HTMX"""
+    
+    def get(self, request, image_id):
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        image = get_object_or_404(Image, pk=image_id)
+        html = render_to_string('partials/image_status.html', {'image': image})
+        return HttpResponse(html)

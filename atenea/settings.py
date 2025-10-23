@@ -42,6 +42,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Third party
+    'tailwind',
+    'theme',  # App de Tailwind
+    'django_browser_reload',  # Hot reload
+    
     # Local apps
     'core',
 ]
@@ -54,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_browser_reload.middleware.BrowserReloadMiddleware',  # Hot reload
 ]
 
 ROOT_URLCONF = 'atenea.urls'
@@ -190,3 +197,11 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# Tailwind Configuration
+TAILWIND_APP_NAME = 'theme'
+
+# Para desarrollo local
+INTERNAL_IPS = [
+    "127.0.0.1",
+]
