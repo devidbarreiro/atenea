@@ -19,6 +19,12 @@ urlpatterns = [
     path('videos/<int:video_id>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
     path('videos/<int:video_id>/status/', views.VideoStatusView.as_view(), name='video_status'),
     
+    # Images
+    path('projects/<int:project_id>/images/create/', views.ImageCreateView.as_view(), name='image_create'),
+    path('images/<int:image_id>/', views.ImageDetailView.as_view(), name='image_detail'),
+    path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
+    path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
+    
     # API endpoints
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),

@@ -4,7 +4,7 @@ Formularios Django para validación de datos
 
 from django import forms
 from django.core.validators import MinValueValidator, MaxValueValidator
-from .models import Project, Video, VIDEO_TYPES
+from .models import Project, Video, Image, VIDEO_TYPES, IMAGE_TYPES
 
 
 class ProjectForm(forms.ModelForm):
@@ -548,4 +548,142 @@ class GeminiVeoVideoForm(VideoBaseForm):
         label='Modo de Máscara',
         help_text='Qué parte del video afecta la máscara'
     )
+
+
+# ====================
+# IMAGE FORMS
+# ====================
+
+class GeminiImageForm(forms.Form):
+    """Formulario para generar imágenes con Gemini"""
+    
+    title = forms.CharField(
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Título de la imagen',
+            'required': True,
+        }),
+        label='Título',
+        help_text='Nombre descriptivo para identificar la imagen'
+    )
+    
+    type = forms.ChoiceField(
+        choices=IMAGE_TYPES,
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'required': True,
+            'onchange': 'updateImageTypeFields(this.value)',
+        }),
+        label='Tipo de Generación',
+        help_text='Selecciona el modo de generación de imagen'
+    )
+    
+    prompt = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'placeholder': 'Describe la imagen que quieres generar o las modificaciones que deseas hacer...',
+            'rows': 5,
+            'required': True,
+        }),
+        label='Prompt / Descripción',
+        help_text='Prompt descriptivo o instrucciones de edición'
+    )
+    
+    aspect_ratio = forms.ChoiceField(
+        choices=[
+            ('1:1', '1:1 - Cuadrado (1024×1024)'),
+            ('16:9', '16:9 - Horizontal (1344×768)'),
+            ('9:16', '9:16 - Vertical (768×1344)'),
+            ('4:3', '4:3 - Horizontal (1184×864)'),
+            ('3:4', '3:4 - Vertical (864×1184)'),
+            ('21:9', '21:9 - Ultra Wide (1536×672)'),
+            ('2:3', '2:3 - Vertical (832×1248)'),
+            ('3:2', '3:2 - Horizontal (1248×832)'),
+            ('4:5', '4:5 - Vertical (896×1152)'),
+            ('5:4', '5:4 - Horizontal (1152×896)'),
+        ],
+        initial='1:1',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Aspect Ratio',
+        help_text='Relación de aspecto de la imagen generada'
+    )
+    
+    response_modalities = forms.ChoiceField(
+        choices=[
+            ('text_and_image', 'Texto e Imagen'),
+            ('image_only', 'Solo Imagen'),
+        ],
+        initial='image_only',
+        widget=forms.RadioSelect(attrs={
+            'class': 'form-check-input',
+        }),
+        label='Modalidades de Respuesta',
+        help_text='Recibir solo imagen o imagen con texto explicativo'
+    )
+    
+    # Para image-to-image
+    input_image = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen de Entrada',
+        help_text='Imagen a editar (requerido para "Imagen a Imagen")'
+    )
+    
+    # Para multi_image
+    input_image_1 = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen de Entrada 1',
+        help_text='Primera imagen para composición (requerido para "Múltiples Imágenes")'
+    )
+    
+    input_image_2 = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen de Entrada 2',
+        help_text='Segunda imagen para composición'
+    )
+    
+    input_image_3 = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/*',
+        }),
+        label='Imagen de Entrada 3',
+        help_text='Tercera imagen para composición (opcional)'
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        image_type = cleaned_data.get('type')
+        input_image = cleaned_data.get('input_image')
+        input_image_1 = cleaned_data.get('input_image_1')
+        input_image_2 = cleaned_data.get('input_image_2')
+        
+        # Validaciones según el tipo
+        if image_type == 'image_to_image' and not input_image:
+            raise forms.ValidationError(
+                'Debes subir una imagen de entrada para el modo "Imagen a Imagen"'
+            )
+        
+        if image_type == 'multi_image':
+            if not input_image_1 or not input_image_2:
+                raise forms.ValidationError(
+                    'Debes subir al menos 2 imágenes para el modo "Múltiples Imágenes"'
+                )
+        
+        return cleaned_data
 

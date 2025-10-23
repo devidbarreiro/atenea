@@ -8,9 +8,10 @@ from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from datetime import datetime
 
-from .models import Project, Video
+from .models import Project, Video, Image
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
+from .ai_services.gemini_image import GeminiImageClient
 from .storage.gcs import gcs_storage
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,11 @@ class ServiceException(Exception):
 
 class VideoGenerationException(ServiceException):
     """Error al generar video"""
+    pass
+
+
+class ImageGenerationException(ServiceException):
+    """Error al generar imagen"""
     pass
 
 
@@ -667,3 +673,336 @@ class APIService:
         except Exception as e:
             logger.error(f"Error al listar image assets: {e}")
             raise ServiceException(str(e))
+
+
+# ====================
+# IMAGE SERVICE
+# ====================
+
+class ImageService:
+    """Servicio principal para manejar imágenes generadas por IA"""
+    
+    def __init__(self):
+        self.gemini_client = None
+    
+    def _get_gemini_client(self) -> GeminiImageClient:
+        """Lazy initialization de Gemini Image client"""
+        if not self.gemini_client:
+            if not settings.GEMINI_API_KEY:
+                raise ValidationException('GEMINI_API_KEY no está configurada')
+            self.gemini_client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
+        return self.gemini_client
+    
+    # ----------------
+    # CREAR IMAGEN
+    # ----------------
+    
+    def create_image(
+        self,
+        project: Project,
+        title: str,
+        image_type: str,
+        prompt: str,
+        config: Dict
+    ) -> Image:
+        """
+        Crea una nueva imagen (sin generarla)
+        
+        Args:
+            project: Proyecto al que pertenece
+            title: Título de la imagen
+            image_type: Tipo de imagen (text_to_image, image_to_image, multi_image)
+            prompt: Prompt descriptivo
+            config: Configuración específica del tipo
+        
+        Returns:
+            Image creada
+        """
+        image = Image.objects.create(
+            project=project,
+            title=title,
+            type=image_type,
+            prompt=prompt,
+            config=config
+        )
+        
+        logger.info(f"Imagen creada: {image.id} - {image.title} ({image.type})")
+        return image
+    
+    # ----------------
+    # SUBIR IMÁGENES DE ENTRADA
+    # ----------------
+    
+    def upload_input_image(
+        self,
+        image_file: UploadedFile,
+        project: Project
+    ) -> Dict[str, str]:
+        """
+        Sube imagen de entrada para image-to-image
+        
+        Args:
+            image_file: Archivo de imagen
+            project: Proyecto relacionado
+        
+        Returns:
+            Dict con 'gcs_path' y 'mime_type'
+        """
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = image_file.name.replace(' ', '_')
+            gcs_destination = f"image_inputs/project_{project.id}/{timestamp}_{safe_filename}"
+            
+            logger.info(f"Subiendo imagen de entrada: {safe_filename}")
+            gcs_path = gcs_storage.upload_django_file(image_file, gcs_destination)
+            
+            return {
+                'gcs_path': gcs_path,
+                'mime_type': image_file.content_type or 'image/jpeg'
+            }
+        except Exception as e:
+            logger.error(f"Error al subir imagen de entrada: {e}")
+            raise StorageException(f"Error al subir imagen: {str(e)}")
+    
+    def upload_multiple_input_images(
+        self,
+        image_files: List[UploadedFile],
+        project: Project
+    ) -> List[Dict]:
+        """
+        Sube múltiples imágenes de entrada para composición
+        
+        Args:
+            image_files: Lista de archivos de imagen
+            project: Proyecto relacionado
+        
+        Returns:
+            Lista de dicts con datos de las imágenes subidas
+        """
+        input_images = []
+        
+        for i, image_file in enumerate(image_files):
+            if image_file:
+                try:
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    safe_filename = image_file.name.replace(' ', '_')
+                    gcs_destination = f"image_inputs/project_{project.id}/{timestamp}_{i+1}_{safe_filename}"
+                    
+                    logger.info(f"Subiendo imagen de entrada {i+1}: {safe_filename}")
+                    gcs_path = gcs_storage.upload_django_file(image_file, gcs_destination)
+                    
+                    input_images.append({
+                        'gcs_path': gcs_path,
+                        'mime_type': image_file.content_type or 'image/jpeg',
+                        'index': i
+                    })
+                    
+                    logger.info(f"✅ Imagen {i+1} subida: {gcs_path}")
+                except Exception as e:
+                    logger.error(f"Error al subir imagen {i+1}: {str(e)}")
+        
+        return input_images
+    
+    # ----------------
+    # GENERAR IMAGEN
+    # ----------------
+    
+    def generate_image(self, image: Image) -> str:
+        """
+        Genera una imagen usando Gemini Image API
+        
+        Args:
+            image: Objeto Image a generar
+        
+        Returns:
+            Path de GCS de la imagen generada
+        
+        Raises:
+            ImageGenerationException: Si falla la generación
+        """
+        # Validar estado
+        if image.status in ['processing', 'completed']:
+            raise ValidationException(f'La imagen ya está en estado: {image.get_status_display()}')
+        
+        # Marcar como procesando
+        image.mark_as_processing()
+        
+        try:
+            client = self._get_gemini_client()
+            
+            # Obtener configuración
+            aspect_ratio = image.config.get('aspect_ratio', '1:1')
+            response_modalities = image.config.get('response_modalities')
+            
+            # Generar según el tipo
+            if image.type == 'text_to_image':
+                result = client.generate_image_from_text(
+                    prompt=image.prompt,
+                    aspect_ratio=aspect_ratio,
+                    response_modalities=response_modalities
+                )
+            
+            elif image.type == 'image_to_image':
+                # Obtener imagen de entrada desde GCS
+                input_gcs_path = image.config.get('input_image_gcs_path')
+                if not input_gcs_path:
+                    raise ValidationException('Imagen de entrada es requerida para image-to-image')
+                
+                # Descargar imagen desde GCS
+                input_image_data = self._download_image_from_gcs(input_gcs_path)
+                
+                result = client.generate_image_from_image(
+                    prompt=image.prompt,
+                    input_image_data=input_image_data,
+                    aspect_ratio=aspect_ratio,
+                    response_modalities=response_modalities
+                )
+            
+            elif image.type == 'multi_image':
+                # Obtener imágenes de entrada desde GCS
+                input_images_config = image.config.get('input_images', [])
+                if not input_images_config:
+                    raise ValidationException('Imágenes de entrada son requeridas para multi_image')
+                
+                # Descargar imágenes desde GCS
+                input_images_data = []
+                for img_config in input_images_config:
+                    img_data = self._download_image_from_gcs(img_config['gcs_path'])
+                    input_images_data.append(img_data)
+                
+                result = client.generate_image_from_multiple_images(
+                    prompt=image.prompt,
+                    input_images_data=input_images_data,
+                    aspect_ratio=aspect_ratio,
+                    response_modalities=response_modalities
+                )
+            
+            else:
+                raise ValidationException(f'Tipo de imagen no soportado: {image.type}')
+            
+            # Subir imagen generada a GCS
+            gcs_path = self._save_generated_image(
+                image_data=result['image_data'],
+                project=image.project,
+                image_id=image.id
+            )
+            
+            # Preparar metadata
+            metadata = {
+                'width': result['width'],
+                'height': result['height'],
+                'aspect_ratio': result['aspect_ratio'],
+                'text_response': result.get('text_response'),
+            }
+            
+            # Actualizar imagen en BD
+            image.width = result['width']
+            image.height = result['height']
+            image.aspect_ratio = result['aspect_ratio']
+            image.mark_as_completed(gcs_path=gcs_path, metadata=metadata)
+            
+            logger.info(f"Imagen {image.id} generada exitosamente: {gcs_path}")
+            return gcs_path
+            
+        except Exception as e:
+            logger.error(f"Error al generar imagen {image.id}: {e}")
+            image.mark_as_error(str(e))
+            raise ImageGenerationException(str(e))
+    
+    def _download_image_from_gcs(self, gcs_path: str) -> bytes:
+        """Descarga imagen desde GCS y retorna bytes"""
+        try:
+            # Extraer blob name del path
+            blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+            blob = gcs_storage.bucket.blob(blob_name)
+            
+            # Descargar como bytes
+            image_data = blob.download_as_bytes()
+            logger.info(f"Imagen descargada desde GCS: {len(image_data)} bytes")
+            return image_data
+            
+        except Exception as e:
+            logger.error(f"Error al descargar imagen desde GCS: {e}")
+            raise StorageException(f"Error al descargar imagen: {str(e)}")
+    
+    def _save_generated_image(
+        self,
+        image_data: bytes,
+        project: Project,
+        image_id: int
+    ) -> str:
+        """Guarda imagen generada en GCS"""
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+            
+            logger.info(f"Guardando imagen generada en GCS: {gcs_destination}")
+            gcs_path = gcs_storage.upload_from_bytes(
+                file_content=image_data,
+                destination_path=gcs_destination,
+                content_type='image/png'
+            )
+            
+            return gcs_path
+            
+        except Exception as e:
+            logger.error(f"Error al guardar imagen generada: {e}")
+            raise StorageException(f"Error al guardar imagen: {str(e)}")
+    
+    # ----------------
+    # UTILIDADES
+    # ----------------
+    
+    def get_image_with_signed_url(self, image: Image) -> Dict:
+        """
+        Obtiene una imagen con su URL firmada
+        
+        Args:
+            image: Imagen a procesar
+        
+        Returns:
+            Dict con image y URLs firmadas
+        """
+        result = {
+            'image': image,
+            'signed_url': None,
+            'input_images_urls': []
+        }
+        
+        # URL firmada de la imagen generada
+        if image.status == 'completed' and image.gcs_path:
+            try:
+                result['signed_url'] = gcs_storage.get_signed_url(image.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada: {e}")
+        
+        # URLs de imágenes de entrada (para image-to-image y multi_image)
+        if image.type == 'image_to_image' and image.config.get('input_image_gcs_path'):
+            try:
+                input_url = gcs_storage.get_signed_url(
+                    image.config['input_image_gcs_path'], 
+                    expiration=3600
+                )
+                result['input_images_urls'].append({
+                    'index': 0,
+                    'gcs_path': image.config['input_image_gcs_path'],
+                    'signed_url': input_url
+                })
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para imagen de entrada: {e}")
+        
+        if image.type == 'multi_image' and image.config.get('input_images'):
+            try:
+                for idx, img_config in enumerate(image.config['input_images']):
+                    gcs_path = img_config.get('gcs_path')
+                    if gcs_path:
+                        signed_url = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+                        result['input_images_urls'].append({
+                            'index': idx,
+                            'gcs_path': gcs_path,
+                            'signed_url': signed_url
+                        })
+            except Exception as e:
+                logger.error(f"Error al generar URLs firmadas para imágenes de entrada: {e}")
+        
+        return result
