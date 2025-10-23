@@ -12,6 +12,7 @@ from .models import Project, Video, Image
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
+from .ai_services.sora import SoraClient
 from .storage.gcs import gcs_storage
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ class VideoService:
     def __init__(self):
         self.heygen_client = None
         self.veo_client = None
+        self.sora_client = None
     
     def _get_heygen_client(self) -> HeyGenClient:
         """Lazy initialization de HeyGen client"""
@@ -142,6 +144,14 @@ class VideoService:
         if not settings.GEMINI_API_KEY:
             raise ValidationException('GEMINI_API_KEY no está configurada')
         return GeminiVeoClient(api_key=settings.GEMINI_API_KEY, model_name=model_name)
+    
+    def _get_sora_client(self) -> SoraClient:
+        """Lazy initialization de Sora client"""
+        if not self.sora_client:
+            if not settings.OPENAI_API_KEY:
+                raise ValidationException('OPENAI_API_KEY no está configurada')
+            self.sora_client = SoraClient(api_key=settings.OPENAI_API_KEY)
+        return self.sora_client
     
     # ----------------
     # CREAR VIDEO
@@ -290,6 +300,37 @@ class VideoService:
         
         return reference_images
     
+    def upload_sora_input_reference(
+        self,
+        image: UploadedFile,
+        project: Project
+    ) -> Dict[str, str]:
+        """
+        Sube imagen de referencia para Sora
+        
+        Args:
+            image: Archivo de imagen
+            project: Proyecto relacionado
+        
+        Returns:
+            Dict con 'gcs_path' y 'mime_type'
+        """
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = image.name.replace(' ', '_')
+            gcs_destination = f"sora_input_references/project_{project.id}/{timestamp}_{safe_filename}"
+            
+            logger.info(f"Subiendo imagen de referencia Sora: {safe_filename}")
+            gcs_path = gcs_storage.upload_django_file(image, gcs_destination)
+            
+            return {
+                'gcs_path': gcs_path,
+                'mime_type': image.content_type or 'image/jpeg'
+            }
+        except Exception as e:
+            logger.error(f"Error al subir imagen de referencia Sora: {e}")
+            raise StorageException(f"Error al subir imagen: {str(e)}")
+    
     # ----------------
     # GENERAR VIDEO
     # ----------------
@@ -319,6 +360,8 @@ class VideoService:
                 external_id = self._generate_heygen_video(video)
             elif video.type == 'gemini_veo':
                 external_id = self._generate_veo_video(video)
+            elif video.type == 'sora':
+                external_id = self._generate_sora_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -438,6 +481,68 @@ class VideoService:
         response = client.generate_video(**params)
         return response.get('video_id')
     
+    def _generate_sora_video(self, video: Video) -> str:
+        """Genera video con OpenAI Sora"""
+        client = self._get_sora_client()
+        
+        # Obtener configuración
+        model = video.config.get('sora_model', 'sora-2')
+        duration = int(video.config.get('duration', 8))  # Asegurar que es int
+        size = video.config.get('size', '1280x720')
+        use_input_reference = video.config.get('use_input_reference', False)
+        
+        # Generar video
+        if use_input_reference and video.config.get('input_reference_gcs_path'):
+            # Descargar imagen desde GCS a un archivo temporal
+            import tempfile
+            import os
+            
+            gcs_path = video.config['input_reference_gcs_path']
+            mime_type = video.config.get('input_reference_mime_type', 'image/jpeg')
+            
+            # Determinar extensión
+            ext_map = {
+                'image/jpeg': '.jpg',
+                'image/png': '.png',
+                'image/webp': '.webp'
+            }
+            ext = ext_map.get(mime_type, '.jpg')
+            
+            # Descargar a archivo temporal
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+                tmp_path = tmp_file.name
+                
+                # Descargar desde GCS
+                blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                blob = gcs_storage.bucket.blob(blob_name)
+                blob.download_to_filename(tmp_path)
+                
+                logger.info(f"Imagen de referencia descargada a: {tmp_path}")
+            
+            try:
+                response = client.generate_video_with_image(
+                    prompt=video.script,
+                    input_reference_path=tmp_path,
+                    model=model,
+                    seconds=duration,
+                    size=size
+                )
+            finally:
+                # Limpiar archivo temporal
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    logger.info(f"Archivo temporal eliminado: {tmp_path}")
+        else:
+            # Generación text-to-video
+            response = client.generate_video(
+                prompt=video.script,
+                model=model,
+                seconds=duration,
+                size=size
+            )
+        
+        return response.get('video_id')
+    
     # ----------------
     # CONSULTAR ESTADO
     # ----------------
@@ -467,6 +572,8 @@ class VideoService:
                 return self._check_heygen_status(video)
             elif video.type == 'gemini_veo':
                 return self._check_veo_status(video)
+            elif video.type == 'sora':
+                return self._check_sora_status(video)
         except Exception as e:
             logger.error(f"Error al consultar estado: {e}")
             raise ServiceException(str(e))
@@ -549,6 +656,85 @@ class VideoService:
                 )
         
         elif api_status in ['failed', 'error']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            video.mark_as_error(error_msg)
+        
+        return status_data
+    
+    def _check_sora_status(self, video: Video) -> Dict:
+        """Consulta estado en OpenAI Sora"""
+        client = self._get_sora_client()
+        status_data = client.get_video_status(video.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            # Descargar video desde Sora API
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                tmp_path = tmp_file.name
+            
+            try:
+                # Descargar video
+                success = client.download_video(video.external_id, tmp_path)
+                
+                if success:
+                    # Subir a GCS
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                    
+                    with open(tmp_path, 'rb') as video_file:
+                        gcs_full_path = gcs_storage.upload_from_bytes(
+                            file_content=video_file.read(),
+                            destination_path=gcs_path,
+                            content_type='video/mp4'
+                        )
+                    
+                    # Preparar metadata
+                    metadata = {
+                        'model': status_data.get('model'),
+                        'duration': status_data.get('seconds'),
+                        'size': status_data.get('size'),
+                        'progress': status_data.get('progress'),
+                        'created_at': status_data.get('created_at'),
+                        'completed_at': status_data.get('completed_at'),
+                        'expires_at': status_data.get('expires_at'),
+                    }
+                    
+                    # Intentar descargar thumbnail también
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.webp') as thumb_file:
+                            thumb_path = thumb_file.name
+                        
+                        if client.download_thumbnail(video.external_id, thumb_path):
+                            thumb_gcs_path = f"projects/{video.project.id}/videos/{video.id}/thumbnail.webp"
+                            
+                            with open(thumb_path, 'rb') as thumb:
+                                thumb_gcs_full = gcs_storage.upload_from_bytes(
+                                    file_content=thumb.read(),
+                                    destination_path=thumb_gcs_path,
+                                    content_type='image/webp'
+                                )
+                            
+                            metadata['thumbnail_gcs_path'] = thumb_gcs_full
+                            logger.info(f"Thumbnail guardado: {thumb_gcs_full}")
+                        
+                        if os.path.exists(thumb_path):
+                            os.unlink(thumb_path)
+                    except Exception as e:
+                        logger.warning(f"No se pudo descargar thumbnail: {e}")
+                    
+                    video.mark_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"Video Sora {video.id} completado: {gcs_full_path}")
+                else:
+                    video.mark_as_error("No se pudo descargar el video desde Sora")
+            finally:
+                # Limpiar archivo temporal
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        
+        elif api_status == 'failed':
             error_msg = status_data.get('error', 'Video generation failed')
             video.mark_as_error(error_msg)
         

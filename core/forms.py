@@ -255,6 +255,88 @@ class HeyGenAvatarIVForm(VideoBaseForm):
         return cleaned_data
 
 
+class SoraVideoForm(VideoBaseForm):
+    """Formulario para videos OpenAI Sora"""
+    
+    sora_model = forms.ChoiceField(
+        choices=[
+            ('sora-2', 'Sora 2 - Rápido (exploración y redes sociales)'),
+            ('sora-2-pro', 'Sora 2 Pro - Alta calidad (producción profesional)'),
+        ],
+        initial='sora-2',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Modelo Sora',
+        help_text='Sora 2 es más rápido, Sora 2 Pro ofrece mayor calidad'
+    )
+    
+    duration = forms.ChoiceField(
+        choices=[
+            (4, '4 segundos'),
+            (8, '8 segundos'),
+            (12, '12 segundos'),
+        ],
+        initial=8,
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Duración',
+        help_text='Duración del video: 4, 8 o 12 segundos'
+    )
+    
+    size = forms.ChoiceField(
+        choices=[
+            ('1280x720', '1280x720 - Horizontal (16:9)'),
+            ('720x1280', '720x1280 - Vertical (9:16)'),
+            ('1024x1024', '1024x1024 - Cuadrado (1:1)'),
+        ],
+        initial='1280x720',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+        }),
+        label='Resolución',
+        help_text='Tamaño y orientación del video'
+    )
+    
+    use_input_reference = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'form-check-input',
+        }),
+        label='Usar Imagen de Referencia',
+        help_text='Generar video a partir de una imagen (debe coincidir con la resolución)'
+    )
+    
+    input_reference = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': 'image/jpeg,image/png,image/webp',
+        }),
+        label='Imagen de Referencia',
+        help_text='⚠️ IMPORTANTE: La imagen debe tener exactamente las mismas dimensiones que la resolución seleccionada (ej: 1280x720 para video 1280x720)'
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        use_input_reference = cleaned_data.get('use_input_reference')
+        input_reference = cleaned_data.get('input_reference')
+        
+        if use_input_reference and not input_reference:
+            raise forms.ValidationError(
+                'Debes subir una imagen de referencia si "Usar Imagen de Referencia" está marcado'
+            )
+        
+        # Validar tamaño de imagen
+        if input_reference and input_reference.size > 10 * 1024 * 1024:  # 10 MB
+            raise forms.ValidationError(
+                'La imagen de referencia no debe superar los 10 MB'
+            )
+        
+        return cleaned_data
+
+
 class GeminiVeoVideoForm(VideoBaseForm):
     """Formulario para videos Gemini Veo (todos los modelos)"""
     
