@@ -16,7 +16,7 @@ from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
 
 from .models import Project, Video, Image
-from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, GeminiImageForm
+from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm
 from .services import ProjectService, VideoService, ImageService, APIService, ValidationException, ServiceException, ImageGenerationException
 import logging
 
@@ -329,6 +329,8 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             return HeyGenAvatarIVForm
         elif video_type == 'gemini_veo':
             return GeminiVeoVideoForm
+        elif video_type == 'sora':
+            return SoraVideoForm
         else:
             # Fallback al formulario base si el tipo no es reconocido
             return VideoBaseForm
@@ -370,7 +372,7 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             return self.get(request, *args, **kwargs)
         
         try:
-        # Configuración según el tipo de video
+            # Configuración según el tipo de video
             config = self._build_video_config(request, video_type, project, video_service)
             
             # Crear video usando servicio
@@ -402,6 +404,8 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             config = self._build_heygen_iv_config(request, project, video_service)
         elif video_type == 'gemini_veo':
             config = self._build_veo_config(request, project, video_service)
+        elif video_type == 'sora':
+            config = self._build_sora_config(request, project, video_service)
         
         return config
     
@@ -505,6 +509,28 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 reference_images, reference_types, project
             )
             config['reference_images'] = uploaded_refs
+        
+        return config
+    
+    def _build_sora_config(self, request, project, video_service):
+        """Configuración para OpenAI Sora"""
+        config = {
+            'sora_model': request.POST.get('sora_model', 'sora-2'),
+            'duration': int(request.POST.get('duration', 8)),
+            'size': request.POST.get('size', '1280x720'),
+            'use_input_reference': request.POST.get('use_input_reference') == 'on',
+        }
+        
+        # Imagen de referencia (opcional)
+        if config['use_input_reference']:
+            input_reference = request.FILES.get('input_reference')
+            if not input_reference:
+                raise ValidationException('Debes subir una imagen de referencia')
+            
+            # Subir imagen usando servicio
+            upload_result = video_service.upload_sora_input_reference(input_reference, project)
+            config['input_reference_gcs_path'] = upload_result['gcs_path']
+            config['input_reference_mime_type'] = upload_result['mime_type']
         
         return config
 

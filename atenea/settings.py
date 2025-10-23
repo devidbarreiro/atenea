@@ -145,6 +145,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
 # API Keys Configuration
 HEYGEN_API_KEY = config('HEYGEN_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
 # Logging Configuration
 LOGGING = {
