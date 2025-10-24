@@ -1,0 +1,95 @@
+{% load static %}
+
+<!-- Skeleton para Dashboard Stats -->
+<div class="stats shadow w-full mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    {% for i in "12345" %}
+    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div class="stat-figure">
+            <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div class="stat-title w-20 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+        <div class="stat-value w-16 h-8 bg-gray-200 rounded animate-pulse mb-1"></div>
+        <div class="stat-desc w-24 h-3 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Skeleton para Proyectos Grid -->
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <div class="w-32 h-8 bg-gray-200 rounded animate-pulse"></div>
+        <div class="w-32 h-10 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for i in "123" %}
+        <div class="card bg-white shadow-xl border border-gray-200 rounded-lg overflow-hidden">
+            <div class="card-body p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-40 h-6 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="w-8 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                </div>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="w-24 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="w-28 h-4 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                
+                <div class="flex justify-between items-center">
+                    <div class="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Skeleton para Videos Recientes -->
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <div class="w-40 h-8 bg-gray-200 rounded animate-pulse"></div>
+        <div class="w-24 h-10 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {% for i in "1234" %}
+        <div class="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+            <div class="w-full h-48 bg-gray-200 animate-pulse"></div>
+            <div class="p-4">
+                <div class="w-3/4 h-5 bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div class="w-full h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
+                <div class="w-2/3 h-4 bg-gray-200 rounded animate-pulse mb-4"></div>
+                
+                <div class="flex justify-between items-center">
+                    <div class="w-20 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                    <div class="flex space-x-2">
+                        <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                        <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Skeleton para Imágenes Recientes -->
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <div class="w-40 h-8 bg-gray-200 rounded animate-pulse"></div>
+        <div class="w-24 h-10 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {% for i in "123456" %}
+        <div class="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+            <div class="w-full h-32 bg-gray-200 animate-pulse"></div>
+            <div class="p-3">
+                <div class="w-full h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div class="w-16 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>

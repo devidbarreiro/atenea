@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ejemplos de Skeleton UI - Atenea{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <h1 class="text-4xl font-bold mb-8">Ejemplos de Skeleton UI</h1>
+    
+    <!-- Ejemplo 1: Dashboard Stats -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">1. Dashboard Stats</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {% for i in "12345" %}
+            <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="stat-figure">
+                    <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div class="stat-title w-20 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div class="stat-value w-16 h-8 bg-gray-200 rounded animate-pulse mb-1"></div>
+                <div class="stat-desc w-24 h-3 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Ejemplo 2: Cards de Proyectos -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">2. Cards de Proyectos</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for i in "123" %}
+            <div class="card bg-white shadow-xl border border-gray-200 rounded-lg overflow-hidden">
+                <div class="card-body p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-40 h-6 bg-gray-200 rounded animate-pulse"></div>
+                        <div class="w-8 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                    </div>
+                    
+                    <div class="space-y-2 mb-4">
+                        <div class="w-24 h-4 bg-gray-200 rounded animate-pulse"></div>
+                        <div class="w-28 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <div class="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
+                        <div class="w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Ejemplo 3: Media Cards -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">3. Media Cards (Videos/Imágenes)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {% for i in "1234" %}
+            <div class="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+                <div class="w-full h-48 bg-gray-200 animate-pulse"></div>
+                <div class="p-4">
+                    <div class="w-3/4 h-5 bg-gray-200 rounded animate-pulse mb-2"></div>
+                    <div class="w-full h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
+                    <div class="w-2/3 h-4 bg-gray-200 rounded animate-pulse mb-4"></div>
+                    
+                    <div class="flex justify-between items-center">
+                        <div class="w-20 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                        <div class="flex space-x-2">
+                            <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                            <div class="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Ejemplo 4: Diferentes Tipos de Animación -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">4. Diferentes Tipos de Animación</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Shimmer -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Shimmer</h3>
+                <div class="w-full h-4 bg-gray-200 rounded skeleton-shimmer mb-2"></div>
+                <div class="w-3/4 h-4 bg-gray-200 rounded skeleton-shimmer mb-2"></div>
+                <div class="w-1/2 h-4 bg-gray-200 rounded skeleton-shimmer"></div>
+            </div>
+
+            <!-- Wave -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Wave</h3>
+                <div class="w-full h-4 bg-gray-200 rounded skeleton-wave mb-2"></div>
+                <div class="w-3/4 h-4 bg-gray-200 rounded skeleton-wave mb-2"></div>
+                <div class="w-1/2 h-4 bg-gray-200 rounded skeleton-wave"></div>
+            </div>
+
+            <!-- Pulse -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Pulse</h3>
+                <div class="w-full h-4 bg-gray-200 rounded skeleton-pulse mb-2"></div>
+                <div class="w-3/4 h-4 bg-gray-200 rounded skeleton-pulse mb-2"></div>
+                <div class="w-1/2 h-4 bg-gray-200 rounded skeleton-pulse"></div>
+            </div>
+
+            <!-- Fade -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Fade</h3>
+                <div class="w-full h-4 bg-gray-200 rounded skeleton-fade mb-2"></div>
+                <div class="w-3/4 h-4 bg-gray-200 rounded skeleton-fade mb-2"></div>
+                <div class="w-1/2 h-4 bg-gray-200 rounded skeleton-fade"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ejemplo 5: Estados de Loading -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">5. Estados de Loading</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Loading -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Loading</h3>
+                <div class="w-full h-4 bg-gray-200 rounded skeleton-loading animate-pulse mb-2"></div>
+                <div class="w-3/4 h-4 bg-gray-200 rounded skeleton-loading animate-pulse mb-2"></div>
+                <div class="w-1/2 h-4 bg-gray-200 rounded skeleton-loading animate-pulse"></div>
+            </div>
+
+            <!-- Error -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Error</h3>
+                <div class="w-full h-4 bg-red-200 rounded skeleton-error mb-2"></div>
+                <div class="w-3/4 h-4 bg-red-200 rounded skeleton-error mb-2"></div>
+                <div class="w-1/2 h-4 bg-red-200 rounded skeleton-error"></div>
+            </div>
+
+            <!-- Success -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Success</h3>
+                <div class="w-full h-4 bg-green-200 rounded skeleton-success mb-2"></div>
+                <div class="w-3/4 h-4 bg-green-200 rounded skeleton-success mb-2"></div>
+                <div class="w-1/2 h-4 bg-green-200 rounded skeleton-success"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botones de Demostración -->
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">6. Demostración Interactiva</h2>
+        <div class="flex flex-wrap gap-4">
+            <button onclick="showSkeletonDemo()" class="btn btn-primary">
+                Mostrar Skeleton
+            </button>
+            <button onclick="hideSkeletonDemo()" class="btn btn-secondary">
+                Ocultar Skeleton
+            </button>
+            <button onclick="showLoadingDemo()" class="btn btn-accent">
+                Mostrar Loading
+            </button>
+            <button onclick="hideLoadingDemo()" class="btn btn-outline">
+                Ocultar Loading
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Incluir componentes skeleton -->
+{% include 'includes/skeleton_components.html' %}
+{% include 'includes/loading_states.html' %}
+
+<script>
+function showSkeletonDemo() {
+    // Simular carga con skeleton
+    const content = document.querySelector('.max-w-6xl');
+    const skeleton = document.createElement('div');
+    skeleton.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="card bg-white shadow-xl border border-gray-200 rounded-lg overflow-hidden">
+                <div class="card-body p-6">
+                    <div class="w-40 h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
+                    <div class="w-24 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                    <div class="w-28 h-4 bg-gray-200 rounded animate-pulse mb-4"></div>
+                    <div class="w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    content.innerHTML = '';
+    content.appendChild(skeleton);
+    
+    setTimeout(() => {
+        hideSkeletonDemo();
+    }, 2000);
+}
+
+function hideSkeletonDemo() {
+    // Restaurar contenido original
+    location.reload();
+}
+
+function showLoadingDemo() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+    }
+}
+
+function hideLoadingDemo() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

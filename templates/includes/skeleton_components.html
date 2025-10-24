@@ -1,0 +1,208 @@
+{% load static %}
+
+<!-- Skeleton Components Reutilizables -->
+
+<!-- Skeleton para estadísticas -->
+<div class="skeleton-stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+    <div class="flex items-center justify-between mb-4">
+        <div class="skeleton-icon w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    <div class="skeleton-title w-20 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+    <div class="skeleton-value w-16 h-8 bg-gray-200 rounded animate-pulse mb-1"></div>
+    <div class="skeleton-desc w-24 h-3 bg-gray-200 rounded animate-pulse"></div>
+</div>
+
+<!-- Skeleton para cards de proyecto -->
+<div class="skeleton-card bg-white shadow-xl border border-gray-200 rounded-lg overflow-hidden">
+    <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="skeleton-title w-32 h-6 bg-gray-200 rounded animate-pulse"></div>
+            <div class="skeleton-badge w-8 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+        </div>
+        
+        <div class="space-y-2 mb-4">
+            <div class="skeleton-line w-24 h-4 bg-gray-200 rounded animate-pulse"></div>
+            <div class="skeleton-line w-28 h-4 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        
+        <div class="flex justify-between items-center">
+            <div class="skeleton-date w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
+            <div class="skeleton-button w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Skeleton para media cards (videos/imágenes) -->
+<div class="skeleton-media-card bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+    <div class="skeleton-thumbnail w-full h-48 bg-gray-200 animate-pulse"></div>
+    <div class="p-4">
+        <div class="skeleton-title w-3/4 h-5 bg-gray-200 rounded animate-pulse mb-2"></div>
+        <div class="skeleton-description w-full h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
+        <div class="skeleton-description w-2/3 h-4 bg-gray-200 rounded animate-pulse mb-4"></div>
+        
+        <div class="flex justify-between items-center">
+            <div class="skeleton-status w-20 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+            <div class="skeleton-actions flex space-x-2">
+                <div class="skeleton-button w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+                <div class="skeleton-button w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Skeleton para listas -->
+<div class="skeleton-list-item bg-white border border-gray-200 rounded-lg p-4 mb-3">
+    <div class="flex items-center space-x-4">
+        <div class="skeleton-avatar w-12 h-12 bg-gray-200 rounded-full animate-pulse"></div>
+        <div class="flex-1">
+            <div class="skeleton-title w-1/3 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div class="skeleton-description w-2/3 h-3 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div class="skeleton-status w-16 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+    </div>
+</div>
+
+<!-- Skeleton para formularios -->
+<div class="skeleton-form bg-white border border-gray-200 rounded-lg p-6">
+    <div class="space-y-4">
+        <div>
+            <div class="skeleton-label w-20 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div class="skeleton-input w-full h-10 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div>
+            <div class="skeleton-label w-24 h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div class="skeleton-textarea w-full h-20 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div class="flex justify-end space-x-2">
+            <div class="skeleton-button w-20 h-8 bg-gray-200 rounded animate-pulse"></div>
+            <div class="skeleton-button w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Skeleton para tablas -->
+<div class="skeleton-table bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="p-4 border-b border-gray-200">
+        <div class="skeleton-title w-32 h-6 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    <div class="divide-y divide-gray-200">
+        {% for i in "12345" %}
+        <div class="p-4">
+            <div class="flex items-center space-x-4">
+                <div class="skeleton-avatar w-10 h-10 bg-gray-200 rounded-full animate-pulse"></div>
+                <div class="flex-1">
+                    <div class="skeleton-title w-1/4 h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
+                    <div class="skeleton-description w-1/3 h-3 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div class="skeleton-status w-20 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                <div class="skeleton-actions w-16 h-8 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+/* Animaciones personalizadas para skeletons */
+@keyframes shimmer {
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+@keyframes wave {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+@keyframes fadeInOut {
+    0%, 100% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+@keyframes slideIn {
+    0% {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Clases de animación para skeletons */
+.skeleton-shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.skeleton-wave {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    background-size: 200% 100%;
+    animation: wave 1.5s infinite;
+}
+
+.skeleton-fade {
+    animation: fadeInOut 2s ease-in-out infinite;
+}
+
+.skeleton-slide {
+    animation: slideIn 0.6s ease-out;
+}
+
+/* Variaciones de skeleton */
+.skeleton-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.skeleton-bounce {
+    animation: bounce 1s infinite;
+}
+
+/* Estados de skeleton */
+.skeleton-loading {
+    opacity: 0.7;
+}
+
+.skeleton-error {
+    background-color: #fee2e2;
+    border-color: #fecaca;
+}
+
+.skeleton-success {
+    background-color: #dcfce7;
+    border-color: #bbf7d0;
+}
+
+/* Skeleton responsive */
+@media (max-width: 768px) {
+    .skeleton-mobile {
+        animation-duration: 0.8s;
+    }
+}
+
+/* Skeleton con delay escalonado */
+.skeleton-delay-1 { animation-delay: 0.1s; }
+.skeleton-delay-2 { animation-delay: 0.2s; }
+.skeleton-delay-3 { animation-delay: 0.3s; }
+.skeleton-delay-4 { animation-delay: 0.4s; }
+.skeleton-delay-5 { animation-delay: 0.5s; }
+
+/* Skeleton con diferentes velocidades */
+.skeleton-slow { animation-duration: 3s; }
+.skeleton-fast { animation-duration: 0.8s; }
+.skeleton-normal { animation-duration: 1.5s; }
+</style>

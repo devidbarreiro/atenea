@@ -1,0 +1,201 @@
+{% load static %}
+
+<!-- Loading States Avanzados con HTMX -->
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+    <div class="flex items-center justify-center h-full">
+        <div class="bg-white rounded-lg p-8 shadow-xl">
+            <div class="flex items-center space-x-4">
+                <div class="loading loading-spinner loading-lg text-primary"></div>
+                <div>
+                    <div class="text-lg font-semibold">Cargando...</div>
+                    <div class="text-sm text-gray-500">Por favor espera</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Button States -->
+<div class="loading-button-container">
+    <button class="btn btn-primary" 
+            hx-get="/api/load-data" 
+            hx-indicator="#loading-spinner"
+            hx-target="#content-area">
+        <span class="btn-text">Cargar Datos</span>
+        <span id="loading-spinner" class="loading loading-spinner loading-sm hidden"></span>
+    </button>
+</div>
+
+<!-- Skeleton con HTMX -->
+<div id="skeleton-container" class="hidden">
+    {% include 'includes/dashboard_skeleton.html' %}
+</div>
+
+<!-- Content Container -->
+<div id="content-container">
+    <!-- El contenido real va aquí -->
+</div>
+
+<!-- JavaScript para manejar estados de loading -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Configuración de HTMX para loading states
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        showLoadingState(evt.detail.xhr);
+    });
+    
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        hideLoadingState();
+    });
+    
+    document.body.addEventListener('htmx:responseError', function(evt) {
+        showErrorState(evt.detail.xhr);
+    });
+    
+    // Funciones de loading
+    function showLoadingState(xhr) {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('hidden');
+        }
+        
+        // Mostrar skeleton si es necesario
+        const skeletonContainer = document.getElementById('skeleton-container');
+        const contentContainer = document.getElementById('content-container');
+        
+        if (skeletonContainer && contentContainer) {
+            skeletonContainer.classList.remove('hidden');
+            contentContainer.classList.add('hidden');
+        }
+    }
+    
+    function hideLoadingState() {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.add('hidden');
+        }
+        
+        // Ocultar skeleton
+        const skeletonContainer = document.getElementById('skeleton-container');
+        const contentContainer = document.getElementById('content-container');
+        
+        if (skeletonContainer && contentContainer) {
+            skeletonContainer.classList.add('hidden');
+            contentContainer.classList.remove('hidden');
+        }
+    }
+    
+    function showErrorState(xhr) {
+        hideLoadingState();
+        
+        // Mostrar mensaje de error
+        const errorMessage = 'Error al cargar los datos. Por favor, inténtalo de nuevo.';
+        showNotification(errorMessage, 'error');
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+            type === 'error' ? 'bg-red-500 text-white' : 
+            type === 'success' ? 'bg-green-500 text-white' : 
+            'bg-blue-500 text-white'
+        }`;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 5000);
+    }
+    
+    // Exponer funciones globalmente
+    window.showLoadingState = showLoadingState;
+    window.hideLoadingState = hideLoadingState;
+    window.showErrorState = showErrorState;
+    window.showNotification = showNotification;
+});
+
+// Función para mostrar skeleton en navegación
+function showSkeletonOnNavigation() {
+    const skeletonContainer = document.getElementById('skeleton-container');
+    const contentContainer = document.getElementById('content-container');
+    
+    if (skeletonContainer && contentContainer) {
+        skeletonContainer.classList.remove('hidden');
+        contentContainer.classList.add('hidden');
+    }
+}
+
+// Función para ocultar skeleton después de carga
+function hideSkeletonAfterLoad() {
+    setTimeout(() => {
+        const skeletonContainer = document.getElementById('skeleton-container');
+        const contentContainer = document.getElementById('content-container');
+        
+        if (skeletonContainer && contentContainer) {
+            skeletonContainer.classList.add('hidden');
+            contentContainer.classList.remove('hidden');
+        }
+    }, 1000);
+}
+
+// Auto-hide skeleton en carga inicial
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        hideSkeletonAfterLoad();
+    }, 500);
+});
+</script>
+
+<!-- CSS adicional para loading states -->
+<style>
+/* Loading overlay animations */
+#loading-overlay {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Skeleton transitions */
+#skeleton-container {
+    transition: opacity 0.3s ease-in-out;
+}
+
+#content-container {
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Loading button states */
+.loading-button-container button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* HTMX indicators */
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.htmx-request .htmx-indicator {
+    opacity: 1;
+}
+
+.htmx-request.htmx-indicator {
+    opacity: 1;
+}
+
+/* Skeleton responsive */
+@media (max-width: 768px) {
+    #loading-overlay .bg-white {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+}
+</style>

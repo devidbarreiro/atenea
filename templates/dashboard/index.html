@@ -1,8 +1,16 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Dashboard - Atenea{% endblock %}
 
 {% block content %}
+<!-- Loading State con Skeleton -->
+<div id="dashboard-loading" class="hidden">
+    {% include 'includes/dashboard_skeleton.html' %}
+</div>
+
+<!-- Contenido Principal -->
+<div id="dashboard-content">
 <!-- Header con estadísticas -->
 <div class="mb-8">
     <h1 class="text-4xl font-bold mb-2">Dashboard</h1>
@@ -316,4 +324,45 @@
     </div>
 </div>
 {% endif %}
+</div>
+
+<!-- JavaScript para manejar estados de loading -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Simular loading inicial (opcional)
+    const loadingElement = document.getElementById('dashboard-loading');
+    const contentElement = document.getElementById('dashboard-content');
+    
+    // Función para mostrar skeleton
+    function showSkeleton() {
+        loadingElement.classList.remove('hidden');
+        contentElement.classList.add('hidden');
+    }
+    
+    // Función para ocultar skeleton
+    function hideSkeleton() {
+        loadingElement.classList.add('hidden');
+        contentElement.classList.remove('hidden');
+    }
+    
+    // Función para mostrar skeleton en acciones específicas
+    function showSkeletonForAction(action) {
+        showSkeleton();
+        // Simular delay de carga
+        setTimeout(() => {
+            hideSkeleton();
+        }, 1000);
+    }
+    
+    // Exponer funciones globalmente para uso en HTMX
+    window.showSkeleton = showSkeleton;
+    window.hideSkeleton = hideSkeleton;
+    window.showSkeletonForAction = showSkeletonForAction;
+    
+    // Auto-hide skeleton después de 500ms (simulación de carga rápida)
+    setTimeout(() => {
+        hideSkeleton();
+    }, 500);
+});
+</script>
 {% endblock %}
