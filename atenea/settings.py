@@ -87,25 +87,13 @@ WSGI_APPLICATION = 'atenea.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Database configuration
-# Use SQLite for CI/testing, PostgreSQL for production
-if config('USE_SQLITE', default=False, cast=bool):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+# Use SQLite for development, PostgreSQL for production
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('POSTGRES_DB', default='atenea'),
-            'USER': config('POSTGRES_USER', default='atenea'),
-            'PASSWORD': config('POSTGRES_PASSWORD', default=''),
-            'HOST': config('DB_HOST', default='db'),
-            'PORT': config('DB_PORT', default='5432'),
-        }
-    }
+}
 
 
 # Password validation
@@ -168,6 +156,10 @@ HEYGEN_API_KEY = config('HEYGEN_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
+# Redis Configuration
+REDIS_URL = config('REDIS_URL', default='redis://redis-13128.c12.us-east-1-4.ec2.redns.redis-cloud.com:13128')
+REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+
 # Logging Configuration
 LOGGING = {
     'version': 1,
@@ -219,3 +211,40 @@ TAILWIND_APP_NAME = 'theme'
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {module} - {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'atenea.log',
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'core': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

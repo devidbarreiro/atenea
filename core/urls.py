@@ -25,13 +25,23 @@ urlpatterns = [
     path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     
+    # Scripts
+    path('projects/<int:project_id>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
+    path('scripts/<int:script_id>/', views.ScriptDetailView.as_view(), name='script_detail'),
+    path('scripts/<int:script_id>/delete/', views.ScriptDeleteView.as_view(), name='script_delete'),
+    path('scripts/<int:script_id>/retry/', views.ScriptRetryView.as_view(), name='script_retry'),
+    
     # HTMX Partials
     path('videos/<int:video_id>/status-partial/', views.VideoStatusPartialView.as_view(), name='video_status_partial'),
     path('images/<int:image_id>/status-partial/', views.ImageStatusPartialView.as_view(), name='image_status_partial'),
+    path('scripts/<int:script_id>/status-partial/', views.ScriptStatusPartialView.as_view(), name='script_status_partial'),
     
     # API endpoints
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),
     path('api/image-assets/', views.ListImageAssetsView.as_view(), name='api_list_image_assets'),
+    
+    # Webhooks
+    path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
 ]
 

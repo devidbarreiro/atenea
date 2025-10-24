@@ -3,12 +3,14 @@ Capa de servicios para manejar la lógica de negocio
 """
 
 import logging
+import json
+import redis
 from typing import Dict, Optional, List
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from datetime import datetime
 
-from .models import Project, Video, Image
+from .models import Project, Video, Image, Script
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
@@ -1192,3 +1194,153 @@ class ImageService:
                 logger.error(f"Error al generar URLs firmadas para imágenes de entrada: {e}")
         
         return result
+
+
+# ====================
+# N8N INTEGRATION SERVICE
+# ====================
+
+class N8nService:
+    """Servicio para integrar con n8n para procesamiento de guiones"""
+    
+    def __init__(self):
+        self.webhook_url = "https://n8n.nxhumans.com/webhook/6e03a7df-1812-446e-a776-9a5b4ab543c8"
+    
+    def send_script_for_processing(self, script):
+        """Enviar guión a n8n para procesamiento"""
+        try:
+            import requests
+            
+            # Preparar datos para enviar (solo guión y duración)
+            data = {
+                'script_id': script.id,
+                'guion': script.original_script,
+                'duracion_minutos': script.desired_duration_min
+            }
+            
+            # Marcar como procesando
+            script.mark_as_processing()
+            
+            # Enviar a n8n
+            response = requests.post(
+                self.webhook_url,
+                json=data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"Guión {script.id} enviado exitosamente a n8n")
+                return True
+            else:
+                script.mark_as_error(f"Error HTTP {response.status_code}: {response.text}")
+                logger.error(f"Error al enviar guión a n8n: {response.status_code} - {response.text}")
+                return False
+                
+        except requests.exceptions.Timeout as e:
+            # Timeout no es un error fatal, n8n puede estar procesando
+            logger.warning(f"Timeout al enviar guión a n8n (puede estar procesando): {e}")
+            return True  # Consideramos que se envió correctamente
+        except requests.exceptions.RequestException as e:
+            script.mark_as_error(f"Error de conexión: {str(e)}")
+            logger.error(f"Error de conexión al enviar guión a n8n: {e}")
+            return False
+        except Exception as e:
+            script.mark_as_error(f"Error inesperado: {str(e)}")
+            logger.error(f"Error inesperado al enviar guión a n8n: {e}")
+            return False
+    
+    def process_webhook_response(self, data):
+        """Procesar respuesta del webhook de n8n"""
+        try:
+            # Validar que tenemos la estructura esperada
+            if 'status' not in data:
+                raise ValidationException("Estructura de respuesta inválida del webhook")
+            
+            # Verificar que el procesamiento fue exitoso
+            if data.get('status') != 'success':
+                raise ValidationException(f"Error en n8n: {data.get('message', 'Error desconocido')}")
+            
+            # Obtener el script_id
+            script_id = data.get('script_id')
+            if not script_id:
+                raise ValidationException("No se encontró script_id en la respuesta")
+            
+            try:
+                script = Script.objects.get(id=script_id)
+            except Script.DoesNotExist:
+                raise ValidationException(f"Guión con ID {script_id} no encontrado")
+            
+            # Preparar datos procesados
+            output_data = {}
+            
+            # Si viene con 'output' (estructura original)
+            if 'output' in data:
+                output_data = data.get('output')
+                # Si output_data es un string (JSON stringificado), parsearlo
+                if isinstance(output_data, str):
+                    import json
+                    output_data = json.loads(output_data)
+            
+            # Si viene con 'project' y 'scenes' directamente (estructura nueva)
+            elif 'project' in data and 'scenes' in data:
+                output_data = {
+                    'project': data.get('project'),
+                    'scenes': data.get('scenes')
+                }
+            
+            # Validar estructura de datos procesados
+            if 'project' not in output_data or 'scenes' not in output_data:
+                raise ValidationException("Estructura de datos procesados inválida")
+            
+            # Marcar como completado con los datos procesados
+            script.mark_as_completed(output_data)
+            
+            logger.info(f"Guión {script_id} procesado exitosamente por n8n")
+            return script
+            
+        except Exception as e:
+            logger.error(f"Error al procesar respuesta del webhook: {e}")
+            raise ServiceException(f"Error al procesar respuesta: {str(e)}")
+
+
+class RedisService:
+    """Servicio para manejar comunicación con Redis"""
+    
+    def __init__(self):
+        self.redis_client = redis.from_url(
+            settings.REDIS_URL,
+            password=settings.REDIS_PASSWORD,
+            decode_responses=True
+        )
+    
+    def set_script_result(self, script_id: str, result_data: dict):
+        """Guardar resultado de guión procesado en Redis"""
+        try:
+            key = f"script_result:{script_id}"
+            value = json.dumps(result_data)
+            
+            # Guardar con expiración de 1 hora
+            self.redis_client.setex(key, 3600, value)
+            logger.info(f"Resultado del guión {script_id} guardado en Redis")
+            
+        except Exception as e:
+            logger.error(f"Error al guardar resultado en Redis: {e}")
+            raise ServiceException(f"Error al guardar en Redis: {str(e)}")
+    
+    def get_script_result(self, script_id: str):
+        """Obtener resultado de un guión desde Redis"""
+        try:
+            key = f"script_result:{script_id}"
+            result = self.redis_client.get(key)
+            
+            if result:
+                data = json.loads(result)
+                logger.info(f"Resultado encontrado en Redis para guión {script_id}")
+                return data
+            else:
+                logger.info(f"No hay resultado aún en Redis para guión {script_id}")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error al obtener resultado de Redis: {e}")
+            return None

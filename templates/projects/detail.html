@@ -19,6 +19,9 @@
             <a href="{% url 'core:image_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 + Imagen
             </a>
+            <a href="{% url 'core:script_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                + Guión
+            </a>
             <a href="{% url 'core:project_delete' project.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 Eliminar
             </a>
@@ -41,9 +44,14 @@
             <div class="text-xs text-gray-500 mt-1">{{ project.completed_images }} completadas</div>
         </div>
         <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div class="text-sm text-gray-600 mb-1">Guiones</div>
+            <div class="text-3xl font-bold text-orange-600">{{ project.script_count }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ project.completed_scripts }} completados</div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
             <div class="text-sm text-gray-600 mb-1">Total Media</div>
-            <div class="text-3xl font-bold text-gray-900">{{ project.video_count|add:project.image_count }}</div>
-            <div class="text-xs text-gray-500 mt-1">Videos + Imágenes</div>
+            <div class="text-3xl font-bold text-gray-900">{{ project.video_count|add:project.image_count|add:project.script_count }}</div>
+            <div class="text-xs text-gray-500 mt-1">Videos + Imágenes + Guiones</div>
         </div>
         <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
             <div class="text-sm text-gray-600 mb-1">Creado</div>
@@ -255,4 +263,123 @@
     </a>
 </div>
 {% endif %}
+
+<!-- Scripts Section -->
+{% if scripts %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Guiones</h2>
+        <div class="flex gap-2">
+            <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                <button 
+                    @click="view = 'grid'; 
+                            document.getElementById('scripts-grid').classList.remove('hidden'); 
+                            document.getElementById('scripts-list').classList.add('hidden')"
+                    :class="view === 'grid' ? 'bg-gray-100' : ''"
+                    class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                    ⊞ Cuadrícula
+                </button>
+                <button 
+                    @click="view = 'list'; 
+                            document.getElementById('scripts-grid').classList.add('hidden'); 
+                            document.getElementById('scripts-list').classList.remove('hidden')"
+                    :class="view === 'list' ? 'bg-gray-100' : ''"
+                    class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                    ☰ Lista
+                </button>
+            </div>
+            <a href="{% url 'core:script_create' project.id %}" 
+               class="bg-orange-500 text-white hover:bg-orange-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                + Guión
+            </a>
+        </div>
+    </div>
+    
+    <!-- Vista Cuadrícula -->
+    <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {% for script in scripts %}
+        <div class="script-card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200">
+            <a href="{% url 'core:script_detail' script.id %}" class="block">
+                <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                    <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
+                        {% if script.status == 'completed' %}bg-green-500 text-white
+                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
+                        {% elif script.status == 'error' %}bg-red-500 text-white
+                        {% else %}bg-gray-500 text-white{% endif %}">
+                        {{ script.get_status_display }}
+                    </span>
+                    <span class="text-5xl opacity-30">📝</span>
+                </div>
+                <div class="p-4">
+                    <div class="font-semibold mb-1 truncate text-gray-900">{{ script.title }}</div>
+                    <div class="text-sm text-gray-500 mb-2">
+                        {% if script.num_scenes %}
+                            {{ script.num_scenes }} escenas
+                        {% else %}
+                            Guión
+                        {% endif %}
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-400">
+                        <span>{{ script.created_at|date:"d/m/Y" }}</span>
+                        <span>{{ script.created_at|date:"H:i" }}</span>
+                    </div>
+                </div>
+            </a>
+            <div class="p-4 pt-0">
+                {% include 'partials/script_actions.html' with script=script %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Vista Lista -->
+    <div id="scripts-list" class="hidden space-y-3">
+        {% for script in scripts %}
+        <div class="script-card flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <a href="{% url 'core:script_detail' script.id %}" class="flex gap-4 flex-1">
+                <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <span class="text-3xl opacity-30">📝</span>
+                </div>
+                <div class="flex-1 flex flex-col justify-center">
+                    <div class="font-semibold text-gray-900">{{ script.title }}</div>
+                    <div class="text-sm text-gray-500">
+                        <span>
+                            {% if script.num_scenes %}
+                                {{ script.num_scenes }} escenas
+                            {% else %}
+                                Guión
+                            {% endif %}
+                        </span>
+                        <span class="ml-4">{{ script.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                        {% if script.status == 'completed' %}bg-green-500 text-white
+                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
+                        {% elif script.status == 'error' %}bg-red-500 text-white
+                        {% else %}bg-gray-500 text-white{% endif %}">
+                        {{ script.get_status_display }}
+                    </span>
+                </div>
+            </a>
+            <div class="flex items-center">
+                {% include 'partials/script_actions.html' with script=script %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
+    <div class="text-6xl mb-4 opacity-30">📝</div>
+    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay guiones</h3>
+    <p class="text-gray-600 mb-4">Comienza creando tu primer guión para procesar con n8n</p>
+    <a href="{% url 'core:script_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
+        Crear Guión
+    </a>
+</div>
+{% endif %}
+
+<!-- Modal Container for HTMX -->
 {% endblock %}

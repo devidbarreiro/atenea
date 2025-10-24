@@ -13,11 +13,12 @@ from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.core.paginator import Paginator
 
-from .models import Project, Video, Image
-from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm
-from .services import ProjectService, VideoService, ImageService, APIService, ValidationException, ServiceException, ImageGenerationException
+from .models import Project, Video, Image, Script
+from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
+from .services import ProjectService, VideoService, ImageService, APIService, N8nService, ValidationException, ServiceException, ImageGenerationException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,8 +90,10 @@ class DashboardView(ServiceMixin, ListView):
         context.update({
             'total_videos': Video.objects.count(),
             'total_images': Image.objects.count(),
+            'total_scripts': Script.objects.count(),
             'completed_videos': Video.objects.filter(status='completed').count(),
             'processing_videos': Video.objects.filter(status='processing').count(),
+            'completed_scripts': Script.objects.filter(status='completed').count(),
         })
         
         # Obtener todos los videos recientes
@@ -215,10 +218,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
                     'signed_url': None
                 })
         
+        # Obtener guiones del proyecto
+        scripts = self.object.scripts.select_related('project').order_by('-created_at')
+        
         context['videos'] = videos
         context['videos_with_urls'] = videos_with_urls
         context['images'] = images
         context['images_with_urls'] = images_with_urls
+        context['scripts'] = scripts
         
         return context
 
@@ -920,3 +927,270 @@ class ImageStatusPartialView(View):
         image = get_object_or_404(Image, pk=image_id)
         html = render_to_string('partials/image_status.html', {'image': image})
         return HttpResponse(html)
+
+
+class ScriptStatusPartialView(View):
+    """Vista parcial para actualizar estado de guión con HTMX"""
+    
+    def get(self, request, script_id):
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        from .services import RedisService, N8nService
+        script = get_object_or_404(Script, pk=script_id)
+        
+        # Log del polling
+        logger.info(f"=== POLLING SCRIPT {script_id} ===")
+        logger.info(f"Estado actual: {script.status}")
+        logger.info(f"Datos procesados: {bool(script.processed_data)}")
+        if script.processed_data:
+            logger.info(f"Escenas: {len(script.scenes)}")
+        logger.info(f"Timestamp: {timezone.now()}")
+        
+        # Si está procesando, verificar Redis
+        if script.status == 'processing':
+            try:
+                redis_service = RedisService()
+                result = redis_service.get_script_result(str(script_id))
+                
+                if result:
+                    logger.info(f"✓ Resultado encontrado en Redis para guión {script_id}")
+                    # Procesar resultado como si fuera webhook
+                    n8n_service = N8nService()
+                    script = n8n_service.process_webhook_response(result)
+                    logger.info(f"✓ Guión {script_id} actualizado desde Redis")
+                else:
+                    logger.info(f"⏳ No hay resultado aún en Redis para guión {script_id}")
+                    
+            except Exception as e:
+                logger.error(f"✗ Error al consultar Redis: {e}")
+        
+        html = render_to_string('partials/script_status.html', {'script': script})
+        return HttpResponse(html)
+
+
+# ====================
+# SCRIPT VIEWS
+# ====================
+
+class ScriptDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de un guión"""
+    model = Script
+    template_name = 'scripts/detail.html'
+    context_object_name = 'script'
+    pk_url_kwarg = 'script_id'
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {'label': self.object.title, 'url': None}
+        ]
+
+
+class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+    """Crear nuevo guión"""
+    template_name = 'scripts/create.html'
+    form_class = ScriptForm
+    
+    def get_template_names(self):
+        """Usar template modal si es petición HTMX"""
+        if self.request.headers.get('HX-Request'):
+            return ['scripts/create_modal.html']
+        return ['scripts/create.html']
+    
+    def get_project(self):
+        """Obtener proyecto del contexto"""
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {
+                'label': project.name, 
+                'url': reverse('core:project_detail', args=[project.pk])
+            },
+            {'label': 'Nuevo Guión', 'url': None}
+        ]
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de guión"""
+        project = self.get_project()
+        
+        # Obtener datos básicos
+        title = request.POST.get('title')
+        original_script = request.POST.get('original_script')
+        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        
+        # Validaciones básicas
+        if not all([title, original_script]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            # Crear guión
+            script = Script.objects.create(
+                project=project,
+                title=title,
+                original_script=original_script,
+                desired_duration_min=int(desired_duration_min),
+                status='pending'
+            )
+            
+            # Enviar a n8n para procesamiento (en background)
+            n8n_service = N8nService()
+            try:
+                n8n_service.send_script_for_processing(script)
+                messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
+            except Exception as e:
+                messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
+            
+            # Redirigir inmediatamente al detalle del guión
+            return redirect('core:script_detail', script_id=script.pk)
+            
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class ScriptDeleteView(BreadcrumbMixin, DeleteView):
+    """Eliminar guión"""
+    model = Script
+    template_name = 'scripts/delete.html'
+    context_object_name = 'script'
+    pk_url_kwarg = 'script_id'
+    
+    def get_success_url(self):
+        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {
+                'label': self.object.title, 
+                'url': reverse('core:script_detail', args=[self.object.pk])
+            },
+            {'label': 'Eliminar', 'url': None}
+        ]
+    
+    def delete(self, request, *args, **kwargs):
+        """Manejar eliminación con soporte HTMX"""
+        self.object = self.get_object()
+        project_id = self.object.project.pk
+        self.object.delete()
+        
+        # Si es petición HTMX, devolver respuesta vacía (el elemento se eliminará)
+        if request.headers.get('HX-Request'):
+            from django.http import HttpResponse
+            return HttpResponse(status=200)
+        
+        # Si no es HTMX, redirigir normalmente
+        return redirect('core:project_detail', project_id=project_id)
+
+
+class ScriptRetryView(ServiceMixin, View):
+    """Reintentar procesamiento de guión"""
+    
+    def post(self, request, script_id):
+        script = get_object_or_404(Script, pk=script_id)
+        
+        try:
+            # Resetear estado
+            script.status = 'pending'
+            script.error_message = None
+            script.save()
+            
+            # Reenviar a n8n
+            n8n_service = N8nService()
+            if n8n_service.send_script_for_processing(script):
+                messages.success(request, f'Guión "{script.title}" reenviado para procesamiento.')
+            else:
+                messages.error(request, f'Error al reenviar guión "{script.title}".')
+            
+            # Si es petición HTMX, devolver template parcial
+            if request.headers.get('HX-Request'):
+                from django.template.loader import render_to_string
+                from django.http import HttpResponse
+                html = render_to_string('partials/script_actions.html', {'script': script})
+                return HttpResponse(html)
+            
+            return redirect('core:script_detail', script_id=script.pk)
+            
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:script_detail', script_id=script.pk)
+
+
+# ====================
+# WEBHOOK INTEGRATION
+# ====================
+
+class N8nWebhookView(View):
+    """Webhook para recibir respuestas de n8n"""
+    
+    from django.views.decorators.csrf import csrf_exempt
+    from django.utils.decorators import method_decorator
+    
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+    
+    def post(self, request):
+        """Procesar respuesta del webhook de n8n"""
+        try:
+            import json
+            
+            # Log de inicio
+            logger.info("=" * 80)
+            logger.info("=== WEBHOOK N8N RECIBIDO ===")
+            logger.info(f"Timestamp: {timezone.now()}")
+            logger.info(f"Request headers: {dict(request.headers)}")
+            logger.info(f"Request body (raw): {request.body.decode('utf-8')}")
+            
+            # Obtener datos del webhook
+            data = json.loads(request.body)
+            
+            # Log de los datos parseados
+            logger.info(f"Datos parseados:")
+            logger.info(f"  - status: {data.get('status')}")
+            logger.info(f"  - script_id: {data.get('script_id')}")
+            logger.info(f"  - message: {data.get('message')}")
+            logger.info(f"  - project: {data.get('project', {})}")
+            logger.info(f"  - scenes count: {len(data.get('scenes', []))}")
+            
+            # Procesar respuesta usando el servicio
+            n8n_service = N8nService()
+            script = n8n_service.process_webhook_response(data)
+            
+            logger.info(f"✓ Webhook n8n procesado exitosamente para guión {script.id}")
+            logger.info(f"  - Nuevo estado: {script.status}")
+            logger.info(f"  - Escenas guardadas: {len(script.scenes)}")
+            logger.info("=" * 80)
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': 'Datos procesados',
+                'script_id': script.id
+            })
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"✗ JSON inválido en webhook: {e}")
+            return JsonResponse({'error': 'JSON inválido'}, status=400)
+        except (ValidationException, ServiceException) as e:
+            logger.error(f"✗ Error de validación en webhook n8n: {e}")
+            return JsonResponse({'error': str(e)}, status=400)
+        except Exception as e:
+            logger.error(f"✗ Error inesperado en webhook n8n: {e}")
+            logger.exception("Traceback completo:")
+            return JsonResponse({'error': 'Error interno'}, status=500)

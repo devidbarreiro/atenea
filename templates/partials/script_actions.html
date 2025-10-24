@@ -1,0 +1,65 @@
+{% load static %}
+
+<div class="script-actions" id="script-actions-{{ script.id }}">
+    <div class="flex gap-2">
+        {% if script.status == 'completed' %}
+            <button 
+                hx-get="{% url 'core:script_detail' script_id=script.pk %}"
+                hx-target="body"
+                hx-swap="innerHTML"
+                class="bg-blue-500 text-white hover:bg-blue-600 px-3 py-1 rounded text-sm transition-colors">
+                <i class="fas fa-eye me-1"></i>Ver
+            </button>
+            <button 
+                hx-get="{% url 'core:script_detail' script_id=script.pk %}"
+                hx-target="body"
+                hx-swap="innerHTML"
+                class="bg-green-500 text-white hover:bg-green-600 px-3 py-1 rounded text-sm transition-colors">
+                <i class="fas fa-download me-1"></i>Exportar
+            </button>
+        {% elif script.status == 'processing' %}
+            <button 
+                hx-get="{% url 'core:script_status_partial' script_id=script.pk %}"
+                hx-target="#script-status-{{ script.id }}"
+                hx-swap="innerHTML"
+                hx-trigger="every 3s"
+                class="bg-yellow-500 text-white px-3 py-1 rounded text-sm">
+                <i class="fas fa-spinner fa-spin me-1"></i>Procesando...
+            </button>
+        {% elif script.status == 'error' %}
+            <button 
+                hx-get="{% url 'core:script_detail' script_id=script.pk %}"
+                hx-target="body"
+                hx-swap="innerHTML"
+                class="bg-red-500 text-white hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
+                <i class="fas fa-exclamation-triangle me-1"></i>Ver Error
+            </button>
+            <button 
+                hx-post="{% url 'core:script_retry' script_id=script.pk %}"
+                hx-target="#script-actions-{{ script.id }}"
+                hx-swap="innerHTML"
+                hx-confirm="¿Reintentar procesamiento del guión?"
+                class="bg-orange-500 text-white hover:bg-orange-600 px-3 py-1 rounded text-sm transition-colors">
+                <i class="fas fa-redo me-1"></i>Reintentar
+            </button>
+        {% else %}
+            <button 
+                hx-get="{% url 'core:script_detail' script_id=script.pk %}"
+                hx-target="body"
+                hx-swap="innerHTML"
+                class="bg-gray-500 text-white hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors">
+                <i class="fas fa-eye me-1"></i>Ver
+            </button>
+        {% endif %}
+        
+        <button 
+            hx-delete="{% url 'core:script_delete' script_id=script.pk %}"
+            hx-target="closest .script-card"
+            hx-swap="outerHTML"
+            hx-confirm="¿Eliminar este guión?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+            class="bg-red-500 text-white hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
+            <i class="fas fa-trash me-1"></i>Eliminar
+        </button>
+    </div>
+</div>

@@ -4,7 +4,7 @@ Formularios Django para validación de datos
 
 from django import forms
 from django.core.validators import MinValueValidator, MaxValueValidator
-from .models import Project, Video, Image, VIDEO_TYPES, IMAGE_TYPES
+from .models import Project, Video, Image, Script, VIDEO_TYPES, IMAGE_TYPES
 
 
 class ProjectForm(forms.ModelForm):
@@ -768,4 +768,49 @@ class GeminiImageForm(forms.Form):
                 )
         
         return cleaned_data
+
+
+# ====================
+# SCRIPT FORMS
+# ====================
+
+class ScriptForm(forms.Form):
+    """Formulario para crear guiones"""
+    
+    title = forms.CharField(
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Título del guión',
+            'required': True,
+        }),
+        label='Título',
+        help_text='Nombre descriptivo para identificar el guión'
+    )
+    
+    original_script = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'placeholder': 'Escribe tu guión aquí...',
+            'rows': 10,
+            'required': True,
+        }),
+        label='Guión',
+        help_text='El texto del guión que será procesado por n8n'
+    )
+    
+    desired_duration_min = forms.IntegerField(
+        initial=5,
+        min_value=1,
+        max_value=60,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '5',
+            'min': '1',
+            'max': '60',
+            'required': True,
+        }),
+        label='Duración Deseada (minutos)',
+        help_text='Duración aproximada del video final en minutos'
+    )
 
