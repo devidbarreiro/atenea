@@ -190,9 +190,9 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
                             <select name="duration" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-                                <option value="5">5 segundos</option>
-                                <option value="10">10 segundos</option>
-                                <option value="15">15 segundos</option>
+                                <option value="4">4 segundos</option>
+                                <option value="8" selected>8 segundos</option>
+                                <option value="12">12 segundos</option>
                             </select>
                         </div>
                     </div>
@@ -209,21 +209,42 @@
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Resolución</label>
-                            <select name="resolution" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                                <option value="1080p">1080p</option>
-                                <option value="720p">720p</option>
-                                <option value="480p">480p</option>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
+                            <select name="duration" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                                <option value="4">4 segundos</option>
+                                <option value="8" selected>8 segundos</option>
+                                <option value="12">12 segundos</option>
                             </select>
                         </div>
                         
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">FPS</label>
-                            <select name="fps" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                                <option value="24">24 fps</option>
-                                <option value="30">30 fps</option>
-                                <option value="60">60 fps</option>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Tamaño</label>
+                            <select name="size" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                                <option value="1280x720">1280x720 (16:9)</option>
+                                <option value="720x1280">720x1280 (9:16)</option>
+                                <option value="1024x1024">1024x1024 (1:1)</option>
                             </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
+                            <select name="sora_model" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                                <option value="sora-2" selected>Sora 2 (Rápido)</option>
+                                <option value="sora-2-pro">Sora 2 Pro (Alta calidad)</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" name="use_input_reference" class="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500">
+                                <span class="text-sm text-gray-700">Usar imagen de referencia</span>
+                            </label>
+                        </div>
+                        
+                        <div id="sora-reference-section" class="hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Referencia</label>
+                            <input type="file" name="input_reference" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">La imagen debe tener exactamente las mismas dimensiones que el tamaño del video</p>
                         </div>
                     </div>
                 </div>
@@ -376,6 +397,22 @@ async function loadVoicesIV() {
         select.innerHTML = '<option value="">Error al cargar voces</option>';
     }
 }
+
+// Manejar checkbox de imagen de referencia para Sora
+document.addEventListener('DOMContentLoaded', function() {
+    const referenceCheckbox = document.querySelector('input[name="use_input_reference"]');
+    const referenceSection = document.getElementById('sora-reference-section');
+    
+    if (referenceCheckbox && referenceSection) {
+        referenceCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                referenceSection.classList.remove('hidden');
+            } else {
+                referenceSection.classList.add('hidden');
+            }
+        });
+    }
+});
 </script>
 
 <style>
