@@ -48,9 +48,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     # Third party
+    'whitenoise',  # Para servir archivos estáticos
     'tailwind',
     'theme',  # App de Tailwind
-    'django_browser_reload',  # Hot reload
     'django_celery_beat',  # Celery Beat para tareas periódicas
     'django_celery_results',  # Celery Results para almacenar resultados
     
@@ -58,16 +58,24 @@ INSTALLED_APPS = [
     'core',
 ]
 
+# Solo en desarrollo
+if DEBUG:
+    INSTALLED_APPS.append('django_browser_reload')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir archivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_browser_reload.middleware.BrowserReloadMiddleware',  # Hot reload
 ]
+
+# Solo en desarrollo
+if DEBUG:
+    MIDDLEWARE.append('django_browser_reload.middleware.BrowserReloadMiddleware')
 
 ROOT_URLCONF = 'atenea.urls'
 
@@ -102,15 +110,14 @@ if config('USE_SQLITE', default=True, cast=bool):
         }
     }
 else:
+    # Para Render, usar DATABASE_URL si está disponible
+    import dj_database_url
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('POSTGRES_DB', default='atenea'),
-            'USER': config('POSTGRES_USER', default='atenea'),
-            'PASSWORD': config('POSTGRES_PASSWORD', default=''),
-            'HOST': config('DB_HOST', default='db'),
-            'PORT': config('DB_PORT', default='5432'),
-        }
+        'default': dj_database_url.parse(
+            config('DATABASE_URL', default=''),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
 
 
@@ -154,9 +161,7 @@ STATICFILES_DIRS = [
 ]
 
 # Configuración para Render
-if not DEBUG:
-    STATIC_ROOT = BASE_DIR / 'staticfiles'
-    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
