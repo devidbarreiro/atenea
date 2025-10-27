@@ -913,7 +913,29 @@ class VideoStatusPartialView(View):
     def get(self, request, video_id):
         from django.template.loader import render_to_string
         from django.http import HttpResponse
+        from .services import VideoService
+        
         video = get_object_or_404(Video, pk=video_id)
+        
+        # Si el video está procesando y tiene external_id, consultar estado externo
+        if video.status == 'processing' and video.external_id:
+            try:
+                video_service = VideoService()
+                status_data = video_service.check_video_status(video)
+                
+                # Log del polling
+                logger.info(f"=== POLLING VIDEO {video_id} ===")
+                logger.info(f"Estado actual: {video.status}")
+                logger.info(f"External ID: {video.external_id}")
+                logger.info(f"Estado externo: {status_data.get('status', 'unknown')}")
+                logger.info(f"Timestamp: {timezone.now()}")
+                
+                # Refrescar el objeto desde la BD para obtener el estado actualizado
+                video.refresh_from_db()
+                
+            except Exception as e:
+                logger.error(f"Error al consultar estado del video {video_id}: {e}")
+        
         html = render_to_string('partials/video_status.html', {'video': video})
         return HttpResponse(html)
 

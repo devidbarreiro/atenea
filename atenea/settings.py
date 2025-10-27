@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'tailwind',
     'theme',  # App de Tailwind
     'django_browser_reload',  # Hot reload
+    'django_celery_beat',  # Celery Beat para tareas periódicas
+    'django_celery_results',  # Celery Results para almacenar resultados
     
     # Local apps
     'core',
@@ -210,3 +212,4 @@ TAILWIND_APP_NAME = 'theme'
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
+
