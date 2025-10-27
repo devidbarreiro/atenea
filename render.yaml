@@ -14,7 +14,7 @@ services:
       - key: USE_SQLITE
         value: False
       - key: ALLOWED_HOSTS
-        value: atenea-web.onrender.com
+        value: atenea-vao9.onrender.com
       - key: SECRET_KEY
         generateValue: true
       - key: POSTGRES_DB

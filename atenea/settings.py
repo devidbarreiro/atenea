@@ -32,6 +32,10 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# Para Render, agregar el dominio automáticamente
+if not DEBUG:
+    ALLOWED_HOSTS.extend(['atenea-vao9.onrender.com', '*.onrender.com'])
+
 
 # Application definition
 
@@ -148,6 +152,11 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+# Configuración para Render
+if not DEBUG:
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
