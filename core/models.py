@@ -36,6 +36,19 @@ SCRIPT_STATUS = [
     ('error', 'Error'),
 ]
 
+SCENE_STATUS = [
+    ('pending', 'Pendiente'),
+    ('processing', 'Procesando'),
+    ('completed', 'Completado'),
+    ('error', 'Error'),
+]
+
+SCENE_AI_SERVICES = [
+    ('gemini_veo', 'Gemini Veo'),
+    ('sora', 'OpenAI Sora'),
+    ('heygen', 'HeyGen Avatar'),
+]
+
 
 class Project(models.Model):
     """Modelo para proyectos que agrupan videos"""
@@ -80,6 +93,16 @@ class Project(models.Model):
     def completed_scripts(self):
         """Retorna guiones completados"""
         return self.scripts.filter(status='completed').count()
+    
+    @property
+    def scene_count(self):
+        """Retorna el número de escenas en el proyecto"""
+        return self.scenes.count()
+    
+    @property
+    def completed_scenes(self):
+        """Retorna escenas completadas"""
+        return self.scenes.filter(video_status='completed').count()
 
 
 class Video(models.Model):
@@ -301,6 +324,20 @@ class Script(models.Model):
         help_text='Datos procesados por n8n (project, scenes, etc.)'
     )
     
+    # Agent flow
+    agent_flow = models.BooleanField(
+        default=False,
+        help_text='True si fue creado por el flujo del agente'
+    )
+    final_video = models.ForeignKey(
+        'Video',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='source_script',
+        help_text='Video final combinado generado por el agente'
+    )
+    
     # Metadatos del procesamiento
     platform_mode = models.CharField(
         max_length=50,
@@ -369,10 +406,214 @@ class Script(models.Model):
 
     @property
     def scenes(self):
-        """Retorna las escenas del guión procesado"""
+        """Retorna las escenas del guión procesado (desde processed_data JSON)"""
         return self.processed_data.get('scenes', [])
 
     @property
     def project_data(self):
         """Retorna los datos del proyecto del guión procesado"""
         return self.processed_data.get('project', {})
+
+
+class Scene(models.Model):
+    """Modelo para escenas individuales del agente de video"""
+    
+    # Relaciones
+    script = models.ForeignKey(
+        Script,
+        on_delete=models.CASCADE,
+        related_name='db_scenes',
+        help_text='Guión del que forma parte esta escena'
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='scenes',
+        help_text='Proyecto al que pertenece (para consultas directas)'
+    )
+    
+    # Datos de la escena (desde n8n)
+    scene_id = models.CharField(
+        max_length=50,
+        help_text='ID de la escena (ej: "Escena 1")'
+    )
+    summary = models.TextField(
+        help_text='Resumen breve del contenido de la escena'
+    )
+    script_text = models.TextField(
+        help_text='Texto literal y completo del guión para esta escena'
+    )
+    duration_sec = models.IntegerField(
+        help_text='Duración de la escena en segundos'
+    )
+    avatar = models.CharField(
+        max_length=10,
+        help_text='Indica si tiene avatar visible (si/no)'
+    )
+    platform = models.CharField(
+        max_length=50,
+        help_text='Plataforma sugerida por n8n (gemini_veo, sora, heygen)'
+    )
+    broll = models.JSONField(
+        default=list,
+        help_text='Lista de elementos visuales sugeridos para B-roll'
+    )
+    transition = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Tipo de transición (corte, fundido, deslizamiento, etc.)'
+    )
+    text_on_screen = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Texto para mostrar en pantalla'
+    )
+    audio_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Notas sobre tono, música y efectos de audio'
+    )
+    
+    # Orden en el video final
+    order = models.IntegerField(
+        help_text='Orden de la escena en la secuencia del video (0, 1, 2...)'
+    )
+    
+    # Indica si está incluida en el video final
+    is_included = models.BooleanField(
+        default=True,
+        help_text='Si está marcada para incluir en el video final'
+    )
+    
+    # Preview image (generada con Gemini)
+    preview_image_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta de la imagen preview en GCS'
+    )
+    preview_image_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pendiente'),
+            ('generating', 'Generando'),
+            ('completed', 'Completada'),
+            ('error', 'Error')
+        ],
+        default='pending',
+        help_text='Estado de generación de la imagen preview'
+    )
+    preview_image_error = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Mensaje de error si falla la generación del preview'
+    )
+    
+    # Configuración del servicio IA para generar video
+    ai_service = models.CharField(
+        max_length=50,
+        choices=SCENE_AI_SERVICES,
+        help_text='Servicio de IA seleccionado para generar el video'
+    )
+    ai_config = models.JSONField(
+        default=dict,
+        help_text='Configuración específica del servicio (avatar_id, voice_id, duration, etc.)'
+    )
+    
+    # Video generado
+    video_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta del video generado en GCS'
+    )
+    video_status = models.CharField(
+        max_length=20,
+        choices=SCENE_STATUS,
+        default='pending',
+        help_text='Estado de generación del video'
+    )
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='ID del video en la plataforma externa (HeyGen, Gemini, Sora)'
+    )
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Mensaje de error si falla la generación del video'
+    )
+    
+    # Historial de versiones (para regeneración)
+    version = models.IntegerField(
+        default=1,
+        help_text='Versión de la escena (incrementa con cada regeneración)'
+    )
+    parent_scene = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='versions',
+        help_text='Escena padre si es una versión regenerada'
+    )
+    
+    # Metadatos adicionales
+    metadata = models.JSONField(
+        default=dict,
+        help_text='Metadata adicional de la API o del proceso'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['order']
+        verbose_name = 'Escena'
+        verbose_name_plural = 'Escenas'
+        unique_together = ['script', 'scene_id']
+
+    def __str__(self):
+        return f"{self.scene_id} - {self.script.title}"
+    
+    def mark_preview_as_generating(self):
+        """Marca el preview como generando"""
+        self.preview_image_status = 'generating'
+        self.save(update_fields=['preview_image_status', 'updated_at'])
+    
+    def mark_preview_as_completed(self, gcs_path):
+        """Marca el preview como completado"""
+        self.preview_image_status = 'completed'
+        self.preview_image_gcs_path = gcs_path
+        self.save(update_fields=['preview_image_status', 'preview_image_gcs_path', 'updated_at'])
+    
+    def mark_preview_as_error(self, error_message):
+        """Marca el preview con error"""
+        self.preview_image_status = 'error'
+        self.preview_image_error = error_message
+        self.save(update_fields=['preview_image_status', 'preview_image_error', 'updated_at'])
+    
+    def mark_video_as_processing(self):
+        """Marca el video como procesando"""
+        self.video_status = 'processing'
+        self.save(update_fields=['video_status', 'updated_at'])
+
+    def mark_video_as_completed(self, gcs_path=None, metadata=None):
+        """Marca el video como completado"""
+        self.video_status = 'completed'
+        self.completed_at = timezone.now()
+        if gcs_path:
+            self.video_gcs_path = gcs_path
+        if metadata:
+            self.metadata = metadata
+        self.save(update_fields=['video_status', 'completed_at', 'video_gcs_path', 'metadata', 'updated_at'])
+
+    def mark_video_as_error(self, error_message):
+        """Marca el video con error"""
+        self.video_status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['video_status', 'error_message', 'updated_at'])

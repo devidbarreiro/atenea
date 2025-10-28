@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+
+{% block title %}Final Video - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Progress Bar -->
+    <div class="mb-8">
+        <div class="flex items-center justify-center space-x-4">
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 text-white font-bold">✓</div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Contenido</span>
+            </div>
+            <div class="w-16 h-1 bg-green-500"></div>
+            
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 text-white font-bold">✓</div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Configurar</span>
+            </div>
+            <div class="w-16 h-1 bg-green-500"></div>
+            
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 text-white font-bold">✓</div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Escenas</span>
+            </div>
+            <div class="w-16 h-1 bg-blue-600"></div>
+            
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-blue-600 text-white font-bold">4</div>
+                <span class="ml-2 text-sm font-medium text-gray-900">Final</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-gray-900 mb-2">Video Final</h1>
+        <p class="text-gray-600">Revisa y combina todas las escenas en el video final</p>
+    </div>
+
+    <!-- Complete Video Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-8">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">Video Completo</h2>
+        <p class="text-gray-600 mb-6">{{ scenes.count }} escenas listas para combinar</p>
+
+        <!-- Video Preview Placeholder -->
+        <div class="w-full h-96 bg-gray-900 rounded-lg flex flex-col items-center justify-center mb-6">
+            <svg class="w-24 h-24 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <p class="text-gray-400 text-lg">Listo para combinar {{ scenes.count }} escenas</p>
+        </div>
+
+        <!-- Video Title Input -->
+        <div class="mb-6">
+            <label for="video_title" class="block text-sm font-medium text-gray-700 mb-2">
+                Título del Video
+            </label>
+            <input 
+                type="text" 
+                id="video_title" 
+                name="video_title"
+                value="{{ script.title }}"
+                placeholder="Ingresa el título del video..."
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+            >
+        </div>
+
+        <!-- Combine Button -->
+        <button 
+            id="combineBtn"
+            onclick="combineVideos()"
+            class="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-lg rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Combinar con FFmpeg
+        </button>
+
+        <!-- Loading State -->
+        <div id="combining-state" class="hidden mt-6 text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
+            <p class="text-gray-700 font-medium">Combinando videos...</p>
+            <p class="text-sm text-gray-500">Esto puede tomar unos minutos</p>
+        </div>
+    </div>
+
+    <!-- Included Scenes Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4">Escenas Incluidas ({{ scenes.count }})</h3>
+        <p class="text-gray-600 mb-6">Todas las escenas que estarán en el video final</p>
+
+        <div class="space-y-4">
+            {% for scene_data in scenes_with_urls %}
+            {% with scene=scene_data.scene %}
+            <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <!-- Scene Number -->
+                <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span class="text-blue-600 font-bold">{{ forloop.counter }}</span>
+                </div>
+
+                <!-- Thumbnail -->
+                <div class="w-24 h-16 bg-gray-200 rounded overflow-hidden flex-shrink-0">
+                    {% if scene_data.video_url %}
+                    <video src="{{ scene_data.video_url }}" class="w-full h-full object-cover"></video>
+                    {% else %}
+                    <div class="w-full h-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Info -->
+                <div class="flex-1">
+                    <h4 class="font-semibold text-gray-900">{{ scene.scene_id }}</h4>
+                    <p class="text-sm text-gray-600">{{ scene.summary|truncatewords:15 }}</p>
+                </div>
+
+                <!-- Service Badge -->
+                <div>
+                    <span class="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                        {{ scene.get_ai_service_display }}
+                    </span>
+                </div>
+
+                <!-- Duration -->
+                <div class="text-right">
+                    <span class="text-sm font-medium text-gray-700">{{ scene.duration_sec }}s</span>
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex justify-between items-center">
+        <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+           class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+            ← Volver a Escenas
+        </a>
+    </div>
+</div>
+
+<script>
+function combineVideos() {
+    const videoTitle = document.getElementById('video_title').value.trim();
+    
+    if (!videoTitle) {
+        alert('Por favor ingresa un título para el video');
+        return;
+    }
+    
+    // Confirmar acción
+    if (!confirm(`¿Combinar ${{{ scenes.count }}} escenas en un video final?\n\nTítulo: "${videoTitle}"`)) {
+        return;
+    }
+    
+    console.log('Iniciando combinación de videos...');
+    
+    // Show loading state
+    const combineBtn = document.getElementById('combineBtn');
+    const combiningState = document.getElementById('combining-state');
+    
+    combineBtn.disabled = true;
+    combineBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    combiningState.classList.remove('hidden');
+    
+    // Send request to combine videos
+    fetch("{% url 'core:agent_final' project.id %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: new URLSearchParams({
+            'script_id': {{ script.id }},
+            'video_title': videoTitle
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Respuesta del servidor:', data);
+        
+        if (data.status === 'success') {
+            if (data.video_id) {
+                console.log(`✓ Video combinado exitosamente. ID: ${data.video_id}`);
+                
+                // Mostrar mensaje de éxito
+                alert('✓ Video combinado exitosamente!\n\nRedirigiendo al video...');
+                
+                // Redirect to video detail
+                window.location.href = `/videos/${data.video_id}/`;
+            } else {
+                // No debería llegar aquí, pero por si acaso
+                console.warn('Video combinado pero sin video_id en respuesta');
+                alert('Video procesado. Redirigiendo al proyecto...');
+                window.location.href = "{% url 'core:project_detail' project.id %}";
+            }
+        } else {
+            console.error('Error en la combinación:', data.message);
+            alert('Error al combinar videos:\n\n' + data.message);
+            
+            // Restore button state
+            combineBtn.disabled = false;
+            combineBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            combiningState.classList.add('hidden');
+        }
+    })
+    .catch(error => {
+        console.error('Error en fetch:', error);
+        alert('Error al combinar videos:\n\n' + error.message);
+        
+        // Restore button state
+        combineBtn.disabled = false;
+        combineBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        combiningState.classList.add('hidden');
+    });
+}
+</script>
+{% endblock %}
+

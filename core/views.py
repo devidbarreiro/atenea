@@ -8,7 +8,7 @@ from django.views.generic import (
 from django.views.generic.edit import FormView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -16,9 +16,10 @@ from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.core.paginator import Paginator
 
-from .models import Project, Video, Image, Script
+from .models import Project, Video, Image, Script, Scene
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
-from .services import ProjectService, VideoService, ImageService, APIService, N8nService, ValidationException, ServiceException, ImageGenerationException
+from .services import ProjectService, VideoService, ImageService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+from django.template.loader import render_to_string
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1152,6 +1153,454 @@ class ScriptRetryView(ServiceMixin, View):
         except Exception as e:
             messages.error(request, f'Error inesperado: {str(e)}')
             return redirect('core:script_detail', script_id=script.pk)
+
+
+# ====================
+# AGENT VIDEO FLOW
+# ====================
+
+class AgentCreateView(BreadcrumbMixin, View):
+    """Paso 1: Crear contenido (script o PDF)"""
+    template_name = 'agent/create.html'
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Agente de Video', 'url': None}
+        ]
+    
+    def get(self, request, project_id):
+        project = self.get_project()
+        
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        
+        return render(request, self.template_name, context)
+    
+    def post(self, request, project_id):
+        """
+        Guarda el contenido en sessionStorage (lado cliente) y redirige
+        El POST solo valida y redirige a configure
+        """
+        project = self.get_project()
+        
+        content_type = request.POST.get('content_type')
+        script_content = request.POST.get('script_content')
+        
+        if not content_type or not script_content:
+            messages.error(request, 'Debes proporcionar el contenido del script')
+            return redirect('core:agent_create', project_id=project_id)
+        
+        # El script se guarda en sessionStorage en el cliente
+        # Aquí solo redirigimos a configure
+        return redirect('core:agent_configure', project_id=project_id)
+
+
+class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 2: Procesar con IA y configurar escenas"""
+    template_name = 'agent/configure.html'
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Configurar Escenas', 'url': None}
+        ]
+    
+    def get(self, request, project_id):
+        """
+        Muestra pantalla de "Processing..." 
+        Si hay un script_id en la URL, muestra las escenas
+        """
+        project = self.get_project()
+        
+        script_id = request.GET.get('script_id')
+        
+        # Si hay script_id, cargar escenas
+        if script_id:
+            try:
+                script = Script.objects.get(id=script_id, project=project, agent_flow=True)
+                scenes = script.db_scenes.all().order_by('order')
+                
+                # Generar URLs firmadas para preview images
+                scenes_with_urls = []
+                for scene in scenes:
+                    scene_data = SceneService().get_scene_with_signed_urls(scene)
+                    scenes_with_urls.append(scene_data)
+                
+                context = {
+                    'project': project,
+                    'script': script,
+                    'scenes': scenes,
+                    'scenes_with_urls': scenes_with_urls,
+                    'breadcrumbs': self.get_breadcrumbs()
+                }
+                
+                return render(request, self.template_name, context)
+                
+            except Script.DoesNotExist:
+                messages.error(request, 'Script no encontrado')
+                return redirect('core:agent_create', project_id=project_id)
+        
+        # Si no hay script_id, mostrar pantalla inicial
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        
+        return render(request, self.template_name, context)
+    
+    def post(self, request, project_id):
+        """
+        Recibe el script desde el cliente y lo envía a n8n
+        """
+        project = self.get_project()
+        
+        # Obtener datos del POST
+        script_title = request.POST.get('title', 'Video con Agente')
+        script_content = request.POST.get('script_content')
+        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        
+        if not script_content:
+            messages.error(request, 'El contenido del script es requerido')
+            return redirect('core:agent_create', project_id=project_id)
+        
+        try:
+            # Crear Script con agent_flow=True
+            script = Script.objects.create(
+                project=project,
+                title=script_title,
+                original_script=script_content,
+                desired_duration_min=int(desired_duration_min),
+                agent_flow=True,  # Marcar como flujo del agente
+                status='pending'
+            )
+            
+            # Enviar a n8n
+            from .services import N8nService
+            n8n_service = N8nService()
+            
+            try:
+                n8n_service.send_script_for_processing(script)
+                
+                # Redirigir a la misma página con script_id para polling
+                return JsonResponse({
+                    'status': 'success',
+                    'script_id': script.id,
+                    'message': 'Script enviado para procesamiento'
+                })
+                
+            except Exception as e:
+                script.mark_as_error(str(e))
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Error al enviar script: {str(e)}'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error al crear script: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al crear script: {str(e)}'
+            }, status=500)
+
+
+class AgentScenesView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 3: Generar videos de las escenas"""
+    template_name = 'agent/scenes.html'
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Generar Escenas', 'url': None}
+        ]
+    
+    def get(self, request, project_id):
+        project = self.get_project()
+        
+        script_id = request.GET.get('script_id')
+        
+        if not script_id:
+            messages.error(request, 'Script ID requerido')
+            return redirect('core:agent_create', project_id=project_id)
+        
+        try:
+            script = Script.objects.get(id=script_id, project=project, agent_flow=True)
+            scenes = script.db_scenes.filter(is_included=True).order_by('order')
+            
+            # Generar URLs firmadas para cada escena
+            scenes_with_urls = []
+            for scene in scenes:
+                scene_data = SceneService().get_scene_with_signed_urls(scene)
+                scenes_with_urls.append(scene_data)
+            
+            context = {
+                'project': project,
+                'script': script,
+                'scenes': scenes,
+                'scenes_with_urls': scenes_with_urls,
+                'breadcrumbs': self.get_breadcrumbs()
+            }
+            
+            return render(request, self.template_name, context)
+            
+        except Script.DoesNotExist:
+            messages.error(request, 'Script no encontrado')
+            return redirect('core:agent_create', project_id=project_id)
+
+
+class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 4: Combinar videos y crear video final"""
+    template_name = 'agent/final.html'
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Video Final', 'url': None}
+        ]
+    
+    def get(self, request, project_id):
+        project = self.get_project()
+        
+        script_id = request.GET.get('script_id')
+        
+        if not script_id:
+            messages.error(request, 'Script ID requerido')
+            return redirect('core:agent_create', project_id=project_id)
+        
+        try:
+            script = Script.objects.get(id=script_id, project=project, agent_flow=True)
+            scenes = script.db_scenes.filter(
+                is_included=True,
+                video_status='completed'
+            ).order_by('order')
+            
+            # Generar URLs firmadas
+            scenes_with_urls = []
+            for scene in scenes:
+                scene_data = SceneService().get_scene_with_signed_urls(scene)
+                scenes_with_urls.append(scene_data)
+            
+            context = {
+                'project': project,
+                'script': script,
+                'scenes': scenes,
+                'scenes_with_urls': scenes_with_urls,
+                'breadcrumbs': self.get_breadcrumbs()
+            }
+            
+            return render(request, self.template_name, context)
+            
+        except Script.DoesNotExist:
+            messages.error(request, 'Script no encontrado')
+            return redirect('core:agent_create', project_id=project_id)
+    
+    def post(self, request, project_id):
+        """Combinar videos de escenas con FFmpeg"""
+        from .services import VideoCompositionService
+        from datetime import datetime
+        
+        project = self.get_project()
+        
+        script_id = request.POST.get('script_id')
+        video_title = request.POST.get('video_title')
+        
+        if not script_id or not video_title:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Script ID y título son requeridos'
+            }, status=400)
+        
+        try:
+            script = Script.objects.get(id=script_id, project=project, agent_flow=True)
+            scenes = script.db_scenes.filter(
+                is_included=True,
+                video_status='completed'
+            ).order_by('order')
+            
+            if scenes.count() == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No hay escenas completadas para combinar'
+                }, status=400)
+            
+            # Combinar videos con FFmpeg
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_filename = f"{timestamp}_{video_title.replace(' ', '_')}.mp4"
+            
+            composition_service = VideoCompositionService()
+            gcs_path = composition_service.combine_scene_videos(scenes, output_filename)
+            
+            # Calcular duración total
+            total_duration = sum(scene.duration_sec for scene in scenes)
+            
+            # Crear objeto Video final
+            video = Video.objects.create(
+                project=project,
+                title=video_title,
+                type='gemini_veo',  # Tipo genérico, podría ser mixto
+                status='completed',
+                script=f"Video generado por agente con {scenes.count()} escenas",
+                config={
+                    'agent_generated': True,
+                    'script_id': script.id,
+                    'num_scenes': scenes.count(),
+                    'scene_ids': [scene.id for scene in scenes]
+                },
+                gcs_path=gcs_path,
+                duration=total_duration,
+                metadata={
+                    'scenes': [
+                        {
+                            'scene_id': scene.scene_id,
+                            'ai_service': scene.ai_service,
+                            'duration_sec': scene.duration_sec
+                        }
+                        for scene in scenes
+                    ]
+                },
+                completed_at=timezone.now()
+            )
+            
+            # Asociar video final con el script
+            script.final_video = video
+            script.save(update_fields=['final_video'])
+            
+            logger.info(f"✓ Video final creado: {video.id} para script {script.id}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Video combinado exitosamente',
+                'video_id': video.id
+            })
+            
+        except Script.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Script no encontrado'
+            }, status=404)
+        except (ValidationException, ServiceException) as e:
+            logger.error(f"Error de servicio al combinar videos: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+        except Exception as e:
+            logger.error(f"Error inesperado al combinar videos: {e}")
+            logger.exception("Traceback completo:")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error inesperado: {str(e)}'
+            }, status=500)
+
+
+# ====================
+# SCENE ACTIONS
+# ====================
+
+class SceneGenerateView(ServiceMixin, View):
+    """Generar video para una escena"""
+    
+    def post(self, request, scene_id):
+        from .models import Scene
+        
+        try:
+            scene = get_object_or_404(Scene, pk=scene_id)
+            
+            # Generar video usando SceneService
+            scene_service = SceneService()
+            external_id = scene_service.generate_scene_video(scene)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Video de escena enviado para generación',
+                'external_id': external_id,
+                'scene_id': scene.id
+            })
+            
+        except ValidationException as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except Exception as e:
+            logger.error(f"Error al generar video de escena: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
+class SceneStatusView(View):
+    """Consultar estado de una escena (para polling)"""
+    
+    def get(self, request, scene_id):
+        from .models import Scene
+        
+        try:
+            scene = get_object_or_404(Scene, pk=scene_id)
+            
+            # Si está procesando y tiene external_id, consultar estado
+            if scene.video_status == 'processing' and scene.external_id:
+                try:
+                    scene_service = SceneService()
+                    status_data = scene_service.check_scene_video_status(scene)
+                    
+                    # Refrescar desde BD
+                    scene.refresh_from_db()
+                    
+                except Exception as e:
+                    logger.error(f"Error al consultar estado de escena {scene_id}: {e}")
+            
+            # Generar URLs firmadas
+            scene_data = SceneService().get_scene_with_signed_urls(scene)
+            
+            return JsonResponse({
+                'status': 'success',
+                'scene_id': scene.id,
+                'video_status': scene.video_status,
+                'preview_status': scene.preview_image_status,
+                'video_url': scene_data.get('video_url'),
+                'preview_url': scene_data.get('preview_image_url'),
+                'error_message': scene.error_message
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class SceneRegenerateView(View):
+    """Regenerar video de una escena (próximamente)"""
+    
+    def post(self, request, scene_id):
+        return JsonResponse({
+            'status': 'info',
+            'message': 'Función de regeneración disponible próximamente'
+        })
 
 
 # ====================

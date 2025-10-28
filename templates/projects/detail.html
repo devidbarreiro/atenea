@@ -13,6 +13,10 @@
             {% endif %}
         </div>
         <div class="flex gap-2">
+            <a href="{% url 'core:agent_create' project.id %}" 
+               class="bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 px-4 py-2 rounded-md text-sm font-medium transition-all shadow-md hover:shadow-lg flex items-center gap-2">
+                <span>✨</span> Generar Video con Agente
+            </a>
             <a href="{% url 'core:video_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 + Video
             </a>
