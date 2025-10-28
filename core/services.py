@@ -1768,48 +1768,59 @@ class VideoCompositionService:
             
             logger.info(f"=== {len(video_paths)} VIDEOS DESCARGADOS ===")
             
-            # Crear archivo de lista para FFmpeg concat
-            concat_file_path = os.path.join(temp_dir, 'concat_list.txt')
-            with open(concat_file_path, 'w', encoding='utf-8') as f:
-                for video_path in video_paths:
-                    # FFmpeg requiere rutas con formato específico
-                    # Usar rutas absolutas y escapar caracteres especiales
-                    escaped_path = video_path.replace("'", "'\\''")
-                    f.write(f"file '{escaped_path}'\n")
+            # Verificar streams de audio en cada video
+            logger.info("=== VERIFICANDO STREAMS DE AUDIO ===")
+            videos_with_audio = []
+            for video_path in video_paths:
+                has_audio = VideoCompositionService._check_audio_stream(video_path)
+                videos_with_audio.append(has_audio)
+                logger.info(f"  {os.path.basename(video_path)}: {'✓ Audio OK' if has_audio else '⚠️ Sin audio'}")
             
-            logger.info(f"Archivo de concatenación creado: {concat_file_path}")
-            
-            # Log del contenido del archivo concat para debug
-            with open(concat_file_path, 'r', encoding='utf-8') as f:
-                concat_content = f.read()
-                logger.info(f"=== CONTENIDO DE CONCAT_LIST.TXT ===")
-                for line in concat_content.splitlines():
-                    logger.info(f"  {line}")
-                logger.info(f"=== FIN CONCAT_LIST.TXT ===")
+            # Si algún video no tiene audio, usar estrategia especial
+            all_have_audio = all(videos_with_audio)
+            if not all_have_audio:
+                logger.warning("⚠️ Algunos videos no tienen audio - ajustando estrategia de concatenación")
             
             # Path de salida temporal
             output_path = os.path.join(temp_dir, 'combined_output.mp4')
             
-            # Ejecutar FFmpeg para combinar
-            # Re-encodear para asegurar compatibilidad entre diferentes servicios
-            # (HeyGen, Sora, Veo pueden tener diferentes codecs/resoluciones)
-            ffmpeg_command = [
-                'ffmpeg',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', concat_file_path,
+            # Estrategia: Usar filtro concat de FFmpeg en lugar de demuxer concat
+            # Esto es más robusto para videos de diferentes fuentes y evita desfases de audio
+            
+            # Construir comando FFmpeg con inputs individuales
+            ffmpeg_command = ['ffmpeg']
+            
+            # Añadir todos los videos como inputs
+            for video_path in video_paths:
+                ffmpeg_command.extend(['-i', video_path])
+            
+            # Construir filter_complex para concatenación
+            # Formato: [0:v][0:a][1:v][1:a]...[n:v][n:a]concat=n=N:v=1:a=1[outv][outa]
+            filter_parts = []
+            for i in range(len(video_paths)):
+                filter_parts.append(f"[{i}:v][{i}:a]")
+            
+            filter_complex = f"{''.join(filter_parts)}concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+            
+            ffmpeg_command.extend([
+                '-filter_complex', filter_complex,
+                '-map', '[outv]',
+                '-map', '[outa]',
                 '-c:v', 'libx264',  # Re-encodear video con H.264
-                '-preset', 'fast',  # Balance entre velocidad y calidad
+                '-preset', 'medium',  # Balance entre velocidad y calidad
                 '-crf', '23',  # Calidad constante (18-28, menor=mejor)
                 '-c:a', 'aac',  # Re-encodear audio con AAC
                 '-b:a', '192k',  # Bitrate de audio
+                '-ar', '48000',  # Sample rate consistente
                 '-movflags', '+faststart',  # Optimizar para streaming
                 '-y',  # Sobrescribir si existe
                 output_path
-            ]
+            ])
             
-            logger.info(f"Ejecutando FFmpeg con re-encoding:")
-            logger.info(f"  {' '.join(ffmpeg_command)}")
+            logger.info(f"Ejecutando FFmpeg con filter_complex concat:")
+            logger.info(f"  Número de videos: {len(video_paths)}")
+            logger.info(f"  Filter: {filter_complex}")
+            logger.info(f"  Comando: {' '.join(ffmpeg_command[:10])}... (truncado)")
             
             result = subprocess.run(
                 ffmpeg_command,
@@ -1820,9 +1831,16 @@ class VideoCompositionService:
             
             if result.returncode != 0:
                 error_msg = f"FFmpeg falló con código {result.returncode}\n"
-                error_msg += f"STDOUT: {result.stdout}\n"
-                error_msg += f"STDERR: {result.stderr}"
+                error_msg += f"=== STDOUT ===\n{result.stdout}\n"
+                error_msg += f"=== STDERR ===\n{result.stderr}"
                 logger.error(error_msg)
+                
+                # Detectar problemas específicos de audio
+                stderr_lower = result.stderr.lower()
+                if 'audio' in stderr_lower or 'stream' in stderr_lower:
+                    logger.error("⚠️ Posible problema de audio detectado")
+                    logger.error("Verificar que todos los videos tienen stream de audio")
+                
                 raise ServiceException(f"Error al combinar videos con FFmpeg: {result.stderr[:500]}")
             
             logger.info("✓ Videos combinados exitosamente con FFmpeg")
