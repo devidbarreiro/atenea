@@ -1795,12 +1795,33 @@ class VideoCompositionService:
                 ffmpeg_command.extend(['-i', video_path])
             
             # Construir filter_complex para concatenación
-            # Formato: [0:v][0:a][1:v][1:a]...[n:v][n:a]concat=n=N:v=1:a=1[outv][outa]
-            filter_parts = []
-            for i in range(len(video_paths)):
-                filter_parts.append(f"[{i}:v][{i}:a]")
+            # Si todos tienen audio: [0:v][0:a][1:v][1:a]...[n:v][n:a]concat=n=N:v=1:a=1[outv][outa]
+            # Si algunos no tienen audio: añadir anullsrc (audio silencioso) para los que no tienen
             
-            filter_complex = f"{''.join(filter_parts)}concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+            if all_have_audio:
+                # Todos tienen audio - estrategia simple
+                filter_parts = []
+                for i in range(len(video_paths)):
+                    filter_parts.append(f"[{i}:v][{i}:a]")
+                
+                filter_complex = f"{''.join(filter_parts)}concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+            else:
+                # Algunos no tienen audio - añadir audio silencioso donde falte
+                filter_lines = []
+                concat_inputs = []
+                
+                for i, has_audio in enumerate(videos_with_audio):
+                    if has_audio:
+                        concat_inputs.append(f"[{i}:v][{i}:a]")
+                    else:
+                        # Crear audio silencioso del mismo length que el video
+                        filter_lines.append(f"[{i}:v]anullsrc=channel_layout=stereo:sample_rate=48000[a{i}]")
+                        concat_inputs.append(f"[{i}:v][a{i}]")
+                
+                if filter_lines:
+                    filter_complex = ';'.join(filter_lines) + ';' + ''.join(concat_inputs) + f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+                else:
+                    filter_complex = ''.join(concat_inputs) + f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
             
             ffmpeg_command.extend([
                 '-filter_complex', filter_complex,
@@ -1918,6 +1939,48 @@ class VideoCompositionService:
         except Exception as e:
             logger.warning(f"Error al obtener duración: {e}")
             return 0.0
+    
+    @staticmethod
+    def _check_audio_stream(video_path: str) -> bool:
+        """
+        Verifica si un video tiene stream de audio usando FFprobe
+        
+        Args:
+            video_path: Path al archivo de video
+            
+        Returns:
+            True si tiene audio, False si no
+        """
+        import subprocess
+        
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'a:0',
+                    '-show_entries', 'stream=codec_name',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    video_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Si hay output, significa que encontró un stream de audio
+            has_audio = result.returncode == 0 and result.stdout.strip() != ''
+            
+            if has_audio:
+                codec = result.stdout.strip()
+                logger.debug(f"  Audio codec: {codec}")
+            
+            return has_audio
+                
+        except Exception as e:
+            logger.warning(f"Error al verificar audio stream: {e}")
+            # Por defecto, asumir que tiene audio si no se puede verificar
+            return True
 
 
 # ====================
