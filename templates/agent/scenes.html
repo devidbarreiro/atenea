@@ -105,13 +105,30 @@
                     <div class="mb-3">
                         <div class="flex items-center justify-between mb-1">
                             <label class="text-sm font-medium text-gray-700">Guión</label>
-                            <button class="text-xs text-blue-600 hover:text-blue-800">(Editar - próximamente)</button>
+                            <button 
+                                onclick="openEditModal({{ scene.id }})" 
+                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors">
+                                ✏️ Editar
+                            </button>
                         </div>
-                        <p class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">{{ scene.script_text|truncatewords:30 }}</p>
+                        <p id="script-preview-{{ scene.id }}" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">{{ scene.script_text|truncatewords:30 }}</p>
+                    </div>
+                    
+                    <!-- Service Info -->
+                    <div class="mb-3 flex items-center gap-2 text-xs text-gray-500">
+                        <span class="px-2 py-1 bg-gray-100 rounded">{{ scene.get_ai_service_display }}</span>
+                        {% if scene.ai_service == 'heygen' %}
+                        <span class="px-2 py-1 bg-purple-100 text-purple-700 rounded">Avatar V2</span>
+                        {% if scene.ai_config.avatar_id and scene.ai_config.voice_id %}
+                        <span class="text-green-600">✓ Configurado</span>
+                        {% else %}
+                        <span class="text-red-600">⚠️ Falta config</span>
+                        {% endif %}
+                        {% endif %}
                     </div>
 
                     <!-- Actions -->
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
                         {% if scene.video_status == 'pending' %}
                         <button 
                             onclick="generateScene({{ scene.id }})"
@@ -131,6 +148,25 @@
                             class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50">
                             Regenerar
                         </button>
+                        
+                        <!-- Version Selector -->
+                        <div class="relative ml-auto">
+                            <button 
+                                onclick="toggleVersions({{ scene.id }})"
+                                class="px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 flex items-center gap-1">
+                                <span>v{{ scene.version }}</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            
+                            <!-- Versions dropdown -->
+                            <div id="versions-{{ scene.id }}" class="hidden absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                                <div class="p-2">
+                                    <p class="text-xs text-gray-500 mb-2">Cargando versiones...</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {% if scene.error_message %}
@@ -158,6 +194,52 @@
             class="px-8 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             Continuar a Video Final →
         </button>
+    </div>
+</div>
+
+<!-- Modal de Edición -->
+<div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">Editar Escena</h3>
+            <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="space-y-4">
+            <!-- Script Text -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Guión</label>
+                <textarea id="editScriptText" rows="5" class="w-full px-3 py-2 border border-gray-300 rounded-md"></textarea>
+            </div>
+            
+            <!-- Service Selector -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Servicio IA</label>
+                <select id="editServiceSelect" onchange="updateEditConfig()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="gemini_veo">Gemini Veo</option>
+                    <option value="sora">Sora</option>
+                    <option value="heygen">HeyGen</option>
+                </select>
+            </div>
+            
+            <!-- Config Container -->
+            <div id="editConfigContainer" class="grid grid-cols-2 gap-4">
+                <!-- Se llenará dinámicamente -->
+            </div>
+        </div>
+        
+        <div class="flex justify-end gap-2 mt-6">
+            <button onclick="closeEditModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                Cancelar
+            </button>
+            <button onclick="saveEdit()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Guardar
+            </button>
+        </div>
     </div>
 </div>
 
@@ -333,6 +415,254 @@ async function checkAllScenesStatus() {
 function continueToFinal() {
     window.location.href = "{% url 'core:agent_final' project.id %}?script_id=" + scriptId;
 }
+
+// ===== MODAL DE EDICIÓN =====
+let currentEditSceneId = null;
+let avatarsCache = null;
+let voicesCache = null;
+
+// Cache para guardar datos de escenas
+const scenesData = {
+    {% for scene_data in scenes_with_urls %}
+    {{ scene_data.scene.id }}: {
+        script_text: `{{ scene_data.scene.script_text|escapejs }}`,
+        ai_service: '{{ scene_data.scene.ai_service }}',
+        ai_config: {{ scene_data.scene.ai_config|safe }}
+    },
+    {% endfor %}
+};
+
+function openEditModal(sceneId) {
+    currentEditSceneId = sceneId;
+    const scene = scenesData[sceneId];
+    
+    // Llenar datos
+    document.getElementById('editScriptText').value = scene.script_text;
+    document.getElementById('editServiceSelect').value = scene.ai_service;
+    
+    // Actualizar configuración
+    updateEditConfig();
+    
+    // Mostrar modal
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+    currentEditSceneId = null;
+}
+
+function updateEditConfig() {
+    const service = document.getElementById('editServiceSelect').value;
+    const container = document.getElementById('editConfigContainer');
+    const scene = scenesData[currentEditSceneId];
+    const config = scene.ai_config || {};
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
+                <select id="editDuration" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="5" ${config.duration == 5 ? 'selected' : ''}>5s</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8s</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Aspecto</label>
+                <select id="editAspectRatio" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="16:9" ${config.aspect_ratio == '16:9' || !config.aspect_ratio ? 'selected' : ''}>16:9</option>
+                    <option value="9:16" ${config.aspect_ratio == '9:16' ? 'selected' : ''}>9:16</option>
+                    <option value="1:1" ${config.aspect_ratio == '1:1' ? 'selected' : ''}>1:1</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        container.innerHTML = `
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
+                <select id="editDuration" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="4" ${config.duration == 4 ? 'selected' : ''}>4s</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8s</option>
+                    <option value="12" ${config.duration == 12 ? 'selected' : ''}>12s</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tamaño</label>
+                <select id="editSize" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="1280x720" ${config.size == '1280x720' || !config.size ? 'selected' : ''}>1280x720 (16:9)</option>
+                    <option value="720x1280" ${config.size == '720x1280' ? 'selected' : ''}>720x1280 (9:16)</option>
+                    <option value="1024x1024" ${config.size == '1024x1024' ? 'selected' : ''}>1024x1024 (1:1)</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'heygen') {
+        container.innerHTML = `
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
+                <select id="editAvatarId" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Voz</label>
+                <select id="editVoiceId" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+        `;
+        
+        // Cargar avatares y voces
+        loadHeyGenAssetsForEdit(config.avatar_id, config.voice_id);
+    }
+}
+
+async function loadHeyGenAssetsForEdit(selectedAvatarId, selectedVoiceId) {
+    try {
+        // Cargar avatares si no están en cache
+        if (!avatarsCache) {
+            const avatarResponse = await fetch('{% url "core:api_list_avatars" %}');
+            const avatarData = await avatarResponse.json();
+            avatarsCache = avatarData.avatars;
+        }
+        
+        // Cargar voces si no están en cache
+        if (!voicesCache) {
+            const voiceResponse = await fetch('{% url "core:api_list_voices" %}');
+            const voiceData = await voiceResponse.json();
+            voicesCache = voiceData.voices;
+        }
+        
+        // Poblar avatares
+        const avatarSelect = document.getElementById('editAvatarId');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        avatarsCache.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            option.selected = avatar.avatar_id === selectedAvatarId;
+            avatarSelect.appendChild(option);
+        });
+        
+        // Poblar voces
+        const voiceSelect = document.getElementById('editVoiceId');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        voicesCache.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            option.selected = voice.voice_id === selectedVoiceId;
+            voiceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando assets de HeyGen:', error);
+    }
+}
+
+async function saveEdit() {
+    const scriptText = document.getElementById('editScriptText').value;
+    const service = document.getElementById('editServiceSelect').value;
+    
+    const data = {
+        script_text: scriptText,
+        ai_service: service,
+        ai_config: {}
+    };
+    
+    // Recoger configuración según el servicio
+    if (service === 'gemini_veo') {
+        data.ai_config.duration = parseInt(document.getElementById('editDuration').value);
+        data.ai_config.aspect_ratio = document.getElementById('editAspectRatio').value;
+    } else if (service === 'sora') {
+        data.ai_config.duration = parseInt(document.getElementById('editDuration').value);
+        data.ai_config.size = document.getElementById('editSize').value;
+    } else if (service === 'heygen') {
+        data.ai_config.avatar_id = document.getElementById('editAvatarId').value;
+        data.ai_config.voice_id = document.getElementById('editVoiceId').value;
+    }
+    
+    try {
+        const response = await fetch(`/scenes/${currentEditSceneId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Escena actualizada');
+            closeEditModal();
+            location.reload(); // Recargar para mostrar cambios
+        } else {
+            alert('Error al guardar: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al guardar cambios');
+    }
+}
+
+// ===== VERSIONES =====
+async function toggleVersions(sceneId) {
+    const dropdown = document.getElementById(`versions-${sceneId}`);
+    
+    if (dropdown.classList.contains('hidden')) {
+        // Cargar y mostrar versiones
+        await loadVersions(sceneId);
+        dropdown.classList.remove('hidden');
+    } else {
+        dropdown.classList.add('hidden');
+    }
+}
+
+async function loadVersions(sceneId) {
+    const dropdown = document.getElementById(`versions-${sceneId}`);
+    
+    try {
+        const response = await fetch(`/scenes/${sceneId}/versions/`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            const versions = data.versions;
+            
+            dropdown.innerHTML = `
+                <div class="py-1">
+                    ${versions.map(v => `
+                        <button 
+                            onclick="changeVersion(${v.id}, ${sceneId})"
+                            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center justify-between ${v.is_included ? 'font-bold text-blue-600' : 'text-gray-700'}">
+                            <span>Versión ${v.version}</span>
+                            ${v.is_included ? '<span class="text-xs">✓</span>' : ''}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error cargando versiones:', error);
+        dropdown.innerHTML = '<div class="p-2 text-xs text-red-600">Error al cargar</div>';
+    }
+}
+
+function changeVersion(versionId, currentSceneId) {
+    if (confirm('¿Cambiar a esta versión? La versión actual se desactivará.')) {
+        // Aquí podrías implementar la lógica para cambiar de versión
+        // Por ahora, simplemente recargaremos mostrando la versión seleccionada
+        console.log(`Cambiar a versión ${versionId} desde escena ${currentSceneId}`);
+        alert('Funcionalidad de cambio de versión en desarrollo');
+    }
+}
+
+// Cerrar dropdowns al hacer click fuera
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('[onclick^="toggleVersions"]')) {
+        document.querySelectorAll('[id^="versions-"]').forEach(dropdown => {
+            dropdown.classList.add('hidden');
+        });
+    }
+});
 </script>
 {% endblock %}
 

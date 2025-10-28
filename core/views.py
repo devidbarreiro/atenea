@@ -1528,6 +1528,22 @@ class SceneGenerateView(ServiceMixin, View):
         try:
             scene = get_object_or_404(Scene, pk=scene_id)
             
+            # Validar configuración de HeyGen antes de generar
+            if scene.ai_service == 'heygen':
+                logger.info(f"Validando configuración de HeyGen para escena {scene_id}")
+                logger.info(f"  ai_config: {scene.ai_config}")
+                
+                if not scene.ai_config.get('avatar_id') or not scene.ai_config.get('voice_id'):
+                    error_msg = 'Debes configurar el avatar y la voz. Regresa al Paso 2 (Configurar) y selecciona un avatar y una voz para esta escena HeyGen.'
+                    logger.error(f"Escena {scene_id}: {error_msg}")
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': error_msg
+                    }, status=400)
+                    
+                logger.info(f"  ✓ Avatar ID: {scene.ai_config.get('avatar_id')}")
+                logger.info(f"  ✓ Voice ID: {scene.ai_config.get('voice_id')}")
+            
             # Generar video usando SceneService
             scene_service = SceneService()
             external_id = scene_service.generate_scene_video(scene)
@@ -1593,31 +1609,98 @@ class SceneStatusView(View):
             }, status=500)
 
 
-class SceneRegenerateView(View):
-    """Regenerar video de una escena"""
+class SceneUpdateConfigView(View):
+    """Actualizar configuración de una escena"""
     
     def post(self, request, scene_id):
         try:
             scene = get_object_or_404(Scene, id=scene_id)
             
-            # Verificar permisos
-            if not request.user.is_authenticated:
-                return JsonResponse({'status': 'error', 'message': 'No autorizado'}, status=401)
+            import json
+            data = json.loads(request.body)
             
-            # Resetear estado de la escena
-            scene.video_status = 'pending'
-            scene.external_id = None
-            scene.video_gcs_path = None
-            scene.error_message = None
-            scene.save(update_fields=['video_status', 'external_id', 'video_gcs_path', 'error_message', 'updated_at'])
+            logger.info(f"Actualizando configuración de escena {scene_id}: {data}")
             
-            # Generar nuevo video
-            scene_service = SceneService()
-            external_id = scene_service.generate_scene_video(scene)
+            # Actualizar ai_service si viene
+            if 'ai_service' in data:
+                scene.ai_service = data['ai_service']
+                logger.info(f"  ai_service actualizado a: {data['ai_service']}")
+            
+            # Actualizar ai_config
+            if 'ai_config' in data:
+                scene.ai_config.update(data['ai_config'])
+                logger.info(f"  ai_config actualizado: {scene.ai_config}")
+            
+            # Actualizar script_text si viene
+            if 'script_text' in data:
+                scene.script_text = data['script_text']
+                logger.info(f"  script_text actualizado")
+            
+            scene.save()
             
             return JsonResponse({
                 'status': 'success',
-                'message': 'Escena regenerada exitosamente',
+                'message': 'Configuración actualizada',
+                'ai_config': scene.ai_config  # Retornar para confirmación
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al actualizar configuración de escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
+class SceneRegenerateView(View):
+    """Regenerar video de una escena (crea nueva versión)"""
+    
+    def post(self, request, scene_id):
+        try:
+            original_scene = get_object_or_404(Scene, id=scene_id)
+            
+            logger.info(f"Regenerando escena {scene_id} (versión actual: {original_scene.version})")
+            
+            # Crear nueva versión de la escena
+            new_version = original_scene.version + 1
+            
+            new_scene = Scene.objects.create(
+                script=original_scene.script,
+                project=original_scene.project,
+                scene_id=original_scene.scene_id,
+                summary=original_scene.summary,
+                script_text=original_scene.script_text,
+                duration_sec=original_scene.duration_sec,
+                avatar=original_scene.avatar,
+                platform=original_scene.platform,
+                broll=original_scene.broll,
+                transition=original_scene.transition,
+                text_on_screen=original_scene.text_on_screen,
+                audio_notes=original_scene.audio_notes,
+                order=original_scene.order,
+                is_included=original_scene.is_included,
+                ai_service=original_scene.ai_service,
+                ai_config=original_scene.ai_config.copy(),
+                preview_image_gcs_path=original_scene.preview_image_gcs_path,
+                preview_image_status=original_scene.preview_image_status,
+                video_status='pending',
+                version=new_version,
+                parent_scene_id=original_scene.id
+            )
+            
+            # Marcar la versión anterior como no incluida
+            original_scene.is_included = False
+            original_scene.save(update_fields=['is_included', 'updated_at'])
+            
+            # Generar nuevo video
+            scene_service = SceneService()
+            external_id = scene_service.generate_scene_video(new_scene)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Nueva versión de escena creada',
+                'new_scene_id': new_scene.id,
+                'version': new_version,
                 'external_id': external_id
             })
             
@@ -1626,6 +1709,57 @@ class SceneRegenerateView(View):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Error al regenerar escena: {str(e)}'
+            }, status=500)
+
+
+class SceneVersionsView(View):
+    """Obtener todas las versiones de una escena"""
+    
+    def get(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            # Obtener todas las versiones (la actual y sus ancestros)
+            versions = []
+            
+            # Primero agregar la escena actual
+            scene_service = SceneService()
+            current_data = scene_service.get_scene_with_signed_urls(scene)
+            versions.append({
+                'id': scene.id,
+                'version': scene.version,
+                'created_at': scene.created_at.isoformat(),
+                'video_status': scene.video_status,
+                'is_included': scene.is_included,
+                'video_url': current_data.get('video_url'),
+                'preview_url': current_data.get('preview_url')
+            })
+            
+            # Luego agregar todas las versiones anteriores
+            parent = scene.parent_scene
+            while parent:
+                parent_data = scene_service.get_scene_with_signed_urls(parent)
+                versions.append({
+                    'id': parent.id,
+                    'version': parent.version,
+                    'created_at': parent.created_at.isoformat(),
+                    'video_status': parent.video_status,
+                    'is_included': parent.is_included,
+                    'video_url': parent_data.get('video_url'),
+                    'preview_url': parent_data.get('preview_url')
+                })
+                parent = parent.parent_scene
+            
+            return JsonResponse({
+                'status': 'success',
+                'versions': versions
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al obtener versiones de escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
             }, status=500)
 
 

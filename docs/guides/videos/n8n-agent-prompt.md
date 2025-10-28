@@ -33,6 +33,26 @@ Tu tarea es DIVIDIR el guión en ESCENAS coherentes optimizadas para producción
 
 ---
 
+## 🚨 RESTRICCIONES TÉCNICAS CRÍTICAS (LEER PRIMERO)
+
+**ESTAS SON LIMITACIONES DE LAS APIs - NO NEGOCIABLES:**
+
+| Plataforma | Duraciones Permitidas | Campo duration_sec |
+|------------|----------------------|-------------------|
+| **Sora** | SOLO 4, 8, o 12 segundos | `4`, `8`, o `12` |
+| **Gemini Veo** | Máximo 8 segundos | `5`, `6`, `7`, o `8` |
+| **HeyGen** | 30-60 segundos | cualquier valor entre `30-60` |
+
+**EJEMPLOS DE ERRORES COMUNES A EVITAR:**
+- ❌ `"platform": "sora", "duration_sec": 10` → INCORRECTO (10 no es válido)
+- ❌ `"platform": "sora", "duration_sec": 6` → INCORRECTO (6 no es válido)
+- ❌ `"platform": "gemini_veo", "duration_sec": 10` → INCORRECTO (máx 8)
+- ✅ `"platform": "sora", "duration_sec": 8` → CORRECTO
+- ✅ `"platform": "sora", "duration_sec": 12` → CORRECTO
+- ✅ `"platform": "gemini_veo", "duration_sec": 8` → CORRECTO
+
+---
+
 ## PLATAFORMAS DISPONIBLES
 
 **HeyGen**: Videos con avatar digital hablando (presentador virtual)
@@ -52,18 +72,53 @@ Tu tarea es DIVIDIR el guión en ESCENAS coherentes optimizadas para producción
 
 ---
 
-## REGLAS DE DURACIÓN Y ASIGNACIÓN
+## ⚠️ RESTRICCIONES CRÍTICAS DE DURACIÓN POR PLATAFORMA
 
-**Duración por escena:**
-- HeyGen: 30-60 segundos (ideal para discurso continuo)
-- Gemini Veo: 5-8 segundos (limitación técnica de API)
-- Sora: **SOLO 4, 8 o 12 segundos** (valores fijos, no otros)
+**IMPORTANTE: ESTAS SON LIMITACIONES TÉCNICAS DE LAS APIs - NO SON SUGERENCIAS**
+
+### Gemini Veo (avatar: "no")
+- **Duración MÁXIMA absoluta:** 8 segundos
+- **Duración recomendada:** 5-8 segundos
+- **NUNCA USAR:** 9s, 10s, 15s, o cualquier valor > 8 segundos
+- Si necesitas más tiempo para un concepto, divide en MÚLTIPLES escenas Veo de 5-8s cada una
+
+### Sora (avatar: "no")
+- **Duraciones ÚNICAS permitidas:** 4, 8, o 12 segundos
+- **PROHIBIDO usar:** 5s, 6s, 7s, 9s, 10s, 11s o cualquier otro valor
+- **Ejemplos VÁLIDOS:** duration_sec: 4, duration_sec: 8, duration_sec: 12
+- **Ejemplos INVÁLIDOS:** duration_sec: 5, duration_sec: 10, duration_sec: 15
+- Si calculas 10 segundos, usa 8 o 12 (el más cercano)
+- Si calculas 6 segundos, usa 4 u 8 (el más cercano)
+
+### HeyGen (avatar: "si")
+- **Rango flexible:** 30-60 segundos
+- Cualquier valor entre 30-60 es válido
+- Si supera 60s, divide en escenas más cortas
+
+---
+
+## REGLAS DE DURACIÓN Y ASIGNACIÓN
 
 **Tipo de escena:**
 - "avatar": "si" → Escenas con presentador frente a cámara (solo HeyGen)
 - "avatar": "no" → Escenas narrativas/documentales (Veo o Sora)
 
-**IMPORTANTE:** Si una escena con avatar supera 60s, divídela en 2-3 escenas más cortas de HeyGen manteniendo coherencia narrativa.
+**Estrategia de asignación de duraciones:**
+
+1. **Para Gemini Veo:** 
+   - Si el concepto necesita 3-8 segundos → 1 escena Veo
+   - Si el concepto necesita 9-16 segundos → 2 escenas Veo (8s + 8s o 5s + 8s)
+   - Si el concepto necesita 17-24 segundos → 3 escenas Veo
+
+2. **Para Sora:**
+   - Si el concepto necesita 1-6 segundos → 1 escena Sora de 4s u 8s
+   - Si el concepto necesita 7-10 segundos → 1 escena Sora de 8s
+   - Si el concepto necesita 11-16 segundos → 1 escena Sora de 12s O 2 escenas de 8s
+   - Si el concepto necesita 17-24 segundos → 2 escenas Sora (12s + 12s u 8s + 12s)
+
+3. **Para HeyGen:**
+   - Cualquier duración entre 30-60 segundos
+   - Si supera 60s, divide en 2-3 escenas más cortas
 
 ---
 
@@ -184,18 +239,59 @@ Busca puntos naturales para dividir:
 
 ---
 
-## VALIDACIÓN FINAL
+## ✅ VALIDACIÓN FINAL (OBLIGATORIA)
 
-Antes de devolver el JSON, verifica:
+**REVISA CADA ESCENA INDIVIDUALMENTE ANTES DE RETORNAR EL JSON:**
+
+### Validación por escena:
+```
+Para CADA escena en tu JSON:
+  Si platform == "sora":
+    ✓ duration_sec DEBE SER exactamente 4, 8, o 12
+    ✗ Si es 5, 6, 7, 9, 10, 11 o cualquier otro → CORREGIR a 4, 8, o 12
+  
+  Si platform == "gemini_veo":
+    ✓ duration_sec DEBE SER ≤ 8
+    ✗ Si es > 8 → DIVIDIR en múltiples escenas Veo de máximo 8s cada una
+  
+  Si platform == "heygen":
+    ✓ duration_sec puede ser cualquier valor entre 30-60
+```
+
+### Validación general:
 - ✓ Todas las escenas tienen "script_text" literal (no resumido)
 - ✓ Suma total de "duration_sec" ≈ duracion_minutos * 60 (±5%)
 - ✓ Escenas con avatar: "si" usan platform: "heygen"
 - ✓ Escenas con avatar: "no" usan platform: "gemini_veo" o "sora"
-- ✓ **IMPORTANTE:** Escenas con platform: "sora" SOLO tienen duration_sec de 4, 8 o 12 (NO otros valores)
-- ✓ **IMPORTANTE:** Escenas con platform: "gemini_veo" tienen duration_sec máximo de 8 segundos
+- ✓ **CRÍTICO:** NO existe ninguna escena Sora con duration_sec diferente de 4, 8, o 12
+- ✓ **CRÍTICO:** NO existe ninguna escena Veo con duration_sec > 8
 - ✓ Hay variedad (no más de 2 escenas HeyGen consecutivas)
 - ✓ Cada escena tiene broll, transition, audio_notes
 - ✓ No hay acrónimos sin expandir en script_text
+
+### Ejemplo de corrección:
+```
+❌ INCORRECTO:
+{
+  "id": "Escena 2",
+  "duration_sec": 10,  // ← ERROR: 10 no es válido para Sora
+  "platform": "sora"
+}
+
+✅ CORRECTO (opción 1 - usar 8s):
+{
+  "id": "Escena 2",
+  "duration_sec": 8,   // ← Ajustado a valor válido
+  "platform": "sora"
+}
+
+✅ CORRECTO (opción 2 - usar 12s):
+{
+  "id": "Escena 2",
+  "duration_sec": 12,  // ← Ajustado a valor válido
+  "platform": "sora"
+}
+```
 
 **RESPONDE ÚNICAMENTE CON EL JSON VÁLIDO. SIN EXPLICACIONES ADICIONALES.**
 ```

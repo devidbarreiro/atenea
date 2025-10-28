@@ -53,6 +53,8 @@ urlpatterns = [
     # Agent Scene Actions
     path('scenes/<int:scene_id>/generate/', views.SceneGenerateView.as_view(), name='scene_generate'),
     path('scenes/<int:scene_id>/status/', views.SceneStatusView.as_view(), name='scene_status'),
+    path('scenes/<int:scene_id>/update/', views.SceneUpdateConfigView.as_view(), name='scene_update'),
     path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
+    path('scenes/<int:scene_id>/versions/', views.SceneVersionsView.as_view(), name='scene_versions'),
 ]
 
