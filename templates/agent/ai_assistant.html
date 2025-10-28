@@ -1,0 +1,392 @@
+{% extends 'base.html' %}
+
+{% block title %}Asistente de Escritura IA - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Progress Bar -->
+    <div class="mb-8">
+        <div class="flex items-center justify-center space-x-4">
+            <!-- Step 1: Content (Active) -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-blue-600 text-white font-bold">
+                    1
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-900">Contenido</span>
+            </div>
+            <div class="w-16 h-1 bg-gray-300"></div>
+            
+            <!-- Step 2: Configure (Inactive) -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-300 text-gray-600 font-bold">
+                    2
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Configurar</span>
+            </div>
+            <div class="w-16 h-1 bg-gray-300"></div>
+            
+            <!-- Step 3: Scenes (Inactive) -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-300 text-gray-600 font-bold">
+                    3
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Escenas</span>
+            </div>
+            <div class="w-16 h-1 bg-gray-300"></div>
+            
+            <!-- Step 4: Final (Inactive) -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-300 text-gray-600 font-bold">
+                    4
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Final</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="text-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Asistente de Escritura con IA</h1>
+        <p class="text-gray-600">Escribe tu guión con ayuda de nuestro asistente inteligente</p>
+    </div>
+
+    <!-- Layout 60/40 -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 h-[calc(100vh-300px)]">
+        <!-- Left: Script Editor (60%) -->
+        <div class="lg:col-span-3 flex flex-col">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-900">Tu Guión</h2>
+                    <div class="flex items-center space-x-2">
+                        <span id="char-count" class="text-sm text-gray-500">0 caracteres</span>
+                        <button id="clear-script" 
+                                class="text-sm text-red-600 hover:text-red-700 px-3 py-1 rounded hover:bg-red-50">
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+                
+                <textarea 
+                    id="script-content" 
+                    class="flex-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm"
+                    placeholder="El asistente escribirá aquí tu guión mientras conversas con él. También puedes editarlo directamente en cualquier momento..."
+                ></textarea>
+                
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <label for="desired-duration" class="text-sm font-medium text-gray-700">Duración deseada:</label>
+                            <input 
+                                type="number" 
+                                id="desired-duration" 
+                                value="5" 
+                                min="1" 
+                                max="60"
+                                class="ml-2 w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                            <span class="ml-1 text-sm text-gray-600">minutos</span>
+                        </div>
+                        
+                        <button 
+                            id="finish-script"
+                            class="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            Continuar con este guión →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Chat (40%) -->
+        <div class="lg:col-span-2 flex flex-col">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col">
+                <!-- Chat Header -->
+                <div class="px-6 py-4 border-b border-gray-200 bg-blue-50">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center mr-3">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Asistente IA</h3>
+                            <p class="text-xs text-gray-600">Potenciado por GPT-4</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Messages -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <!-- Los mensajes se agregarán aquí dinámicamente -->
+                </div>
+
+                <!-- Loading indicator -->
+                <div id="chat-loading" class="hidden px-6 py-2">
+                    <div class="flex items-center text-gray-500">
+                        <svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-sm">El asistente está escribiendo...</span>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="px-6 py-4 border-t border-gray-200">
+                    <form id="chat-form" class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            id="user-message" 
+                            placeholder="Escribe tu mensaje..."
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            autocomplete="off"
+                        >
+                        <button 
+                            type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Estado de la sesión
+let sessionData = null;
+let lastKnownScript = '';
+
+// Inicializar sesión al cargar la página
+async function initSession() {
+    try {
+        const response = await fetch("{% url 'core:agent_ai_assistant_init' project.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const data = await response.json();
+        sessionData = data;
+        
+        // Guardar en sessionStorage
+        sessionStorage.setItem('ai_assistant_session', JSON.stringify(sessionData));
+        
+        // Mostrar mensaje inicial del asistente
+        const initialMessage = sessionData.messages[sessionData.messages.length - 1];
+        if (initialMessage && initialMessage.role === 'assistant') {
+            const parts = initialMessage.content.split('---SCRIPT---');
+            addMessageToChat('assistant', parts[0].trim());
+        }
+        
+    } catch (error) {
+        console.error('Error al inicializar sesión:', error);
+        alert('Error al conectar con el asistente. Por favor recarga la página.');
+    }
+}
+
+// Agregar mensaje al chat
+function addMessageToChat(role, content) {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+    
+    const bubble = document.createElement('div');
+    bubble.className = `max-w-[80%] rounded-lg px-4 py-2 ${
+        role === 'user' 
+            ? 'bg-blue-600 text-white' 
+            : 'bg-gray-100 text-gray-900'
+    }`;
+    bubble.innerHTML = content.replace(/\n/g, '<br>');
+    
+    messageDiv.appendChild(bubble);
+    chatMessages.appendChild(messageDiv);
+    
+    // Scroll al final
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Enviar mensaje al asistente
+async function sendMessage(userMessage) {
+    // Agregar mensaje del usuario al chat
+    addMessageToChat('user', userMessage);
+    
+    // Mostrar loading
+    document.getElementById('chat-loading').classList.remove('hidden');
+    document.getElementById('user-message').disabled = true;
+    
+    try {
+        // Obtener el guión actual
+        const currentScript = document.getElementById('script-content').value;
+        
+        const response = await fetch("{% url 'core:agent_ai_assistant_chat' project.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                session_data: sessionData,
+                user_message: userMessage,
+                current_script: currentScript
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            // Actualizar sesión
+            sessionData.messages = data.messages;
+            sessionData.script = data.updated_script;
+            sessionStorage.setItem('ai_assistant_session', JSON.stringify(sessionData));
+            
+            // Mostrar respuesta del asistente
+            addMessageToChat('assistant', data.assistant_message);
+            
+            // Actualizar el guión
+            document.getElementById('script-content').value = data.updated_script;
+            lastKnownScript = data.updated_script;
+            updateCharCount();
+            checkScriptContent();
+            
+        } else {
+            alert('Error: ' + data.message);
+        }
+        
+    } catch (error) {
+        console.error('Error al enviar mensaje:', error);
+        alert('Error al comunicarse con el asistente. Por favor intenta de nuevo.');
+    } finally {
+        // Ocultar loading
+        document.getElementById('chat-loading').classList.add('hidden');
+        document.getElementById('user-message').disabled = false;
+        document.getElementById('user-message').focus();
+    }
+}
+
+// Manejar envío del formulario
+document.getElementById('chat-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const input = document.getElementById('user-message');
+    const message = input.value.trim();
+    
+    if (message && sessionData) {
+        sendMessage(message);
+        input.value = '';
+    }
+});
+
+// Detectar cambios manuales en el guión
+let scriptChangeTimeout = null;
+document.getElementById('script-content').addEventListener('input', function() {
+    updateCharCount();
+    checkScriptContent();
+    
+    // Detección de cambios manuales (debounce de 2 segundos)
+    clearTimeout(scriptChangeTimeout);
+    scriptChangeTimeout = setTimeout(() => {
+        const currentScript = this.value;
+        
+        // Si el usuario cambió el guión manualmente
+        if (currentScript !== lastKnownScript && sessionData) {
+            console.log('Usuario editó el guión manualmente');
+            lastKnownScript = currentScript;
+            sessionData.script = currentScript;
+            sessionStorage.setItem('ai_assistant_session', JSON.stringify(sessionData));
+        }
+    }, 2000);
+});
+
+// Actualizar contador de caracteres
+function updateCharCount() {
+    const content = document.getElementById('script-content').value;
+    document.getElementById('char-count').textContent = `${content.length} caracteres`;
+}
+
+// Verificar si hay contenido en el guión para habilitar el botón
+function checkScriptContent() {
+    const content = document.getElementById('script-content').value.trim();
+    const button = document.getElementById('finish-script');
+    button.disabled = content.length < 50; // Mínimo 50 caracteres
+}
+
+// Limpiar guión
+document.getElementById('clear-script').addEventListener('click', function() {
+    if (confirm('¿Estás seguro de que quieres limpiar todo el guión?')) {
+        document.getElementById('script-content').value = '';
+        lastKnownScript = '';
+        updateCharCount();
+        checkScriptContent();
+    }
+});
+
+// Finalizar y continuar
+document.getElementById('finish-script').addEventListener('click', function() {
+    const scriptContent = document.getElementById('script-content').value.trim();
+    const duration = document.getElementById('desired-duration').value;
+    
+    if (scriptContent.length < 50) {
+        alert('El guión debe tener al menos 50 caracteres');
+        return;
+    }
+    
+    // Guardar en sessionStorage para el siguiente paso
+    sessionStorage.setItem('agentContent', JSON.stringify({
+        type: 'script',
+        content: scriptContent,
+        duration: duration
+    }));
+    
+    // Redirigir a configure
+    window.location.href = "{% url 'core:agent_configure' project.id %}";
+});
+
+// Inicializar al cargar
+document.addEventListener('DOMContentLoaded', function() {
+    // Intentar recuperar sesión existente
+    const savedSession = sessionStorage.getItem('ai_assistant_session');
+    
+    if (savedSession) {
+        sessionData = JSON.parse(savedSession);
+        
+        // Restaurar chat
+        const messages = sessionData.messages.filter(m => m.role !== 'system');
+        messages.forEach(msg => {
+            if (msg.role === 'assistant') {
+                const parts = msg.content.split('---SCRIPT---');
+                addMessageToChat('assistant', parts[0].trim());
+            } else if (msg.role === 'user') {
+                // Limpiar el mensaje de edición manual si existe
+                let content = msg.content;
+                if (content.includes('[El usuario ha editado el guión manualmente')) {
+                    const match = content.match(/\n\n(.+)$/s);
+                    if (match) content = match[1];
+                }
+                addMessageToChat('user', content);
+            }
+        });
+        
+        // Restaurar guión
+        if (sessionData.script) {
+            document.getElementById('script-content').value = sessionData.script;
+            lastKnownScript = sessionData.script;
+            updateCharCount();
+            checkScriptContent();
+        }
+    } else {
+        // Crear nueva sesión
+        initSession();
+    }
+});
+</script>
+{% endblock %}
+

@@ -51,53 +51,69 @@
     </div>
 
     <!-- Content Options -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <!-- Write Script Card -->
-        <div id="script-card" 
-             onclick="selectContentType('script')"
-             class="content-card cursor-pointer bg-white rounded-lg border-2 border-blue-600 p-8 hover:shadow-xl transition-all duration-300">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Write Script Manually Card -->
+        <div id="script-manual-card" 
+             onclick="selectContentType('script-manual')"
+             class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 p-6 hover:border-blue-600 hover:shadow-xl transition-all duration-300">
             <div class="flex flex-col items-center text-center">
-                <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
                 </div>
                 <h3 class="text-xl font-semibold text-gray-900 mb-2">Escribir Guión</h3>
-                <p class="text-gray-600">Escribe o pega el guión de tu video directamente</p>
+                <p class="text-gray-600 text-sm">Escribe o pega el guión de tu video directamente</p>
+            </div>
+        </div>
+
+        <!-- Write Script with AI Card -->
+        <div id="script-ai-card" 
+             onclick="selectContentType('script-ai')"
+             class="content-card cursor-pointer bg-white rounded-lg border-2 border-blue-600 p-6 hover:shadow-xl transition-all duration-300">
+            <div class="flex flex-col items-center text-center">
+                <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Escribir Guión con IA</h3>
+                <p class="text-gray-600 text-sm">Crea tu guión con ayuda de un asistente inteligente</p>
+                <span class="mt-2 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Recomendado</span>
             </div>
         </div>
 
         <!-- Upload PDF Card (Disabled) -->
-        <div class="content-card bg-gray-100 rounded-lg border-2 border-gray-300 p-8 opacity-50 cursor-not-allowed">
+        <div class="content-card bg-gray-100 rounded-lg border-2 border-gray-300 p-6 opacity-50 cursor-not-allowed">
             <div class="flex flex-col items-center text-center">
                 <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mb-4">
                     <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                     </svg>
                 </div>
-                <h3 class="text-xl font-semibold text-gray-700 mb-2">Subir PDF</h3>
-                <p class="text-gray-500">Sube un documento PDF con tu contenido</p>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Subir Guión</h3>
+                <p class="text-gray-500 text-sm">Sube un documento con tu guión</p>
                 <span class="mt-2 text-xs font-medium text-gray-500 bg-gray-200 px-3 py-1 rounded-full">Próximamente</span>
             </div>
         </div>
     </div>
 
-    <!-- Script Form -->
-    <div id="script-form" class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+    <!-- Script Form - Manual -->
+    <div id="script-manual-form" class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 hidden">
         <h2 class="text-2xl font-bold text-gray-900 mb-2">Tu Guión</h2>
         <p class="text-gray-600 mb-6">Ingresa el guión para tu video</p>
 
-        <form id="agentCreateForm" method="post">
+        <form id="agentCreateFormManual" method="post">
             {% csrf_token %}
-            <input type="hidden" name="content_type" value="script">
+            <input type="hidden" name="content_type" value="script-manual">
 
             <!-- Script Content -->
             <div class="mb-6">
-                <label for="script_content" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="script_content_manual" class="block text-sm font-medium text-gray-700 mb-2">
                     Contenido del Guión
                 </label>
                 <textarea 
-                    id="script_content" 
+                    id="script_content_manual" 
                     name="script_content" 
                     rows="12"
                     placeholder="Escribe tu guión de video aquí..."
@@ -111,12 +127,12 @@
 
             <!-- Duration -->
             <div class="mb-6">
-                <label for="desired_duration_min" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="desired_duration_min_manual" class="block text-sm font-medium text-gray-700 mb-2">
                     Duración Deseada (minutos)
                 </label>
                 <input 
                     type="number" 
-                    id="desired_duration_min" 
+                    id="desired_duration_min_manual" 
                     name="desired_duration_min" 
                     value="5" 
                     min="1" 
@@ -139,10 +155,27 @@
             </div>
         </form>
     </div>
+
+    <!-- Script Form - AI Assisted -->
+    <div id="script-ai-form" class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Escritura Asistida con IA</h2>
+        <p class="text-gray-600 mb-6">Nuestro asistente te ayudará a crear el guión perfecto</p>
+
+        <div class="flex justify-center">
+            <a href="{% url 'core:agent_ai_assistant' project.id %}" 
+               class="px-8 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm inline-flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                Comenzar con IA
+            </a>
+        </div>
+    </div>
 </div>
 
 <script>
 function selectContentType(type) {
+<<<<<<< HEAD
     // Por ahora solo script está disponible
     if (type === 'script') {
         document.getElementById('script-card').classList.add('border-blue-600');
@@ -155,6 +188,40 @@ document.getElementById('agentCreateForm').addEventListener('submit', function(e
     
     const scriptContent = document.getElementById('script_content').value;
     const duration = document.getElementById('desired_duration_min').value;
+=======
+    // Resetear todos los cards
+    document.getElementById('script-manual-card').classList.remove('border-blue-600');
+    document.getElementById('script-manual-card').classList.add('border-gray-300');
+    document.getElementById('script-ai-card').classList.remove('border-blue-600');
+    document.getElementById('script-ai-card').classList.add('border-gray-300');
+    
+    // Ocultar todos los forms
+    document.getElementById('script-manual-form').classList.add('hidden');
+    document.getElementById('script-ai-form').classList.add('hidden');
+    
+    // Mostrar el form seleccionado
+    if (type === 'script-manual') {
+        document.getElementById('script-manual-card').classList.add('border-blue-600');
+        document.getElementById('script-manual-card').classList.remove('border-gray-300');
+        document.getElementById('script-manual-form').classList.remove('hidden');
+        document.getElementById('script-manual-form').scrollIntoView({ behavior: 'smooth' });
+    } else if (type === 'script-ai') {
+        document.getElementById('script-ai-card').classList.add('border-blue-600');
+        document.getElementById('script-ai-card').classList.remove('border-gray-300');
+        document.getElementById('script-ai-form').classList.remove('hidden');
+        document.getElementById('script-ai-form').scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+// Por defecto, seleccionar "Escribir con IA"
+selectContentType('script-ai');
+
+document.getElementById('agentCreateFormManual').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const scriptContent = document.getElementById('script_content_manual').value;
+    const duration = document.getElementById('desired_duration_min_manual').value;
+>>>>>>> 4f5b2eb (feat: add OpenAI script assistant service and UI integration)
     
     if (!scriptContent.trim()) {
         alert('Por favor ingresa un guión');

@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -1512,6 +1513,100 @@ class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Error inesperado: {str(e)}'
+            }, status=500)
+
+
+class AgentAIAssistantView(BreadcrumbMixin, View):
+    """Vista para el asistente de escritura con IA"""
+    template_name = 'agent/ai_assistant.html'
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Asistente IA', 'url': None}
+        ]
+    
+    def get(self, request, project_id):
+        project = self.get_project()
+        
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        
+        return render(request, self.template_name, context)
+
+
+class AgentAIAssistantInitView(View):
+    """API para inicializar sesión de chat con el asistente"""
+    
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+    
+    def post(self, request, project_id):
+        """Inicializa una nueva sesión de chat"""
+        try:
+            from .services import OpenAIScriptAssistantService
+            
+            service = OpenAIScriptAssistantService()
+            session_data = service.create_chat_session()
+            
+            return JsonResponse({
+                'status': 'success',
+                **session_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al inicializar sesión IA: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class AgentAIAssistantChatView(View):
+    """API para enviar mensajes al asistente"""
+    
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+    
+    def post(self, request, project_id):
+        """Envía un mensaje y obtiene respuesta del asistente"""
+        try:
+            import json
+            from .services import OpenAIScriptAssistantService
+            
+            data = json.loads(request.body)
+            session_data = data.get('session_data')
+            user_message = data.get('user_message')
+            current_script = data.get('current_script', '')
+            
+            if not session_data or not user_message:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Datos incompletos'
+                }, status=400)
+            
+            service = OpenAIScriptAssistantService()
+            result = service.send_message(session_data, user_message, current_script)
+            
+            return JsonResponse({
+                'status': 'success',
+                **result
+            })
+            
+        except Exception as e:
+            logger.error(f"Error en chat IA: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
             }, status=500)
 
 

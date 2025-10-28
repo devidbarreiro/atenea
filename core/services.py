@@ -2153,3 +2153,147 @@ class RedisService:
         except Exception as e:
             logger.error(f"Error al obtener resultado de Redis: {e}")
             return None
+
+
+# ====================
+# OPENAI SCRIPT ASSISTANT SERVICE
+# ====================
+
+class OpenAIScriptAssistantService:
+    """Servicio para asistencia de escritura de guiones con OpenAI GPT-4"""
+    
+    def __init__(self):
+        """Inicializa el cliente de OpenAI"""
+        if not settings.OPENAI_API_KEY:
+            raise ValidationException('OPENAI_API_KEY no está configurada')
+        
+        from openai import OpenAI
+        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.model = "gpt-4"
+        
+        # Prompt del sistema para guiar al asistente
+        self.system_prompt = """Eres un asistente experto en redacción de guiones para videos. Tu objetivo es ayudar al usuario a crear un guión efectivo y bien estructurado mediante una conversación natural.
+
+Tu proceso debe ser:
+1. Hacer preguntas específicas sobre el contenido del video (tema, objetivo, audiencia, duración, tono, etc.)
+2. A medida que el usuario responda, ir construyendo el guión progresivamente
+3. Mostrar siempre el guión completo actualizado después de cada iteración
+4. El usuario puede editar el guión directamente, y tú debes adaptar tus siguientes sugerencias basándote en esos cambios
+
+IMPORTANTE: 
+- Cuando actualices el guión, debes mostrar TODO el guión completo, no solo la parte que cambió
+- El guión debe estar listo para ser leído/narrado directamente
+- Sé conciso en tus preguntas y explicaciones
+- Adapta el tono y estilo del guión según las preferencias del usuario
+- Si el usuario hace cambios manuales al guión, reconócelos y adapta tus siguientes sugerencias
+
+Formato de respuesta:
+Tu respuesta debe tener DOS partes separadas por "---SCRIPT---":
+1. ANTES del separador: Tu mensaje conversacional (pregunta o comentario)
+2. DESPUÉS del separador: El guión completo actualizado (solo el texto del guión, sin formato especial)
+
+Ejemplo:
+Entiendo que quieres hacer un video sobre marketing digital. ¿Cuál es la duración aproximada que tienes en mente?
+---SCRIPT---
+Bienvenidos al mundo del marketing digital. Hoy vamos a explorar las estrategias más efectivas para hacer crecer tu negocio en línea."""
+    
+    def create_chat_session(self) -> Dict:
+        """
+        Crea una nueva sesión de chat
+        
+        Returns:
+            Dict con 'session_id' y 'messages' iniciales
+        """
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # Mensaje inicial del asistente
+        initial_messages = [
+            {
+                "role": "system",
+                "content": self.system_prompt
+            },
+            {
+                "role": "assistant",
+                "content": "¡Hola! Soy tu asistente para escribir guiones. Voy a ayudarte a crear un guión profesional para tu video.\n\nPara empezar, cuéntame: ¿De qué va a tratar tu video?\n---SCRIPT---\n"
+            }
+        ]
+        
+        return {
+            "session_id": session_id,
+            "messages": initial_messages,
+            "script": ""
+        }
+    
+    def send_message(self, session_data: Dict, user_message: str, current_script: str = None) -> Dict:
+        """
+        Envía un mensaje al asistente y obtiene respuesta
+        
+        Args:
+            session_data: Datos de la sesión (con historial de mensajes)
+            user_message: Mensaje del usuario
+            current_script: Guión actual (si el usuario lo editó manualmente)
+        
+        Returns:
+            Dict con:
+                - assistant_message: Mensaje del asistente
+                - updated_script: Guión actualizado
+                - messages: Historial completo actualizado
+        """
+        try:
+            messages = session_data.get("messages", [])
+            
+            # Si el usuario editó el guión manualmente, informar al asistente
+            if current_script and current_script != session_data.get("script", ""):
+                user_message = f"[El usuario ha editado el guión manualmente. Nuevo contenido del guión:\n{current_script}\n]\n\n{user_message}"
+            
+            # Agregar mensaje del usuario
+            messages.append({
+                "role": "user",
+                "content": user_message
+            })
+            
+            # Llamar a OpenAI
+            logger.info(f"Enviando mensaje a OpenAI GPT-4 (historial: {len(messages)} mensajes)")
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            assistant_reply = response.choices[0].message.content
+            
+            # Agregar respuesta del asistente al historial
+            messages.append({
+                "role": "assistant",
+                "content": assistant_reply
+            })
+            
+            # Separar el mensaje del guión
+            if "---SCRIPT---" in assistant_reply:
+                parts = assistant_reply.split("---SCRIPT---")
+                assistant_message = parts[0].strip()
+                updated_script = parts[1].strip() if len(parts) > 1 else ""
+            else:
+                # Si no hay separador, todo es mensaje
+                assistant_message = assistant_reply
+                updated_script = current_script or ""
+            
+            logger.info(f"✓ Respuesta recibida de OpenAI (script length: {len(updated_script)})")
+            
+            return {
+                "assistant_message": assistant_message,
+                "updated_script": updated_script,
+                "messages": messages,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error al comunicar con OpenAI: {e}")
+            raise ServiceException(f"Error al procesar mensaje: {str(e)}")

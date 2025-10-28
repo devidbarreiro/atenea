@@ -46,6 +46,9 @@ urlpatterns = [
     
     # Agent Video Flow
     path('projects/<int:project_id>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
+    path('projects/<int:project_id>/agent/ai-assistant/', views.AgentAIAssistantView.as_view(), name='agent_ai_assistant'),
+    path('projects/<int:project_id>/agent/ai-assistant/init/', views.AgentAIAssistantInitView.as_view(), name='agent_ai_assistant_init'),
+    path('projects/<int:project_id>/agent/ai-assistant/chat/', views.AgentAIAssistantChatView.as_view(), name='agent_ai_assistant_chat'),
     path('projects/<int:project_id>/agent/configure/', views.AgentConfigureView.as_view(), name='agent_configure'),
     path('projects/<int:project_id>/agent/scenes/', views.AgentScenesView.as_view(), name='agent_scenes'),
     path('projects/<int:project_id>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
