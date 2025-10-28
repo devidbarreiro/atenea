@@ -1750,17 +1750,23 @@ class VideoCompositionService:
             
             # Descargar todos los videos de GCS al directorio temporal
             video_paths = []
+            logger.info(f"=== ORDEN DE ESCENAS PARA CONCATENACIÓN ===")
+            
             for idx, scene in enumerate(scenes):
+                logger.info(f"  [{idx}] Escena {scene.scene_id} (order={scene.order}, service={scene.ai_service})")
+                
                 # Extraer blob name del GCS path
                 blob_name = scene.video_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
                 blob = gcs_storage.bucket.blob(blob_name)
                 
-                # Descargar a archivo temporal
-                temp_video_path = os.path.join(temp_dir, f"scene_{idx:03d}.mp4")
+                # Descargar a archivo temporal con orden explícito
+                temp_video_path = os.path.join(temp_dir, f"scene_{scene.order:03d}_{scene.scene_id.replace(' ', '_')}.mp4")
                 blob.download_to_filename(temp_video_path)
                 video_paths.append(temp_video_path)
                 
-                logger.info(f"Descargado: {scene.scene_id} -> {temp_video_path}")
+                logger.info(f"    ✓ Descargado: {temp_video_path} ({os.path.getsize(temp_video_path)} bytes)")
+            
+            logger.info(f"=== {len(video_paths)} VIDEOS DESCARGADOS ===")
             
             # Crear archivo de lista para FFmpeg concat
             concat_file_path = os.path.join(temp_dir, 'concat_list.txt')
@@ -1773,28 +1779,43 @@ class VideoCompositionService:
             
             logger.info(f"Archivo de concatenación creado: {concat_file_path}")
             
+            # Log del contenido del archivo concat para debug
+            with open(concat_file_path, 'r', encoding='utf-8') as f:
+                concat_content = f.read()
+                logger.info(f"=== CONTENIDO DE CONCAT_LIST.TXT ===")
+                for line in concat_content.splitlines():
+                    logger.info(f"  {line}")
+                logger.info(f"=== FIN CONCAT_LIST.TXT ===")
+            
             # Path de salida temporal
             output_path = os.path.join(temp_dir, 'combined_output.mp4')
             
             # Ejecutar FFmpeg para combinar
-            # Usar codec copy para no re-encodear (más rápido)
+            # Re-encodear para asegurar compatibilidad entre diferentes servicios
+            # (HeyGen, Sora, Veo pueden tener diferentes codecs/resoluciones)
             ffmpeg_command = [
                 'ffmpeg',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concat_file_path,
-                '-c', 'copy',  # Copy streams sin re-encodear
+                '-c:v', 'libx264',  # Re-encodear video con H.264
+                '-preset', 'fast',  # Balance entre velocidad y calidad
+                '-crf', '23',  # Calidad constante (18-28, menor=mejor)
+                '-c:a', 'aac',  # Re-encodear audio con AAC
+                '-b:a', '192k',  # Bitrate de audio
+                '-movflags', '+faststart',  # Optimizar para streaming
                 '-y',  # Sobrescribir si existe
                 output_path
             ]
             
-            logger.info(f"Ejecutando FFmpeg: {' '.join(ffmpeg_command)}")
+            logger.info(f"Ejecutando FFmpeg con re-encoding:")
+            logger.info(f"  {' '.join(ffmpeg_command)}")
             
             result = subprocess.run(
                 ffmpeg_command,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minutos máximo
+                timeout=600  # 10 minutos máximo (re-encoding toma más tiempo)
             )
             
             if result.returncode != 0:
@@ -1829,7 +1850,7 @@ class VideoCompositionService:
             return gcs_full_path
             
         except subprocess.TimeoutExpired:
-            raise ServiceException("FFmpeg timeout: el proceso tardó más de 5 minutos")
+            raise ServiceException("FFmpeg timeout: el proceso tardó más de 10 minutos")
         except Exception as e:
             logger.error(f"Error al combinar videos: {e}")
             raise ServiceException(f"Error al combinar videos: {str(e)}")

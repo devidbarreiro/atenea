@@ -1664,10 +1664,21 @@ class SceneRegenerateView(View):
             # Crear nueva versión de la escena
             new_version = original_scene.version + 1
             
+            # Modificar scene_id para la nueva versión (debido a unique_together constraint)
+            # Extraer el scene_id base sin el sufijo de versión anterior si existe
+            base_scene_id = original_scene.scene_id
+            if ' v' in base_scene_id:
+                base_scene_id = base_scene_id.split(' v')[0]
+            
+            new_scene_id = f"{base_scene_id} v{new_version}" if new_version > 1 else base_scene_id
+            
+            logger.info(f"  scene_id original: {original_scene.scene_id}")
+            logger.info(f"  scene_id nuevo: {new_scene_id}")
+            
             new_scene = Scene.objects.create(
                 script=original_scene.script,
                 project=original_scene.project,
-                scene_id=original_scene.scene_id,
+                scene_id=new_scene_id,
                 summary=original_scene.summary,
                 script_text=original_scene.script_text,
                 duration_sec=original_scene.duration_sec,
