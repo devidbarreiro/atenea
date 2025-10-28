@@ -57,7 +57,7 @@ Tu tarea es DIVIDIR el guión en ESCENAS coherentes optimizadas para producción
 **Duración por escena:**
 - HeyGen: 30-60 segundos (ideal para discurso continuo)
 - Gemini Veo: 5-8 segundos (limitación técnica de API)
-- Sora: 4-12 segundos (flexible)
+- Sora: **SOLO 4, 8 o 12 segundos** (valores fijos, no otros)
 
 **Tipo de escena:**
 - "avatar": "si" → Escenas con presentador frente a cámara (solo HeyGen)
@@ -191,6 +191,8 @@ Antes de devolver el JSON, verifica:
 - ✓ Suma total de "duration_sec" ≈ duracion_minutos * 60 (±5%)
 - ✓ Escenas con avatar: "si" usan platform: "heygen"
 - ✓ Escenas con avatar: "no" usan platform: "gemini_veo" o "sora"
+- ✓ **IMPORTANTE:** Escenas con platform: "sora" SOLO tienen duration_sec de 4, 8 o 12 (NO otros valores)
+- ✓ **IMPORTANTE:** Escenas con platform: "gemini_veo" tienen duration_sec máximo de 8 segundos
 - ✓ Hay variedad (no más de 2 escenas HeyGen consecutivas)
 - ✓ Cada escena tiene broll, transition, audio_notes
 - ✓ No hay acrónimos sin expandir en script_text

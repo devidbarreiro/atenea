@@ -54,8 +54,5 @@ urlpatterns = [
     path('scenes/<int:scene_id>/generate/', views.SceneGenerateView.as_view(), name='scene_generate'),
     path('scenes/<int:scene_id>/status/', views.SceneStatusView.as_view(), name='scene_status'),
     path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
-    
-    # HeyGen assets
-    path('heygen/assets/', views.HeyGenAssetsView.as_view(), name='heygen_assets'),
 ]
 

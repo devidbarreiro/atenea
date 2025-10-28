@@ -1629,39 +1629,6 @@ class SceneRegenerateView(View):
             }, status=500)
 
 
-class HeyGenAssetsView(View):
-    """Obtener avatares y voces de HeyGen para configuración"""
-    
-    def get(self, request):
-        try:
-            from .ai_services.heygen import HeyGenClient
-            
-            if not settings.HEYGEN_API_KEY:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'HEYGEN_API_KEY no configurada'
-                }, status=500)
-            
-            client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
-            
-            # Obtener avatares y voces
-            avatars = client.list_avatars()
-            voices = client.list_voices()
-            
-            return JsonResponse({
-                'status': 'success',
-                'avatars': avatars,
-                'voices': voices
-            })
-            
-        except Exception as e:
-            logger.error(f"Error al obtener assets de HeyGen: {e}")
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Error al obtener assets: {str(e)}'
-            }, status=500)
-
-
 # ====================
 # WEBHOOK INTEGRATION
 # ====================
