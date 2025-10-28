@@ -1475,7 +1475,7 @@ This is a preview thumbnail for a video, make it visually engaging and represent
     
     def _generate_sora_scene_video(self, scene):
         """Genera video de escena con OpenAI Sora"""
-        from .ai_services.sora import SoraClient
+        from .ai_services.sora import SoraClient, SORA_DURATIONS
         
         if not settings.OPENAI_API_KEY:
             raise ValidationException('OPENAI_API_KEY no está configurada')
@@ -1492,6 +1492,17 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         model = scene.ai_config.get('sora_model', 'sora-2')
         duration = int(scene.ai_config.get('duration', 8))
         size = scene.ai_config.get('size', '1280x720')
+        
+        # Validar y ajustar duración para Sora (solo 4, 8, 12 segundos)
+        if duration not in SORA_DURATIONS:
+            # Encontrar la duración más cercana
+            closest_duration = min(SORA_DURATIONS, key=lambda x: abs(x - duration))
+            logger.warning(f"Duración {duration}s no válida para Sora. Ajustando a {closest_duration}s")
+            duration = closest_duration
+            
+            # Actualizar la configuración de la escena
+            scene.ai_config['duration'] = duration
+            scene.save(update_fields=['ai_config', 'updated_at'])
         
         response = client.generate_video(
             prompt=prompt,

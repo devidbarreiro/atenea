@@ -89,6 +89,7 @@ Tu tarea es DIVIDIR el guión en ESCENAS coherentes optimizadas para producción
 - Escenas de acción o dramatización
 - Planos creativos o artísticos
 - Transiciones con efectos
+- **DURACIÓN FIJA:** Solo 4, 8 o 12 segundos (no otros valores)
 
 **Regla de oro:** Alterna entre escenas con avatar (HeyGen) y escenas visuales (Veo/Sora) para mantener dinamismo. No uses más de 2 escenas HeyGen consecutivas.
 

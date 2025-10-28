@@ -1594,13 +1594,72 @@ class SceneStatusView(View):
 
 
 class SceneRegenerateView(View):
-    """Regenerar video de una escena (próximamente)"""
+    """Regenerar video de una escena"""
     
     def post(self, request, scene_id):
-        return JsonResponse({
-            'status': 'info',
-            'message': 'Función de regeneración disponible próximamente'
-        })
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            # Verificar permisos
+            if not request.user.is_authenticated:
+                return JsonResponse({'status': 'error', 'message': 'No autorizado'}, status=401)
+            
+            # Resetear estado de la escena
+            scene.video_status = 'pending'
+            scene.external_id = None
+            scene.video_gcs_path = None
+            scene.error_message = None
+            scene.save(update_fields=['video_status', 'external_id', 'video_gcs_path', 'error_message', 'updated_at'])
+            
+            # Generar nuevo video
+            scene_service = SceneService()
+            external_id = scene_service.generate_scene_video(scene)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Escena regenerada exitosamente',
+                'external_id': external_id
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al regenerar escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al regenerar escena: {str(e)}'
+            }, status=500)
+
+
+class HeyGenAssetsView(View):
+    """Obtener avatares y voces de HeyGen para configuración"""
+    
+    def get(self, request):
+        try:
+            from .ai_services.heygen import HeyGenClient
+            
+            if not settings.HEYGEN_API_KEY:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'HEYGEN_API_KEY no configurada'
+                }, status=500)
+            
+            client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
+            
+            # Obtener avatares y voces
+            avatars = client.list_avatars()
+            voices = client.list_voices()
+            
+            return JsonResponse({
+                'status': 'success',
+                'avatars': avatars,
+                'voices': voices
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al obtener assets de HeyGen: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al obtener assets: {str(e)}'
+            }, status=500)
 
 
 # ====================

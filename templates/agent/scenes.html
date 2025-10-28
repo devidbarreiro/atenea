@@ -128,9 +128,8 @@
                         
                         <button 
                             onclick="regenerateScene({{ scene.id }})"
-                            class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
-                            title="Próximamente">
-                            Regenerar (próximamente)
+                            class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50">
+                            Regenerar
                         </button>
                     </div>
 
@@ -222,7 +221,33 @@ function generateScene(sceneId) {
 }
 
 function regenerateScene(sceneId) {
-    alert('Función de regeneración disponible próximamente');
+    if (!confirm('¿Regenerar esta escena? Se creará un nuevo video.')) {
+        return;
+    }
+    
+    console.log(`Regenerando escena ${sceneId}...`);
+    
+    fetch(`/scenes/${sceneId}/regenerate/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log(`✓ Escena ${sceneId} regenerada. External ID: ${data.external_id}`);
+            // Recargar página para mostrar el nuevo estado
+            location.reload();
+        } else {
+            console.error(`Error al regenerar escena ${sceneId}:`, data.message);
+            alert('Error al regenerar escena: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error(`Error en fetch para regenerar escena ${sceneId}:`, error);
+        alert('Error al regenerar escena: ' + error.message);
+    });
 }
 
 function startPolling() {
