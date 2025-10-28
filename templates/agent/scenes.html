@@ -346,7 +346,25 @@ async function checkAllScenesStatus() {
     let errorCount = 0;
     let needsReload = false;
     
-    for (const sceneId of sceneIds) {
+    // Filtrar solo escenas que no están completadas o con error
+    const activeSceneIds = sceneIds.filter(sceneId => {
+        const status = sceneStatuses[sceneId]?.videoStatus;
+        return status !== 'completed' && status !== 'error';
+    });
+    
+    console.log(`Polling ${activeSceneIds.length}/${sceneIds.length} escenas activas`);
+    
+    // Si no hay escenas activas, parar polling
+    if (activeSceneIds.length === 0) {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            console.log('✓ No hay escenas activas - polling detenido automáticamente');
+        }
+        return;
+    }
+    
+    for (const sceneId of activeSceneIds) {
         try {
             const response = await fetch(`/scenes/${sceneId}/status/`);
             
@@ -364,25 +382,28 @@ async function checkAllScenesStatus() {
                 // Detectar cambio de estado
                 if (oldStatus !== newStatus) {
                     console.log(`Escena ${sceneId}: ${oldStatus} → ${newStatus}`);
-                    needsReload = true; // Necesitamos recargar para mostrar el video
+                    needsReload = true; // Necesitamos actualizar UI
                 }
                 
                 sceneStatuses[sceneId] = {
                     videoStatus: newStatus,
                     videoUrl: data.video_url
                 };
-                
-                // Contar estados
-                if (newStatus === 'completed') {
-                    completedCount++;
-                } else if (newStatus === 'processing') {
-                    processingCount++;
-                } else if (newStatus === 'error') {
-                    errorCount++;
-                }
             }
         } catch (error) {
             console.error(`Error checking scene ${sceneId}:`, error);
+        }
+    }
+    
+    // Contar todos los estados (incluyendo los que ya estaban completados)
+    for (const sceneId of sceneIds) {
+        const status = sceneStatuses[sceneId]?.videoStatus;
+        if (status === 'completed') {
+            completedCount++;
+        } else if (status === 'processing') {
+            processingCount++;
+        } else if (status === 'error') {
+            errorCount++;
         }
     }
     
@@ -392,8 +413,9 @@ async function checkAllScenesStatus() {
     const continueBtn = document.getElementById('continueBtn');
     if (completedCount >= totalScenes) {
         continueBtn.disabled = false;
-        continueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        continueBtn.classList.add('animate-pulse');
+        continueBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-blue-600');
+        continueBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'animate-pulse');
+        continueBtn.innerHTML = '✅ Continuar a Video Final →';
         
         // Detener polling
         if (pollInterval) {
@@ -403,17 +425,50 @@ async function checkAllScenesStatus() {
         }
     }
     
-    // Recargar página si hubo cambios de estado para actualizar videos
-    if (needsReload && (completedCount > 0 || errorCount > 0)) {
-        console.log('Recargando página para actualizar videos...');
-        setTimeout(() => {
-            location.reload();
-        }, 1000);
+    // Actualizar UI sin recargar página
+    if (needsReload) {
+        console.log('Actualizando UI sin recargar página...');
+        updateSceneUI();
     }
 }
 
 function continueToFinal() {
     window.location.href = "{% url 'core:agent_final' project.id %}?script_id=" + scriptId;
+}
+
+function updateSceneUI() {
+    // Actualizar el estado visual de cada escena sin recargar
+    for (const sceneId of sceneIds) {
+        const sceneData = sceneStatuses[sceneId];
+        if (sceneData) {
+            const sceneElement = document.querySelector(`[data-scene-id="${sceneId}"]`);
+            if (sceneElement) {
+                const statusElement = sceneElement.querySelector('[data-status]');
+                const videoElement = sceneElement.querySelector('video');
+                
+                // Actualizar estado
+                if (statusElement) {
+                    statusElement.textContent = sceneData.videoStatus;
+                    statusElement.className = getStatusClass(sceneData.videoStatus);
+                }
+                
+                // Actualizar video si está disponible
+                if (videoElement && sceneData.videoUrl) {
+                    videoElement.src = sceneData.videoUrl;
+                    videoElement.style.display = 'block';
+                }
+            }
+        }
+    }
+}
+
+function getStatusClass(status) {
+    switch (status) {
+        case 'completed': return 'px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800';
+        case 'processing': return 'px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800';
+        case 'error': return 'px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800';
+        default: return 'px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800';
+    }
 }
 
 // ===== MODAL DE EDICIÓN =====

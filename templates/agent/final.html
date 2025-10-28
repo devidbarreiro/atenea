@@ -156,7 +156,8 @@ function combineVideos() {
     }
     
     // Confirmar acción
-    if (!confirm(`¿Combinar ${{{ scenes.count }}} escenas en un video final?\n\nTítulo: "${videoTitle}"`)) {
+    const sceneCount = {{ scenes.count }};
+    if (!confirm(`¿Combinar ${sceneCount} escenas en un video final?\n\nTítulo: "${videoTitle}"`)) {
         return;
     }
     
