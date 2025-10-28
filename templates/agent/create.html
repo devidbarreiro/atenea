@@ -175,20 +175,6 @@
 
 <script>
 function selectContentType(type) {
-<<<<<<< HEAD
-    // Por ahora solo script está disponible
-    if (type === 'script') {
-        document.getElementById('script-card').classList.add('border-blue-600');
-        document.getElementById('script-form').scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-document.getElementById('agentCreateForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const scriptContent = document.getElementById('script_content').value;
-    const duration = document.getElementById('desired_duration_min').value;
-=======
     // Resetear todos los cards
     document.getElementById('script-manual-card').classList.remove('border-blue-600');
     document.getElementById('script-manual-card').classList.add('border-gray-300');
@@ -221,7 +207,6 @@ document.getElementById('agentCreateFormManual').addEventListener('submit', func
     
     const scriptContent = document.getElementById('script_content_manual').value;
     const duration = document.getElementById('desired_duration_min_manual').value;
->>>>>>> 4f5b2eb (feat: add OpenAI script assistant service and UI integration)
     
     if (!scriptContent.trim()) {
         alert('Por favor ingresa un guión');
