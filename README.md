@@ -1,6 +1,31 @@
 # Atenea 🎬
 
-Plataforma centralizada para generación de contenido de video con IA. Integra múltiples servicios de IA (HeyGen, Gemini Veo) para crear videos de forma automatizada.
+Plataforma centralizada para generación de contenido de video e imágenes con IA. Integra múltiples servicios de IA (HeyGen, Gemini Veo, OpenAI) para crear contenido de forma automatizada.
+
+## 🚀 Inicio Rápido
+
+### 👨‍💻 Frontend Developer (Nuevo Aquí?)
+**[→ Guía de Frontend](docs/frontend/GETTING_STARTED.md)** - Todo lo que necesitas para empezar
+
+**Stack**: Tailwind CSS + HTMX + Alpine.js + Django Templates  
+**Tiempo de setup**: 5 minutos  
+**No necesitas**: Node.js, npm, webpack, o build tools complejos
+
+### 🔧 Backend Developer
+Sigue las instrucciones de instalación abajo.
+
+---
+
+## 📚 Documentación Completa
+
+**[→ Documentación Principal](docs/README.md)**
+
+- **[Frontend](docs/frontend/)** - Tailwind, HTMX, Alpine, componentes
+- **[Backend](docs/architecture/)** - Django, Service Layer, arquitectura
+- **[Getting Started](docs/getting-started/)** - Tutoriales para empezar
+- **[Guías](docs/guides/)** - Cómo hacer tareas específicas
+
+---
 
 ## Requisitos
 
