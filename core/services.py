@@ -1197,6 +1197,793 @@ class ImageService:
 
 
 # ====================
+# SCENE SERVICE
+# ====================
+
+class SceneService:
+    """Servicio para manejar escenas del agente de video"""
+    
+    def __init__(self):
+        self.image_service = ImageService()
+        self.video_service = VideoService()
+    
+    @staticmethod
+    def create_scenes_from_n8n_data(script, scenes_data: List[Dict]) -> List:
+        """
+        Crea objetos Scene desde los datos procesados por n8n
+        
+        Args:
+            script: Objeto Script al que pertenecen las escenas
+            scenes_data: Lista de dicts con datos de escenas desde n8n
+            
+        Returns:
+            Lista de objetos Scene creados
+        
+        Raises:
+            ValidationException: Si los datos son inválidos
+        """
+        from .models import Scene
+        
+        created_scenes = []
+        
+        for idx, scene_data in enumerate(scenes_data):
+            try:
+                # Validar campos requeridos
+                required_fields = ['id', 'summary', 'script_text', 'duration_sec', 'avatar', 'platform']
+                for field in required_fields:
+                    if field not in scene_data:
+                        raise ValidationException(f"Campo requerido '{field}' faltante en escena {idx + 1}")
+                
+                # Determinar ai_service inicial basado en platform de n8n
+                ai_service = scene_data.get('platform', 'gemini_veo').lower()
+                if ai_service == 'hedra':  # Por si viene de prompts antiguos
+                    ai_service = 'gemini_veo'
+                if ai_service not in ['gemini_veo', 'sora', 'heygen']:
+                    ai_service = 'gemini_veo'  # Default
+                
+                # Preparar config básica según el servicio
+                ai_config = {}
+                if ai_service == 'heygen' and scene_data.get('avatar') == 'si':
+                    # Config por defecto para HeyGen (se puede editar después)
+                    ai_config = {
+                        'avatar_id': '',  # El usuario lo configurará
+                        'voice_id': '',   # El usuario lo configurará
+                        'voice_speed': 1.0,
+                        'voice_pitch': 50,
+                        'voice_emotion': 'Excited'
+                    }
+                elif ai_service == 'gemini_veo':
+                    ai_config = {
+                        'veo_model': 'veo-2.0-generate-001',
+                        'duration': min(8, scene_data.get('duration_sec', 8)),  # Max 8s
+                        'aspect_ratio': '16:9',
+                        'sample_count': 1,
+                        'enhance_prompt': True,
+                        'person_generation': 'allow_adult',
+                        'compression_quality': 'optimized'
+                    }
+                elif ai_service == 'sora':
+                    ai_config = {
+                        'sora_model': 'sora-2',
+                        'duration': min(12, scene_data.get('duration_sec', 8)),  # Max 12s
+                        'size': '1280x720'
+                    }
+                
+                # Crear escena
+                scene = Scene.objects.create(
+                    script=script,
+                    project=script.project,
+                    scene_id=scene_data.get('id'),
+                    summary=scene_data.get('summary', ''),
+                    script_text=scene_data.get('script_text', ''),
+                    duration_sec=scene_data.get('duration_sec', 0),
+                    avatar=scene_data.get('avatar', 'no'),
+                    platform=scene_data.get('platform', 'gemini_veo'),
+                    broll=scene_data.get('broll', []),
+                    transition=scene_data.get('transition', 'corte'),
+                    text_on_screen=scene_data.get('text_on_screen', ''),
+                    audio_notes=scene_data.get('audio_notes', ''),
+                    order=idx,
+                    is_included=True,
+                    ai_service=ai_service,
+                    ai_config=ai_config,
+                    preview_image_status='pending',
+                    video_status='pending'
+                )
+                
+                created_scenes.append(scene)
+                logger.info(f"Escena creada: {scene.scene_id} para script {script.id}")
+                
+            except Exception as e:
+                logger.error(f"Error al crear escena {idx + 1}: {e}")
+                # Continuar con las demás escenas
+        
+        logger.info(f"✓ {len(created_scenes)} escenas creadas para script {script.id}")
+        return created_scenes
+    
+    def generate_preview_image(self, scene):
+        """
+        Genera imagen preview para una escena usando Gemini Image
+        
+        Args:
+            scene: Objeto Scene
+            
+        Returns:
+            GCS path de la imagen generada
+            
+        Raises:
+            ImageGenerationException: Si falla la generación
+        """
+        from .models import Scene
+        
+        try:
+            # Marcar como generando
+            scene.mark_preview_as_generating()
+            
+            # Construir prompt optimizado para el preview
+            prompt = f"""
+Create a cinematic preview image for a video scene.
+
+Scene summary: {scene.summary}
+Scene content: {scene.script_text[:200]}...
+
+Visual elements to include: {', '.join(scene.broll[:3]) if scene.broll else 'general scene'}
+
+Style: Photorealistic, professional video production, cinematic lighting, high quality, 16:9 aspect ratio.
+This is a preview thumbnail for a video, make it visually engaging and representative of the content.
+"""
+            
+            # Usar ImageService con Gemini
+            client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
+            
+            result = client.generate_image_from_text(
+                prompt=prompt,
+                aspect_ratio='16:9',
+                response_modalities=['Image']
+            )
+            
+            # Subir a GCS
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            gcs_destination = f"scene_previews/project_{scene.project.id}/scene_{scene.id}/{timestamp}_preview.png"
+            
+            logger.info(f"Guardando preview de escena {scene.scene_id} en GCS: {gcs_destination}")
+            gcs_path = gcs_storage.upload_from_bytes(
+                file_content=result['image_data'],
+                destination_path=gcs_destination,
+                content_type='image/png'
+            )
+            
+            # Actualizar scene
+            scene.mark_preview_as_completed(gcs_path)
+            
+            logger.info(f"✓ Preview generado para escena {scene.scene_id}: {gcs_path}")
+            return gcs_path
+            
+        except Exception as e:
+            error_msg = f"Error al generar preview: {str(e)}"
+            logger.error(f"✗ {error_msg} para escena {scene.scene_id}")
+            scene.mark_preview_as_error(error_msg)
+            raise ImageGenerationException(error_msg)
+    
+    def generate_scene_video(self, scene):
+        """
+        Genera video para una escena según su ai_service configurado
+        
+        Args:
+            scene: Objeto Scene
+            
+        Returns:
+            external_id del video generado
+            
+        Raises:
+            VideoGenerationException: Si falla la generación
+        """
+        try:
+            # Validar que la configuración esté completa
+            if not scene.ai_service:
+                raise ValidationException("La escena no tiene servicio de IA configurado")
+            
+            # Marcar como procesando
+            scene.mark_video_as_processing()
+            
+            # Generar según el servicio
+            if scene.ai_service == 'heygen':
+                external_id = self._generate_heygen_scene_video(scene)
+            elif scene.ai_service == 'gemini_veo':
+                external_id = self._generate_veo_scene_video(scene)
+            elif scene.ai_service == 'sora':
+                external_id = self._generate_sora_scene_video(scene)
+            else:
+                raise ValidationException(f"Servicio de IA no soportado: {scene.ai_service}")
+            
+            # Guardar external_id
+            scene.external_id = external_id
+            scene.save(update_fields=['external_id', 'updated_at'])
+            
+            logger.info(f"✓ Video de escena {scene.scene_id} enviado. External ID: {external_id}")
+            return external_id
+            
+        except Exception as e:
+            error_msg = f"Error al generar video de escena: {str(e)}"
+            logger.error(f"✗ {error_msg}")
+            scene.mark_video_as_error(error_msg)
+            raise VideoGenerationException(error_msg)
+    
+    def _generate_heygen_scene_video(self, scene):
+        """Genera video de escena con HeyGen"""
+        from .ai_services.heygen import HeyGenClient
+        
+        if not settings.HEYGEN_API_KEY:
+            raise ValidationException('HEYGEN_API_KEY no está configurada')
+        
+        client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
+        
+        # Validar configuración
+        if not scene.ai_config.get('avatar_id') or not scene.ai_config.get('voice_id'):
+            raise ValidationException('Avatar ID y Voice ID son requeridos para HeyGen')
+        
+        response = client.generate_video(
+            script=scene.script_text,
+            title=f"{scene.scene_id} - {scene.script.title}",
+            avatar_id=scene.ai_config['avatar_id'],
+            voice_id=scene.ai_config['voice_id'],
+            has_background=scene.ai_config.get('has_background', False),
+            background_url=scene.ai_config.get('background_url'),
+            voice_speed=scene.ai_config.get('voice_speed', 1.0),
+            voice_pitch=scene.ai_config.get('voice_pitch', 50),
+            voice_emotion=scene.ai_config.get('voice_emotion', 'Excited'),
+        )
+        
+        return response.get('data', {}).get('video_id')
+    
+    def _generate_veo_scene_video(self, scene):
+        """Genera video de escena con Gemini Veo"""
+        from .ai_services.gemini_veo import GeminiVeoClient
+        
+        if not settings.GEMINI_API_KEY:
+            raise ValidationException('GEMINI_API_KEY no está configurada')
+        
+        model_name = scene.ai_config.get('veo_model', 'veo-2.0-generate-001')
+        client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY, model_name=model_name)
+        
+        # Preparar storage URI
+        storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{scene.project.id}/scenes/{scene.id}/"
+        
+        # Usar el script_text de la escena como prompt
+        prompt = scene.script_text
+        
+        # Si hay B-roll, agregar contexto visual
+        if scene.broll:
+            prompt += f"\n\nVisual context: {', '.join(scene.broll[:3])}"
+        
+        params = {
+            'prompt': prompt,
+            'title': f"{scene.scene_id}",
+            'duration': scene.ai_config.get('duration', 8),
+            'aspect_ratio': scene.ai_config.get('aspect_ratio', '16:9'),
+            'sample_count': scene.ai_config.get('sample_count', 1),
+            'negative_prompt': scene.ai_config.get('negative_prompt'),
+            'enhance_prompt': scene.ai_config.get('enhance_prompt', True),
+            'person_generation': scene.ai_config.get('person_generation', 'allow_adult'),
+            'compression_quality': scene.ai_config.get('compression_quality', 'optimized'),
+            'seed': scene.ai_config.get('seed'),
+            'storage_uri': storage_uri,
+        }
+        
+        response = client.generate_video(**params)
+        return response.get('video_id')
+    
+    def _generate_sora_scene_video(self, scene):
+        """Genera video de escena con OpenAI Sora"""
+        from .ai_services.sora import SoraClient, SORA_DURATIONS
+        
+        if not settings.OPENAI_API_KEY:
+            raise ValidationException('OPENAI_API_KEY no está configurada')
+        
+        client = SoraClient(api_key=settings.OPENAI_API_KEY)
+        
+        # Usar el script_text de la escena como prompt
+        prompt = scene.script_text
+        
+        # Si hay B-roll, agregar contexto visual
+        if scene.broll:
+            prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        
+        model = scene.ai_config.get('sora_model', 'sora-2')
+        duration = int(scene.ai_config.get('duration', 8))
+        size = scene.ai_config.get('size', '1280x720')
+        
+        # Validar y ajustar duración para Sora (solo 4, 8, 12 segundos)
+        if duration not in SORA_DURATIONS:
+            # Encontrar la duración más cercana
+            closest_duration = min(SORA_DURATIONS, key=lambda x: abs(x - duration))
+            logger.warning(f"Duración {duration}s no válida para Sora. Ajustando a {closest_duration}s")
+            duration = closest_duration
+            
+            # Actualizar la configuración de la escena
+            scene.ai_config['duration'] = duration
+            scene.save(update_fields=['ai_config', 'updated_at'])
+        
+        response = client.generate_video(
+            prompt=prompt,
+            model=model,
+            seconds=duration,
+            size=size
+        )
+        
+        return response.get('video_id')
+    
+    def check_scene_video_status(self, scene) -> Dict:
+        """
+        Consulta el estado del video de una escena en la API externa
+        
+        Args:
+            scene: Scene a consultar
+            
+        Returns:
+            Dict con estado actualizado
+        """
+        if not scene.external_id:
+            raise ValidationException('La escena no tiene external_id')
+        
+        # Si ya está en estado final, no consultar
+        if scene.video_status in ['completed', 'error']:
+            return {
+                'status': scene.video_status,
+                'message': 'Video ya procesado'
+            }
+        
+        try:
+            if scene.ai_service == 'heygen':
+                return self._check_heygen_scene_status(scene)
+            elif scene.ai_service == 'gemini_veo':
+                return self._check_veo_scene_status(scene)
+            elif scene.ai_service == 'sora':
+                return self._check_sora_scene_status(scene)
+        except Exception as e:
+            logger.error(f"Error al consultar estado de escena: {e}")
+            raise ServiceException(str(e))
+    
+    def _check_heygen_scene_status(self, scene):
+        """Consulta estado en HeyGen"""
+        from .ai_services.heygen import HeyGenClient
+        
+        client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
+        status_data = client.get_video_status(scene.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            video_url = status_data.get('video_url')
+            if video_url:
+                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                
+                metadata = {
+                    'duration': status_data.get('duration'),
+                    'video_url_original': video_url,
+                    'thumbnail': status_data.get('thumbnail'),
+                }
+                
+                scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+        
+        elif api_status == 'failed':
+            error_msg = status_data.get('error', 'Video generation failed')
+            scene.mark_video_as_error(error_msg)
+        
+        return status_data
+    
+    def _check_veo_scene_status(self, scene):
+        """Consulta estado en Gemini Veo"""
+        from .ai_services.gemini_veo import GeminiVeoClient
+        
+        client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY)
+        status_data = client.get_video_status(scene.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            all_video_urls = status_data.get('all_video_urls', [])
+            if all_video_urls:
+                # Usar el primer video generado
+                video_data = all_video_urls[0]
+                url = video_data['url']
+                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                
+                if url.startswith('gs://'):
+                    if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
+                        gcs_full_path = url
+                    else:
+                        gcs_full_path = gcs_storage.copy_from_gcs(url, gcs_path)
+                elif url.startswith('http'):
+                    gcs_full_path = gcs_storage.upload_from_url(url, gcs_path)
+                else:
+                    gcs_full_path = gcs_storage.upload_base64(url, gcs_path)
+                
+                metadata = {
+                    'original_url': url,
+                    'mime_type': video_data.get('mime_type', 'video/mp4'),
+                    'operation_data': status_data.get('operation_data', {}),
+                }
+                
+                scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+        
+        elif api_status in ['failed', 'error']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            scene.mark_video_as_error(error_msg)
+        
+        return status_data
+    
+    def _check_sora_scene_status(self, scene):
+        """Consulta estado en OpenAI Sora"""
+        from .ai_services.sora import SoraClient
+        
+        client = SoraClient(api_key=settings.OPENAI_API_KEY)
+        status_data = client.get_video_status(scene.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                tmp_path = tmp_file.name
+            
+            try:
+                success = client.download_video(scene.external_id, tmp_path)
+                
+                if success:
+                    gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                    
+                    with open(tmp_path, 'rb') as video_file:
+                        gcs_full_path = gcs_storage.upload_from_bytes(
+                            file_content=video_file.read(),
+                            destination_path=gcs_path,
+                            content_type='video/mp4'
+                        )
+                    
+                    metadata = {
+                        'model': status_data.get('model'),
+                        'duration': status_data.get('seconds'),
+                        'size': status_data.get('size'),
+                    }
+                    
+                    scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+                else:
+                    scene.mark_video_as_error("No se pudo descargar el video desde Sora")
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        
+        elif api_status == 'failed':
+            error_msg = status_data.get('error', 'Video generation failed')
+            scene.mark_video_as_error(error_msg)
+        
+        return status_data
+    
+    def get_scene_with_signed_urls(self, scene) -> Dict:
+        """
+        Obtiene una escena con todas sus URLs firmadas generadas
+        
+        Args:
+            scene: Scene a procesar
+            
+        Returns:
+            Dict con scene y URLs firmadas
+        """
+        result = {
+            'scene': scene,
+            'preview_image_url': None,
+            'video_url': None
+        }
+        
+        # URL firmada del preview image
+        if scene.preview_image_status == 'completed' and scene.preview_image_gcs_path:
+            try:
+                result['preview_image_url'] = gcs_storage.get_signed_url(
+                    scene.preview_image_gcs_path,
+                    expiration=3600
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada de preview: {e}")
+        
+        # URL firmada del video
+        if scene.video_status == 'completed' and scene.video_gcs_path:
+            try:
+                result['video_url'] = gcs_storage.get_signed_url(
+                    scene.video_gcs_path,
+                    expiration=3600
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada de video: {e}")
+        
+        return result
+
+
+# ====================
+# VIDEO COMPOSITION SERVICE
+# ====================
+
+class VideoCompositionService:
+    """Servicio para combinar múltiples videos usando FFmpeg"""
+    
+    @staticmethod
+    def combine_scene_videos(scenes, output_filename: str) -> str:
+        """
+        Combina videos de múltiples escenas usando FFmpeg
+        
+        Args:
+            scenes: QuerySet o lista de Scene objects ordenados
+            output_filename: Nombre base para el archivo de salida
+            
+        Returns:
+            GCS path del video combinado
+            
+        Raises:
+            ServiceException: Si falla la combinación
+        """
+        import tempfile
+        import os
+        import subprocess
+        from django.conf import settings
+        
+        if not scenes or len(scenes) == 0:
+            raise ValidationException("No hay escenas para combinar")
+        
+        # Verificar que todos tengan video
+        for scene in scenes:
+            if scene.video_status != 'completed' or not scene.video_gcs_path:
+                raise ValidationException(f"La escena {scene.scene_id} no tiene video completado")
+        
+        temp_dir = None
+        concat_file_path = None
+        output_path = None
+        
+        try:
+            # Crear directorio temporal
+            temp_dir = tempfile.mkdtemp(prefix='atenea_combine_')
+            logger.info(f"Directorio temporal creado: {temp_dir}")
+            
+            # Descargar todos los videos de GCS al directorio temporal
+            video_paths = []
+            logger.info(f"=== ORDEN DE ESCENAS PARA CONCATENACIÓN ===")
+            
+            for idx, scene in enumerate(scenes):
+                logger.info(f"  [{idx}] Escena {scene.scene_id} (order={scene.order}, service={scene.ai_service})")
+                
+                # Extraer blob name del GCS path
+                blob_name = scene.video_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                blob = gcs_storage.bucket.blob(blob_name)
+                
+                # Descargar a archivo temporal con orden explícito
+                temp_video_path = os.path.join(temp_dir, f"scene_{scene.order:03d}_{scene.scene_id.replace(' ', '_')}.mp4")
+                blob.download_to_filename(temp_video_path)
+                video_paths.append(temp_video_path)
+                
+                logger.info(f"    ✓ Descargado: {temp_video_path} ({os.path.getsize(temp_video_path)} bytes)")
+            
+            logger.info(f"=== {len(video_paths)} VIDEOS DESCARGADOS ===")
+            
+            # Verificar streams de audio en cada video
+            logger.info("=== VERIFICANDO STREAMS DE AUDIO ===")
+            videos_with_audio = []
+            for video_path in video_paths:
+                has_audio = VideoCompositionService._check_audio_stream(video_path)
+                videos_with_audio.append(has_audio)
+                logger.info(f"  {os.path.basename(video_path)}: {'✓ Audio OK' if has_audio else '⚠️ Sin audio'}")
+            
+            # Si algún video no tiene audio, usar estrategia especial
+            all_have_audio = all(videos_with_audio)
+            if not all_have_audio:
+                logger.warning("⚠️ Algunos videos no tienen audio - ajustando estrategia de concatenación")
+            
+            # Path de salida temporal
+            output_path = os.path.join(temp_dir, 'combined_output.mp4')
+            
+            # Estrategia: Usar filtro concat de FFmpeg en lugar de demuxer concat
+            # Esto es más robusto para videos de diferentes fuentes y evita desfases de audio
+            
+            # Construir comando FFmpeg con inputs individuales
+            ffmpeg_command = ['ffmpeg']
+            
+            # Añadir todos los videos como inputs
+            for video_path in video_paths:
+                ffmpeg_command.extend(['-i', video_path])
+            
+            # Construir filter_complex para concatenación
+            # Si todos tienen audio: [0:v][0:a][1:v][1:a]...[n:v][n:a]concat=n=N:v=1:a=1[outv][outa]
+            # Si algunos no tienen audio: añadir anullsrc (audio silencioso) para los que no tienen
+            
+            if all_have_audio:
+                # Todos tienen audio - estrategia simple
+                filter_parts = []
+                for i in range(len(video_paths)):
+                    filter_parts.append(f"[{i}:v][{i}:a]")
+                
+                filter_complex = f"{''.join(filter_parts)}concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+            else:
+                # Algunos no tienen audio - añadir audio silencioso donde falte
+                filter_lines = []
+                concat_inputs = []
+                
+                for i, has_audio in enumerate(videos_with_audio):
+                    if has_audio:
+                        concat_inputs.append(f"[{i}:v][{i}:a]")
+                    else:
+                        # Crear audio silencioso del mismo length que el video
+                        filter_lines.append(f"[{i}:v]anullsrc=channel_layout=stereo:sample_rate=48000[a{i}]")
+                        concat_inputs.append(f"[{i}:v][a{i}]")
+                
+                if filter_lines:
+                    filter_complex = ';'.join(filter_lines) + ';' + ''.join(concat_inputs) + f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+                else:
+                    filter_complex = ''.join(concat_inputs) + f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+            
+            ffmpeg_command.extend([
+                '-filter_complex', filter_complex,
+                '-map', '[outv]',
+                '-map', '[outa]',
+                '-c:v', 'libx264',  # Re-encodear video con H.264
+                '-preset', 'medium',  # Balance entre velocidad y calidad
+                '-crf', '23',  # Calidad constante (18-28, menor=mejor)
+                '-c:a', 'aac',  # Re-encodear audio con AAC
+                '-b:a', '192k',  # Bitrate de audio
+                '-ar', '48000',  # Sample rate consistente
+                '-movflags', '+faststart',  # Optimizar para streaming
+                '-y',  # Sobrescribir si existe
+                output_path
+            ])
+            
+            logger.info(f"Ejecutando FFmpeg con filter_complex concat:")
+            logger.info(f"  Número de videos: {len(video_paths)}")
+            logger.info(f"  Filter: {filter_complex}")
+            logger.info(f"  Comando: {' '.join(ffmpeg_command[:10])}... (truncado)")
+            
+            result = subprocess.run(
+                ffmpeg_command,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minutos máximo (re-encoding toma más tiempo)
+            )
+            
+            if result.returncode != 0:
+                error_msg = f"FFmpeg falló con código {result.returncode}\n"
+                error_msg += f"=== STDOUT ===\n{result.stdout}\n"
+                error_msg += f"=== STDERR ===\n{result.stderr}"
+                logger.error(error_msg)
+                
+                # Detectar problemas específicos de audio
+                stderr_lower = result.stderr.lower()
+                if 'audio' in stderr_lower or 'stream' in stderr_lower:
+                    logger.error("⚠️ Posible problema de audio detectado")
+                    logger.error("Verificar que todos los videos tienen stream de audio")
+                
+                raise ServiceException(f"Error al combinar videos con FFmpeg: {result.stderr[:500]}")
+            
+            logger.info("✓ Videos combinados exitosamente con FFmpeg")
+            
+            # Verificar que el archivo de salida existe
+            if not os.path.exists(output_path):
+                raise ServiceException("FFmpeg no generó el archivo de salida")
+            
+            file_size = os.path.getsize(output_path)
+            logger.info(f"Video combinado: {file_size} bytes")
+            
+            # Subir video combinado a GCS
+            project_id = scenes[0].project.id if hasattr(scenes[0], 'project') else 'unknown'
+            gcs_destination = f"projects/{project_id}/combined_videos/{output_filename}"
+            
+            with open(output_path, 'rb') as video_file:
+                gcs_full_path = gcs_storage.upload_from_bytes(
+                    file_content=video_file.read(),
+                    destination_path=gcs_destination,
+                    content_type='video/mp4'
+                )
+            
+            logger.info(f"✓ Video combinado subido a GCS: {gcs_full_path}")
+            
+            return gcs_full_path
+            
+        except subprocess.TimeoutExpired:
+            raise ServiceException("FFmpeg timeout: el proceso tardó más de 10 minutos")
+        except Exception as e:
+            logger.error(f"Error al combinar videos: {e}")
+            raise ServiceException(f"Error al combinar videos: {str(e)}")
+        finally:
+            # Limpiar archivos temporales
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                    logger.info(f"✓ Directorio temporal eliminado: {temp_dir}")
+                except Exception as e:
+                    logger.warning(f"No se pudo eliminar directorio temporal {temp_dir}: {e}")
+    
+    @staticmethod
+    def get_video_duration(video_path: str) -> float:
+        """
+        Obtiene la duración de un video usando FFprobe
+        
+        Args:
+            video_path: Path al archivo de video
+            
+        Returns:
+            Duración en segundos
+        """
+        import subprocess
+        
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    video_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+            else:
+                logger.warning(f"No se pudo obtener duración del video: {result.stderr}")
+                return 0.0
+                
+        except Exception as e:
+            logger.warning(f"Error al obtener duración: {e}")
+            return 0.0
+    
+    @staticmethod
+    def _check_audio_stream(video_path: str) -> bool:
+        """
+        Verifica si un video tiene stream de audio usando FFprobe
+        
+        Args:
+            video_path: Path al archivo de video
+            
+        Returns:
+            True si tiene audio, False si no
+        """
+        import subprocess
+        
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'a:0',
+                    '-show_entries', 'stream=codec_name',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    video_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Si hay output, significa que encontró un stream de audio
+            has_audio = result.returncode == 0 and result.stdout.strip() != ''
+            
+            if has_audio:
+                codec = result.stdout.strip()
+                logger.debug(f"  Audio codec: {codec}")
+            
+            return has_audio
+                
+        except Exception as e:
+            logger.warning(f"Error al verificar audio stream: {e}")
+            # Por defecto, asumir que tiene audio si no se puede verificar
+            return True
+
+
+# ====================
 # N8N INTEGRATION SERVICE
 # ====================
 
@@ -1294,6 +2081,28 @@ class N8nService:
             
             # Marcar como completado con los datos procesados
             script.mark_as_completed(output_data)
+            
+            # Si es flujo del agente, crear objetos Scene en la BD
+            if script.agent_flow:
+                logger.info(f"Script {script_id} es del flujo del agente, creando escenas en BD...")
+                scenes_data = output_data.get('scenes', [])
+                
+                if scenes_data:
+                    # Crear escenas usando SceneService
+                    created_scenes = SceneService.create_scenes_from_n8n_data(script, scenes_data)
+                    
+                    # Iniciar generación de preview images en background para cada escena
+                    scene_service = SceneService()
+                    for scene in created_scenes:
+                        try:
+                            # TODO: Idealmente esto debería ser async o con Celery
+                            # Por ahora lo hacemos síncrono
+                            scene_service.generate_preview_image(scene)
+                        except Exception as e:
+                            # No bloqueamos si falla una preview image
+                            logger.error(f"Error al generar preview para escena {scene.scene_id}: {e}")
+                    
+                    logger.info(f"✓ {len(created_scenes)} escenas creadas para script {script_id}")
             
             logger.info(f"Guión {script_id} procesado exitosamente por n8n")
             return script

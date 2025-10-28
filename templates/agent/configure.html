@@ -1,0 +1,552 @@
+{% extends 'base.html' %}
+
+{% block title %}Configure Scenes - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Progress Bar -->
+    <div class="mb-8">
+        <div class="flex items-center justify-center space-x-4">
+            <!-- Step 1: Completed -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 text-white font-bold">
+                    ✓
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Contenido</span>
+            </div>
+            <div class="w-16 h-1 bg-green-500"></div>
+            
+            <!-- Step 2: Active -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-blue-600 text-white font-bold">
+                    2
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-900">Configurar</span>
+            </div>
+            <div class="w-16 h-1 bg-gray-300"></div>
+            
+            <!-- Step 3: Inactive -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-300 text-gray-600 font-bold">
+                    3
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Escenas</span>
+            </div>
+            <div class="w-16 h-1 bg-gray-300"></div>
+            
+            <!-- Step 4: Inactive -->
+            <div class="flex items-center">
+                <div class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-300 text-gray-600 font-bold">
+                    4
+                </div>
+                <span class="ml-2 text-sm font-medium text-gray-500">Final</span>
+            </div>
+        </div>
+    </div>
+
+    {% if not script %}
+    <!-- Processing Screen -->
+    <div id="processing-screen" class="text-center py-16">
+        <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-8"></div>
+        <h2 class="text-3xl font-bold text-gray-900 mb-4">Procesando Guión con IA...</h2>
+        <p class="text-gray-600 mb-8">Nuestro agente de IA está analizando tu contenido</p>
+        <div class="max-w-2xl mx-auto bg-blue-50 rounded-lg p-6 mb-8">
+            <div id="processing-status" class="text-left space-y-2">
+                <p class="text-sm text-gray-700">⏳ Analizando estructura del guión...</p>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Scenes Ready Screen -->
+    <div id="scenes-ready">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Escenas Listas</h1>
+            <p class="text-gray-600">Revisa y configura tus escenas generadas por IA</p>
+        </div>
+
+        <!-- Scenes Grid -->
+        <div class="space-y-6 mb-8">
+            {% for scene_data in scenes_with_urls %}
+            {% with scene=scene_data.scene %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" x-data="{ expanded: false }">
+                <!-- Scene Header -->
+                <div class="flex items-start gap-6">
+                    <!-- Checkbox -->
+                    <div class="flex items-center h-6 mt-1">
+                        <input type="checkbox" 
+                               checked 
+                               class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    </div>
+
+                    <!-- Preview Image -->
+                    <div class="w-48 h-32 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                        {% if scene.preview_image_status == 'completed' and scene_data.preview_image_url %}
+                            <img src="{{ scene_data.preview_image_url }}" 
+                                 alt="{{ scene.scene_id }}" 
+                                 class="w-full h-full object-cover">
+                        {% elif scene.preview_image_status == 'generating' %}
+                            <div class="w-full h-full flex items-center justify-center">
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            </div>
+                        {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-gray-400">
+                                <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                        {% endif %}
+                        <button class="mt-2 text-xs text-blue-600 hover:text-blue-800">(Replace - próximamente)</button>
+                    </div>
+
+                    <!-- Scene Info -->
+                    <div class="flex-1">
+                        <div class="flex items-start justify-between mb-2">
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900">{{ scene.scene_id }}</h3>
+                                <p class="text-sm text-gray-600">{{ scene.summary }}</p>
+                            </div>
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">{{ scene.duration_sec }}s</span>
+                        </div>
+
+                        <!-- Script Text (Editable) -->
+                        <div class="mt-4">
+                            <label class="text-sm font-medium text-gray-700 mb-1 block">Texto del Guión</label>
+                            <textarea 
+                                rows="3"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                readonly
+                            >{{ scene.script_text }}</textarea>
+                            <p class="mt-1 text-xs text-gray-500">(Edición disponible próximamente)</p>
+                        </div>
+
+                        <!-- Service Selector -->
+                        <div class="mt-4">
+                            <div class="mb-3">
+                                <label class="text-sm font-medium text-gray-700 mb-1 block">Servicio IA</label>
+                                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" 
+                                        data-scene-id="{{ scene.id }}"
+                                        onchange="changeServiceAndSave({{ scene.id }}, this.value)">
+                                    <option value="gemini_veo" {% if scene.ai_service == 'gemini_veo' %}selected{% endif %}>Gemini Veo</option>
+                                    <option value="sora" {% if scene.ai_service == 'sora' %}selected{% endif %}>Sora</option>
+                                    <option value="heygen" {% if scene.ai_service == 'heygen' %}selected{% endif %}>HeyGen</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Config Container (dinámico) -->
+                            <div id="config-{{ scene.id }}" class="grid grid-cols-2 gap-4">
+                                <!-- Se llenará dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-between items-center">
+            <a href="{% url 'core:project_detail' project.id %}" 
+               class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+                Cancelar
+            </a>
+            <div class="flex flex-col items-end gap-2">
+                <p class="text-xs text-gray-500">
+                    💡 Tip: Las configuraciones se guardan automáticamente
+                </p>
+                <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+                   class="px-8 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
+                    Continuar a Escenas →
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if script %}
+<script>
+// Script ya procesado, mostrar escenas
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Script procesado, mostrando escenas');
+    
+    // Inicializar configuraciones de cada escena
+    {% for scene_data in scenes_with_urls %}
+    updateServiceConfig({{ scene_data.scene.id }}, '{{ scene_data.scene.ai_service }}');
+    {% endfor %}
+    
+    // Cargar avatares y voces de HeyGen (solo una vez gracias al cache)
+    loadHeyGenAssets();
+});
+
+// Cambiar servicio y guardar
+function changeServiceAndSave(sceneId, service) {
+    updateServiceConfig(sceneId, service);
+    saveSceneConfig(sceneId, { ai_service: service });
+}
+
+// Actualizar configuración según el servicio seleccionado
+function updateServiceConfig(sceneId, service) {
+    const container = document.getElementById(`config-${sceneId}`);
+    container.innerHTML = ''; // Limpiar contenido anterior
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
+                    <option value="5">5s</option>
+                    <option value="8" selected>8s</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Aspecto</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'aspect_ratio', this.value)">
+                    <option value="16:9" selected>16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="1:1">1:1</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
+                    <option value="4">4s</option>
+                    <option value="8" selected>8s</option>
+                    <option value="12">12s</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Tamaño</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'size', this.value)">
+                    <option value="1280x720" selected>1280x720 (16:9)</option>
+                    <option value="720x1280">720x1280 (9:16)</option>
+                    <option value="1024x1024">1024x1024 (1:1)</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'heygen') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Avatar</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" 
+                        data-scene-id="${sceneId}" 
+                        data-config-field="avatar_id">
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Voz</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        data-scene-id="${sceneId}" 
+                        data-config-field="voice_id">
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+        `;
+        
+        // Recargar avatares y voces para esta escena (usa cache si está disponible)
+        // Los eventos onchange se añaden automáticamente en populateAvatarSelects y populateVoiceSelects
+        if (avatarsCache) {
+            populateAvatarSelects(avatarsCache);
+        } else {
+            // Si no hay cache, esperar a que se carguen
+            setTimeout(() => {
+                if (avatarsCache) populateAvatarSelects(avatarsCache);
+            }, 1000);
+        }
+        
+        if (voicesCache) {
+            populateVoiceSelects(voicesCache);
+        } else {
+            // Si no hay cache, esperar a que se carguen
+            setTimeout(() => {
+                if (voicesCache) populateVoiceSelects(voicesCache);
+            }, 1000);
+        }
+    }
+}
+
+// Guardar configuración de escena
+async function saveSceneConfig(sceneId, data) {
+    try {
+        const response = await fetch(`/scenes/${sceneId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log(`✓ Configuración de escena ${sceneId} guardada`);
+            console.log(`  Datos guardados:`, data);
+            
+            // Mostrar indicador visual temporal
+            showSaveIndicator(sceneId);
+        } else {
+            console.error(`Error al guardar configuración:`, result.message);
+            alert(`Error al guardar configuración: ${result.message}`);
+        }
+    } catch (error) {
+        console.error(`Error al guardar configuración:`, error);
+        alert(`Error de conexión al guardar configuración`);
+    }
+}
+
+// Mostrar indicador visual de guardado
+function showSaveIndicator(sceneId) {
+    const card = document.querySelector(`[data-scene-id="${sceneId}"]`)?.closest('.bg-white');
+    if (card) {
+        card.classList.add('ring-2', 'ring-green-500');
+        setTimeout(() => {
+            card.classList.remove('ring-2', 'ring-green-500');
+        }, 1000);
+    }
+}
+
+// Guardar configuración específica de AI
+function saveSceneAiConfig(sceneId, key, value) {
+    const aiConfig = {};
+    aiConfig[key] = value;
+    saveSceneConfig(sceneId, { ai_config: aiConfig });
+}
+
+// Cache para avatares y voces
+let avatarsCache = null;
+let voicesCache = null;
+
+// Cargar avatares y voces de HeyGen
+async function loadHeyGenAssets() {
+    await Promise.all([
+        loadAvatars(),
+        loadVoices()
+    ]);
+}
+
+async function loadAvatars() {
+    // Usar cache si existe
+    if (avatarsCache) {
+        populateAvatarSelects(avatarsCache);
+        return;
+    }
+    
+    const selects = document.querySelectorAll('[data-config-field="avatar_id"]');
+    selects.forEach(select => {
+        select.innerHTML = '<option value="">Cargando avatares...</option>';
+    });
+    
+    try {
+        const response = await fetch('{% url "core:api_list_avatars" %}');
+        const data = await response.json();
+        
+        avatarsCache = data.avatars; // Guardar en cache
+        populateAvatarSelects(data.avatars);
+    } catch (error) {
+        console.error('Error cargando avatares:', error);
+        selects.forEach(select => {
+            select.innerHTML = '<option value="">Error al cargar avatares</option>';
+        });
+    }
+}
+
+async function loadVoices() {
+    // Usar cache si existe
+    if (voicesCache) {
+        populateVoiceSelects(voicesCache);
+        return;
+    }
+    
+    const selects = document.querySelectorAll('[data-config-field="voice_id"]');
+    selects.forEach(select => {
+        select.innerHTML = '<option value="">Cargando voces...</option>';
+    });
+    
+    try {
+        const response = await fetch('{% url "core:api_list_voices" %}');
+        const data = await response.json();
+        
+        voicesCache = data.voices; // Guardar en cache
+        populateVoiceSelects(data.voices);
+    } catch (error) {
+        console.error('Error cargando voces:', error);
+        selects.forEach(select => {
+            select.innerHTML = '<option value="">Error al cargar voces</option>';
+        });
+    }
+}
+
+function populateAvatarSelects(avatars) {
+    const avatarSelects = document.querySelectorAll('[data-config-field="avatar_id"]');
+    
+    avatarSelects.forEach(select => {
+        const sceneId = select.dataset.sceneId;
+        select.innerHTML = '<option value="">Selecciona un avatar</option>';
+        
+        avatars.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            select.appendChild(option);
+        });
+        
+        // Añadir evento onchange para guardar automáticamente
+        select.onchange = function() {
+            const avatarId = this.value;
+            if (avatarId) {
+                console.log(`Guardando avatar ${avatarId} para escena ${sceneId}`);
+                saveSceneAiConfig(sceneId, 'avatar_id', avatarId);
+            }
+        };
+    });
+}
+
+function populateVoiceSelects(voices) {
+    const voiceSelects = document.querySelectorAll('[data-config-field="voice_id"]');
+    
+    voiceSelects.forEach(select => {
+        const sceneId = select.dataset.sceneId;
+        select.innerHTML = '<option value="">Selecciona una voz</option>';
+        
+        voices.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            select.appendChild(option);
+        });
+        
+        // Añadir evento onchange para guardar automáticamente
+        select.onchange = function() {
+            const voiceId = this.value;
+            if (voiceId) {
+                console.log(`Guardando voz ${voiceId} para escena ${sceneId}`);
+                saveSceneAiConfig(sceneId, 'voice_id', voiceId);
+            }
+        };
+    });
+}
+</script>
+{% endif %}
+
+{% if not script %}
+<script>
+// Enviar script a backend para procesamiento
+document.addEventListener('DOMContentLoaded', function() {
+    // Obtener datos del sessionStorage
+    const agentContent = JSON.parse(sessionStorage.getItem('agentContent'));
+    
+    if (!agentContent) {
+        window.location.href = "{% url 'core:agent_create' project.id %}";
+        return;
+    }
+    
+    // Actualizar UI
+    updateProcessingStatus('Enviando guión a procesamiento...');
+    
+    // Enviar a backend
+    fetch("{% url 'core:agent_configure' project.id %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: new URLSearchParams({
+            'title': 'Video con Agente',
+            'script_content': agentContent.content,
+            'desired_duration_min': agentContent.duration
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            updateProcessingStatus('✓ Guión enviado. Esperando procesamiento de n8n...');
+            // Polling para esperar a que n8n procese
+            pollScriptStatus(data.script_id);
+        } else {
+            alert('Error: ' + data.message);
+            window.location.href = "{% url 'core:agent_create' project.id %}";
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al enviar script');
+        window.location.href = "{% url 'core:agent_create' project.id %}";
+    });
+});
+
+function updateProcessingStatus(message) {
+    const statusDiv = document.getElementById('processing-status');
+    if (statusDiv) {
+        const timestamp = new Date().toLocaleTimeString();
+        statusDiv.innerHTML += `<p class="text-sm text-gray-700">${timestamp} - ${message}</p>`;
+    }
+}
+
+function pollScriptStatus(scriptId) {
+    let pollCount = 0;
+    const maxPolls = 60; // 3 minutos máximo (60 * 3 segundos)
+    
+    updateProcessingStatus('Consultando estado del guión...');
+    
+    const interval = setInterval(async () => {
+        pollCount++;
+        
+        if (pollCount > maxPolls) {
+            clearInterval(interval);
+            updateProcessingStatus('⚠️ Timeout: El procesamiento está tardando más de lo esperado.');
+            alert('El procesamiento está tardando más de lo esperado. Por favor, verifica el estado del script en el proyecto.');
+            window.location.href = "{% url 'core:project_detail' project.id %}";
+            return;
+        }
+        
+        try {
+            // Usar el endpoint de status partial que ya existe
+            const response = await fetch(`{% url 'core:script_status_partial' 0 %}`.replace('/0/', `/${scriptId}/`));
+            
+            if (!response.ok) {
+                throw new Error('Error al consultar estado');
+            }
+            
+            const html = await response.text();
+            
+            // Verificar si está completado
+            if (html.includes('Completado') || html.includes('bg-green-500')) {
+                clearInterval(interval);
+                updateProcessingStatus('✓ Guión procesado exitosamente. Generando escenas...');
+                
+                // Esperar 2 segundos para que terminen de generarse las preview images
+                setTimeout(() => {
+                    // Redirigir a la misma página con script_id para mostrar escenas
+                    window.location.href = "{% url 'core:agent_configure' project.id %}?script_id=" + scriptId;
+                }, 2000);
+                
+            } else if (html.includes('Error') || html.includes('bg-red-500')) {
+                clearInterval(interval);
+                updateProcessingStatus('✗ Error al procesar guión');
+                alert('Error al procesar el guión. Por favor, intenta nuevamente.');
+                window.location.href = "{% url 'core:agent_create' project.id %}";
+            } else {
+                // Actualizar mensaje de progreso
+                if (pollCount % 5 === 0) { // Cada 15 segundos
+                    updateProcessingStatus(`⏳ Procesando... (${pollCount * 3}s transcurridos)`);
+                }
+            }
+        } catch (error) {
+            console.error('Error checking status:', error);
+            // No detener el polling por errores individuales
+        }
+    }, 3000); // Poll cada 3 segundos
+}
+</script>
+{% endif %}
+{% endblock %}
+

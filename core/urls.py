@@ -43,5 +43,18 @@ urlpatterns = [
     
     # Webhooks
     path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
+    
+    # Agent Video Flow
+    path('projects/<int:project_id>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
+    path('projects/<int:project_id>/agent/configure/', views.AgentConfigureView.as_view(), name='agent_configure'),
+    path('projects/<int:project_id>/agent/scenes/', views.AgentScenesView.as_view(), name='agent_scenes'),
+    path('projects/<int:project_id>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
+    
+    # Agent Scene Actions
+    path('scenes/<int:scene_id>/generate/', views.SceneGenerateView.as_view(), name='scene_generate'),
+    path('scenes/<int:scene_id>/status/', views.SceneStatusView.as_view(), name='scene_status'),
+    path('scenes/<int:scene_id>/update/', views.SceneUpdateConfigView.as_view(), name='scene_update'),
+    path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
+    path('scenes/<int:scene_id>/versions/', views.SceneVersionsView.as_view(), name='scene_versions'),
 ]
 
