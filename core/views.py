@@ -111,7 +111,7 @@ class LogoutView(View):
     def get(self, request):
         logout(request)
         messages.info(request, "Has cerrado sesión correctamente 👋")
-        return redirect('login')
+        return redirect('core:login')
 
 # ====================
 # DASHBOARD
