@@ -256,9 +256,9 @@ document.getElementById('agentCreateFormManual').addEventListener('submit', func
      
     // Redirigir según checkbox
     if (qualityChecked) {
-        alert('Alta calidad activada: se generarán más escenas de menor duración.');
-    } else {
         window.location.href = "{% url 'core:agent_configure' project.id %}";
+    } else {
+        alert('Alta calidad desactivada: se generarán menos escenas de mayor duración.');
     }
 
 });
