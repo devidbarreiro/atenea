@@ -1,129 +1,173 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Atenea{% endblock %}</title>
-    
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- HTMX - Interactividad sin JavaScript -->
-    <script src="https://unpkg.com/htmx.org@1.9.10" 
-            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
-            crossorigin="anonymous"></script>
-    
-    <!-- Alpine.js - Componentes reactivos -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
-    
-    <style>
-        /* Solo CSS necesario para animaciones */
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{% block title %}Atenea{% endblock %}</title>
+        
+        <!-- Tailwind CSS CDN -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        
+        <!-- HTMX - Interactividad sin JavaScript -->
+        <script src="https://unpkg.com/htmx.org@1.9.10" 
+                integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
+                crossorigin="anonymous"></script>
+        
+        <!-- Alpine.js - Componentes reactivos -->
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+        
+        <style>
+            /* Solo CSS necesario para animaciones */
+            @keyframes slideIn {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
             }
-            to {
-                transform: translateX(0);
-                opacity: 1;
+            
+            .message {
+                animation: slideIn 0.3s ease;
             }
-        }
-        
-        .message {
-            animation: slideIn 0.3s ease;
-        }
-        
-        [x-cloak] { 
-            display: none !important; 
-        }
-        
-        {% block extra_css %}{% endblock %}
-    </style>
-</head>
-<body class="bg-gray-50">
-    <!-- Navbar -->
-    {% if not hide_header %}
-    <nav class="bg-white border-b border-gray-200 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <a href="{% url 'core:dashboard' %}" class="flex items-center space-x-2 text-xl font-bold text-gray-900 hover:text-gray-700">
-                        <span>🎨</span>
-                        <span>Atenea</span>
-                    </a>
-                    
-                    {% if breadcrumbs %}
-                    <div class="hidden md:flex ml-6 items-center space-x-2 text-sm text-gray-500">
-                        {% for crumb in breadcrumbs %}
-                            {% if crumb.url %}
-                                <a href="{{ crumb.url }}" class="hover:text-gray-700">{{ crumb.label }}</a>
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
-                            {% else %}
-                                <span class="font-medium text-gray-900">{{ crumb.label }}</span>
-                            {% endif %}
-                        {% endfor %}
+            
+            [x-cloak] { 
+                display: none !important; 
+            }
+            
+            {% block extra_css %}{% endblock %}
+        </style>
+    </head>
+    <body class="bg-gray-50">
+        <!-- Navbar -->
+        {% if not hide_header %}
+        <nav class="bg-white border-b border-gray-200 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <a href="{% url 'core:dashboard' %}" class="flex items-center space-x-2 text-xl font-bold text-gray-900 hover:text-gray-700">
+                            <span>🎨</span>
+                            <span>Atenea</span>
+                        </a>
+                        
+                        {% if breadcrumbs %}
+                        <div class="hidden md:flex ml-6 items-center space-x-2 text-sm text-gray-500">
+                            {% for crumb in breadcrumbs %}
+                                {% if crumb.url %}
+                                    <a href="{{ crumb.url }}" class="hover:text-gray-700">{{ crumb.label }}</a>
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                {% else %}
+                                    <span class="font-medium text-gray-900">{{ crumb.label }}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <a href="{% url 'core:dashboard' %}" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transform transition-all duration-200 ease-out">
+                            Dashboard
+                        </a>
+                        <div class="text-gray-700 hover:text-gray-900 px-3 rounded-md text-sm font-medium relative group">
+                            <button id="userMenuButton" class="flex items-center text-gray-700 hover:text-gray-900">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6 mr-1">
+                                    <path fill-rule="evenodd" d="M18.685 19.097A9.723 9.723 0 0 0 21.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 0 0 3.065 7.097A9.716 9.716 0 0 0 12 21.75a9.716 9.716 0 0 0 6.685-2.653Zm-12.54-1.285A7.486 7.486 0 0 1 12 15a7.486 7.486 0 0 1 5.855 2.812A8.224 8.224 0 0 1 12 20.25a8.224 8.224 0 0 1-5.855-2.438ZM15.75 9a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" clip-rule="evenodd" />
+                                </svg>
+                                {{ user.username }}
+                                <svg class="ml-1 w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="userMenu" class="hidden absolute absolute left-1/2 -translate-x-1/2 right-0 mt-1 w-32 bg-white border rounded-md shadow-lg">
+                                <a href="/admin/" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Admin</a>
+                                <a href="{% url 'core:logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Cerrar sesión
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        {% endif %}
+        
+        <!-- Mensajes Flash -->
+        {% if messages %}
+        <div class="fixed top-20 right-4 z-50 space-y-2 max-w-md">
+            {% for message in messages %}
+            <div class="message shadow-lg rounded-lg p-4 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
+                <div class="flex items-center">
+                    {% if message.tags == 'success' %}
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif message.tags == 'error' %}
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                    </svg>
                     {% endif %}
-                </div>
-                
-                <div class="flex items-center space-x-4">
-                    <a href="{% url 'core:dashboard' %}" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                        Dashboard
-                    </a>
-                    <a href="/admin/" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                        Admin
-                    </a>
-                    <a href="{% url 'core:logout' %}" class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                        Logout
-                    </a>
+                    <span>{{ message }}</span>
                 </div>
             </div>
+            {% endfor %}
         </div>
-    </nav>
-    {% endif %}
-    
-    <!-- Mensajes Flash -->
-    {% if messages %}
-    <div class="fixed top-20 right-4 z-50 space-y-2 max-w-md">
-        {% for message in messages %}
-        <div class="message shadow-lg rounded-lg p-4 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
-            <div class="flex items-center">
-                {% if message.tags == 'success' %}
-                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                </svg>
-                {% elif message.tags == 'error' %}
-                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                </svg>
-                {% endif %}
-                <span>{{ message }}</span>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-    
-    <!-- Contenido Principal -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {% block content %}{% endblock %}
-    </main>
-    
-    {% block extra_js %}{% endblock %}
-    
-    <script>
-        // Auto-dismiss messages después de 5 segundos
-        setTimeout(() => {
-            const messages = document.querySelectorAll('.message');
-            messages.forEach(msg => {
-                msg.style.transition = 'opacity 0.3s ease';
-                msg.style.opacity = '0';
-                setTimeout(() => msg.remove(), 300);
-            });
-        }, 5000);
-    </script>
-</body>
+        {% endif %}
+        
+        <!-- Contenido Principal -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {% block content %}{% endblock %}
+        </main>
+        
+        {% block extra_js %}{% endblock %}
+        
+        <script>
+            // Auto-dismiss messages después de 5 segundos
+            setTimeout(() => {
+                const messages = document.querySelectorAll('.message');
+                messages.forEach(msg => {
+                    msg.style.transition = 'opacity 0.3s ease';
+                    msg.style.opacity = '0';
+                    setTimeout(() => msg.remove(), 300);
+                });
+            }, 5000);
+
+            function setupDropdown(buttonId, menuId) {
+                const button = document.getElementById(buttonId);
+                const menu = document.getElementById(menuId);
+
+                if (!button || !menu) return;
+
+                // Funciones para abrir y cerrar el menú
+                const openMenu = () => {
+                    menu.classList.remove('hidden');
+                };
+
+                const closeMenu = () => {
+                    menu.classList.add('hidden');
+                };
+
+                // Abrir menú al pasar el mouse
+                button.addEventListener('mouseenter', openMenu);
+
+
+                // Cerrar menú cuando el mouse sale del botón o del menú
+                [button, menu].forEach(el => {
+                    el.addEventListener('mouseleave', () => {
+                    // Usamos setTimeout para permitir mover el mouse de botón a menú
+                    setTimeout(() => {
+                        if (!button.matches(':hover') && !menu.matches(':hover')) {
+                            closeMenu();
+                        }
+                    }, 50);
+                    });
+                });
+            }
+            setupDropdown('userMenuButton', 'userMenu');
+        </script>
+    </body>
 </html>
