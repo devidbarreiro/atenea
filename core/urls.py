@@ -78,5 +78,8 @@ urlpatterns = [
     path('api/vuela/validate-token/', views.VuelaAIValidateTokenView.as_view(), name='vuela_validate_token'),
     path('api/vuela/videos/', views.VuelaAIListVideosView.as_view(), name='vuela_list_videos'),
     path('api/vuela/videos/<str:video_id>/', views.VuelaAIVideoDetailsView.as_view(), name='vuela_video_details'),
+
+    # User Management
+    path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
 ]
 

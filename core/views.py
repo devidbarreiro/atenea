@@ -20,6 +20,8 @@ from django.db import models
 from django.db.models import Max
 from django.contrib.auth import authenticate, login, logout
 import os
+from django.contrib.auth.models import User
+from .forms import CustomUserCreationForm
 
 from .models import Project, Video, Image, Script, Scene
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
@@ -2780,3 +2782,33 @@ class VuelaAIVideoDetailsView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=500)
+        
+# ====================
+# USER MANAGEMENT VIEW
+# ====================
+class UserMenuView(View):
+    template_name = 'users/menu.html'
+
+    def get(self, request):
+        users = User.objects.all()
+        form = CustomUserCreationForm()
+        context = {
+            'users': users,
+            'form': form,
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Usuario creado correctamente.')
+            return redirect('core:user_menu')
+        else:
+            # Combinar errores de todos los campos con saltos de línea
+            error_lines = []
+            for field, error_list in form.errors.items():
+                for error in error_list:
+                    error_lines.append(f"{field}: {error}")
+            messages.error(request, "\n".join(error_lines))
+            return redirect('core:user_menu')

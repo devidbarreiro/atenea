@@ -2,9 +2,12 @@
 Formularios Django para validación de datos
 """
 
+import re
 from django import forms
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from .models import Project, Video, Image, Script, VIDEO_TYPES, IMAGE_TYPES
+from django.contrib.auth.models import User
 
 
 class ProjectForm(forms.ModelForm):
@@ -814,3 +817,26 @@ class ScriptForm(forms.Form):
         help_text='Duración aproximada del video final en minutos'
     )
 
+# ====================
+# PASSWORD VALIDATION FORMS
+# ====================
+
+class CustomUserCreationForm(forms.ModelForm):
+    password = forms.CharField(widget=forms.PasswordInput)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        password_confirm = self.data.get('password_confirm')
+        if password != password_confirm:
+            raise ValidationError("Las contraseñas no coinciden.")
+        if len(password) < 8:
+            raise ValidationError("La contraseña debe tener al menos 8 caracteres.")
+        if not re.search(r"\d", password):
+            raise ValidationError("La contraseña debe contener al menos un número.")
+        if not re.search(r"[A-Z]", password):
+            raise ValidationError("La contraseña debe contener al menos una letra mayúscula.")
+        return password
