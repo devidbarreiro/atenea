@@ -22,6 +22,7 @@ from django.contrib.auth import authenticate, login, logout
 import os
 from django.contrib.auth.models import User
 from .forms import CustomUserCreationForm
+from django.db import IntegrityError
 
 from .models import Project, Video, Image, Script, Scene
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
@@ -2784,31 +2785,77 @@ class VuelaAIVideoDetailsView(View):
             }, status=500)
         
 # ====================
-# USER MANAGEMENT VIEW
+# MANAGEMENT USERS
 # ====================
+
 class UserMenuView(View):
     template_name = 'users/menu.html'
 
     def get(self, request):
+        if not request.user.is_superuser:
+            messages.error(request, 'No tienes permiso para acceder a esta página.')
+            return redirect('core:home')  # mejor redirigir al home
+
         users = User.objects.all()
         form = CustomUserCreationForm()
-        context = {
-            'users': users,
-            'form': form,
-        }
-        return render(request, self.template_name, context)
+        return render(request, self.template_name, {'users': users, 'form': form})
 
     def post(self, request):
+        # --- Actualización AJAX ---
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            try:
+                usuarios = []
+
+                # Recolectar todos los datos del FormData
+                for key in request.POST:
+                    if key.startswith('usuarios['):
+                        idx = key.split('[')[1].split(']')[0]
+                        campo = key.split('[')[2].split(']')[0]
+                        valor = request.POST[key]
+
+                        # Asegurar que existe el índice
+                        while len(usuarios) <= int(idx):
+                            usuarios.append({})
+                        usuarios[int(idx)][campo] = valor
+
+                # Procesar cada usuario una vez todos están completos
+                for u in usuarios:
+                    if 'id' not in u:
+                        continue  # ignorar filas vacías
+
+                    user = User.objects.get(id=u['id'])
+                    nuevo_username = u.get('username', user.username).strip()
+                    nuevo_email = u.get('email', user.email).strip()
+
+                    # Evitar duplicados de username
+                    if User.objects.exclude(id=user.id).filter(username=nuevo_username).exists():
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'El nombre de usuario "{nuevo_username}" ya está en uso.'
+                        })
+
+                    user.username = nuevo_username
+                    user.email = nuevo_email
+                    user.is_staff = u.get('is_staff', 'False').lower() == 'true'
+                    user.is_active = u.get('is_active', 'False').lower() == 'true'
+                    user.save()
+
+                    print(request.POST)
+
+                return JsonResponse({'success': True})
+
+            except IntegrityError:
+                return JsonResponse({'success': False, 'error': 'Usuario duplicado.'})
+            except Exception as e:
+                print("❌ Error al guardar:", e)
+                return JsonResponse({'success': False, 'error': str(e)})
+
+        # --- Creación normal (formulario) ---
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             form.save()
             messages.success(request, 'Usuario creado correctamente.')
-            return redirect('core:user_menu')
         else:
-            # Combinar errores de todos los campos con saltos de línea
-            error_lines = []
-            for field, error_list in form.errors.items():
-                for error in error_list:
-                    error_lines.append(f"{field}: {error}")
-            messages.error(request, "\n".join(error_lines))
-            return redirect('core:user_menu')
+            messages.error(request, 'Error al crear usuario.')
+
+        return redirect('core:user_menu')

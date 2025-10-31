@@ -178,46 +178,86 @@
 <div id="user-admin-form" 
      class="hidden w-full bg-white p-6 rounded-md shadow overflow-y-auto"
      style="max-height: calc(100vh - 600px);"
-     x-data="{ search: ''}">
+     x-data="{ search: '' }">
 
-     <div class="mb-4">
-        <input type="text" 
-               placeholder="Buscar usuario..." 
-               x-model="search"
-               class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
+  <div>
+    <div class="mb-4">
+      <input type="text" 
+             placeholder="Buscar usuario..." 
+             x-model="search"
+             class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
     </div>
-    <table class="min-w-full bg-white border border-gray-200">
-        <thead class="bg-gray-100">
-            <tr>
-                <th class="px-4 py-2 text-left border-b border-gray-200 w-2"></th>
-                <th class="px-4 py-2 text-left border-b border-gray-200">Username</th>
-                <th class="px-4 py-2 text-left border-b border-gray-200">Email</th>
-                <th class="px-4 py-2 text-left border-b border-gray-200">Staff</th>
-                <th class="px-4 py-2 text-left border-b border-gray-200">Active</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for user in users %}
-            <tr class="hover:bg-gray-50"
-                x-show="search === '' || '{{ user.username }}'.toLowerCase().includes(search.toLowerCase())">
-                <td class="px-4 py-2 border-b border-gray-200">
-                    <input type="checkbox" class="form-checkbox h-4 w-4 text-blue-600">
-                </td>
-                <td class="px-4 py-2 border-b border-gray-200">{{ user.username }}</td>
-                <td class="px-4 py-2 border-b border-gray-200">{{ user.email }}</td>
-                <td class="px-4 py-2 border-b border-gray-200">{{ user.is_staff }}</td>
-                <td class="px-4 py-2 border-b border-gray-200">{{ user.is_active }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+
+    <table id="tabla-usuarios" class="min-w-full bg-white border border-gray-200">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 text-left border-b border-gray-200 w-2"></th>
+          <th class="px-4 py-2 text-left border-b border-gray-200 w-40">Username</th>
+          <th class="px-4 py-2 text-left border-b border-gray-200">Email</th>
+          <th class="px-4 py-2 text-left border-b border-gray-200">Staff</th>
+          <th class="px-4 py-2 text-left border-b border-gray-200">Active</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr class="hover:bg-gray-50"
+            data-id="{{ user.id }}"
+            x-show="search === '' || '{{ user.username }}'.toLowerCase().includes(search.toLowerCase())">
+            <td class="px-4 py-2 border-b border-gray-200">
+                <input type="checkbox" class="form-checkbox h-4 w-4 text-blue-600 decoration-none">
+            </td>
+            <td class="username">
+                <input type="text" value="{{ user.username }}" class="editable w-80 bg-transparent border border-gray-300 rounded-md px-3 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            </td>
+            <td class="email">
+                <input type="text" value="{{ user.email }}" class="editable w-full bg-transparent border border-gray-300 rounded-md px-3 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            </td>
+            <td class="is_staff w-20">
+                <select class="editable w-full bg-transparent border border-gray-300 rounded-md px-3 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="True" {% if user.is_staff %}selected{% endif %}>Si</option>
+                    <option value="False" {% if not user.is_staff %}selected{% endif %}>No</option>
+                </select>
+            </td>
+            <td class="is_active w-28">
+                <select class="editable w-full bg-transparent border border-gray-300 rounded-md px-3 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="True" {% if user.is_active %}selected{% endif %}>Activo</option>
+                    <option value="False" {% if not user.is_active %}selected{% endif %}>Inactivo</option>
+                </select>
+            </td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
+</div>
+
+<!-- Botón Guardar Cambios -->
+<div id="botones-acciones" 
+     class="w-full flex justify-between items-center mt-6 px-8 hidden">
+
+    <button id="cancelar"
+            disabled
+            class="bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg hover:bg-red-700 transition opacity-50 cursor-not-allowed">
+        Cancelar cambios
+    </button>
+        
+    <button id="guardar"
+            disabled
+            class="bg-black text-white px-5 py-3 rounded-lg shadow-lg hover:bg-gray-900 transition opacity-50 cursor-not-allowed">
+        Guardar cambios
+    </button>
+
 </div>
 
 <script>
 function selectContentType(type) {
     const cards = ['user-create-card', 'user-admin-card'];
     const forms = ['user-create-form', 'user-admin-form'];
+    const botonesAcciones = document.getElementById('botones-acciones');
+    const botonGuardar = document.getElementById('guardar');
+    const botonCancelar = document.getElementById('cancelar');
 
+    // Reiniciar estados
     cards.forEach(card => document.getElementById(card).classList.replace('border-blue-600', 'border-gray-300'));
     forms.forEach(form => document.getElementById(form).classList.add('hidden'));
 
@@ -225,11 +265,146 @@ function selectContentType(type) {
         document.getElementById('user-create-card').classList.replace('border-gray-300', 'border-blue-600');
         document.getElementById('user-create-form').classList.remove('hidden');
         document.getElementById('user-create-form').scrollIntoView({ behavior: 'smooth' });
+        botonesAcciones.classList.add('hidden');
     } else if (type === 'user-admin') {
         document.getElementById('user-admin-card').classList.replace('border-gray-300', 'border-blue-600');
         document.getElementById('user-admin-form').classList.remove('hidden');
         document.getElementById('user-admin-form').scrollIntoView({ behavior: 'smooth' });
+        botonesAcciones.classList.remove('hidden');
+
+        botonGuardar.disabled = true;
+        botonCancelar.disabled = true;
+        botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const filas = document.querySelectorAll('#tabla-usuarios tr[data-id]');
+    const botonGuardar = document.getElementById('guardar');
+    const botonCancelar = document.getElementById('cancelar');
+
+    // Guardar estado original de cada fila
+    filas.forEach(row => {
+        row.dataset.original = JSON.stringify({
+            username: row.querySelector('.username input').value,
+            email: row.querySelector('.email input').value,
+            is_staff: row.querySelector('.is_staff select').value,
+            is_active: row.querySelector('.is_active select').value
+        });
+    });
+
+    let cambiosPendientes = false;
+
+    const activarBotones = () => {
+        if (cambiosPendientes) return;
+        cambiosPendientes = true;
+        botonGuardar.disabled = false;
+        botonCancelar.disabled = false;
+        botonGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.remove('opacity-50', 'cursor-not-allowed');
+    };
+
+    filas.forEach(row => {
+        row.addEventListener('input', activarBotones);
+        row.addEventListener('change', activarBotones);
+    });
+
+    botonCancelar.addEventListener('click', () => {
+        if (botonCancelar.disabled) return;
+
+        filas.forEach(row => {
+            const original = JSON.parse(row.dataset.original);
+
+            // Restaurar cada campo
+            row.querySelector('.username input').value = original.username;
+            row.querySelector('.email input').value = original.email;
+            row.querySelector('.is_staff select').value = original.is_staff;
+            row.querySelector('.is_active select').value = original.is_active;
+        });
+
+        // Deshabilitar botones de nuevo
+        cambiosPendientes = false;
+        botonGuardar.disabled = true;
+        botonCancelar.disabled = true;
+        botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+    });
+
+    botonGuardar.addEventListener('click', () => {
+        if (botonGuardar.disabled) return;
+
+        const formData = new FormData();
+        let index = 0;
+
+        filas.forEach(row => {
+            const original = JSON.parse(row.dataset.original);
+            const changes = {};
+
+            const username = row.querySelector('.username input').value;
+            if (username !== original.username) changes.username = username;
+
+            const email = row.querySelector('.email input').value;
+            if (email !== original.email) changes.email = email;
+
+            const is_staff = row.querySelector('.is_staff select').value;
+            if (is_staff !== original.is_staff) changes.is_staff = is_staff;
+
+            const is_active = row.querySelector('.is_active select').value;
+            if (is_active !== original.is_active) changes.is_active = is_active;
+
+            if (Object.keys(changes).length > 0) {
+                formData.append(`usuarios[${index}][id]`, row.dataset.id);
+                Object.entries(changes).forEach(([campo, valor]) => {
+                    formData.append(`usuarios[${index}][${campo}]`, valor);
+                });
+                index++;
+            }
+        });
+
+        if (index === 0) {
+            alert('No hay cambios que guardar.');
+            return;
+        }
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Cambios guardados correctamente');
+                // Actualizar los "originales" solo de los campos modificados
+                filas.forEach(row => {
+                    const original = JSON.parse(row.dataset.original);
+                    const current = {
+                        username: row.querySelector('.username input').value,
+                        email: row.querySelector('.email input').value,
+                        is_staff: row.querySelector('.is_staff select').value,
+                        is_active: row.querySelector('.is_active select').value
+                    };
+                    Object.keys(current).forEach(key => {
+                        if (current[key] !== original[key]) original[key] = current[key];
+                    });
+                    row.dataset.original = JSON.stringify(original);
+                });
+
+                cambiosPendientes = false;
+                botonGuardar.disabled = true;
+                botonCancelar.disabled = true;
+                botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+                botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                alert('❌ Error al guardar: ' + data.error);
+            }
+        });
+    });
+});
 </script>
+
 {% endblock %}
