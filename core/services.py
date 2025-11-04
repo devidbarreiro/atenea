@@ -2105,6 +2105,7 @@ class VideoCompositionService:
                 filter_complex = f"{''.join(filter_parts)}concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
             else:
                 # Algunos no tienen audio - añadir audio silencioso donde falte
+                # Necesitamos obtener la duración de cada video sin audio
                 filter_lines = []
                 concat_inputs = []
                 
@@ -2112,9 +2113,18 @@ class VideoCompositionService:
                     if has_audio:
                         concat_inputs.append(f"[{i}:v][{i}:a]")
                     else:
-                        # Crear audio silencioso del mismo length que el video
-                        filter_lines.append(f"[{i}:v]anullsrc=channel_layout=stereo:sample_rate=48000[a{i}]")
-                        concat_inputs.append(f"[{i}:v][a{i}]")
+                        # Obtener duración del video sin audio
+                        duration = VideoCompositionService.get_video_duration(video_paths[i])
+                        
+                        # Si no se pudo obtener duración, usar valor por defecto
+                        if duration <= 0:
+                            duration = 8.0  # 8 segundos por defecto
+                        
+                        # Generar audio silencioso con la duración del video
+                        # anullsrc no acepta inputs, genera audio sintético directamente
+                        audio_label = f"a{i}"
+                        filter_lines.append(f"anullsrc=channel_layout=stereo:sample_rate=48000:duration={duration}[{audio_label}]")
+                        concat_inputs.append(f"[{i}:v][{audio_label}]")
                 
                 if filter_lines:
                     filter_complex = ';'.join(filter_lines) + ';' + ''.join(concat_inputs) + f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
