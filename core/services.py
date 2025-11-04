@@ -1226,6 +1226,12 @@ class SceneService:
         
         created_scenes = []
         
+        # Obtener configuración heredada del script
+        video_orientation = getattr(script, 'video_orientation', '16:9')
+        video_type = getattr(script, 'video_type', 'general')
+        
+        logger.info(f"Creando escenas con orientación heredada: {video_orientation}, tipo: {video_type}")
+        
         for idx, scene_data in enumerate(scenes_data):
             try:
                 # Validar campos requeridos
@@ -1238,35 +1244,75 @@ class SceneService:
                 ai_service = scene_data.get('platform', 'gemini_veo').lower()
                 if ai_service == 'hedra':  # Por si viene de prompts antiguos
                     ai_service = 'gemini_veo'
-                if ai_service not in ['gemini_veo', 'sora', 'heygen']:
+                # Convertir heygen antiguo a heygen_v2
+                if ai_service == 'heygen':
+                    ai_service = 'heygen_v2'
+                if ai_service not in ['gemini_veo', 'sora', 'heygen_v2', 'heygen_avatar_iv', 'vuela_ai']:
                     ai_service = 'gemini_veo'  # Default
                 
-                # Preparar config básica según el servicio
+                # Validar servicio según tipo de video
+                if video_type == 'ultra':
+                    # Modo Ultra: Solo Veo3 y Sora2
+                    if ai_service in ['heygen_v2', 'heygen_avatar_iv']:
+                        logger.info(f"Video tipo Ultra: Cambiando {ai_service} a gemini_veo")
+                        ai_service = 'gemini_veo'
+                elif video_type == 'avatar':
+                    # Con Avatares: Principalmente HeyGen, pero permitir otros
+                    if ai_service not in ['heygen_v2', 'heygen_avatar_iv', 'gemini_veo', 'sora']:
+                        ai_service = 'heygen_v2'  # Default para avatares
+                
+                # Preparar config básica según el servicio CON ORIENTACIÓN HEREDADA
                 ai_config = {}
-                if ai_service == 'heygen' and scene_data.get('avatar') == 'si':
-                    # Config por defecto para HeyGen (se puede editar después)
+                if ai_service in ['heygen_v2', 'heygen_avatar_iv'] and scene_data.get('avatar') == 'si':
+                    # Config por defecto para HeyGen V2 o Avatar IV (se puede editar después)
                     ai_config = {
                         'avatar_id': '',  # El usuario lo configurará
                         'voice_id': '',   # El usuario lo configurará
+                        'video_orientation': video_orientation,  # Heredado del script
                         'voice_speed': 1.0,
                         'voice_pitch': 50,
                         'voice_emotion': 'Excited'
                     }
+                    # Para Avatar IV, agregar campo específico para image_key (si hay preview)
+                    if ai_service == 'heygen_avatar_iv':
+                        ai_config['image_key'] = ''  # Se llenará si hay imagen de preview
                 elif ai_service == 'gemini_veo':
                     ai_config = {
                         'veo_model': 'veo-2.0-generate-001',
                         'duration': min(8, scene_data.get('duration_sec', 8)),  # Max 8s
-                        'aspect_ratio': '16:9',
+                        'aspect_ratio': video_orientation,  # Heredado del script
                         'sample_count': 1,
                         'enhance_prompt': True,
                         'person_generation': 'allow_adult',
                         'compression_quality': 'optimized'
                     }
                 elif ai_service == 'sora':
+                    # Mapear orientación a tamaño para Sora
+                    if video_orientation == '9:16':
+                        sora_size = '720x1280'  # Vertical
+                    else:
+                        sora_size = '1280x720'  # Horizontal (default)
+                    
                     ai_config = {
                         'sora_model': 'sora-2',
                         'duration': min(12, scene_data.get('duration_sec', 8)),  # Max 12s
-                        'size': '1280x720'
+                        'size': sora_size  # Heredado del script
+                    }
+                elif ai_service == 'vuela_ai':
+                    # Configuración para Vuela.ai
+                    ai_config = {
+                        'mode': 'single_voice',  # Default mode
+                        'aspect_ratio': video_orientation,  # Heredado del script
+                        'animation_type': 'moving_image',  # Efecto Ken Burns
+                        'quality_tier': 'premium',
+                        'voice_id': '',  # El usuario lo configurará
+                        'voice_style': 'expressive',
+                        'voice_speed': 'standard',
+                        'media_type': 'ai_image',
+                        'style': 'photorealistic',
+                        'images_per_minute': 8,
+                        'add_subtitles': False,
+                        'add_background_music': False
                     }
                 
                 # Crear escena
@@ -1314,14 +1360,8 @@ class SceneService:
         Raises:
             ImageGenerationException: Si falla la generación
         """
-        from .models import Scene
-        
-        try:
-            # Marcar como generando
-            scene.mark_preview_as_generating()
-            
-            # Construir prompt optimizado para el preview
-            prompt = f"""
+        # Construir prompt optimizado para el preview
+        prompt = f"""
 Create a cinematic preview image for a video scene.
 
 Scene summary: {scene.summary}
@@ -1332,12 +1372,33 @@ Visual elements to include: {', '.join(scene.broll[:3]) if scene.broll else 'gen
 Style: Photorealistic, professional video production, cinematic lighting, high quality, 16:9 aspect ratio.
 This is a preview thumbnail for a video, make it visually engaging and representative of the content.
 """
+        return self.generate_preview_image_with_prompt(scene, prompt)
+    
+    def generate_preview_image_with_prompt(self, scene, custom_prompt: str):
+        """
+        Genera imagen preview para una escena usando un prompt personalizado
+        
+        Args:
+            scene: Objeto Scene
+            custom_prompt: Prompt personalizado para generar la imagen
+            
+        Returns:
+            GCS path de la imagen generada
+            
+        Raises:
+            ImageGenerationException: Si falla la generación
+        """
+        from .models import Scene
+        
+        try:
+            # Marcar como generando
+            scene.mark_preview_as_generating()
             
             # Usar ImageService con Gemini
             client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
             
             result = client.generate_image_from_text(
-                prompt=prompt,
+                prompt=custom_prompt,
                 aspect_ratio='16:9',
                 response_modalities=['Image']
             )
@@ -1383,16 +1444,24 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             if not scene.ai_service:
                 raise ValidationException("La escena no tiene servicio de IA configurado")
             
+            # Convertir valores antiguos de heygen a heygen_v2 (backward compatibility)
+            if scene.ai_service == 'heygen':
+                logger.info(f"Convirtiendo ai_service 'heygen' a 'heygen_v2' para escena {scene.scene_id}")
+                scene.ai_service = 'heygen_v2'
+                scene.save(update_fields=['ai_service'])
+            
             # Marcar como procesando
             scene.mark_video_as_processing()
             
             # Generar según el servicio
-            if scene.ai_service == 'heygen':
+            if scene.ai_service in ['heygen_v2', 'heygen_avatar_iv']:
                 external_id = self._generate_heygen_scene_video(scene)
             elif scene.ai_service == 'gemini_veo':
                 external_id = self._generate_veo_scene_video(scene)
             elif scene.ai_service == 'sora':
                 external_id = self._generate_sora_scene_video(scene)
+            elif scene.ai_service == 'vuela_ai':
+                external_id = self._generate_vuela_ai_scene_video(scene)
             else:
                 raise ValidationException(f"Servicio de IA no soportado: {scene.ai_service}")
             
@@ -1410,31 +1479,76 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             raise VideoGenerationException(error_msg)
     
     def _generate_heygen_scene_video(self, scene):
-        """Genera video de escena con HeyGen"""
+        """Genera video de escena con HeyGen (V2 o Avatar IV)"""
         from .ai_services.heygen import HeyGenClient
+        from .storage.gcs import gcs_storage
         
         if not settings.HEYGEN_API_KEY:
             raise ValidationException('HEYGEN_API_KEY no está configurada')
         
         client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
         
-        # Validar configuración
-        if not scene.ai_config.get('avatar_id') or not scene.ai_config.get('voice_id'):
-            raise ValidationException('Avatar ID y Voice ID son requeridos para HeyGen')
+        # Avatar IV: requiere image_key y voice_id
+        if scene.ai_service == 'heygen_avatar_iv':
+            if not scene.ai_config.get('voice_id'):
+                raise ValidationException('Voice ID es requerido para HeyGen Avatar IV')
+            
+            # Obtener o subir imagen de preview como asset de HeyGen
+            image_key = scene.ai_config.get('image_key')
+            
+            if not image_key and scene.preview_image_gcs_path:
+                # Descargar la imagen de preview desde GCS
+                logger.info(f"Descargando imagen de preview para Avatar IV desde GCS: {scene.preview_image_gcs_path}")
+                image_data = gcs_storage.download_as_bytes(scene.preview_image_gcs_path)
+                
+                # Subir a HeyGen y obtener image_key
+                logger.info(f"Subiendo imagen a HeyGen como asset para Avatar IV")
+                image_key = client.upload_asset_from_bytes(image_data, content_type='image/jpeg')
+                
+                # Guardar image_key en la configuración para futuras regeneraciones
+                scene.ai_config['image_key'] = image_key
+                scene.save(update_fields=['ai_config', 'updated_at'])
+                
+                logger.info(f"✓ Imagen subida a HeyGen. Image Key: {image_key}")
+            
+            if not image_key:
+                raise ValidationException('Se requiere una imagen de preview para HeyGen Avatar IV. Por favor, añade una imagen en el paso de configuración.')
+            
+            # Generar video Avatar IV
+            video_orientation = scene.ai_config.get('video_orientation', '16:9')
+            # Convertir formato de orientación a portrait/landscape
+            orientation_map = {'9:16': 'portrait', '16:9': 'landscape'}
+            orientation_str = orientation_map.get(video_orientation, 'landscape')
+            
+            response = client.generate_avatar_iv_video(
+                script=scene.script_text,
+                image_key=image_key,
+                voice_id=scene.ai_config['voice_id'],
+                title=f"{scene.scene_id} - {scene.script.title}",
+                video_orientation=orientation_str,
+                fit=scene.ai_config.get('fit', 'cover')
+            )
+            
+            return response.get('data', {}).get('video_id')
         
-        response = client.generate_video(
-            script=scene.script_text,
-            title=f"{scene.scene_id} - {scene.script.title}",
-            avatar_id=scene.ai_config['avatar_id'],
-            voice_id=scene.ai_config['voice_id'],
-            has_background=scene.ai_config.get('has_background', False),
-            background_url=scene.ai_config.get('background_url'),
-            voice_speed=scene.ai_config.get('voice_speed', 1.0),
-            voice_pitch=scene.ai_config.get('voice_pitch', 50),
-            voice_emotion=scene.ai_config.get('voice_emotion', 'Excited'),
-        )
-        
-        return response.get('data', {}).get('video_id')
+        # Avatar V2: requiere avatar_id y voice_id
+        else:  # heygen_v2
+            if not scene.ai_config.get('avatar_id') or not scene.ai_config.get('voice_id'):
+                raise ValidationException('Avatar ID y Voice ID son requeridos para HeyGen Avatar V2')
+            
+            response = client.generate_video(
+                script=scene.script_text,
+                title=f"{scene.scene_id} - {scene.script.title}",
+                avatar_id=scene.ai_config['avatar_id'],
+                voice_id=scene.ai_config['voice_id'],
+                has_background=scene.ai_config.get('has_background', False),
+                background_url=scene.ai_config.get('background_url'),
+                voice_speed=scene.ai_config.get('voice_speed', 1.0),
+                voice_pitch=scene.ai_config.get('voice_pitch', 50),
+                voice_emotion=scene.ai_config.get('voice_emotion', 'Excited'),
+            )
+            
+            return response.get('data', {}).get('video_id')
     
     def _generate_veo_scene_video(self, scene):
         """Genera video de escena con Gemini Veo"""
@@ -1513,6 +1627,77 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         
         return response.get('video_id')
     
+    def _generate_vuela_ai_scene_video(self, scene):
+        """Genera video de escena con Vuela.ai"""
+        from .ai_services.vuela_ai import VuelaAIClient, VuelaMode, VuelaAnimationType, VuelaQualityTier, VuelaMediaType, VuelaVoiceStyle
+        
+        if not settings.VUELA_AI_API_KEY:
+            raise ValidationException('VUELA_AI_API_KEY no está configurada')
+        
+        client = VuelaAIClient(api_key=settings.VUELA_AI_API_KEY)
+        
+        # Obtener configuración de la escena
+        config = scene.ai_config
+        voice_id = config.get('voice_id', '')
+        
+        if not voice_id:
+            raise ValidationException('Debe configurar un voice_id para Vuela.ai')
+        
+        # Construir script (usar \n para saltos de línea)
+        video_script = scene.script_text.replace('\n', '\\n')
+        
+        # Mapear valores de configuración
+        mode_str = config.get('mode', 'single_voice')
+        mode = VuelaMode(mode_str)
+        
+        aspect_ratio = config.get('aspect_ratio', '16:9')
+        
+        animation_type_str = config.get('animation_type', 'moving_image')
+        animation_type = VuelaAnimationType(animation_type_str)
+        
+        quality_tier_str = config.get('quality_tier', 'premium')
+        quality_tier = VuelaQualityTier(quality_tier_str)
+        
+        voice_style_str = config.get('voice_style', 'expressive')
+        voice_style = VuelaVoiceStyle(voice_style_str)
+        
+        voice_speed = config.get('voice_speed', 'standard')
+        
+        media_type_str = config.get('media_type', 'ai_image')
+        media_type = VuelaMediaType(media_type_str)
+        
+        style = config.get('style', 'photorealistic')
+        images_per_minute = int(config.get('images_per_minute', 8))
+        
+        add_subtitles = config.get('add_subtitles', False)
+        add_background_music = config.get('add_background_music', False)
+        
+        # Generar video
+        response = client.generate_video(
+            mode=mode,
+            video_script=video_script,
+            aspect_ratio=aspect_ratio,
+            animation_type=animation_type,
+            quality_tier=quality_tier,
+            language='es',  # TODO: Heredar del script
+            country='ES',
+            voice_id=voice_id,
+            voice_style=voice_style,
+            voice_speed=voice_speed,
+            media_type=media_type,
+            style=style,
+            images_per_minute=images_per_minute,
+            add_subtitles=add_subtitles,
+            add_background_music=add_background_music
+        )
+        
+        # Vuela.ai devuelve video_id en la respuesta
+        video_id = response.get('video_id')
+        if not video_id:
+            raise ValidationException('Vuela.ai no devolvió video_id')
+        
+        return video_id
+    
     def check_scene_video_status(self, scene) -> Dict:
         """
         Consulta el estado del video de una escena en la API externa
@@ -1533,13 +1718,23 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 'message': 'Video ya procesado'
             }
         
+        # Convertir valores antiguos de heygen a heygen_v2 (backward compatibility)
+        if scene.ai_service == 'heygen':
+            logger.info(f"Convirtiendo ai_service 'heygen' a 'heygen_v2' para escena {scene.scene_id}")
+            scene.ai_service = 'heygen_v2'
+            scene.save(update_fields=['ai_service'])
+        
         try:
-            if scene.ai_service == 'heygen':
+            if scene.ai_service in ['heygen_v2', 'heygen_avatar_iv']:
                 return self._check_heygen_scene_status(scene)
             elif scene.ai_service == 'gemini_veo':
                 return self._check_veo_scene_status(scene)
             elif scene.ai_service == 'sora':
                 return self._check_sora_scene_status(scene)
+            elif scene.ai_service == 'vuela_ai':
+                return self._check_vuela_ai_scene_status(scene)
+            else:
+                raise ValidationException(f"Servicio de IA no soportado para check status: {scene.ai_service}")
         except Exception as e:
             logger.error(f"Error al consultar estado de escena: {e}")
             raise ServiceException(str(e))
@@ -1661,6 +1856,109 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         
         elif api_status == 'failed':
             error_msg = status_data.get('error', 'Video generation failed')
+            scene.mark_video_as_error(error_msg)
+        
+        return status_data
+    
+    def _download_freepik_video(self, scene, resource_id: str):
+        """Descarga video de Freepik y lo sube a GCS"""
+        from .ai_services.freepik import FreepikClient
+        from .storage.gcs import gcs_storage
+        
+        if not settings.FREEPIK_API_KEY:
+            raise ValidationException('FREEPIK_API_KEY no está configurada')
+        
+        client = FreepikClient(api_key=settings.FREEPIK_API_KEY)
+        
+        try:
+            # Obtener URL de descarga
+            download_url = client.get_download_url(resource_id, file_type='original')
+            
+            if not download_url:
+                raise ValidationException('No se pudo obtener URL de descarga de Freepik')
+            
+            # Preparar ruta en GCS
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/freepik_video_{timestamp}.mp4"
+            
+            # Descargar y subir a GCS
+            logger.info(f"Descargando video de Freepik: {download_url}")
+            gcs_full_path = gcs_storage.upload_from_url(download_url, gcs_path)
+            
+            # Actualizar escena
+            scene.video_gcs_path = gcs_full_path
+            scene.video_status = 'completed'
+            scene.freepik_resource_id = resource_id
+            scene.image_source = 'freepik_stock'
+            scene.save()
+            
+            logger.info(f"✓ Video de Freepik subido para escena {scene.id}: {gcs_full_path}")
+            return gcs_full_path
+            
+        except Exception as e:
+            error_msg = f"Error al descargar video de Freepik: {str(e)}"
+            logger.error(error_msg)
+            scene.mark_video_as_error(error_msg)
+            raise
+    
+    def _check_vuela_ai_scene_status(self, scene):
+        """Consulta estado en Vuela.ai"""
+        from .ai_services.vuela_ai import VuelaAIClient
+        
+        client = VuelaAIClient(api_key=settings.VUELA_AI_API_KEY)
+        status_data = client.get_video_details(scene.external_id)
+        
+        # Vuela.ai devuelve: 'creating', 'completed', 'failed'
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            # Descargar video desde Vuela.ai
+            video_url = status_data.get('video_url')
+            if not video_url:
+                raise ValidationException('Vuela.ai no devolvió video_url')
+            
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                tmp_path = tmp_file.name
+            
+            try:
+                # Descargar video
+                logger.info(f"Descargando video de Vuela.ai: {video_url}")
+                response = requests.get(video_url, timeout=300, stream=True)
+                response.raise_for_status()
+                
+                with open(tmp_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                
+                # Subir a GCS
+                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                
+                with open(tmp_path, 'rb') as video_file:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=video_file.read(),
+                        destination_path=gcs_path,
+                        content_type='video/mp4'
+                    )
+                
+                metadata = {
+                    'mode': status_data.get('mode'),
+                    'aspect_ratio': status_data.get('aspect_ratio'),
+                    'animation_type': status_data.get('animation_type'),
+                }
+                
+                scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                logger.info(f"✓ Video de escena {scene.scene_id} completado desde Vuela.ai: {gcs_full_path}")
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        
+        elif api_status == 'failed':
+            error_msg = status_data.get('error_message', 'Video generation failed')
             scene.mark_video_as_error(error_msg)
         
         return status_data
@@ -2091,16 +2389,19 @@ class N8nService:
                     # Crear escenas usando SceneService
                     created_scenes = SceneService.create_scenes_from_n8n_data(script, scenes_data)
                     
-                    # Iniciar generación de preview images en background para cada escena
-                    scene_service = SceneService()
-                    for scene in created_scenes:
-                        try:
-                            # TODO: Idealmente esto debería ser async o con Celery
-                            # Por ahora lo hacemos síncrono
-                            scene_service.generate_preview_image(scene)
-                        except Exception as e:
-                            # No bloqueamos si falla una preview image
-                            logger.error(f"Error al generar preview para escena {scene.scene_id}: {e}")
+                    # Iniciar generación de preview images solo si está habilitado
+                    if script.generate_previews:
+                        scene_service = SceneService()
+                        for scene in created_scenes:
+                            try:
+                                # TODO: Idealmente esto debería ser async o con Celery
+                                # Por ahora lo hacemos síncrono
+                                scene_service.generate_preview_image(scene)
+                            except Exception as e:
+                                # No bloqueamos si falla una preview image
+                                logger.error(f"Error al generar preview para escena {scene.scene_id}: {e}")
+                    else:
+                        logger.info(f"✓ Generación de previews deshabilitada (script.generate_previews=False)")
                     
                     logger.info(f"✓ {len(created_scenes)} escenas creadas para script {script_id}")
             

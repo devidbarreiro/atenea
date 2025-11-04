@@ -231,8 +231,21 @@ class GeminiImageClient:
             result['width'] = self.ASPECT_RATIOS[aspect_ratio]['width']
             result['height'] = self.ASPECT_RATIOS[aspect_ratio]['height']
         
+        # Validar que la respuesta tenga candidatos
+        if not response.candidates:
+            logger.error("[Gemini Image] ❌ Respuesta sin candidatos")
+            raise ValueError("Gemini no devolvió candidatos en la respuesta. Es posible que el contenido haya sido bloqueado por políticas de seguridad.")
+        
+        # Validar que el primer candidato tenga contenido
+        candidate = response.candidates[0]
+        if not candidate.content:
+            logger.error(f"[Gemini Image] ❌ Candidato sin contenido. Finish reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'unknown'}")
+            if hasattr(candidate, 'finish_reason'):
+                logger.error(f"[Gemini Image] Motivo de finalización: {candidate.finish_reason}")
+            raise ValueError(f"Gemini bloqueó la generación. Motivo: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'desconocido'}")
+        
         # Extraer partes de la respuesta
-        for part in response.candidates[0].content.parts:
+        for part in candidate.content.parts:
             if part.text is not None:
                 result['text_response'] = part.text
                 logger.info(f"[Gemini Image] Texto de respuesta: {part.text[:100]}...")

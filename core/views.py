@@ -16,6 +16,9 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.core.paginator import Paginator
+from django.db import models
+from django.db.models import Max
+import os
 
 from .models import Project, Video, Image, Script, Scene
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
@@ -1245,6 +1248,8 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                     'script': script,
                     'scenes': scenes,
                     'scenes_with_urls': scenes_with_urls,
+                    'video_type': script.video_type or 'general',
+                    'video_orientation': script.video_orientation or '16:9',
                     'breadcrumbs': self.get_breadcrumbs()
                 }
                 
@@ -1272,6 +1277,9 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
         script_title = request.POST.get('title', 'Video con Agente')
         script_content = request.POST.get('script_content')
         desired_duration_min = request.POST.get('desired_duration_min', 5)
+        video_type = request.POST.get('video_type', 'general')
+        video_orientation = request.POST.get('video_orientation', '16:9')
+        generate_previews = request.POST.get('generate_previews', 'true').lower() == 'true'
         
         if not script_content:
             messages.error(request, 'El contenido del script es requerido')
@@ -1285,6 +1293,9 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 original_script=script_content,
                 desired_duration_min=int(desired_duration_min),
                 agent_flow=True,  # Marcar como flujo del agente
+                video_type=video_type,
+                video_orientation=video_orientation,
+                generate_previews=generate_previews,
                 status='pending'
             )
             
@@ -1704,6 +1715,283 @@ class SceneStatusView(View):
             }, status=500)
 
 
+class SceneCreateManualView(View):
+    """Crear una escena manualmente (Paso 2 o 3)"""
+    
+    def post(self, request, script_id):
+        try:
+            script = get_object_or_404(Script, id=script_id)
+            project = script.project
+            
+            import json
+            data = json.loads(request.body)
+            
+            logger.info(f"Creando escena manual para script {script_id}: {data}")
+            
+            # Obtener datos básicos
+            scene_type = data.get('scene_type', 'ai_generated')  # 'ai_generated', 'video_upload', 'freepik_video'
+            script_text = data.get('script_text', '')
+            summary = data.get('summary', script_text[:100] if script_text else 'Escena manual')
+            
+            # Calcular el siguiente order
+            max_order = script.db_scenes.aggregate(Max('order'))['order__max'] or -1
+            new_order = max_order + 1
+            
+            # Calcular scene_id
+            scene_count = script.db_scenes.count()
+            scene_id = f"Escena {scene_count + 1}"
+            
+            # Obtener y convertir ai_service si es necesario
+            ai_service = data.get('ai_service', 'gemini_veo')
+            # Convertir valores antiguos de heygen a heygen_v2 (backward compatibility)
+            if ai_service == 'heygen':
+                logger.info(f"  Convirtiendo ai_service 'heygen' a 'heygen_v2'")
+                ai_service = 'heygen_v2'
+            
+            # Crear escena base
+            new_scene = Scene.objects.create(
+                script=script,
+                project=project,
+                scene_id=scene_id,
+                summary=summary,
+                script_text=script_text,
+                duration_sec=data.get('duration_sec', 8),
+                avatar='no',
+                platform='manual',
+                broll=[],
+                order=new_order,
+                is_included=True,
+                ai_service=ai_service,
+                ai_config=data.get('ai_config', {}),
+                video_status='pending' if scene_type == 'ai_generated' else 'completed',
+                version=1
+            )
+            
+            # Manejar según el tipo
+            if scene_type == 'video_upload':
+                # El video se subirá en otra petición con el video file
+                # Por ahora solo creamos la escena
+                pass
+            elif scene_type == 'freepik_video':
+                # Descargar video de Freepik
+                freepik_resource_id = data.get('freepik_resource_id')
+                if freepik_resource_id:
+                    from .services import SceneService
+                    scene_service = SceneService()
+                    scene_service._download_freepik_video(new_scene, freepik_resource_id)
+            # Si es 'ai_generated', la escena queda pendiente para generar
+            
+            logger.info(f"✓ Escena manual creada: {new_scene.id} ({scene_id})")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Escena creada exitosamente',
+                'scene_id': new_scene.id,
+                'scene_data': {
+                    'id': new_scene.id,
+                    'scene_id': new_scene.scene_id,
+                    'summary': new_scene.summary,
+                    'script_text': new_scene.script_text,
+                    'ai_service': new_scene.ai_service,
+                    'ai_config': new_scene.ai_config,
+                    'order': new_scene.order,
+                    'video_status': new_scene.video_status
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al crear escena manual: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
+class SceneGenerateAIImageView(View):
+    """Generar imagen preview con IA usando un prompt personalizado"""
+    
+    def post(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            import json
+            data = json.loads(request.body)
+            prompt = data.get('prompt', '').strip()
+            
+            if not prompt:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'El prompt es requerido'
+                }, status=400)
+            
+            logger.info(f"Generando imagen con IA para escena {scene_id} con prompt: {prompt[:100]}...")
+            
+            # Usar SceneService para generar la imagen
+            from .services import SceneService
+            scene_service = SceneService()
+            
+            # Modificar temporalmente el script_text para usar el prompt personalizado
+            # Guardamos el original
+            original_script_text = scene.script_text
+            original_summary = scene.summary
+            
+            # Construir prompt mejorado
+            enhanced_prompt = f"""
+Create a cinematic preview image for a video scene.
+
+Custom prompt: {prompt}
+
+Scene summary: {scene.summary}
+Scene content: {scene.script_text[:200]}...
+
+Visual elements to include: {', '.join(scene.broll[:3]) if scene.broll else 'general scene'}
+
+Style: Photorealistic, professional video production, cinematic lighting, high quality, 16:9 aspect ratio.
+This is a preview thumbnail for a video, make it visually engaging and representative of the content.
+"""
+            
+            # Generar imagen
+            gcs_path = scene_service.generate_preview_image_with_prompt(scene, enhanced_prompt)
+            
+            logger.info(f"✓ Imagen generada con IA para escena {scene_id}: {gcs_path}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Imagen generada exitosamente',
+                'gcs_path': gcs_path
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al generar imagen con IA para escena {scene_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
+class SceneUploadVideoView(View):
+    """Subir video manual a una escena"""
+    
+    def post(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            if 'video_file' not in request.FILES:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No se proporcionó archivo de video'
+                }, status=400)
+            
+            video_file = request.FILES['video_file']
+            
+            # Validar tipo de archivo
+            allowed_extensions = ['.mp4', '.mov', '.avi', '.webm']
+            file_ext = os.path.splitext(video_file.name)[1].lower()
+            if file_ext not in allowed_extensions:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Formato no soportado. Use: {", ".join(allowed_extensions)}'
+                }, status=400)
+            
+            # Subir a GCS
+            from .storage.gcs import gcs_storage
+            from datetime import datetime
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = os.path.basename(video_file.name)
+            gcs_destination = f"projects/{scene.project.id}/scenes/{scene.id}/manual_upload_{timestamp}_{safe_filename}"
+            
+            logger.info(f"Subiendo video manual a GCS: {safe_filename}")
+            gcs_path = gcs_storage.upload_django_file(video_file, gcs_destination)
+            
+            # Marcar escena como completada
+            scene.video_gcs_path = gcs_path
+            scene.video_status = 'completed'
+            scene.save()
+            
+            logger.info(f"✓ Video manual subido para escena {scene.id}: {gcs_path}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Video subido exitosamente',
+                'gcs_path': gcs_path
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al subir video manual: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
+class SceneUploadCustomImageView(View):
+    """Subir imagen personalizada como preview de una escena"""
+    
+    def post(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            if 'image_file' not in request.FILES:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No se proporcionó archivo de imagen'
+                }, status=400)
+            
+            image_file = request.FILES['image_file']
+            
+            # Validar tipo de archivo
+            allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+            file_ext = os.path.splitext(image_file.name)[1].lower()
+            if file_ext not in allowed_extensions:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Formato no soportado. Use: {", ".join(allowed_extensions)}'
+                }, status=400)
+            
+            # Validar tamaño (max 10MB)
+            max_size = 10 * 1024 * 1024  # 10MB
+            if image_file.size > max_size:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'La imagen es demasiado grande. Tamaño máximo: 10MB'
+                }, status=400)
+            
+            # Subir a GCS
+            from .storage.gcs import gcs_storage
+            from datetime import datetime
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = os.path.basename(image_file.name)
+            gcs_destination = f"projects/{scene.project.id}/scenes/{scene.id}/custom_preview_{timestamp}_{safe_filename}"
+            
+            logger.info(f"Subiendo imagen personalizada a GCS: {safe_filename}")
+            gcs_path = gcs_storage.upload_django_file(image_file, gcs_destination)
+            
+            # Establecer como preview de la escena
+            scene.preview_image_path = gcs_path
+            scene.save()
+            
+            logger.info(f"✓ Imagen personalizada subida para escena {scene.id}: {gcs_path}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Imagen subida exitosamente',
+                'gcs_path': gcs_path
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al subir imagen personalizada: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            }, status=500)
+
+
 class SceneUpdateConfigView(View):
     """Actualizar configuración de una escena"""
     
@@ -1718,8 +2006,13 @@ class SceneUpdateConfigView(View):
             
             # Actualizar ai_service si viene
             if 'ai_service' in data:
-                scene.ai_service = data['ai_service']
-                logger.info(f"  ai_service actualizado a: {data['ai_service']}")
+                ai_service = data['ai_service']
+                # Convertir valores antiguos de heygen a heygen_v2 (backward compatibility)
+                if ai_service == 'heygen':
+                    logger.info(f"  Convirtiendo ai_service 'heygen' a 'heygen_v2'")
+                    ai_service = 'heygen_v2'
+                scene.ai_service = ai_service
+                logger.info(f"  ai_service actualizado a: {ai_service}")
             
             # Actualizar ai_config
             if 'ai_config' in data:
@@ -1730,6 +2023,11 @@ class SceneUpdateConfigView(View):
             if 'script_text' in data:
                 scene.script_text = data['script_text']
                 logger.info(f"  script_text actualizado")
+            
+            # Actualizar order si viene (para drag & drop)
+            if 'order' in data:
+                scene.order = int(data['order'])
+                logger.info(f"  order actualizado a: {data['order']}")
             
             scene.save()
             
@@ -1756,19 +2054,36 @@ class SceneRegenerateView(View):
             
             logger.info(f"Regenerando escena {scene_id} (versión actual: {original_scene.version})")
             
-            # Crear nueva versión de la escena
-            new_version = original_scene.version + 1
-            
-            # Modificar scene_id para la nueva versión (debido a unique_together constraint)
             # Extraer el scene_id base sin el sufijo de versión anterior si existe
             base_scene_id = original_scene.scene_id
             if ' v' in base_scene_id:
                 base_scene_id = base_scene_id.split(' v')[0]
             
+            # Buscar la versión más alta existente para esta escena base
+            # Esto evita conflictos si ya existe una versión posterior
+            max_version = Scene.objects.filter(
+                script=original_scene.script,
+                scene_id__startswith=base_scene_id
+            ).aggregate(models.Max('version'))['version__max'] or 0
+            
+            new_version = max_version + 1
+            
+            # Generar nuevo scene_id único
             new_scene_id = f"{base_scene_id} v{new_version}" if new_version > 1 else base_scene_id
+            
+            # Verificar que no exista (por seguridad adicional)
+            counter = 0
+            temp_scene_id = new_scene_id
+            while Scene.objects.filter(script=original_scene.script, scene_id=temp_scene_id).exists():
+                counter += 1
+                temp_scene_id = f"{base_scene_id} v{new_version + counter}"
+                logger.warning(f"scene_id {new_scene_id} ya existe, probando con {temp_scene_id}")
+            
+            new_scene_id = temp_scene_id
             
             logger.info(f"  scene_id original: {original_scene.scene_id}")
             logger.info(f"  scene_id nuevo: {new_scene_id}")
+            logger.info(f"  versión nueva: {new_version}")
             
             new_scene = Scene.objects.create(
                 script=original_scene.script,
@@ -1931,3 +2246,434 @@ class N8nWebhookView(View):
             logger.error(f"✗ Error inesperado en webhook n8n: {e}")
             logger.exception("Traceback completo:")
             return JsonResponse({'error': 'Error interno'}, status=500)
+
+
+# ====================
+# FREEPIK API VIEWS
+# ====================
+
+class FreepikSearchImagesView(View):
+    """Buscar imágenes en Freepik Stock"""
+    
+    def get(self, request):
+        """
+        Busca imágenes en Freepik
+        
+        Query params:
+            - query: Término de búsqueda (requerido)
+            - orientation: horizontal, vertical, square (opcional)
+            - page: Número de página (default: 1)
+            - limit: Límite de resultados (default: 20, max: 200)
+        """
+        from .ai_services.freepik import FreepikClient, FreepikOrientation
+        from django.conf import settings
+        
+        query = request.GET.get('query')
+        if not query:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'El parámetro "query" es requerido'
+            }, status=400)
+        
+        if not settings.FREEPIK_API_KEY:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'FREEPIK_API_KEY no configurada'
+            }, status=500)
+        
+        try:
+            client = FreepikClient(api_key=settings.FREEPIK_API_KEY)
+            
+            # Parsear orientación
+            orientation = None
+            orientation_str = request.GET.get('orientation', '').lower()
+            if orientation_str == 'horizontal':
+                orientation = FreepikOrientation.HORIZONTAL
+            elif orientation_str == 'vertical':
+                orientation = FreepikOrientation.VERTICAL
+            elif orientation_str == 'square':
+                orientation = FreepikOrientation.SQUARE
+            
+            page = int(request.GET.get('page', 1))
+            limit = int(request.GET.get('limit', 20))
+            license_filter = request.GET.get('license', 'all')  # all, free, premium
+            
+            # Buscar
+            results = client.search_images(
+                query=query,
+                orientation=orientation,
+                page=page,
+                limit=limit,
+                license_filter=license_filter
+            )
+            
+            logger.info(f"Freepik search for '{query}': Found {len(results.get('data', []))} raw results")
+            
+            # Log de los primeros IDs para debugging
+            if results.get('data'):
+                first_ids = [item.get('id') for item in results.get('data', [])[:3]]
+                logger.info(f"First 3 resource IDs from Freepik: {first_ids}")
+            
+            # Parsear resultados para simplificar
+            parsed_results = client.parse_search_results(results, license_filter=license_filter)
+            
+            logger.info(f"Freepik search for '{query}': Parsed {len(parsed_results)} results with images")
+            
+            # Log de un resultado de ejemplo para debugging
+            if parsed_results:
+                sample = parsed_results[0]
+                logger.info(f"Sample result: ID={sample['id']}, title='{sample['title'][:50]}', has_thumbnail={bool(sample['thumbnail'])}, has_preview={bool(sample['preview'])}, is_premium={sample.get('is_premium', 'NOT SET')}")
+                
+                # Log de las primeras 3 para ver distribución de premium
+                for i, result in enumerate(parsed_results[:3]):
+                    logger.info(f"  Result {i+1}: ID={result['id']}, is_premium={result.get('is_premium')}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'results': parsed_results,
+                'meta': results.get('meta', {}),
+                'query': query
+            })
+            
+        except Exception as e:
+            logger.error(f"Error en búsqueda de Freepik: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class FreepikSetSceneImageView(View):
+    """Establecer imagen de Freepik como preview/referencia de una escena"""
+    
+    def post(self, request, scene_id):
+        """
+        Descarga imagen de Freepik y la establece como preview de la escena
+        
+        Body (JSON):
+            - resource_id: ID del recurso en Freepik (requerido)
+            - download_url: URL de descarga de la imagen (requerido)
+        """
+        from .ai_services.freepik import FreepikClient
+        from django.conf import settings
+        from .storage.gcs import gcs_storage
+        import json
+        import requests
+        import tempfile
+        import os
+        
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            data = json.loads(request.body)
+            
+            resource_id = data.get('resource_id')
+            
+            if not resource_id:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'resource_id es requerido'
+                }, status=400)
+            
+            # Obtener URL de descarga real usando la API de Freepik
+            logger.info(f"Obteniendo detalles de imagen de Freepik: {resource_id}")
+            
+            if not settings.FREEPIK_API_KEY:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'FREEPIK_API_KEY no configurada'
+                }, status=500)
+            
+            client = FreepikClient(api_key=settings.FREEPIK_API_KEY)
+            
+            # Intentar usar el endpoint oficial de download
+            image_url = None
+            try:
+                download_response = client.get_download_url(resource_id, image_size='large')
+                
+                # Extraer URL de descarga
+                if 'data' in download_response:
+                    data = download_response['data']
+                    # La API puede devolver 'signed_url', 'url' o ambas
+                    image_url = data.get('signed_url') or data.get('url')
+                    logger.info(f"✓ URL de descarga obtenida del endpoint oficial")
+            
+            except Exception as e:
+                error_str = str(e)
+                logger.warning(f"No se pudo usar endpoint de descarga: {error_str}")
+                
+                # Si es un recurso Premium, usar fallback al preview
+                if '403' in error_str or 'Premium' in error_str or 'Forbidden' in error_str:
+                    logger.info(f"Recurso Premium detectado, usando preview/thumbnail como fallback")
+                    
+                    # Obtener detalles del recurso para extraer preview
+                    try:
+                        details = client.get_resource_details(resource_id)
+                        logger.info(f"Details response keys: {details.keys() if isinstance(details, dict) else 'Not a dict'}")
+                        
+                        if 'data' in details:
+                            item = details['data']
+                            logger.info(f"Item keys: {item.keys() if isinstance(item, dict) else 'Not a dict'}")
+                            
+                            # Intentar obtener preview de diferentes lugares
+                            # 1. Desde preview.url
+                            if 'preview' in item and isinstance(item['preview'], dict):
+                                preview_url = item['preview'].get('url')
+                                if preview_url and isinstance(preview_url, str):
+                                    image_url = preview_url
+                                    logger.info(f"✓ Usando preview.url: {image_url[:80]}")
+                            
+                            # 2. Desde image.source.url (backup)
+                            if not image_url and 'image' in item and isinstance(item['image'], dict):
+                                if 'source' in item['image'] and isinstance(item['image']['source'], dict):
+                                    source_url = item['image']['source'].get('url')
+                                    if source_url and isinstance(source_url, str):
+                                        image_url = source_url
+                                        logger.info(f"✓ Usando image.source.url: {image_url[:80]}")
+                            
+                            if image_url:
+                                logger.info(f"✓ Preview/thumbnail encontrado para recurso Premium")
+                            else:
+                                logger.error(f"No se encontró URL de preview en detalles del recurso")
+                    except Exception as detail_error:
+                        logger.error(f"Error obteniendo detalles del recurso: {detail_error}")
+                else:
+                    raise
+            
+            if not image_url:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No se pudo obtener URL de imagen de Freepik. Es posible que sea un recurso Premium.'
+                }, status=400)
+            
+            logger.info(f"Descargando imagen desde: {image_url[:80]}...")
+            
+            # Descargar imagen
+            response = requests.get(image_url, timeout=60, stream=True)
+            response.raise_for_status()
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    tmp_file.write(chunk)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Subir a GCS
+                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/preview_freepik.jpg"
+                
+                with open(tmp_path, 'rb') as image_file:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=image_file.read(),
+                        destination_path=gcs_path,
+                        content_type='image/jpeg'
+                    )
+                
+                # Actualizar escena
+                scene.preview_image_gcs_path = gcs_full_path
+                scene.preview_image_status = 'completed'
+                scene.image_source = 'freepik_stock'
+                scene.freepik_resource_id = resource_id
+                scene.save(update_fields=[
+                    'preview_image_gcs_path',
+                    'preview_image_status',
+                    'image_source',
+                    'freepik_resource_id',
+                    'updated_at'
+                ])
+                
+                logger.info(f"✓ Imagen de Freepik establecida para escena {scene.scene_id}")
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Imagen de Freepik establecida correctamente',
+                    'gcs_path': gcs_full_path
+                })
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            
+        except Exception as e:
+            logger.error(f"Error al establecer imagen de Freepik: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class FreepikSearchVideosView(View):
+    """Buscar videos en Freepik Stock"""
+    
+    def get(self, request):
+        """
+        Busca videos en Freepik
+        
+        Query params:
+            - query: Término de búsqueda (requerido)
+            - orientation: horizontal, vertical (opcional)
+            - page: Número de página (default: 1)
+            - limit: Límite de resultados (default: 20, max: 200)
+        """
+        from .ai_services.freepik import FreepikClient, FreepikOrientation
+        from django.conf import settings
+        
+        query = request.GET.get('query')
+        if not query:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'El parámetro "query" es requerido'
+            }, status=400)
+        
+        if not settings.FREEPIK_API_KEY:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'FREEPIK_API_KEY no configurada'
+            }, status=500)
+        
+        try:
+            client = FreepikClient(api_key=settings.FREEPIK_API_KEY)
+            
+            # Parsear orientación
+            orientation = None
+            orientation_str = request.GET.get('orientation', '').lower()
+            if orientation_str == 'horizontal':
+                orientation = FreepikOrientation.HORIZONTAL
+            elif orientation_str == 'vertical':
+                orientation = FreepikOrientation.VERTICAL
+            
+            page = int(request.GET.get('page', 1))
+            limit = int(request.GET.get('limit', 20))
+            
+            # Buscar
+            results = client.search_videos(
+                query=query,
+                orientation=orientation,
+                page=page,
+                limit=limit
+            )
+            
+            # Parsear resultados
+            parsed_results = client.parse_search_results(results)
+            
+            return JsonResponse({
+                'status': 'success',
+                'results': parsed_results,
+                'meta': results.get('meta', {}),
+                'query': query
+            })
+            
+        except Exception as e:
+            logger.error(f"Error en búsqueda de videos en Freepik: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+# ====================
+# VUELA.AI API VIEWS
+# ====================
+
+class VuelaAIValidateTokenView(View):
+    """Validar token de Vuela.ai"""
+    
+    def post(self, request):
+        """Valida el token API de Vuela.ai"""
+        from .ai_services.vuela_ai import VuelaAIClient
+        from django.conf import settings
+        
+        if not settings.VUELA_AI_API_KEY:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'VUELA_AI_API_KEY no configurada'
+            }, status=500)
+        
+        try:
+            client = VuelaAIClient(api_key=settings.VUELA_AI_API_KEY)
+            result = client.validate_token()
+            
+            return JsonResponse({
+                'status': 'success',
+                'validation': result
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al validar token de Vuela.ai: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class VuelaAIListVideosView(View):
+    """Listar videos generados en Vuela.ai"""
+    
+    def get(self, request):
+        """
+        Lista videos de Vuela.ai
+        
+        Query params:
+            - page: Número de página (default: 1)
+            - limit: Límite de resultados (default: 10)
+            - search: Término de búsqueda (opcional)
+        """
+        from .ai_services.vuela_ai import VuelaAIClient
+        from django.conf import settings
+        
+        if not settings.VUELA_AI_API_KEY:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'VUELA_AI_API_KEY no configurada'
+            }, status=500)
+        
+        try:
+            client = VuelaAIClient(api_key=settings.VUELA_AI_API_KEY)
+            
+            page = int(request.GET.get('page', 1))
+            limit = int(request.GET.get('limit', 10))
+            search = request.GET.get('search')
+            
+            result = client.list_videos(page=page, limit=limit, search=search)
+            
+            return JsonResponse({
+                'status': 'success',
+                'videos': result
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al listar videos de Vuela.ai: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+class VuelaAIVideoDetailsView(View):
+    """Obtener detalles de un video de Vuela.ai"""
+    
+    def get(self, request, video_id):
+        """Obtiene detalles de un video específico"""
+        from .ai_services.vuela_ai import VuelaAIClient
+        from django.conf import settings
+        
+        if not settings.VUELA_AI_API_KEY:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'VUELA_AI_API_KEY no configurada'
+            }, status=500)
+        
+        try:
+            client = VuelaAIClient(api_key=settings.VUELA_AI_API_KEY)
+            result = client.get_video_details(video_id)
+            
+            return JsonResponse({
+                'status': 'success',
+                'video': result
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al obtener detalles de video Vuela.ai: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
