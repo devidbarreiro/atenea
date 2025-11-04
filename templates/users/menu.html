@@ -239,6 +239,12 @@
                     <option value="False" {% if not user.is_active %}selected{% endif %}>Inactivo</option>
                 </select>
             </td>
+            <td class="px-4 py-2 border-b border-gray-200">
+                <!-- Boton mas opciones || heroicons ellipsis-horizontal -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                </svg>
+            </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -261,7 +267,6 @@
             class="bg-black text-white px-5 py-3 rounded-lg shadow-lg hover:bg-gray-900 transition opacity-50 cursor-not-allowed">
         Guardar cambios
     </button>
-
 </div>
 
 <script>
@@ -301,6 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const filas = document.querySelectorAll('#tabla-usuarios tr[data-id]');
     const botonGuardar = document.getElementById('guardar');
     const botonCancelar = document.getElementById('cancelar');
+    const botonEditar = document.getElementById('edit-table');
+    const botonEliminar = document.getElementById('delete-selected');
 
     // Guardar estado original de cada fila
     filas.forEach(row => {
@@ -337,8 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Restaurar cada campo
             row.querySelector('.username input').value = original.username;
             row.querySelector('.email input').value = original.email;
-            row.querySelector('.is_staff select').value = original.is_staff;
-            row.querySelector('.is_active select').value = original.is_active;
+            row.querySelector('.is_staff select').value = original.is_staff.toString();
+            row.querySelector('.is_active select').value = original.is_active.toString();
         });
 
         // Deshabilitar botones de nuevo
@@ -366,10 +373,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (email !== original.email) changes.email = email;
 
             const is_staff = row.querySelector('.is_staff select').value;
-            if (is_staff !== original.is_staff) changes.is_staff = is_staff;
+            if (is_staff !== original.is_staff.toString()) changes.is_staff = is_staff;
 
             const is_active = row.querySelector('.is_active select').value;
-            if (is_active !== original.is_active) changes.is_active = is_active;
+            if (is_active !== original.is_active.toString()) changes.is_active = is_active;
 
             if (Object.keys(changes).length > 0) {
                 formData.append(`usuarios[${index}][id]`, row.dataset.id);

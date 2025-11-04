@@ -2794,40 +2794,58 @@ class UserMenuView(View):
     def get(self, request):
         if not request.user.is_superuser:
             messages.error(request, 'No tienes permiso para acceder a esta página.')
-            return redirect('core:home')  # mejor redirigir al home
+            return redirect('core:dashboard')
 
         users = User.objects.all()
         form = CustomUserCreationForm()
         return render(request, self.template_name, {'users': users, 'form': form})
 
     def post(self, request):
-        # --- Actualización AJAX ---
+        # --- Eliminación AJAX ---
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             try:
+                # Si se está eliminando
+                if any(k.startswith('usuarios_a_eliminar') for k in request.POST):
+                    ids_a_eliminar = [
+                        request.POST[k] for k in request.POST if k.startswith('usuarios_a_eliminar')
+                    ]
+
+                    # Evitar que el superusuario actual se elimine a sí mismo
+                    if str(request.user.id) in ids_a_eliminar:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'No puedes eliminar tu propio usuario.'
+                        })
+
+                    eliminados = User.objects.filter(id__in=ids_a_eliminar)
+                    count = eliminados.count()
+                    eliminados.delete()
+
+                    return JsonResponse({'success': True, 'deleted_count': count})
+
+                #  Si se está actualizando
                 usuarios = []
 
-                # Recolectar todos los datos del FormData
+                # Recolectar datos de usuarios actualizados
                 for key in request.POST:
                     if key.startswith('usuarios['):
                         idx = key.split('[')[1].split(']')[0]
                         campo = key.split('[')[2].split(']')[0]
                         valor = request.POST[key]
 
-                        # Asegurar que existe el índice
                         while len(usuarios) <= int(idx):
                             usuarios.append({})
                         usuarios[int(idx)][campo] = valor
 
-                # Procesar cada usuario una vez todos están completos
                 for u in usuarios:
                     if 'id' not in u:
-                        continue  # ignorar filas vacías
+                        continue
 
                     user = User.objects.get(id=u['id'])
                     nuevo_username = u.get('username', user.username).strip()
                     nuevo_email = u.get('email', user.email).strip()
 
-                    # Evitar duplicados de username
+                    # Validar duplicados
                     if User.objects.exclude(id=user.id).filter(username=nuevo_username).exists():
                         return JsonResponse({
                             'success': False,
@@ -2840,22 +2858,32 @@ class UserMenuView(View):
                     user.is_active = u.get('is_active', 'False').lower() == 'true'
                     user.save()
 
-                    print(request.POST)
-
                 return JsonResponse({'success': True})
 
             except IntegrityError:
                 return JsonResponse({'success': False, 'error': 'Usuario duplicado.'})
             except Exception as e:
-                print("❌ Error al guardar:", e)
+                print("❌ Error al guardar/eliminar:", e)
                 return JsonResponse({'success': False, 'error': str(e)})
 
-        # --- Creación normal (formulario) ---
+        # --- Creación normal (formulario clásico) ---
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Usuario creado correctamente.')
+            user = form.save(commit=False)
+            user.set_password(form.cleaned_data['password'])  # Hashea la contraseña
+            user.save()
+            messages.success(request, '✅ Usuario creado correctamente.')
         else:
-            messages.error(request, 'Error al crear usuario.')
+            friendly_names = {
+                'username': 'Usuario',
+                'email': 'Correo electrónico',
+                'password': 'Contraseña',
+                'password_confirm': 'Confirmar contraseña',
+                '__all__': 'Error general'
+            }
+            for field, errors in form.errors.items():
+                field_name = friendly_names.get(field, field.capitalize())
+                for error in errors:
+                    messages.error(request, f"{field_name}: {error}")
 
         return redirect('core:user_menu')

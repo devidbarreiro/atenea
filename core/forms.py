@@ -839,4 +839,6 @@ class CustomUserCreationForm(forms.ModelForm):
             raise ValidationError("La contraseña debe contener al menos un número.")
         if not re.search(r"[A-Z]", password):
             raise ValidationError("La contraseña debe contener al menos una letra mayúscula.")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-\[\]\\;/+=]", password):
+            raise ValidationError("La contraseña debe contener al menos un carácter especial.")
         return password
