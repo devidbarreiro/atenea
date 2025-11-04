@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
 from django.db.models import Max
+from django.contrib.auth import authenticate, login, logout
 import os
 
 from .models import Project, Video, Image, Script, Scene
@@ -72,6 +73,48 @@ class ServiceMixin:
     def get_api_service(self):
         return APIService()
 
+# ====================
+# LOGIN
+# ====================
+
+class LoginView(View):
+    """Inicio de sesión"""
+    template_name = 'login/login.html'
+
+    def get_context(self, username=''):
+        """Contexto extra para el template"""
+        return {
+            'hide_header': True,
+        }
+
+    def get(self, request):
+        return render(request, self.template_name, self.get_context())
+
+    def post(self, request):
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '').strip()
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+            messages.success(request, f"Bienvenido, {user.username} 👋")
+            return redirect('core:dashboard')
+        else:
+            messages.error(request, "Usuario o contraseña incorrectos.")
+            return render(request, self.template_name, self.get_context(username=username))
+
+
+# ====================
+# LOGOUT
+# ====================
+
+class LogoutView(View):
+    """Cerrar sesión"""
+    def get(self, request):
+        logout(request)
+        messages.info(request, "Has cerrado sesión correctamente 👋")
+        return redirect('core:login')
 
 # ====================
 # DASHBOARD
@@ -90,6 +133,7 @@ class DashboardView(ServiceMixin, ListView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['show_header'] = True
         
         # Agregar estadísticas
         context.update({
