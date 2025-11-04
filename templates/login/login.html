@@ -65,6 +65,14 @@
         <button type="submit" class="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-900 transition-colors font-semibold text-lg">
             Entrar
         </button>
+
+        <!-- Enlace de registro -->
+        <div class="mt-6 text-center">
+            <p class="text-sm text-gray-600">
+                ¿No tienes cuenta? 
+                <a href="{% url 'core:signup' %}" class="text-black font-semibold hover:underline">Regístrate aquí</a>
+            </p>
+        </div>
     </form>
 </div>
 {% endblock %}

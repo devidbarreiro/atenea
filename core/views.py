@@ -116,6 +116,65 @@ class LogoutView(View):
         messages.info(request, "Has cerrado sesión correctamente 👋")
         return redirect('core:login')
 
+
+class SignupView(View):
+    """Registro de nuevos usuarios"""
+    template_name = 'login/signup.html'
+
+    def get_context(self):
+        """Contexto extra para el template"""
+        return {
+            'hide_header': True,
+        }
+
+    def get(self, request):
+        return render(request, self.template_name, self.get_context())
+
+    def post(self, request):
+        from django.contrib.auth.models import User
+        
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '').strip()
+        password_confirm = request.POST.get('password_confirm', '').strip()
+
+        # Validaciones básicas
+        if not all([username, email, password, password_confirm]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return render(request, self.template_name, self.get_context())
+
+        if password != password_confirm:
+            messages.error(request, 'Las contraseñas no coinciden')
+            return render(request, self.template_name, self.get_context())
+
+        if len(password) < 8:
+            messages.error(request, 'La contraseña debe tener al menos 8 caracteres')
+            return render(request, self.template_name, self.get_context())
+
+        # Verificar si el usuario ya existe
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Este nombre de usuario ya está en uso')
+            return render(request, self.template_name, self.get_context())
+
+        if User.objects.filter(email=email).exists():
+            messages.error(request, 'Este correo electrónico ya está registrado')
+            return render(request, self.template_name, self.get_context())
+
+        try:
+            # Crear usuario
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
+            messages.success(request, f'Cuenta creada exitosamente. Bienvenido, {username}! 👋')
+            # Autenticar y hacer login automáticamente
+            login(request, user)
+            return redirect('core:dashboard')
+        except Exception as e:
+            messages.error(request, f'Error al crear la cuenta: {str(e)}')
+            return render(request, self.template_name, self.get_context())
+
 # ====================
 # DASHBOARD
 # ====================

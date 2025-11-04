@@ -10,6 +10,7 @@ class LoginRequiredMiddleware:
         exempt_urls = [
             reverse('core:login'),
             reverse('core:logout'),
+            reverse('core:signup'),
         ]
 
         if not request.user.is_authenticated and request.path not in exempt_urls:
