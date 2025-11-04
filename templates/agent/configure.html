@@ -44,15 +44,20 @@
         </div>
     </div>
 
+    <!-- Main Content Area -->
+    <div class="flex gap-6 relative">
+    <div class="flex-1">
     {% if not script %}
     <!-- Processing Screen -->
-    <div id="processing-screen" class="text-center py-16">
-        <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-8"></div>
-        <h2 class="text-3xl font-bold text-gray-900 mb-4">Procesando Guión con IA...</h2>
-        <p class="text-gray-600 mb-8">Nuestro agente de IA está analizando tu contenido</p>
-        <div class="max-w-2xl mx-auto bg-blue-50 rounded-lg p-6 mb-8">
-            <div id="processing-status" class="text-left space-y-2">
-                <p class="text-sm text-gray-700">⏳ Analizando estructura del guión...</p>
+    <div id="processing-screen" class="flex items-center justify-center min-h-[60vh]">
+        <div class="text-center w-full max-w-3xl">
+            <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-8"></div>
+            <h2 class="text-3xl font-bold text-gray-900 mb-4">Procesando Guión con IA...</h2>
+            <p class="text-gray-600 mb-8">Nuestro agente de IA está analizando tu contenido</p>
+            <div class="max-w-2xl mx-auto bg-blue-50 rounded-lg p-6 mb-8">
+                <div id="processing-status" class="text-left space-y-2">
+                    <p class="text-sm text-gray-700">⏳ Analizando estructura del guión...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -60,9 +65,19 @@
     {% else %}
     <!-- Scenes Ready Screen -->
     <div id="scenes-ready">
-        <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Escenas Listas</h1>
-            <p class="text-gray-600">Revisa y configura tus escenas generadas por IA</p>
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-4xl font-bold text-gray-900 mb-2">Escenas Listas</h1>
+                <p class="text-gray-600">Revisa y configura tus escenas generadas por IA</p>
+            </div>
+            <button 
+                onclick="openAddSceneModal()"
+                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Añadir Escena
+            </button>
         </div>
 
         <!-- Scenes Grid -->
@@ -80,23 +95,52 @@
                     </div>
 
                     <!-- Preview Image -->
-                    <div class="w-48 h-32 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                    <div class="w-48 h-32 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0 relative group">
                         {% if scene.preview_image_status == 'completed' and scene_data.preview_image_url %}
                             <img src="{{ scene_data.preview_image_url }}" 
                                  alt="{{ scene.scene_id }}" 
                                  class="w-full h-full object-cover">
+                            <!-- Badge de fuente de imagen -->
+                            <div class="absolute top-1 right-1 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                {% if scene.image_source == 'freepik_stock' %}
+                                    📸 Stock
+                                {% elif scene.image_source == 'user_upload' %}
+                                    ⬆️ Subida
+                                {% else %}
+                                    🤖 IA
+                                {% endif %}
+                            </div>
                         {% elif scene.preview_image_status == 'generating' %}
                             <div class="w-full h-full flex items-center justify-center">
                                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                             </div>
                         {% else %}
-                            <div class="w-full h-full flex items-center justify-center text-gray-400">
-                                <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                </svg>
+                            <div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
+                                <div class="text-center">
+                                    <svg class="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <p class="text-xs text-gray-500">Sin preview</p>
+                                </div>
                             </div>
                         {% endif %}
-                        <button class="mt-2 text-xs text-blue-600 hover:text-blue-800">(Replace - próximamente)</button>
+                        <!-- Botones de acción (siempre visibles cuando no hay preview, o en hover si hay preview) -->
+                        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-2 {% if not scene.preview_image_status == 'completed' or not scene_data.preview_image_url %}opacity-100{% else %}opacity-0 group-hover:opacity-100{% endif %} transition-opacity">
+                            <div class="flex gap-1">
+                                <button onclick="openFreepikSearch({{ scene.id }})" 
+                                        class="flex-1 text-xs text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded">
+                                    📸 Stock
+                                </button>
+                                <button onclick="uploadCustomImage({{ scene.id }})" 
+                                        class="flex-1 text-xs text-white bg-green-600 hover:bg-green-700 px-2 py-1 rounded">
+                                    ⬆️ Subir
+                                </button>
+                                <button onclick="openGenerateAIImageModal({{ scene.id }})" 
+                                        class="flex-1 text-xs text-white bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded">
+                                    🤖 IA
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Scene Info -->
@@ -106,7 +150,14 @@
                                 <h3 class="text-lg font-semibold text-gray-900">{{ scene.scene_id }}</h3>
                                 <p class="text-sm text-gray-600">{{ scene.summary }}</p>
                             </div>
-                            <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">{{ scene.duration_sec }}s</span>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">{{ scene.duration_sec }}s</span>
+                                <button 
+                                    onclick="openInspector({{ scene.id }})"
+                                    class="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
+                                    🔧 Inspector
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Script Text (Editable) -->
@@ -126,11 +177,34 @@
                                 <label class="text-sm font-medium text-gray-700 mb-1 block">Servicio IA</label>
                                 <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" 
                                         data-scene-id="{{ scene.id }}"
+                                        data-video-type="{{ video_type }}"
                                         onchange="changeServiceAndSave({{ scene.id }}, this.value)">
-                                    <option value="gemini_veo" {% if scene.ai_service == 'gemini_veo' %}selected{% endif %}>Gemini Veo</option>
-                                    <option value="sora" {% if scene.ai_service == 'sora' %}selected{% endif %}>Sora</option>
-                                    <option value="heygen" {% if scene.ai_service == 'heygen' %}selected{% endif %}>HeyGen</option>
+                                    {% if video_type == 'ultra' %}
+                                        {# Modo Ultra: Solo Veo3 y Sora2 #}
+                                        <option value="gemini_veo" {% if scene.ai_service == 'gemini_veo' %}selected{% endif %}>Gemini Veo 3</option>
+                                        <option value="sora" {% if scene.ai_service == 'sora' %}selected{% endif %}>Sora 2</option>
+                                    {% elif video_type == 'avatar' %}
+                                        {# Con Avatares: Principalmente HeyGen, pero permitir otros #}
+                                        <option value="heygen_v2" {% if scene.ai_service == 'heygen' or scene.ai_service == 'heygen_v2' %}selected{% endif %}>HeyGen Avatar V2 (Recomendado)</option>
+                                        <option value="heygen_avatar_iv" {% if scene.ai_service == 'heygen_avatar_iv' %}selected{% endif %}>HeyGen Avatar IV</option>
+                                        <option value="gemini_veo" {% if scene.ai_service == 'gemini_veo' %}selected{% endif %}>Gemini Veo</option>
+                                        <option value="sora" {% if scene.ai_service == 'sora' %}selected{% endif %}>Sora</option>
+                                        <option value="vuela_ai" {% if scene.ai_service == 'vuela_ai' %}selected{% endif %}>Vuela.ai</option>
+                                    {% else %}
+                                        {# Video General: Todos los servicios #}
+                                        <option value="gemini_veo" {% if scene.ai_service == 'gemini_veo' %}selected{% endif %}>Gemini Veo</option>
+                                        <option value="sora" {% if scene.ai_service == 'sora' %}selected{% endif %}>Sora</option>
+                                        <option value="heygen_v2" {% if scene.ai_service == 'heygen' or scene.ai_service == 'heygen_v2' %}selected{% endif %}>HeyGen Avatar V2</option>
+                                        <option value="heygen_avatar_iv" {% if scene.ai_service == 'heygen_avatar_iv' %}selected{% endif %}>HeyGen Avatar IV</option>
+                                        <option value="vuela_ai" {% if scene.ai_service == 'vuela_ai' %}selected{% endif %}>Vuela.ai</option>
+                                    {% endif %}
                                 </select>
+                                {% if video_type == 'ultra' %}
+                                <p class="mt-1 text-xs text-blue-600">
+                                    <svg class="inline w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                    Modo Ultra: Solo Veo3 y Sora2 disponibles
+                                </p>
+                                {% endif %}
                             </div>
                             
                             <!-- Config Container (dinámico) -->
@@ -161,8 +235,206 @@
                 </a>
             </div>
         </div>
-    </div>
     {% endif %}
+    </div>
+    
+    <!-- Inspector Panel (Right Side) -->
+    <div id="inspector-panel" class="hidden fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l border-gray-200 z-40 overflow-y-auto">
+        <div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-gray-900">Inspector de Escena</h3>
+            <button onclick="closeInspector()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="p-4 space-y-6">
+            <!-- Scene Title -->
+            <div>
+                <h4 id="inspector-scene-title" class="text-xl font-bold text-gray-900 mb-2"></h4>
+                <p id="inspector-scene-summary" class="text-sm text-gray-600"></p>
+            </div>
+            
+            <!-- Script Text Editor with Character Counter -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-medium text-gray-700">Guión de la Escena</label>
+                    <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                </div>
+                <textarea 
+                    id="inspector-script-text"
+                    rows="6"
+                    maxlength="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    oninput="updateCharCounter()"
+                ></textarea>
+                <p class="mt-1 text-xs text-gray-500">Máximo 1000 caracteres para Sora2 y Veo3</p>
+            </div>
+            
+            <!-- AI Service Selector -->
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Servicio IA</label>
+                <select 
+                    id="inspector-service-select"
+                    onchange="updateInspectorConfig()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="gemini_veo">Gemini Veo</option>
+                    <option value="sora">Sora</option>
+                    <option value="heygen_v2">HeyGen Avatar V2</option>
+                    <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                    <option value="vuela_ai">Vuela.ai</option>
+                </select>
+            </div>
+            
+            <!-- Dynamic Config Container -->
+            <div id="inspector-config-container">
+                <!-- Se llenará dinámicamente -->
+            </div>
+            
+            <!-- Save Button -->
+            <div class="sticky bottom-0 bg-white pt-4 border-t border-gray-200">
+                <button 
+                    onclick="saveInspectorChanges()"
+                    class="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors">
+                    💾 Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Overlay when inspector is open -->
+    <div id="inspector-overlay" class="hidden fixed inset-0 bg-black bg-opacity-30 z-30" onclick="closeInspector()"></div>
+    </div>
+</div>
+
+<!-- Modal para Generar Imagen con IA -->
+<div id="generate-ai-image-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Generar Imagen con IA</h3>
+            <button onclick="closeGenerateAIImageModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <form onsubmit="generateAIImageFromPrompt(event)">
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-2 block">Prompt para Generar Imagen</label>
+                    <textarea 
+                        id="generate-ai-image-prompt"
+                        rows="5"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                        placeholder="Describe la imagen que quieres generar... Ej: 'Una escena de oficina moderna con personas trabajando en computadoras, iluminación natural, estilo profesional'"
+                        required
+                    ></textarea>
+                    <p class="mt-1 text-xs text-gray-500">Describe detalladamente la imagen que quieres como preview de la escena</p>
+                </div>
+            </div>
+            
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="closeGenerateAIImageModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                    🤖 Generar Imagen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="generate-ai-image-overlay" class="hidden fixed inset-0 bg-black bg-opacity-30 z-40" onclick="closeGenerateAIImageModal()"></div>
+
+<!-- Modal para Añadir Escena Manual (Paso 2) -->
+<div id="add-scene-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Añadir Escena Manualmente</h3>
+            <button onclick="closeAddSceneModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="add-scene-form" onsubmit="saveNewScene(event)">
+            <div class="space-y-4">
+                <!-- Script Text -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-medium text-gray-700">Texto del Guión</label>
+                        <span id="add-scene-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                    </div>
+                    <textarea 
+                        id="add-scene-script-text"
+                        name="script_text"
+                        rows="5"
+                        maxlength="1000"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                        oninput="updateAddSceneCharCounter()"
+                        required
+                    ></textarea>
+                </div>
+                
+                <!-- Summary (opcional) -->
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-2 block">Resumen (opcional)</label>
+                    <input 
+                        type="text"
+                        id="add-scene-summary"
+                        name="summary"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        placeholder="Breve descripción de la escena">
+                </div>
+                
+                <!-- AI Service -->
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-2 block">Servicio IA</label>
+                    <select 
+                        id="add-scene-service"
+                        name="ai_service"
+                        onchange="updateAddSceneConfig()"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        required>
+                        {% if video_type == 'ultra' %}
+                            <option value="gemini_veo">Gemini Veo</option>
+                            <option value="sora">Sora</option>
+                        {% elif video_type == 'avatar' %}
+                            <option value="heygen_v2">HeyGen Avatar V2</option>
+                            <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                            <option value="gemini_veo">Gemini Veo</option>
+                            <option value="sora">Sora</option>
+                            <option value="vuela_ai">Vuela.ai</option>
+                        {% else %}
+                            <option value="gemini_veo">Gemini Veo</option>
+                            <option value="sora">Sora</option>
+                            <option value="heygen_v2">HeyGen Avatar V2</option>
+                            <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                            <option value="vuela_ai">Vuela.ai</option>
+                        {% endif %}
+                    </select>
+                </div>
+                
+                <!-- Dynamic Config Container -->
+                <div id="add-scene-config-container">
+                    <!-- Se llenará dinámicamente -->
+                </div>
+            </div>
+            
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="closeAddSceneModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Crear Escena
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 {% if script %}
@@ -191,6 +463,9 @@ function updateServiceConfig(sceneId, service) {
     const container = document.getElementById(`config-${sceneId}`);
     container.innerHTML = ''; // Limpiar contenido anterior
     
+    // Obtener orientación heredada del script
+    const videoOrientation = '{{ video_orientation }}';
+    
     if (service === 'gemini_veo') {
         container.innerHTML = `
             <div>
@@ -202,16 +477,20 @@ function updateServiceConfig(sceneId, service) {
                 </select>
             </div>
             <div>
-                <label class="text-sm font-medium text-gray-700 mb-1 block">Aspecto</label>
-                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        onchange="saveSceneAiConfig(${sceneId}, 'aspect_ratio', this.value)">
-                    <option value="16:9" selected>16:9</option>
-                    <option value="9:16">9:16</option>
-                    <option value="1:1">1:1</option>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Orientación (Heredada)</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50"
+                        onchange="saveSceneAiConfig(${sceneId}, 'aspect_ratio', this.value)" disabled>
+                    <option value="16:9" ${videoOrientation === '16:9' ? 'selected' : ''}>Horizontal (16:9)</option>
+                    <option value="9:16" ${videoOrientation === '9:16' ? 'selected' : ''}>Vertical (9:16)</option>
                 </select>
+                <p class="mt-1 text-xs text-gray-500">Configurado en Paso 1</p>
             </div>
         `;
     } else if (service === 'sora') {
+        // Determinar tamaño según orientación
+        const soraSize = videoOrientation === '9:16' ? '720x1280' : '1280x720';
+        const soraLabel = videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)';
+        
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
@@ -223,16 +502,17 @@ function updateServiceConfig(sceneId, service) {
                 </select>
             </div>
             <div>
-                <label class="text-sm font-medium text-gray-700 mb-1 block">Tamaño</label>
-                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        onchange="saveSceneAiConfig(${sceneId}, 'size', this.value)">
-                    <option value="1280x720" selected>1280x720 (16:9)</option>
-                    <option value="720x1280">720x1280 (9:16)</option>
-                    <option value="1024x1024">1024x1024 (1:1)</option>
-                </select>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Tamaño (Heredado)</label>
+                <input type="text" 
+                       value="${soraSize} (${soraLabel})" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+                <p class="mt-1 text-xs text-gray-500">Configurado en Paso 1</p>
             </div>
         `;
-    } else if (service === 'heygen') {
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        const orientationLabel = videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)';
+        
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Avatar</label>
@@ -249,6 +529,14 @@ function updateServiceConfig(sceneId, service) {
                         data-config-field="voice_id">
                     <option value="">Cargando voces...</option>
                 </select>
+            </div>
+            <div class="col-span-2">
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Orientación (Heredada)</label>
+                <input type="text" 
+                       value="${orientationLabel}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+                <p class="mt-1 text-xs text-gray-500">Configurado en Paso 1</p>
             </div>
         `;
         
@@ -271,6 +559,57 @@ function updateServiceConfig(sceneId, service) {
                 if (voicesCache) populateVoiceSelects(voicesCache);
             }, 1000);
         }
+    } else if (service === 'vuela_ai') {
+        const orientationLabel = videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)';
+        
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Voz</label>
+                <input type="text" 
+                       placeholder="Voice ID de Vuela.ai" 
+                       value=""
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                       onchange="saveSceneAiConfig(${sceneId}, 'voice_id', this.value)">
+                <p class="mt-1 text-xs text-gray-500">Ingresa el ID de voz desde Vuela.ai</p>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Estilo de Voz</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'voice_style', this.value)">
+                    <option value="narrative">Narrativo</option>
+                    <option value="expressive" selected>Expresivo</option>
+                    <option value="dynamic">Dinámico</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Tipo de Animación</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'animation_type', this.value)">
+                    <option value="moving_image" selected>Efecto Ken Burns</option>
+                    <option value="ai_video">Animación IA</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Estilo Visual</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="saveSceneAiConfig(${sceneId}, 'style', this.value)">
+                    <option value="photorealistic" selected>Fotorealista</option>
+                    <option value="flat_design">Diseño Plano</option>
+                    <option value="anime">Anime</option>
+                    <option value="3d">3D</option>
+                    <option value="watercolor">Acuarela</option>
+                    <option value="comic">Cómic</option>
+                </select>
+            </div>
+            <div class="col-span-2">
+                <label class="text-sm font-medium text-gray-700 mb-1 block">Orientación (Heredada)</label>
+                <input type="text" 
+                       value="${orientationLabel}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+                <p class="mt-1 text-xs text-gray-500">Configurado en Paso 1</p>
+            </div>
+        `;
     }
 }
 
@@ -288,9 +627,6 @@ async function saveSceneConfig(sceneId, data) {
         
         const result = await response.json();
         if (result.status === 'success') {
-            console.log(`✓ Configuración de escena ${sceneId} guardada`);
-            console.log(`  Datos guardados:`, data);
-            
             // Mostrar indicador visual temporal
             showSaveIndicator(sceneId);
         } else {
@@ -403,7 +739,6 @@ function populateAvatarSelects(avatars) {
         select.onchange = function() {
             const avatarId = this.value;
             if (avatarId) {
-                console.log(`Guardando avatar ${avatarId} para escena ${sceneId}`);
                 saveSceneAiConfig(sceneId, 'avatar_id', avatarId);
             }
         };
@@ -428,11 +763,1068 @@ function populateVoiceSelects(voices) {
         select.onchange = function() {
             const voiceId = this.value;
             if (voiceId) {
-                console.log(`Guardando voz ${voiceId} para escena ${sceneId}`);
                 saveSceneAiConfig(sceneId, 'voice_id', voiceId);
             }
         };
     });
+}
+
+// ==================
+// FREEPIK INTEGRATION
+// ==================
+
+let currentSceneForImageSearch = null;
+
+function openFreepikSearch(sceneId) {
+    currentSceneForImageSearch = sceneId;
+    
+    // Crear modal de búsqueda de Freepik
+    const modal = document.createElement('div');
+    modal.id = 'freepik-modal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-xl font-bold text-gray-900">Buscar Imagen en Freepik Stock</h3>
+                <button onclick="closeFreepikModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex gap-2 mb-3">
+                    <input type="text" 
+                           id="freepik-search-input"
+                           placeholder="Buscar imágenes..."
+                           class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           onkeypress="if(event.key==='Enter'){event.preventDefault(); searchFreepik();}">
+                    <button type="button" onclick="event.preventDefault(); searchFreepik();" 
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Buscar
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">Filtrar por:</label>
+                    <select id="freepik-license-filter" 
+                            onchange="searchFreepik()"
+                            class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                        <option value="all">Todas las imágenes</option>
+                        <option value="free">Solo gratuitas</option>
+                        <option value="premium">Solo Premium</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div id="freepik-results" class="flex-1 overflow-y-auto p-4">
+                <p class="text-gray-500 text-center py-8">Ingresa un término de búsqueda</p>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.getElementById('freepik-search-input').focus();
+}
+
+function closeFreepikModal() {
+    const modal = document.getElementById('freepik-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Variables globales para paginación de Freepik
+let freepikCurrentPage = 1;
+let freepikCurrentQuery = '';
+let freepikTotalResults = 0;
+let freepikHasMore = false;
+
+async function searchFreepik(page = 1, append = false) {
+    const query = document.getElementById('freepik-search-input').value.trim();
+    if (!query) return;
+    
+    // Si es una nueva búsqueda, resetear
+    if (!append || query !== freepikCurrentQuery) {
+        freepikCurrentPage = 1;
+        freepikCurrentQuery = query;
+        page = 1;
+        append = false;
+    }
+    
+    const resultsDiv = document.getElementById('freepik-results');
+    if (!append) {
+        resultsDiv.innerHTML = '<div class="text-center py-8"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div></div>';
+    } else {
+        // Mostrar loading en el botón "Cargar más"
+        const loadMoreBtn = document.getElementById('freepik-load-more-btn');
+        if (loadMoreBtn) {
+            loadMoreBtn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>';
+            loadMoreBtn.disabled = true;
+        }
+    }
+    
+    try {
+        const orientation = '{{ video_orientation }}' === '9:16' ? 'vertical' : 'horizontal';
+        const licenseFilter = document.getElementById('freepik-license-filter').value;
+        const response = await fetch(`{% url 'core:freepik_search_images' %}?query=${encodeURIComponent(query)}&orientation=${orientation}&limit=20&page=${page}&license=${licenseFilter}`);
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.results && data.results.length > 0) {
+            // Actualizar estado de paginación
+            freepikCurrentPage = page;
+            freepikTotalResults = data.meta?.total || 0;
+            const currentPage = data.meta?.current_page || page;
+            const lastPage = data.meta?.last_page || 1;
+            freepikHasMore = currentPage < lastPage;
+            
+            // Crear o obtener el grid
+            let gridDiv;
+            if (append) {
+                gridDiv = document.querySelector('#freepik-results .grid');
+                if (!gridDiv) {
+                    gridDiv = document.createElement('div');
+                    gridDiv.className = 'grid grid-cols-3 gap-4';
+                    resultsDiv.innerHTML = '';
+                    resultsDiv.appendChild(gridDiv);
+                }
+            } else {
+                gridDiv = document.createElement('div');
+                gridDiv.className = 'grid grid-cols-3 gap-4';
+            }
+            
+            data.results.filter(img => img.thumbnail || img.preview).forEach((img, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'relative group cursor-pointer transition-transform hover:scale-105';
+                
+                // Escapar y validar datos
+                const imgId = String(img.id || '');
+                const downloadUrl = String(img.download_url || img.preview || '');
+                const thumbnail = String(img.thumbnail || img.preview || '');
+                const title = String(img.title || 'Sin título');
+                const isPremium = img.is_premium === true;
+                
+                // Crear elemento de imagen
+                const imgElement = document.createElement('img');
+                imgElement.src = thumbnail;
+                imgElement.alt = title;
+                imgElement.className = 'w-full h-32 object-cover rounded-lg border-2 border-gray-200 group-hover:border-blue-500';
+                imgElement.onerror = function() {
+                    this.closest('.relative').style.display = 'none';
+                };
+                
+                // Crear overlay
+                const overlayDiv = document.createElement('div');
+                overlayDiv.className = 'absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity rounded-lg pointer-events-none';
+                
+                // Badge Premium si aplica
+                let premiumBadge = null;
+                if (isPremium) {
+                    premiumBadge = document.createElement('div');
+                    premiumBadge.className = 'absolute top-2 right-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded-full font-semibold shadow-lg z-10';
+                    premiumBadge.innerHTML = '⭐ Premium';
+                    premiumBadge.title = 'Esta imagen requiere suscripción Premium de Freepik';
+                }
+                
+                // Crear título
+                const titleP = document.createElement('p');
+                titleP.className = 'text-xs text-gray-600 mt-1 truncate';
+                titleP.textContent = title;
+                
+                // Event handler para click
+                itemDiv.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectFreepikImage(imgId);
+                    return false;
+                };
+                
+                // Agregar elementos
+                itemDiv.appendChild(imgElement);
+                itemDiv.appendChild(overlayDiv);
+                if (premiumBadge) {
+                    itemDiv.appendChild(premiumBadge);
+                }
+                itemDiv.appendChild(titleP);
+                
+                gridDiv.appendChild(itemDiv);
+            });
+            
+            if (!append) {
+                resultsDiv.innerHTML = '';
+                resultsDiv.appendChild(gridDiv);
+            }
+            
+            // Agregar botón "Cargar más" si hay más páginas
+            let loadMoreContainer = document.getElementById('freepik-load-more-container');
+            if (!loadMoreContainer) {
+                loadMoreContainer = document.createElement('div');
+                loadMoreContainer.id = 'freepik-load-more-container';
+                loadMoreContainer.className = 'mt-4 text-center';
+                resultsDiv.appendChild(loadMoreContainer);
+            }
+            
+            if (freepikHasMore) {
+                const loadedCount = (freepikCurrentPage * 20);
+                const remainingCount = freepikTotalResults - loadedCount;
+                
+                loadMoreContainer.innerHTML = `
+                    <p class="text-sm text-gray-600 mb-2">
+                        Mostrando ${Math.min(loadedCount, freepikTotalResults)} de ${freepikTotalResults} resultados
+                    </p>
+                    <button id="freepik-load-more-btn" 
+                            onclick="loadMoreFreepik()" 
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                        Cargar más (${Math.min(20, remainingCount)} restantes)
+                    </button>
+                `;
+            } else {
+                loadMoreContainer.innerHTML = `
+                    <p class="text-sm text-gray-600">
+                        Mostrando todos los ${freepikTotalResults} resultados
+                    </p>
+                `;
+            }
+        } else {
+            if (!append) {
+                resultsDiv.innerHTML = '<p class="text-gray-500 text-center py-8">No se encontraron resultados</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error buscando en Freepik:', error);
+        if (!append) {
+            resultsDiv.innerHTML = '<p class="text-red-500 text-center py-8">Error al buscar. Verifica que FREEPIK_API_KEY esté configurada.</p>';
+        } else {
+            const loadMoreBtn = document.getElementById('freepik-load-more-btn');
+            if (loadMoreBtn) {
+                loadMoreBtn.innerHTML = 'Error - Reintentar';
+                loadMoreBtn.disabled = false;
+            }
+        }
+    }
+}
+
+async function loadMoreFreepik() {
+    await searchFreepik(freepikCurrentPage + 1, true);
+}
+
+async function selectFreepikImage(resourceId) {
+    const sceneId = currentSceneForImageSearch;
+    if (!sceneId) {
+        console.error('No scene ID set for image search');
+        return;
+    }
+    
+    // Validar parámetros
+    if (!resourceId) {
+        console.error('Missing resourceId', {resourceId});
+        alert('Error: ID de recurso faltante');
+        return;
+    }
+    
+    closeFreepikModal();
+    
+    // Mostrar loading
+    if (window.showLoading) window.showLoading('Descargando imagen de Freepik...');
+    
+    try {
+        const response = await fetch(`/scenes/${sceneId}/set-freepik-image/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                resource_id: String(resourceId)
+            })
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Imagen de Freepik establecida');
+            // Recargar la página para mostrar la nueva imagen
+            location.reload();
+        } else {
+            if (window.hideLoading) window.hideLoading();
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        if (window.hideLoading) window.hideLoading();
+        console.error('Error:', error);
+        alert('Error al establecer imagen de Freepik');
+    }
+}
+
+let currentUploadImageSceneId = null;
+
+function uploadCustomImage(sceneId) {
+    currentUploadImageSceneId = sceneId;
+    
+    // Crear modal dinámicamente
+    const modal = document.createElement('div');
+    modal.id = 'upload-image-modal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.onclick = (e) => {
+        if (e.target === modal) closeUploadImageModal();
+    };
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-xl font-bold text-gray-900">Subir Imagen Personalizada</h3>
+                <button onclick="closeUploadImageModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="upload-image-form" class="p-6">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Selecciona una imagen
+                    </label>
+                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
+                        <div class="space-y-1 text-center">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <div class="flex text-sm text-gray-600">
+                                <label for="custom-image-file" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                                    <span>Selecciona un archivo</span>
+                                    <input id="custom-image-file" name="image_file" type="file" class="sr-only" accept="image/*" onchange="previewCustomImage(event)" required>
+                                </label>
+                                <p class="pl-1">o arrastra y suelta</p>
+                            </div>
+                            <p class="text-xs text-gray-500">PNG, JPG, WEBP hasta 10MB</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="image-preview-container" class="hidden mb-4">
+                    <img id="image-preview" class="max-h-64 mx-auto rounded-lg border border-gray-300" alt="Preview">
+                </div>
+                
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeUploadImageModal()" 
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button type="submit" 
+                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Subir Imagen
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Agregar event listener al formulario
+    document.getElementById('upload-image-form').addEventListener('submit', handleCustomImageUpload);
+}
+
+function closeUploadImageModal() {
+    const modal = document.getElementById('upload-image-modal');
+    if (modal) {
+        modal.remove();
+    }
+    currentUploadImageSceneId = null;
+}
+
+function previewCustomImage(event) {
+    const file = event.target.files[0];
+    if (file) {
+        // Validar tamaño (10MB max)
+        const maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+            alert('La imagen es demasiado grande. Tamaño máximo: 10MB');
+            event.target.value = '';
+            return;
+        }
+        
+        // Validar tipo
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) {
+            alert('Formato no soportado. Use: JPG, PNG, WEBP o GIF');
+            event.target.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('image-preview');
+            const container = document.getElementById('image-preview-container');
+            preview.src = e.target.result;
+            container.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function handleCustomImageUpload(event) {
+    event.preventDefault();
+    
+    if (!currentUploadImageSceneId) return;
+    
+    const formData = new FormData(event.target);
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = 'Subiendo...';
+    
+    try {
+        const response = await fetch(`/scenes/${currentUploadImageSceneId}/upload-custom-image/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            console.log('✓ Imagen personalizada subida exitosamente');
+            closeUploadImageModal();
+            // Recargar la página para mostrar la nueva imagen
+            location.reload();
+        } else {
+            alert('Error: ' + result.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al subir la imagen');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+}
+
+function openGenerateAIImageModal(sceneId) {
+    currentGenerateAISceneId = sceneId;
+    document.getElementById('generate-ai-image-modal').classList.remove('hidden');
+    document.getElementById('generate-ai-image-overlay').classList.remove('hidden');
+}
+
+function closeGenerateAIImageModal() {
+    document.getElementById('generate-ai-image-modal').classList.add('hidden');
+    document.getElementById('generate-ai-image-overlay').classList.add('hidden');
+    document.getElementById('generate-ai-image-prompt').value = '';
+    currentGenerateAISceneId = null;
+}
+
+async function generateAIImageFromPrompt(event) {
+    event.preventDefault();
+    
+    if (!currentGenerateAISceneId) return;
+    
+    const prompt = document.getElementById('generate-ai-image-prompt').value.trim();
+    if (!prompt) {
+        alert('Por favor ingresa un prompt');
+        return;
+    }
+    
+    const generateBtn = event.target.querySelector('button[type="submit"]');
+    const originalText = generateBtn.innerHTML;
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = 'Generando...';
+    
+    try {
+        const response = await fetch(`/scenes/${currentGenerateAISceneId}/generate-ai-image/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                prompt: prompt
+            })
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Imagen generada con IA');
+            closeGenerateAIImageModal();
+            location.reload();
+        } else {
+            alert('Error: ' + result.message);
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = originalText;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al generar imagen');
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = originalText;
+    }
+}
+
+let currentGenerateAISceneId = null;
+
+// ==================
+// ADD SCENE MODAL (Paso 2)
+// ==================
+
+const scriptId = {{ script.id }};
+
+function openAddSceneModal() {
+    document.getElementById('add-scene-modal').classList.remove('hidden');
+    updateAddSceneConfig();
+}
+
+function closeAddSceneModal() {
+    document.getElementById('add-scene-modal').classList.add('hidden');
+    document.getElementById('add-scene-form').reset();
+    document.getElementById('add-scene-char-count').textContent = '0 / 1000';
+}
+
+function updateAddSceneCharCounter() {
+    const text = document.getElementById('add-scene-script-text').value;
+    const charCount = text.length;
+    const counter = document.getElementById('add-scene-char-count');
+    counter.textContent = `${charCount} / 1000`;
+    
+    if (charCount > 900) {
+        counter.classList.add('text-red-600', 'font-bold');
+        counter.classList.remove('text-gray-500');
+    } else if (charCount > 800) {
+        counter.classList.add('text-yellow-600', 'font-bold');
+        counter.classList.remove('text-gray-500', 'text-red-600');
+    } else {
+        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateAddSceneConfig() {
+    const service = document.getElementById('add-scene-service').value;
+    const container = document.getElementById('add-scene-config-container');
+    const videoOrientation = '{{ video_orientation }}';
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select name="duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="5">5 segundos</option>
+                    <option value="8" selected>8 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select name="duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="4">4 segundos</option>
+                    <option value="8" selected>8 segundos</option>
+                    <option value="12">12 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Avatar</label>
+                <select name="avatar_id" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voz</label>
+                <select name="voice_id" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+        `;
+        loadHeyGenAssetsForAddScene();
+    } else if (service === 'vuela_ai') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voice ID</label>
+                <input type="text" 
+                       name="voice_id"
+                       placeholder="ID de voz de Vuela.ai"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                       required>
+            </div>
+        `;
+    }
+}
+
+async function loadHeyGenAssetsForAddScene() {
+    try {
+        if (!avatarsCache) {
+            const avatarResponse = await fetch('{% url "core:api_list_avatars" %}');
+            const avatarData = await avatarResponse.json();
+            avatarsCache = avatarData.avatars;
+        }
+        
+        if (!voicesCache) {
+            const voiceResponse = await fetch('{% url "core:api_list_voices" %}');
+            const voiceData = await voiceResponse.json();
+            voicesCache = voiceData.voices;
+        }
+        
+        const avatarSelect = document.querySelector('#add-scene-config-container select[name="avatar_id"]');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        avatarsCache.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            avatarSelect.appendChild(option);
+        });
+        
+        const voiceSelect = document.querySelector('#add-scene-config-container select[name="voice_id"]');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        voicesCache.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            voiceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando assets de HeyGen:', error);
+    }
+}
+
+async function saveNewScene(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const scriptText = formData.get('script_text');
+    const summary = formData.get('summary') || scriptText.substring(0, 100);
+    const service = formData.get('ai_service');
+    
+    const data = {
+        scene_type: 'ai_generated',
+        script_text: scriptText,
+        summary: summary,
+        ai_service: service,
+        ai_config: {}
+    };
+    
+    // Recoger configuración según el servicio
+    if (service === 'gemini_veo') {
+        data.duration_sec = parseInt(formData.get('duration') || 8);
+    } else if (service === 'sora') {
+        data.duration_sec = parseInt(formData.get('duration') || 8);
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        const avatarId = formData.get('avatar_id');
+        const voiceId = formData.get('voice_id');
+        
+        if (!avatarId || !voiceId) {
+            alert('Debes seleccionar un avatar y una voz');
+            return;
+        }
+        
+        data.ai_config.avatar_id = avatarId;
+        data.ai_config.voice_id = voiceId;
+    } else if (service === 'vuela_ai') {
+        const voiceId = formData.get('voice_id');
+        if (!voiceId) {
+            alert('Debes ingresar un Voice ID de Vuela.ai');
+            return;
+        }
+        data.ai_config.voice_id = voiceId;
+    }
+    
+    try {
+        const response = await fetch(`/scripts/${scriptId}/scenes/create/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Escena creada:', result.scene_id);
+            closeAddSceneModal();
+            // Recargar página para mostrar la nueva escena
+            location.reload();
+        } else {
+            alert('Error al crear escena: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al crear escena');
+    }
+}
+
+// ==================
+// INSPECTOR PANEL
+// ==================
+
+let currentInspectorSceneId = null;
+
+// Cache de datos de escenas para el inspector
+const scenesInspectorData = {
+    {% for scene_data in scenes_with_urls %}
+    {{ scene_data.scene.id }}: {
+        scene_id: '{{ scene_data.scene.scene_id }}',
+        summary: '{{ scene_data.scene.summary|escapejs }}',
+        script_text: `{{ scene_data.scene.script_text|escapejs }}`,
+        ai_service: '{{ scene_data.scene.ai_service }}',
+        ai_config: {{ scene_data.scene.ai_config|safe }},
+        duration_sec: {{ scene_data.scene.duration_sec }}
+    },
+    {% endfor %}
+};
+
+function openInspector(sceneId) {
+    currentInspectorSceneId = sceneId;
+    const scene = scenesInspectorData[sceneId];
+    
+    if (!scene) {
+        console.error('Escena no encontrada:', sceneId);
+        return;
+    }
+    
+    // Llenar datos del inspector
+    document.getElementById('inspector-scene-title').textContent = scene.scene_id;
+    document.getElementById('inspector-scene-summary').textContent = scene.summary;
+    document.getElementById('inspector-script-text').value = scene.script_text;
+    document.getElementById('inspector-service-select').value = scene.ai_service;
+    
+    // Actualizar contador de caracteres
+    updateCharCounter();
+    
+    // Actualizar configuración dinámica
+    updateInspectorConfig();
+    
+    // Mostrar panel y overlay
+    document.getElementById('inspector-panel').classList.remove('hidden');
+    document.getElementById('inspector-overlay').classList.remove('hidden');
+    
+    // Scroll al top del panel
+    document.getElementById('inspector-panel').scrollTop = 0;
+}
+
+function closeInspector() {
+    document.getElementById('inspector-panel').classList.add('hidden');
+    document.getElementById('inspector-overlay').classList.add('hidden');
+    currentInspectorSceneId = null;
+}
+
+function updateCharCounter() {
+    const text = document.getElementById('inspector-script-text').value;
+    const charCount = text.length;
+    const counter = document.getElementById('inspector-char-count');
+    
+    counter.textContent = `${charCount} / 1000`;
+    
+    // Cambiar color si se acerca al límite
+    if (charCount > 900) {
+        counter.classList.add('text-red-600', 'font-bold');
+        counter.classList.remove('text-gray-500');
+    } else if (charCount > 800) {
+        counter.classList.add('text-yellow-600', 'font-bold');
+        counter.classList.remove('text-gray-500', 'text-red-600');
+    } else {
+        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateInspectorConfig() {
+    if (!currentInspectorSceneId) return;
+    
+    const service = document.getElementById('inspector-service-select').value;
+    const scene = scenesInspectorData[currentInspectorSceneId];
+    const config = scene.ai_config || {};
+    const videoOrientation = '{{ video_orientation }}';
+    const container = document.getElementById('inspector-config-container');
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="5" ${config.duration == 5 ? 'selected' : ''}>5 segundos</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Modelo Veo</label>
+                <select id="inspector-veo-model" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="veo-2.0-generate-001" ${config.veo_model == 'veo-2.0-generate-001' ? 'selected' : ''}>Veo 2.0</option>
+                    <option value="veo-3.0-generate-001" ${config.veo_model == 'veo-3.0-generate-001' ? 'selected' : ''}>Veo 3.0</option>
+                    <option value="veo-3.1-generate-preview" ${config.veo_model == 'veo-3.1-generate-preview' ? 'selected' : ''}>Veo 3.1 Preview</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Orientación (Heredada)</label>
+                <input type="text" 
+                       value="${videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)'}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        const soraSize = videoOrientation === '9:16' ? '720x1280' : '1280x720';
+        
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="4" ${config.duration == 4 ? 'selected' : ''}>4 segundos</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
+                    <option value="12" ${config.duration == 12 ? 'selected' : ''}>12 segundos</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Modelo Sora</label>
+                <select id="inspector-sora-model" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="sora-2" ${config.sora_model == 'sora-2' || !config.sora_model ? 'selected' : ''}>Sora 2</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Tamaño (Heredado)</label>
+                <input type="text" 
+                       value="${soraSize}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+            </div>
+        `;
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Avatar</label>
+                <select id="inspector-avatar" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voz</label>
+                <select id="inspector-voice" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Velocidad de Voz</label>
+                <input type="number" 
+                       id="inspector-voice-speed"
+                       value="${config.voice_speed || 1.0}"
+                       step="0.1"
+                       min="0.5"
+                       max="2.0"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Tono de Voz</label>
+                <input type="number" 
+                       id="inspector-voice-pitch"
+                       value="${config.voice_pitch || 50}"
+                       min="0"
+                       max="100"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Orientación (Heredada)</label>
+                <input type="text" 
+                       value="${videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)'}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+            </div>
+        `;
+        
+        // Cargar avatares y voces
+        loadHeyGenAssetsForInspector(config.avatar_id, config.voice_id);
+    } else if (service === 'vuela_ai') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voice ID</label>
+                <input type="text" 
+                       id="inspector-voice-id"
+                       value="${config.voice_id || ''}"
+                       placeholder="ID de voz de Vuela.ai"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Estilo de Voz</label>
+                <select id="inspector-voice-style" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="narrative" ${config.voice_style == 'narrative' ? 'selected' : ''}>Narrativo</option>
+                    <option value="expressive" ${config.voice_style == 'expressive' || !config.voice_style ? 'selected' : ''}>Expresivo</option>
+                    <option value="dynamic" ${config.voice_style == 'dynamic' ? 'selected' : ''}>Dinámico</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Tipo de Animación</label>
+                <select id="inspector-animation-type" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="moving_image" ${config.animation_type == 'moving_image' || !config.animation_type ? 'selected' : ''}>Efecto Ken Burns</option>
+                    <option value="ai_video" ${config.animation_type == 'ai_video' ? 'selected' : ''}>Animación IA</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Estilo Visual</label>
+                <select id="inspector-style" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="photorealistic" ${config.style == 'photorealistic' || !config.style ? 'selected' : ''}>Fotorealista</option>
+                    <option value="flat_design" ${config.style == 'flat_design' ? 'selected' : ''}>Diseño Plano</option>
+                    <option value="anime" ${config.style == 'anime' ? 'selected' : ''}>Anime</option>
+                    <option value="3d" ${config.style == '3d' ? 'selected' : ''}>3D</option>
+                    <option value="watercolor" ${config.style == 'watercolor' ? 'selected' : ''}>Acuarela</option>
+                    <option value="comic" ${config.style == 'comic' ? 'selected' : ''}>Cómic</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Orientación (Heredada)</label>
+                <input type="text" 
+                       value="${videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)'}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" 
+                       disabled>
+            </div>
+        `;
+    }
+}
+
+async function loadHeyGenAssetsForInspector(selectedAvatarId, selectedVoiceId) {
+    try {
+        // Usar cache si está disponible
+        if (!avatarsCache) {
+            const avatarResponse = await fetch('{% url "core:api_list_avatars" %}');
+            const avatarData = await avatarResponse.json();
+            avatarsCache = avatarData.avatars;
+        }
+        
+        if (!voicesCache) {
+            const voiceResponse = await fetch('{% url "core:api_list_voices" %}');
+            const voiceData = await voiceResponse.json();
+            voicesCache = voiceData.voices;
+        }
+        
+        // Poblar avatares
+        const avatarSelect = document.getElementById('inspector-avatar');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        avatarsCache.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            option.selected = avatar.avatar_id === selectedAvatarId;
+            avatarSelect.appendChild(option);
+        });
+        
+        // Poblar voces
+        const voiceSelect = document.getElementById('inspector-voice');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        voicesCache.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            option.selected = voice.voice_id === selectedVoiceId;
+            voiceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando assets de HeyGen:', error);
+    }
+}
+
+async function saveInspectorChanges() {
+    if (!currentInspectorSceneId) return;
+    
+    const scriptText = document.getElementById('inspector-script-text').value;
+    const service = document.getElementById('inspector-service-select').value;
+    
+    const data = {
+        script_text: scriptText,
+        ai_service: service,
+        ai_config: {}
+    };
+    
+    // Recoger configuración según el servicio
+    if (service === 'gemini_veo') {
+        data.ai_config.duration = parseInt(document.getElementById('inspector-duration').value);
+        const veoModel = document.getElementById('inspector-veo-model').value;
+        if (veoModel) data.ai_config.veo_model = veoModel;
+    } else if (service === 'sora') {
+        data.ai_config.duration = parseInt(document.getElementById('inspector-duration').value);
+        const soraModel = document.getElementById('inspector-sora-model')?.value;
+        if (soraModel) data.ai_config.sora_model = soraModel;
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        const avatarId = document.getElementById('inspector-avatar').value;
+        const voiceId = document.getElementById('inspector-voice').value;
+        const voiceSpeed = parseFloat(document.getElementById('inspector-voice-speed').value);
+        const voicePitch = parseInt(document.getElementById('inspector-voice-pitch').value);
+        
+        if (!avatarId || !voiceId) {
+            alert('Debes seleccionar un avatar y una voz');
+            return;
+        }
+        
+        data.ai_config.avatar_id = avatarId;
+        data.ai_config.voice_id = voiceId;
+        data.ai_config.voice_speed = voiceSpeed;
+        data.ai_config.voice_pitch = voicePitch;
+    } else if (service === 'vuela_ai') {
+        const voiceId = document.getElementById('inspector-voice-id').value;
+        
+        if (!voiceId) {
+            alert('Debes ingresar un Voice ID de Vuela.ai');
+            return;
+        }
+        
+        data.ai_config.voice_id = voiceId;
+        data.ai_config.voice_style = document.getElementById('inspector-voice-style').value;
+        data.ai_config.animation_type = document.getElementById('inspector-animation-type').value;
+        data.ai_config.style = document.getElementById('inspector-style').value;
+    }
+    
+    try {
+        const response = await fetch(`/scenes/${currentInspectorSceneId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Inspector: Cambios guardados');
+            
+            // Actualizar cache local
+            scenesInspectorData[currentInspectorSceneId].script_text = scriptText;
+            scenesInspectorData[currentInspectorSceneId].ai_service = service;
+            scenesInspectorData[currentInspectorSceneId].ai_config = data.ai_config;
+            
+            // Mostrar indicador de éxito
+            const saveBtn = document.querySelector('#inspector-panel button[onclick="saveInspectorChanges()"]');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '✅ Guardado!';
+            saveBtn.classList.add('bg-green-600');
+            saveBtn.classList.remove('bg-blue-600');
+            
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.classList.remove('bg-green-600');
+                saveBtn.classList.add('bg-blue-600');
+            }, 2000);
+        } else {
+            alert('Error al guardar: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al guardar cambios');
+    }
 }
 </script>
 {% endif %}
@@ -462,7 +1854,10 @@ document.addEventListener('DOMContentLoaded', function() {
         body: new URLSearchParams({
             'title': 'Video con Agente',
             'script_content': agentContent.content,
-            'desired_duration_min': agentContent.duration
+            'desired_duration_min': agentContent.duration,
+            'video_type': agentContent.video_type || 'general',
+            'video_orientation': agentContent.video_orientation || '16:9',
+            'generate_previews': agentContent.generate_previews !== false ? 'true' : 'false'
         })
     })
     .then(response => response.json())

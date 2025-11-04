@@ -4,9 +4,10 @@ from . import views
 app_name = 'core'
 
 urlpatterns = [
-    # Login
+    # Authentication
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
+    path('signup/', views.SignupView.as_view(), name='signup'),
 
     # Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
@@ -58,10 +59,24 @@ urlpatterns = [
     path('projects/<int:project_id>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
     
     # Agent Scene Actions
+    path('scripts/<int:script_id>/scenes/create/', views.SceneCreateManualView.as_view(), name='scene_create_manual'),
+    path('scenes/<int:scene_id>/upload-video/', views.SceneUploadVideoView.as_view(), name='scene_upload_video'),
+    path('scenes/<int:scene_id>/upload-custom-image/', views.SceneUploadCustomImageView.as_view(), name='scene_upload_custom_image'),
+    path('scenes/<int:scene_id>/generate-ai-image/', views.SceneGenerateAIImageView.as_view(), name='scene_generate_ai_image'),
     path('scenes/<int:scene_id>/generate/', views.SceneGenerateView.as_view(), name='scene_generate'),
     path('scenes/<int:scene_id>/status/', views.SceneStatusView.as_view(), name='scene_status'),
     path('scenes/<int:scene_id>/update/', views.SceneUpdateConfigView.as_view(), name='scene_update'),
     path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
     path('scenes/<int:scene_id>/versions/', views.SceneVersionsView.as_view(), name='scene_versions'),
+    
+    # Freepik API
+    path('api/freepik/search/images/', views.FreepikSearchImagesView.as_view(), name='freepik_search_images'),
+    path('api/freepik/search/videos/', views.FreepikSearchVideosView.as_view(), name='freepik_search_videos'),
+    path('scenes/<int:scene_id>/set-freepik-image/', views.FreepikSetSceneImageView.as_view(), name='scene_set_freepik_image'),
+    
+    # Vuela.ai API
+    path('api/vuela/validate-token/', views.VuelaAIValidateTokenView.as_view(), name='vuela_validate_token'),
+    path('api/vuela/videos/', views.VuelaAIListVideosView.as_view(), name='vuela_list_videos'),
+    path('api/vuela/videos/<str:video_id>/', views.VuelaAIVideoDetailsView.as_view(), name='vuela_video_details'),
 ]
 

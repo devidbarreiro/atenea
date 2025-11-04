@@ -16,6 +16,19 @@ VIDEO_STATUS = [
     ('error', 'Error'),
 ]
 
+# Tipos de video para el flujo del agente
+AGENT_VIDEO_TYPES = [
+    ('ultra', 'Modo Ultra (Veo3 y Sora2)'),
+    ('avatar', 'Con Avatares (HeyGen)'),
+    ('general', 'Video General'),
+]
+
+# Orientaciones de video
+VIDEO_ORIENTATIONS = [
+    ('16:9', 'Horizontal (16:9)'),
+    ('9:16', 'Vertical (9:16)'),
+]
+
 IMAGE_TYPES = [
     ('text_to_image', 'Texto a Imagen'),
     ('image_to_image', 'Imagen a Imagen (Edición)'),
@@ -46,7 +59,9 @@ SCENE_STATUS = [
 SCENE_AI_SERVICES = [
     ('gemini_veo', 'Gemini Veo'),
     ('sora', 'OpenAI Sora'),
-    ('heygen', 'HeyGen Avatar'),
+    ('heygen_v2', 'HeyGen Avatar V2'),
+    ('heygen_avatar_iv', 'HeyGen Avatar IV'),
+    ('vuela_ai', 'Vuela.ai'),
 ]
 
 
@@ -338,6 +353,25 @@ class Script(models.Model):
         help_text='Video final combinado generado por el agente'
     )
     
+    # Configuración del agente (Paso 1)
+    video_type = models.CharField(
+        max_length=20,
+        choices=AGENT_VIDEO_TYPES,
+        blank=True,
+        null=True,
+        help_text='Tipo de video para el flujo del agente'
+    )
+    video_orientation = models.CharField(
+        max_length=10,
+        choices=VIDEO_ORIENTATIONS,
+        default='16:9',
+        help_text='Orientación del video (heredada a todas las escenas)'
+    )
+    generate_previews = models.BooleanField(
+        default=True,
+        help_text='Si se deben generar previews automáticamente'
+    )
+    
     # Metadatos del procesamiento
     platform_mode = models.CharField(
         max_length=50,
@@ -508,6 +542,24 @@ class Scene(models.Model):
         blank=True,
         null=True,
         help_text='Mensaje de error si falla la generación del preview'
+    )
+    
+    # Fuente de la imagen preview/referencia
+    image_source = models.CharField(
+        max_length=20,
+        choices=[
+            ('ai_generated', 'Generada con IA'),
+            ('freepik_stock', 'Freepik Stock'),
+            ('user_upload', 'Subida por Usuario')
+        ],
+        default='ai_generated',
+        help_text='Origen de la imagen preview/referencia'
+    )
+    freepik_resource_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='ID del recurso de Freepik si se usó stock'
     )
     
     # Configuración del servicio IA para generar video

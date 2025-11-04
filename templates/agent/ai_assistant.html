@@ -339,11 +339,20 @@ document.getElementById('finish-script').addEventListener('click', function() {
         return;
     }
     
+    // Obtener parámetros de configuración de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const videoType = urlParams.get('video_type') || 'general';
+    const videoOrientation = urlParams.get('video_orientation') || '16:9';
+    const generatePreviews = urlParams.get('generate_previews') !== 'false';
+    
     // Guardar en sessionStorage para el siguiente paso
     sessionStorage.setItem('agentContent', JSON.stringify({
         type: 'script',
         content: scriptContent,
-        duration: duration
+        duration: duration,
+        video_type: videoType,
+        video_orientation: videoOrientation,
+        generate_previews: generatePreviews
     }));
     
     // Redirigir a configure

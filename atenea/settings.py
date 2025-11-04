@@ -140,6 +140,10 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Authentication URLs
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/login/'
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -184,6 +188,8 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
 HEYGEN_API_KEY = config('HEYGEN_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
+VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://redis-13128.c12.us-east-1-4.ec2.redns.redis-cloud.com:13128')

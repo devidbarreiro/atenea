@@ -32,22 +32,48 @@
         </div>
     </div>
 
+    <!-- Main Content Area -->
+    <div class="flex gap-6 relative">
+    <div class="flex-1">
     <!-- Header -->
-    <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-gray-900 mb-2">Generando Videos de Escenas...</h1>
-        <p class="text-gray-600">La IA está creando videos para cada escena</p>
+    <div class="flex items-center justify-between mb-8">
+        <div class="text-center flex-1">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Generando Videos de Escenas...</h1>
+            <p class="text-gray-600">Arrastra para reordenar • Click en 🔧 para editar</p>
+        </div>
+        <button 
+            onclick="openAddSceneModalStep3()"
+            class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2 ml-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Añadir Escena
+        </button>
     </div>
 
-    <!-- Scenes List -->
-    <div class="space-y-6 mb-8">
+    <!-- Scenes List (Draggable) -->
+    <div id="scenes-list" class="space-y-6 mb-8">
         {% for scene_data in scenes_with_urls %}
         {% with scene=scene_data.scene %}
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" id="scene-{{ scene.id }}">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 cursor-move hover:shadow-md transition-shadow" 
+             id="scene-{{ scene.id }}"
+             data-scene-id="{{ scene.id }}"
+             data-order="{{ scene.order }}"
+             draggable="true"
+             ondragstart="handleDragStart(event)"
+             ondragover="handleDragOver(event)"
+             ondrop="handleDrop(event)"
+             ondragend="handleDragEnd(event)">
             <div class="flex items-start gap-6">
-                <!-- Scene Number Badge -->
-                <div class="flex-shrink-0">
+                <!-- Drag Handle + Scene Number -->
+                <div class="flex-shrink-0 flex flex-col items-center gap-2">
+                    <div class="text-gray-400 cursor-grab active:cursor-grabbing">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
+                        </svg>
+                    </div>
                     <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span class="text-blue-600 font-bold">{{ forloop.counter }}</span>
+                        <span class="text-blue-600 font-bold scene-number">{{ forloop.counter }}</span>
                     </div>
                 </div>
 
@@ -106,9 +132,9 @@
                         <div class="flex items-center justify-between mb-1">
                             <label class="text-sm font-medium text-gray-700">Guión</label>
                             <button 
-                                onclick="openEditModal({{ scene.id }})" 
-                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors">
-                                ✏️ Editar
+                                onclick="openInspector({{ scene.id }})" 
+                                class="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                                🔧 Inspector
                             </button>
                         </div>
                         <p id="script-preview-{{ scene.id }}" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">{{ scene.script_text|truncatewords:30 }}</p>
@@ -117,8 +143,10 @@
                     <!-- Service Info -->
                     <div class="mb-3 flex items-center gap-2 text-xs text-gray-500">
                         <span class="px-2 py-1 bg-gray-100 rounded">{{ scene.get_ai_service_display }}</span>
-                        {% if scene.ai_service == 'heygen' %}
-                        <span class="px-2 py-1 bg-purple-100 text-purple-700 rounded">Avatar V2</span>
+                        {% if scene.ai_service == 'heygen' or scene.ai_service == 'heygen_v2' or scene.ai_service == 'heygen_avatar_iv' %}
+                        <span class="px-2 py-1 bg-purple-100 text-purple-700 rounded">
+                            {% if scene.ai_service == 'heygen_avatar_iv' %}Avatar IV{% else %}Avatar V2{% endif %}
+                        </span>
                         {% if scene.ai_config.avatar_id and scene.ai_config.voice_id %}
                         <span class="text-green-600">✓ Configurado</span>
                         {% else %}
@@ -195,9 +223,203 @@
             Continuar a Video Final →
         </button>
     </div>
+    </div>
+    
+    <!-- Inspector Panel (Right Side) -->
+    <div id="inspector-panel" class="hidden fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l border-gray-200 z-40 overflow-y-auto">
+        <div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-gray-900">Inspector de Escena</h3>
+            <button onclick="closeInspector()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="p-4 space-y-6">
+            <!-- Scene Title -->
+            <div>
+                <h4 id="inspector-scene-title" class="text-xl font-bold text-gray-900 mb-2"></h4>
+                <p id="inspector-scene-summary" class="text-sm text-gray-600"></p>
+            </div>
+            
+            <!-- Script Text Editor with Character Counter -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-medium text-gray-700">Guión de la Escena</label>
+                    <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                </div>
+                <textarea 
+                    id="inspector-script-text"
+                    rows="6"
+                    maxlength="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    oninput="updateCharCounter()"
+                ></textarea>
+                <p class="mt-1 text-xs text-gray-500">Máximo 1000 caracteres para Sora2 y Veo3</p>
+            </div>
+            
+            <!-- AI Service Selector -->
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Servicio IA</label>
+                <select 
+                    id="inspector-service-select"
+                    onchange="updateInspectorConfig()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="gemini_veo">Gemini Veo</option>
+                    <option value="sora">Sora</option>
+                    <option value="heygen_v2">HeyGen Avatar V2</option>
+                    <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                    <option value="vuela_ai">Vuela.ai</option>
+                </select>
+            </div>
+            
+            <!-- Dynamic Config Container -->
+            <div id="inspector-config-container">
+                <!-- Se llenará dinámicamente -->
+            </div>
+            
+            <!-- Save Button -->
+            <div class="sticky bottom-0 bg-white pt-4 border-t border-gray-200">
+                <button 
+                    onclick="saveInspectorChanges()"
+                    class="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors">
+                    💾 Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Overlay when inspector is open -->
+    <div id="inspector-overlay" class="hidden fixed inset-0 bg-black bg-opacity-30 z-30" onclick="closeInspector()"></div>
+    </div>
 </div>
 
-<!-- Modal de Edición -->
+<!-- Modal para Añadir Escena Manual (Paso 3) -->
+<div id="add-scene-modal-step3" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Añadir Escena Manualmente</h3>
+            <button onclick="closeAddSceneModalStep3()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-200 mb-4">
+            <button onclick="switchAddSceneTab('ai')" id="tab-ai" class="px-4 py-2 font-medium text-sm border-b-2 border-blue-600 text-blue-600">
+                🤖 Generar con IA
+            </button>
+            <button onclick="switchAddSceneTab('upload')" id="tab-upload" class="px-4 py-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                ⬆️ Subir Video
+            </button>
+            <button onclick="switchAddSceneTab('freepik')" id="tab-freepik" class="px-4 py-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                📸 Video Freepik
+            </button>
+        </div>
+        
+        <!-- Tab Content: AI Generated -->
+        <div id="tab-content-ai" class="tab-content">
+            <form id="add-scene-form-ai" onsubmit="saveNewSceneStep3(event, 'ai_generated')">
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-gray-700">Texto del Guión</label>
+                            <span id="add-scene-char-count-step3" class="text-xs text-gray-500">0 / 1000</span>
+                        </div>
+                        <textarea 
+                            id="add-scene-script-text-step3"
+                            name="script_text"
+                            rows="5"
+                            maxlength="1000"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                            oninput="updateAddSceneCharCounterStep3()"
+                            required
+                        ></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">Servicio IA</label>
+                        <select id="add-scene-service-step3" name="ai_service" onchange="updateAddSceneConfigStep3()" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                            <option value="gemini_veo">Gemini Veo</option>
+                            <option value="sora">Sora</option>
+                            <option value="heygen_v2">HeyGen Avatar V2</option>
+                            <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                            <option value="vuela_ai">Vuela.ai</option>
+                        </select>
+                    </div>
+                    
+                    <div id="add-scene-config-container-step3"></div>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeAddSceneModalStep3()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Crear Escena
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Tab Content: Upload Video -->
+        <div id="tab-content-upload" class="tab-content hidden">
+            <form id="add-scene-form-upload" onsubmit="saveNewSceneStep3(event, 'video_upload')">
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">Resumen de la Escena</label>
+                        <input type="text" name="summary" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Breve descripción..." required>
+                    </div>
+                    
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">Subir Video</label>
+                        <input type="file" name="video_file" accept="video/*" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                        <p class="mt-1 text-xs text-gray-500">Formatos: MP4, MOV, AVI, WEBM</p>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeAddSceneModalStep3()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Subir Video
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Tab Content: Freepik Video -->
+        <div id="tab-content-freepik" class="tab-content hidden">
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-2 block">Buscar Video en Freepik</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="freepik-video-search" placeholder="Ej: sunset, ocean..." class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <button onclick="searchFreepikVideosForScene()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            Buscar
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="freepik-video-results" class="grid grid-cols-3 gap-4 max-h-64 overflow-y-auto">
+                    <p class="text-sm text-gray-500 col-span-3">Busca videos para ver resultados...</p>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeAddSceneModalStep3()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edición (DEPRECATED - Using Inspector instead) -->
 <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
     <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
         <div class="flex justify-between items-center mb-4">
@@ -222,7 +444,8 @@
                 <select id="editServiceSelect" onchange="updateEditConfig()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option value="gemini_veo">Gemini Veo</option>
                     <option value="sora">Sora</option>
-                    <option value="heygen">HeyGen</option>
+                    <option value="heygen_v2">HeyGen Avatar V2</option>
+                    <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
                 </select>
             </div>
             
@@ -550,7 +773,7 @@ function updateEditConfig() {
                 </select>
             </div>
         `;
-    } else if (service === 'heygen') {
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
         container.innerHTML = `
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
@@ -630,7 +853,7 @@ async function saveEdit() {
     } else if (service === 'sora') {
         data.ai_config.duration = parseInt(document.getElementById('editDuration').value);
         data.ai_config.size = document.getElementById('editSize').value;
-    } else if (service === 'heygen') {
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
         data.ai_config.avatar_id = document.getElementById('editAvatarId').value;
         data.ai_config.voice_id = document.getElementById('editVoiceId').value;
     }
@@ -718,6 +941,693 @@ document.addEventListener('click', function(event) {
         });
     }
 });
+
+// ==================
+// INSPECTOR PANEL
+// ==================
+
+let currentInspectorSceneId = null;
+
+function openInspector(sceneId) {
+    currentInspectorSceneId = sceneId;
+    const scene = scenesData[sceneId];
+    
+    if (!scene) {
+        console.error('Escena no encontrada:', sceneId);
+        return;
+    }
+    
+    // Llenar datos del inspector
+    document.getElementById('inspector-scene-title').textContent = scene.ai_service + ' - Escena ' + sceneId;
+    document.getElementById('inspector-scene-summary').textContent = 'Configuración detallada';
+    document.getElementById('inspector-script-text').value = scene.script_text;
+    document.getElementById('inspector-service-select').value = scene.ai_service;
+    
+    // Actualizar contador de caracteres
+    updateCharCounter();
+    
+    // Actualizar configuración dinámica
+    updateInspectorConfig();
+    
+    // Mostrar panel y overlay
+    document.getElementById('inspector-panel').classList.remove('hidden');
+    document.getElementById('inspector-overlay').classList.remove('hidden');
+    
+    // Scroll al top del panel
+    document.getElementById('inspector-panel').scrollTop = 0;
+}
+
+function closeInspector() {
+    document.getElementById('inspector-panel').classList.add('hidden');
+    document.getElementById('inspector-overlay').classList.add('hidden');
+    currentInspectorSceneId = null;
+}
+
+function updateCharCounter() {
+    const text = document.getElementById('inspector-script-text').value;
+    const charCount = text.length;
+    const counter = document.getElementById('inspector-char-count');
+    
+    counter.textContent = `${charCount} / 1000`;
+    
+    // Cambiar color si se acerca al límite
+    if (charCount > 900) {
+        counter.classList.add('text-red-600', 'font-bold');
+        counter.classList.remove('text-gray-500');
+    } else if (charCount > 800) {
+        counter.classList.add('text-yellow-600', 'font-bold');
+        counter.classList.remove('text-gray-500', 'text-red-600');
+    } else {
+        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateInspectorConfig() {
+    if (!currentInspectorSceneId) return;
+    
+    const service = document.getElementById('inspector-service-select').value;
+    const scene = scenesData[currentInspectorSceneId];
+    const config = scene.ai_config || {};
+    const container = document.getElementById('inspector-config-container');
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="5" ${config.duration == 5 ? 'selected' : ''}>5 segundos</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="4" ${config.duration == 4 ? 'selected' : ''}>4 segundos</option>
+                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
+                    <option value="12" ${config.duration == 12 ? 'selected' : ''}>12 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Avatar</label>
+                <select id="inspector-avatar" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voz</label>
+                <select id="inspector-voice" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+        `;
+        loadHeyGenAssetsForInspector(config.avatar_id, config.voice_id);
+    } else if (service === 'vuela_ai') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voice ID</label>
+                <input type="text" 
+                       id="inspector-voice-id"
+                       value="${config.voice_id || ''}"
+                       placeholder="ID de voz de Vuela.ai"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            </div>
+        `;
+    }
+}
+
+async function loadHeyGenAssetsForInspector(selectedAvatarId, selectedVoiceId) {
+    try {
+        if (!avatarsCache) {
+            const avatarResponse = await fetch('{% url "core:api_list_avatars" %}');
+            const avatarData = await avatarResponse.json();
+            avatarsCache = avatarData.avatars;
+        }
+        
+        if (!voicesCache) {
+            const voiceResponse = await fetch('{% url "core:api_list_voices" %}');
+            const voiceData = await voiceResponse.json();
+            voicesCache = voiceData.voices;
+        }
+        
+        const avatarSelect = document.getElementById('inspector-avatar');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        avatarsCache.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            option.selected = avatar.avatar_id === selectedAvatarId;
+            avatarSelect.appendChild(option);
+        });
+        
+        const voiceSelect = document.getElementById('inspector-voice');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        voicesCache.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            option.selected = voice.voice_id === selectedVoiceId;
+            voiceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando assets de HeyGen:', error);
+    }
+}
+
+async function saveInspectorChanges() {
+    if (!currentInspectorSceneId) return;
+    
+    const scriptText = document.getElementById('inspector-script-text').value;
+    const service = document.getElementById('inspector-service-select').value;
+    
+    const data = {
+        script_text: scriptText,
+        ai_service: service,
+        ai_config: {}
+    };
+    
+    if (service === 'gemini_veo') {
+        data.ai_config.duration = parseInt(document.getElementById('inspector-duration').value);
+    } else if (service === 'sora') {
+        data.ai_config.duration = parseInt(document.getElementById('inspector-duration').value);
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        const avatarId = document.getElementById('inspector-avatar').value;
+        const voiceId = document.getElementById('inspector-voice').value;
+        
+        if (!avatarId || !voiceId) {
+            alert('Debes seleccionar un avatar y una voz');
+            return;
+        }
+        
+        data.ai_config.avatar_id = avatarId;
+        data.ai_config.voice_id = voiceId;
+    } else if (service === 'vuela_ai') {
+        const voiceId = document.getElementById('inspector-voice-id').value;
+        if (!voiceId) {
+            alert('Debes ingresar un Voice ID de Vuela.ai');
+            return;
+        }
+        data.ai_config.voice_id = voiceId;
+    }
+    
+    try {
+        const response = await fetch(`/scenes/${currentInspectorSceneId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log('✓ Inspector: Cambios guardados');
+            
+            scenesData[currentInspectorSceneId].script_text = scriptText;
+            scenesData[currentInspectorSceneId].ai_service = service;
+            scenesData[currentInspectorSceneId].ai_config = data.ai_config;
+            
+            const saveBtn = document.querySelector('#inspector-panel button[onclick="saveInspectorChanges()"]');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '✅ Guardado!';
+            saveBtn.classList.add('bg-green-600');
+            saveBtn.classList.remove('bg-blue-600');
+            
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.classList.remove('bg-green-600');
+                saveBtn.classList.add('bg-blue-600');
+            }, 2000);
+        } else {
+            alert('Error al guardar: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al guardar cambios');
+    }
+}
+
+// ==================
+// DRAG AND DROP
+// ==================
+
+let draggedElement = null;
+let draggedOverElement = null;
+
+function handleDragStart(e) {
+    draggedElement = e.currentTarget;
+    draggedElement.classList.add('opacity-50', 'scale-95');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', draggedElement.innerHTML);
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    
+    e.dataTransfer.dropEffect = 'move';
+    
+    const target = e.currentTarget;
+    if (target !== draggedElement && target.classList.contains('cursor-move')) {
+        draggedOverElement = target;
+        target.classList.add('border-blue-500', 'border-2');
+    }
+    
+    return false;
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    const target = e.currentTarget;
+    
+    if (draggedElement && draggedElement !== target) {
+        // Obtener el contenedor padre
+        const container = document.getElementById('scenes-list');
+        const allScenes = Array.from(container.children);
+        
+        const draggedIndex = allScenes.indexOf(draggedElement);
+        const targetIndex = allScenes.indexOf(target);
+        
+        // Reordenar en el DOM
+        if (draggedIndex < targetIndex) {
+            target.parentNode.insertBefore(draggedElement, target.nextSibling);
+        } else {
+            target.parentNode.insertBefore(draggedElement, target);
+        }
+        
+        // Actualizar numeración visual
+        updateSceneNumbers();
+        
+        // Guardar nuevo orden en el backend
+        saveSceneOrder();
+    }
+    
+    return false;
+}
+
+function handleDragEnd(e) {
+    draggedElement.classList.remove('opacity-50', 'scale-95');
+    
+    // Limpiar clases de todos los elementos
+    document.querySelectorAll('.cursor-move').forEach(element => {
+        element.classList.remove('border-blue-500', 'border-2');
+    });
+    
+    draggedElement = null;
+    draggedOverElement = null;
+}
+
+function updateSceneNumbers() {
+    const scenes = document.querySelectorAll('#scenes-list > div');
+    scenes.forEach((scene, index) => {
+        const numberElement = scene.querySelector('.scene-number');
+        if (numberElement) {
+            numberElement.textContent = index + 1;
+        }
+    });
+}
+
+async function saveSceneOrder() {
+    const scenes = document.querySelectorAll('#scenes-list > div');
+    const newOrder = [];
+    
+    scenes.forEach((scene, index) => {
+        const sceneId = parseInt(scene.dataset.sceneId);
+        newOrder.push({
+            scene_id: sceneId,
+            order: index
+        });
+    });
+    
+    console.log('Guardando nuevo orden de escenas:', newOrder);
+    
+    // Guardar cada escena con su nuevo orden
+    for (const item of newOrder) {
+        try {
+            await fetch(`/scenes/${item.scene_id}/update/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    order: item.order
+                })
+            });
+        } catch (error) {
+            console.error(`Error al actualizar orden de escena ${item.scene_id}:`, error);
+        }
+    }
+    
+    console.log('✓ Orden de escenas guardado');
+}
+
+// Actualizar el método de SceneUpdateConfigView para aceptar 'order'
+
+// ==================
+// ADD SCENE MODAL (Paso 3)
+// ==================
+
+const scriptIdStep3 = {{ script.id }};
+let currentAddSceneTab = 'ai';
+let selectedFreepikVideoId = null;
+
+function openAddSceneModalStep3() {
+    document.getElementById('add-scene-modal-step3').classList.remove('hidden');
+    switchAddSceneTab('ai');
+}
+
+function closeAddSceneModalStep3() {
+    document.getElementById('add-scene-modal-step3').classList.add('hidden');
+    document.getElementById('add-scene-form-ai').reset();
+    document.getElementById('add-scene-form-upload').reset();
+    document.getElementById('add-scene-char-count-step3').textContent = '0 / 1000';
+    selectedFreepikVideoId = null;
+}
+
+function switchAddSceneTab(tab) {
+    currentAddSceneTab = tab;
+    
+    // Ocultar todos los contenidos
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Desactivar todas las tabs
+    document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+        btn.classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+        btn.classList.add('text-gray-500');
+    });
+    
+    // Mostrar contenido seleccionado
+    document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+    
+    // Activar tab seleccionada
+    const tabBtn = document.getElementById(`tab-${tab}`);
+    tabBtn.classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+    tabBtn.classList.remove('text-gray-500');
+    
+    // Inicializar configuración si es tab AI
+    if (tab === 'ai') {
+        updateAddSceneConfigStep3();
+    }
+}
+
+function updateAddSceneCharCounterStep3() {
+    const text = document.getElementById('add-scene-script-text-step3').value;
+    const charCount = text.length;
+    const counter = document.getElementById('add-scene-char-count-step3');
+    counter.textContent = `${charCount} / 1000`;
+    
+    if (charCount > 900) {
+        counter.classList.add('text-red-600', 'font-bold');
+        counter.classList.remove('text-gray-500');
+    } else if (charCount > 800) {
+        counter.classList.add('text-yellow-600', 'font-bold');
+        counter.classList.remove('text-gray-500', 'text-red-600');
+    } else {
+        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateAddSceneConfigStep3() {
+    const service = document.getElementById('add-scene-service-step3').value;
+    const container = document.getElementById('add-scene-config-container-step3');
+    
+    if (service === 'gemini_veo') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select name="duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="5">5 segundos</option>
+                    <option value="8" selected>8 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'sora') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
+                <select name="duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="4">4 segundos</option>
+                    <option value="8" selected>8 segundos</option>
+                    <option value="12">12 segundos</option>
+                </select>
+            </div>
+        `;
+    } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Avatar</label>
+                <select name="avatar_id" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                    <option value="">Cargando avatares...</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voz</label>
+                <select name="voice_id" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                    <option value="">Cargando voces...</option>
+                </select>
+            </div>
+        `;
+        loadHeyGenAssetsForAddSceneStep3();
+    } else if (service === 'vuela_ai') {
+        container.innerHTML = `
+            <div>
+                <label class="text-sm font-medium text-gray-700 mb-2 block">Voice ID</label>
+                <input type="text" 
+                       name="voice_id"
+                       placeholder="ID de voz de Vuela.ai"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                       required>
+            </div>
+        `;
+    }
+}
+
+async function loadHeyGenAssetsForAddSceneStep3() {
+    try {
+        if (!avatarsCache) {
+            const avatarResponse = await fetch('{% url "core:api_list_avatars" %}');
+            const avatarData = await avatarResponse.json();
+            avatarsCache = avatarData.avatars;
+        }
+        
+        if (!voicesCache) {
+            const voiceResponse = await fetch('{% url "core:api_list_voices" %}');
+            const voiceData = await voiceResponse.json();
+            voicesCache = voiceData.voices;
+        }
+        
+        const avatarSelect = document.querySelector('#add-scene-config-container-step3 select[name="avatar_id"]');
+        avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
+        avatarsCache.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar.avatar_id;
+            option.textContent = avatar.avatar_name;
+            avatarSelect.appendChild(option);
+        });
+        
+        const voiceSelect = document.querySelector('#add-scene-config-container-step3 select[name="voice_id"]');
+        voiceSelect.innerHTML = '<option value="">Selecciona una voz</option>';
+        voicesCache.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.voice_id;
+            option.textContent = `${voice.display_name} (${voice.language})`;
+            voiceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando assets de HeyGen:', error);
+    }
+}
+
+async function saveNewSceneStep3(event, sceneType) {
+    event.preventDefault();
+    
+    if (sceneType === 'ai_generated') {
+        const formData = new FormData(event.target);
+        const scriptText = formData.get('script_text');
+        const service = formData.get('ai_service');
+        
+        const data = {
+            scene_type: 'ai_generated',
+            script_text: scriptText,
+            summary: scriptText.substring(0, 100),
+            ai_service: service,
+            ai_config: {}
+        };
+        
+        if (service === 'gemini_veo') {
+            data.duration_sec = parseInt(formData.get('duration') || 8);
+        } else if (service === 'sora') {
+            data.duration_sec = parseInt(formData.get('duration') || 8);
+        } else if (service === 'heygen' || service === 'heygen_v2' || service === 'heygen_avatar_iv') {
+            data.ai_config.avatar_id = formData.get('avatar_id');
+            data.ai_config.voice_id = formData.get('voice_id');
+        } else if (service === 'vuela_ai') {
+            data.ai_config.voice_id = formData.get('voice_id');
+        }
+        
+        try {
+            const response = await fetch(`/scripts/${scriptIdStep3}/scenes/create/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            if (result.status === 'success') {
+                console.log('✓ Escena creada:', result.scene_id);
+                closeAddSceneModalStep3();
+                location.reload();
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al crear escena');
+        }
+        
+    } else if (sceneType === 'video_upload') {
+        const formData = new FormData(event.target);
+        const summary = formData.get('summary');
+        const videoFile = formData.get('video_file');
+        
+        // Crear escena primero
+        const sceneData = {
+            scene_type: 'video_upload',
+            summary: summary,
+            script_text: summary,
+            ai_service: 'manual_upload',
+            ai_config: {}
+        };
+        
+        try {
+            // Crear escena
+            const createResponse = await fetch(`/scripts/${scriptIdStep3}/scenes/create/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(sceneData)
+            });
+            
+            const createResult = await createResponse.json();
+            if (createResult.status !== 'success') {
+                throw new Error(createResult.message);
+            }
+            
+            // Subir video
+            const uploadFormData = new FormData();
+            uploadFormData.append('video_file', videoFile);
+            
+            const uploadResponse = await fetch(`/scenes/${createResult.scene_id}/upload-video/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: uploadFormData
+            });
+            
+            const uploadResult = await uploadResponse.json();
+            if (uploadResult.status === 'success') {
+                console.log('✓ Video subido');
+                closeAddSceneModalStep3();
+                location.reload();
+            } else {
+                alert('Error al subir video: ' + uploadResult.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al crear escena con video');
+        }
+    }
+}
+
+async function searchFreepikVideosForScene() {
+    const query = document.getElementById('freepik-video-search').value;
+    if (!query) {
+        alert('Ingresa un término de búsqueda');
+        return;
+    }
+    
+    const resultsDiv = document.getElementById('freepik-video-results');
+    resultsDiv.innerHTML = '<p class="text-sm text-gray-500 col-span-3">Buscando...</p>';
+    
+    try {
+        const response = await fetch(`/api/freepik/search/videos/?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.results.length > 0) {
+            resultsDiv.innerHTML = data.results.map(video => `
+                <div class="relative cursor-pointer border-2 rounded overflow-hidden hover:border-blue-500" 
+                     onclick="selectFreepikVideoForScene('${video.id}')">
+                    <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-32 object-cover">
+                    <div class="p-2 bg-white">
+                        <p class="text-xs font-medium truncate">${video.title}</p>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            resultsDiv.innerHTML = '<p class="text-sm text-gray-500 col-span-3">No se encontraron videos</p>';
+        }
+    } catch (error) {
+        console.error('Error buscando videos en Freepik:', error);
+        resultsDiv.innerHTML = '<p class="text-sm text-red-500 col-span-3">Error al buscar</p>';
+    }
+}
+
+function selectFreepikVideoForScene(resourceId) {
+    selectedFreepikVideoId = resourceId;
+    
+    const data = {
+        scene_type: 'freepik_video',
+        summary: 'Video de Freepik',
+        script_text: 'Video de Freepik',
+        freepik_resource_id: resourceId,
+        ai_service: 'freepik',
+        ai_config: {}
+    };
+    
+    fetch(`/scripts/${scriptIdStep3}/scenes/create/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === 'success') {
+            console.log('✓ Video de Freepik añadido');
+            closeAddSceneModalStep3();
+            location.reload();
+        } else {
+            alert('Error: ' + result.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al añadir video de Freepik');
+    });
+}
 </script>
 {% endblock %}
 
