@@ -5,12 +5,13 @@ Capa de servicios para manejar la lógica de negocio
 import logging
 import json
 import redis
+import requests
 from typing import Dict, Optional, List
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from datetime import datetime
 
-from .models import Project, Video, Image, Script
+from .models import Project, Video, Image, Audio, Script
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
@@ -1197,6 +1198,276 @@ class ImageService:
 
 
 # ====================
+# AUDIO SERVICE
+# ====================
+
+class AudioService:
+    """Servicio para manejar audios generados por ElevenLabs TTS"""
+    
+    @staticmethod
+    def _get_elevenlabs_client():
+        """Obtiene cliente de ElevenLabs"""
+        from .ai_services import ElevenLabsClient
+        from django.conf import settings
+        
+        api_key = settings.ELEVENLABS_API_KEY
+        if not api_key:
+            raise ServiceException('ELEVENLABS_API_KEY no configurada')
+        
+        return ElevenLabsClient(api_key=api_key)
+    
+    @staticmethod
+    def _get_default_voice_settings():
+        """Obtiene configuración de voz por defecto desde settings"""
+        from django.conf import settings
+        from decouple import config
+        
+        return {
+            'stability': float(config('ELEVENLABS_DEFAULT_STABILITY', default=0.5)),
+            'similarity_boost': float(config('ELEVENLABS_DEFAULT_SIMILARITY_BOOST', default=0.75)),
+            'style': float(config('ELEVENLABS_DEFAULT_STYLE', default=0.0)),
+            'speed': float(config('ELEVENLABS_DEFAULT_SPEED', default=1.0)),
+        }
+    
+    @staticmethod
+    def create_audio(project, title: str, text: str, voice_id: str, voice_name: str = None, 
+                     voice_settings: Dict = None):
+        """
+        Crea un nuevo audio (sin generarlo aún)
+        
+        Args:
+            project: Proyecto al que pertenece
+            title: Título del audio
+            text: Texto a convertir a voz
+            voice_id: ID de la voz en ElevenLabs
+            voice_name: Nombre de la voz (opcional)
+            voice_settings: Configuración de voz (opcional, usa defaults si no se proporciona)
+            
+        Returns:
+            Objeto Audio creado
+        """
+        from .models import Audio
+        from django.conf import settings
+        from decouple import config
+        
+        # Usar configuración por defecto si no se proporciona
+        if voice_settings is None:
+            voice_settings = AudioService._get_default_voice_settings()
+        
+        # Crear audio
+        audio = Audio.objects.create(
+            project=project,
+            title=title,
+            text=text,
+            voice_id=voice_id,
+            voice_name=voice_name or config('ELEVENLABS_DEFAULT_VOICE_NAME', default='Unknown'),
+            model_id=config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5'),
+            language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
+            voice_settings=voice_settings,
+            status='pending'
+        )
+        
+        logger.info(f"Audio creado: {audio.id} - {audio.title}")
+        return audio
+    
+    @staticmethod
+    def generate_audio(audio, with_timestamps: bool = False):
+        """
+        Genera el audio usando ElevenLabs API
+        
+        Args:
+            audio: Objeto Audio a generar
+            with_timestamps: Si True, genera con timestamps carácter por carácter
+            
+        Returns:
+            GCS path del audio generado
+            
+        Raises:
+            ServiceException: Si falla la generación
+        """
+        from .storage.gcs import gcs_storage
+        import tempfile
+        import os
+        import base64
+        
+        # Validar estado
+        if audio.status in ['processing', 'completed']:
+            raise ValidationException(f'El audio ya está en estado: {audio.get_status_display()}')
+        
+        # Marcar como procesando
+        audio.mark_as_processing()
+        
+        try:
+            client = AudioService._get_elevenlabs_client()
+            
+            # Obtener configuración de voz
+            voice_settings = audio.voice_settings or AudioService._get_default_voice_settings()
+            
+            logger.info(f"Generando audio para: {audio.title}")
+            logger.info(f"  Voz: {audio.voice_name} ({audio.voice_id})")
+            logger.info(f"  Modelo: {audio.model_id}")
+            logger.info(f"  Texto: {audio.text[:100]}{'...' if len(audio.text) > 100 else ''}")
+            
+            if with_timestamps:
+                # Generar con timestamps
+                result = client.text_to_speech_with_timestamps(
+                    text=audio.text,
+                    voice_id=audio.voice_id,
+                    model_id=audio.model_id,
+                    language_code=audio.language_code,
+                    **voice_settings
+                )
+                
+                # El audio viene en base64
+                audio_base64 = result.get('audio_base64')
+                audio_bytes = base64.b64decode(audio_base64)
+                alignment = result.get('alignment', {})
+                
+            else:
+                # Generar sin timestamps
+                audio_bytes = client.text_to_speech(
+                    text=audio.text,
+                    voice_id=audio.voice_id,
+                    model_id=audio.model_id,
+                    language_code=audio.language_code,
+                    **voice_settings
+                )
+                alignment = {}
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+                tmp_file.write(audio_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Subir a GCS
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                gcs_path = f"projects/{audio.project.id}/audios/{audio.id}/{timestamp}_{audio.title.replace(' ', '_')}.mp3"
+                
+                with open(tmp_path, 'rb') as f:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=f.read(),
+                        destination_path=gcs_path,
+                        content_type='audio/mpeg'
+                    )
+                
+                # Obtener duración del audio usando ffprobe
+                duration = AudioService._get_audio_duration(tmp_path)
+                file_size = os.path.getsize(tmp_path)
+                
+                # Marcar como completado
+                audio.mark_as_completed(
+                    gcs_path=gcs_full_path,
+                    duration=duration,
+                    metadata={
+                        'model_id': audio.model_id,
+                        'language_code': audio.language_code,
+                        'voice_settings': voice_settings,
+                        'file_size': file_size,
+                    },
+                    alignment=alignment if alignment else None
+                )
+                
+                audio.file_size = file_size
+                audio.save(update_fields=['file_size'])
+                
+                logger.info(f"✓ Audio generado: {gcs_full_path}")
+                logger.info(f"  Duración: {duration}s, Tamaño: {file_size} bytes")
+                
+                return gcs_full_path
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            logger.error(f"Error al generar audio: {e}")
+            audio.mark_as_error(str(e))
+            raise ServiceException(f"Error al generar audio: {str(e)}")
+    
+    @staticmethod
+    def _get_audio_duration(audio_path: str) -> float:
+        """
+        Obtiene la duración de un archivo de audio usando ffprobe
+        
+        Args:
+            audio_path: Path al archivo de audio
+            
+        Returns:
+            Duración en segundos
+        """
+        import subprocess
+        
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    audio_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+            else:
+                logger.warning(f"No se pudo obtener duración del audio: {result.stderr}")
+                return 0.0
+                
+        except Exception as e:
+            logger.warning(f"Error al obtener duración del audio: {e}")
+            return 0.0
+    
+    @staticmethod
+    def list_voices():
+        """
+        Lista todas las voces disponibles en ElevenLabs
+        
+        Returns:
+            Lista de voces
+        """
+        try:
+            client = AudioService._get_elevenlabs_client()
+            voices = client.list_voices()
+            return voices
+        except Exception as e:
+            logger.error(f"Error al listar voces: {e}")
+            raise ServiceException(f"Error al listar voces: {str(e)}")
+    
+    def get_audio_with_signed_url(self, audio) -> Dict:
+        """
+        Obtiene un audio con su URL firmada para reproducción
+        
+        Args:
+            audio: Objeto Audio
+            
+        Returns:
+            Dict con audio y signed_url
+        """
+        result = {
+            'audio': audio,
+            'signed_url': None
+        }
+        
+        if audio.status == 'completed' and audio.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                result['signed_url'] = gcs_storage.get_signed_url(
+                    audio.gcs_path,
+                    expiration=3600
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada de audio: {e}")
+        
+        return result
+
+
+# ====================
 # SCENE SERVICE
 # ====================
 
@@ -1319,10 +1590,11 @@ class SceneService:
                 scene = Scene.objects.create(
                     script=script,
                     project=script.project,
-                    scene_id=scene_data.get('id'),
-                    summary=scene_data.get('summary', ''),
-                    script_text=scene_data.get('script_text', ''),
-                    duration_sec=scene_data.get('duration_sec', 0),
+                scene_id=scene_data.get('id'),
+                summary=scene_data.get('summary', ''),
+                script_text=scene_data.get('script_text', ''),
+                visual_prompt=scene_data.get('visual_prompt', ''),
+                duration_sec=scene_data.get('duration_sec', 0),
                     avatar=scene_data.get('avatar', 'no'),
                     platform=scene_data.get('platform', 'gemini_veo'),
                     broll=scene_data.get('broll', []),
@@ -1563,12 +1835,14 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         # Preparar storage URI
         storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{scene.project.id}/scenes/{scene.id}/"
         
-        # Usar el script_text de la escena como prompt
-        prompt = scene.script_text
-        
-        # Si hay B-roll, agregar contexto visual
-        if scene.broll:
-            prompt += f"\n\nVisual context: {', '.join(scene.broll[:3])}"
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            # Fallback: usar script_text + broll
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual context: {', '.join(scene.broll[:3])}"
         
         params = {
             'prompt': prompt,
@@ -1643,7 +1917,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         if not voice_id:
             raise ValidationException('Debe configurar un voice_id para Vuela.ai')
         
-        # Construir script (usar \n para saltos de línea)
+        # Construir script (usar script_text para narración)
+        # Vuela.ai usa script_text para la voz/narración del video
         video_script = scene.script_text.replace('\n', '\\n')
         
         # Mapear valores de configuración
@@ -1762,6 +2037,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 
                 scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
                 logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+                
+                # Auto-generar audio si está habilitado
+                self._auto_generate_audio_if_needed(scene)
         
         elif api_status == 'failed':
             error_msg = status_data.get('error', 'Video generation failed')
@@ -1804,6 +2082,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 
                 scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
                 logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+                
+                # Auto-generar audio si está habilitado
+                self._auto_generate_audio_if_needed(scene)
         
         elif api_status in ['failed', 'error']:
             error_msg = status_data.get('error', 'Video generation failed')
@@ -1848,6 +2129,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                     
                     scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
                     logger.info(f"✓ Video de escena {scene.scene_id} completado: {gcs_full_path}")
+                    
+                    # Auto-generar audio si está habilitado
+                    self._auto_generate_audio_if_needed(scene)
                 else:
                     scene.mark_video_as_error("No se pudo descargar el video desde Sora")
             finally:
@@ -1953,6 +2237,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
                 logger.info(f"✓ Video de escena {scene.scene_id} completado desde Vuela.ai: {gcs_full_path}")
                 
+                # Auto-generar audio si está habilitado
+                self._auto_generate_audio_if_needed(scene)
+                
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
@@ -1962,6 +2249,267 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             scene.mark_video_as_error(error_msg)
         
         return status_data
+    
+    def _auto_generate_audio_if_needed(self, scene):
+        """
+        Genera audio automáticamente si la escena lo necesita (Veo/Sora)
+        y luego combina video+audio
+        
+        Args:
+            scene: Scene que acaba de completar su video
+        """
+        try:
+            # Verificar si debe generar audio
+            if not scene.needs_audio():
+                logger.info(f"Escena {scene.scene_id} no necesita audio (ai_service={scene.ai_service})")
+                return
+            
+            # Verificar si el script tiene audio habilitado
+            if not scene.script.enable_audio:
+                logger.info(f"Audio deshabilitado para script {scene.script.id}")
+                return
+            
+            # Obtener configuración de voz (priorizar voz de escena sobre voz por defecto)
+            voice_id = scene.audio_voice_id or scene.script.default_voice_id
+            voice_name = scene.audio_voice_name or scene.script.default_voice_name
+            
+            if not voice_id:
+                logger.warning(f"No hay voice_id configurado para escena {scene.scene_id}, usando voz por defecto")
+                from decouple import config
+                voice_id = config('ELEVENLABS_DEFAULT_VOICE_ID', default='pFZP5JQG7iQjIQuC4Bku')
+                voice_name = config('ELEVENLABS_DEFAULT_VOICE_NAME', default='Aria')
+            
+            logger.info(f"=== GENERANDO AUDIO AUTOMÁTICO PARA ESCENA {scene.scene_id} ===")
+            logger.info(f"  Texto: {scene.script_text[:100]}...")
+            logger.info(f"  Voz: {voice_name} ({voice_id})")
+            
+            # Generar audio
+            self._generate_scene_audio(scene, voice_id, voice_name)
+            
+        except Exception as e:
+            logger.error(f"Error al auto-generar audio para escena {scene.scene_id}: {e}")
+            scene.mark_audio_as_error(str(e))
+    
+    def _generate_scene_audio(self, scene, voice_id: str, voice_name: str):
+        """Genera audio para una escena usando ElevenLabs"""
+        from .ai_services.elevenlabs import ElevenLabsClient
+        from .storage.gcs import gcs_storage
+        from decouple import config
+        import tempfile
+        import os
+        
+        scene.mark_audio_as_processing()
+        
+        try:
+            # Obtener cliente
+            client = ElevenLabsClient(api_key=settings.ELEVENLABS_API_KEY)
+            
+            # Configuración de voz
+            voice_settings = {
+                'stability': float(config('ELEVENLABS_DEFAULT_STABILITY', default=0.5)),
+                'similarity_boost': float(config('ELEVENLABS_DEFAULT_SIMILARITY_BOOST', default=0.75)),
+                'style': float(config('ELEVENLABS_DEFAULT_STYLE', default=0.0)),
+                'speed': float(config('ELEVENLABS_DEFAULT_SPEED', default=1.0)),
+            }
+            
+            # Generar audio
+            audio_bytes = client.text_to_speech(
+                text=scene.script_text,
+                voice_id=voice_id,
+                model_id=config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5'),
+                language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
+                **voice_settings
+            )
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+                tmp_file.write(audio_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Subir a GCS
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/audio_{timestamp}.mp3"
+                
+                with open(tmp_path, 'rb') as f:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=f.read(),
+                        destination_path=gcs_path,
+                        content_type='audio/mpeg'
+                    )
+                
+                # Obtener duración
+                duration = AudioService._get_audio_duration(tmp_path)
+                
+                # Marcar como completado
+                scene.mark_audio_as_completed(
+                    gcs_path=gcs_full_path,
+                    duration=duration,
+                    voice_id=voice_id,
+                    voice_name=voice_name
+                )
+                
+                logger.info(f"✓ Audio generado para escena {scene.scene_id}: {gcs_full_path} (duración: {duration}s)")
+                
+                # Combinar video+audio automáticamente
+                self._auto_combine_video_audio_if_ready(scene)
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            logger.error(f"Error al generar audio para escena {scene.scene_id}: {e}")
+            scene.mark_audio_as_error(str(e))
+            raise
+    
+    def _auto_combine_video_audio_if_ready(self, scene):
+        """
+        Combina video+audio automáticamente si ambos están listos
+        
+        Args:
+            scene: Scene a combinar
+        """
+        try:
+            # Refrescar el objeto desde la base de datos para tener el estado más reciente
+            scene.refresh_from_db()
+            
+            logger.info(f"=== VERIFICANDO COMBINACIÓN PARA ESCENA {scene.scene_id} ===")
+            logger.info(f"  video_status: {scene.video_status}")
+            logger.info(f"  audio_status: {scene.audio_status}")
+            logger.info(f"  final_video_status: {scene.final_video_status}")
+            logger.info(f"  ai_service: {scene.ai_service}")
+            logger.info(f"  needs_audio(): {scene.needs_audio()}")
+            logger.info(f"  needs_combination(): {scene.needs_combination()}")
+            
+            if not scene.needs_combination():
+                logger.info(f"Escena {scene.scene_id} no necesita combinación aún")
+                return
+            
+            logger.info(f"=== ✓ COMBINANDO VIDEO+AUDIO PARA ESCENA {scene.scene_id} ===")
+            
+            scene.mark_final_video_as_processing()
+            
+            # Combinar con FFmpeg
+            final_gcs_path = self._combine_video_and_audio(
+                scene.video_gcs_path,
+                scene.audio_gcs_path,
+                scene.project.id,
+                scene.id
+            )
+            
+            scene.mark_final_video_as_completed(final_gcs_path)
+            logger.info(f"✓ Video final combinado para escena {scene.scene_id}: {final_gcs_path}")
+            
+        except Exception as e:
+            logger.error(f"Error al combinar video+audio para escena {scene.scene_id}: {e}")
+            scene.mark_final_video_as_error(str(e))
+    
+    def _combine_video_and_audio(self, video_gcs_path: str, audio_gcs_path: str, project_id: int, scene_id: int) -> str:
+        """
+        Combina un video con un audio usando FFmpeg
+        
+        Args:
+            video_gcs_path: Path GCS del video
+            audio_gcs_path: Path GCS del audio
+            project_id: ID del proyecto
+            scene_id: ID de la escena
+            
+        Returns:
+            GCS path del video combinado
+        """
+        import tempfile
+        import subprocess
+        import os
+        from .storage.gcs import gcs_storage
+        from datetime import datetime
+        
+        temp_dir = None
+        video_path = None
+        audio_path = None
+        output_path = None
+        
+        try:
+            # Crear directorio temporal
+            temp_dir = tempfile.mkdtemp(prefix='atenea_combine_audio_')
+            
+            # Descargar video
+            video_blob = gcs_storage.bucket.blob(video_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", ""))
+            video_path = os.path.join(temp_dir, 'video.mp4')
+            video_blob.download_to_filename(video_path)
+            
+            # Descargar audio
+            audio_blob = gcs_storage.bucket.blob(audio_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", ""))
+            audio_path = os.path.join(temp_dir, 'audio.mp3')
+            audio_blob.download_to_filename(audio_path)
+            
+            # Path de salida
+            output_path = os.path.join(temp_dir, 'combined.mp4')
+            
+            # Detectar si el video tiene audio original
+            probe_cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-select_streams', 'a:0',
+                '-show_entries', 'stream=codec_type',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ]
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+            has_original_audio = probe_result.stdout.strip() == 'audio'
+            
+            logger.info(f"Video original tiene audio: {has_original_audio}")
+            
+            # Combinar con FFmpeg
+            # Estrategia: ELIMINAR completamente el audio del video y REEMPLAZAR con ElevenLabs TTS
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', video_path,      # Input 0: video (puede tener audio o no)
+                '-i', audio_path,      # Input 1: audio de ElevenLabs
+                '-map', '0:v:0',       # Tomar SOLO el stream de video del input 0
+                '-map', '1:a:0',       # Tomar el stream de audio del input 1 (ElevenLabs)
+                '-c:v', 'copy',        # Copiar video sin re-encodear (mantener calidad)
+                '-c:a', 'aac',         # Encodear audio a AAC
+                '-b:a', '192k',        # Bitrate de audio 192kbps
+                '-ar', '44100',        # Sample rate 44.1kHz
+                '-shortest',           # Si el audio es más largo que el video, cortarlo
+                '-y',                  # Sobrescribir sin preguntar
+                output_path
+            ]
+            
+            logger.info(f"Ejecutando FFmpeg para REEMPLAZAR audio del video con ElevenLabs TTS")
+            logger.info(f"Comando: {' '.join(ffmpeg_cmd)}")
+            
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg stderr: {result.stderr}")
+                raise ServiceException(f"FFmpeg falló: {result.stderr[:500]}")
+            
+            # Subir a GCS
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            gcs_destination = f"projects/{project_id}/scenes/{scene_id}/final_{timestamp}.mp4"
+            
+            with open(output_path, 'rb') as f:
+                gcs_full_path = gcs_storage.upload_from_bytes(
+                    file_content=f.read(),
+                    destination_path=gcs_destination,
+                    content_type='video/mp4'
+                )
+            
+            return gcs_full_path
+            
+        finally:
+            # Limpiar archivos temporales
+            if temp_dir and os.path.exists(temp_dir):
+                import shutil
+                shutil.rmtree(temp_dir)
     
     def get_scene_with_signed_urls(self, scene) -> Dict:
         """
@@ -1976,7 +2524,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         result = {
             'scene': scene,
             'preview_image_url': None,
-            'video_url': None
+            'video_url': None,
+            'audio_url': None,
+            'final_video_url': None
         }
         
         # URL firmada del preview image
@@ -1989,7 +2539,7 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             except Exception as e:
                 logger.error(f"Error al generar URL firmada de preview: {e}")
         
-        # URL firmada del video
+        # URL firmada del video original
         if scene.video_status == 'completed' and scene.video_gcs_path:
             try:
                 result['video_url'] = gcs_storage.get_signed_url(
@@ -1998,6 +2548,26 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 )
             except Exception as e:
                 logger.error(f"Error al generar URL firmada de video: {e}")
+        
+        # URL firmada del audio
+        if scene.audio_status == 'completed' and scene.audio_gcs_path:
+            try:
+                result['audio_url'] = gcs_storage.get_signed_url(
+                    scene.audio_gcs_path,
+                    expiration=3600
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada de audio: {e}")
+        
+        # URL firmada del video final (video+audio combinados)
+        if scene.final_video_status == 'completed' and scene.final_video_gcs_path:
+            try:
+                result['final_video_url'] = gcs_storage.get_signed_url(
+                    scene.final_video_gcs_path,
+                    expiration=3600
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada de video final: {e}")
         
         return result
 
@@ -2032,9 +2602,12 @@ class VideoCompositionService:
         if not scenes or len(scenes) == 0:
             raise ValidationException("No hay escenas para combinar")
         
-        # Verificar que todos tengan video
+        # Verificar que todos tengan video (original o final combinado)
         for scene in scenes:
-            if scene.video_status != 'completed' or not scene.video_gcs_path:
+            has_original_video = scene.video_status == 'completed' and scene.video_gcs_path
+            has_final_video = scene.final_video_status == 'completed' and scene.final_video_gcs_path
+            
+            if not (has_original_video or has_final_video):
                 raise ValidationException(f"La escena {scene.scene_id} no tiene video completado")
         
         temp_dir = None
@@ -2053,8 +2626,19 @@ class VideoCompositionService:
             for idx, scene in enumerate(scenes):
                 logger.info(f"  [{idx}] Escena {scene.scene_id} (order={scene.order}, service={scene.ai_service})")
                 
+                # PRIORIZAR el video final (con audio ElevenLabs) si existe, sino usar el original
+                if scene.final_video_status == 'completed' and scene.final_video_gcs_path:
+                    video_gcs_path = scene.final_video_gcs_path
+                    logger.info(f"    → Usando video FINAL (con audio ElevenLabs TTS)")
+                else:
+                    video_gcs_path = scene.video_gcs_path
+                    if scene.needs_audio():
+                        logger.warning(f"    ⚠️ Video sin audio ElevenLabs (final_video_status={scene.final_video_status})")
+                    else:
+                        logger.info(f"    → Usando video original (servicio={scene.ai_service})")
+                
                 # Extraer blob name del GCS path
-                blob_name = scene.video_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                blob_name = video_gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
                 blob = gcs_storage.bucket.blob(blob_name)
                 
                 # Descargar a archivo temporal con orden explícito
@@ -2066,13 +2650,35 @@ class VideoCompositionService:
             
             logger.info(f"=== {len(video_paths)} VIDEOS DESCARGADOS ===")
             
-            # Verificar streams de audio en cada video
-            logger.info("=== VERIFICANDO STREAMS DE AUDIO ===")
+            # Verificar resoluciones y audio de cada video
+            logger.info("=== VERIFICANDO RESOLUCIONES Y AUDIO ===")
             videos_with_audio = []
+            video_resolutions = []
+            
             for video_path in video_paths:
                 has_audio = VideoCompositionService._check_audio_stream(video_path)
                 videos_with_audio.append(has_audio)
-                logger.info(f"  {os.path.basename(video_path)}: {'✓ Audio OK' if has_audio else '⚠️ Sin audio'}")
+                
+                # Obtener resolución
+                resolution = VideoCompositionService._get_video_resolution(video_path)
+                video_resolutions.append(resolution)
+                
+                logger.info(f"  {os.path.basename(video_path)}: {resolution[0]}x{resolution[1]} | {'✓ Audio' if has_audio else '⚠️ Sin audio'}")
+            
+            # Verificar si todas las resoluciones son iguales
+            all_same_resolution = all(r == video_resolutions[0] for r in video_resolutions)
+            
+            if not all_same_resolution:
+                # Listar todas las resoluciones diferentes
+                unique_resolutions = list(set(video_resolutions))
+                error_msg = (
+                    f"❌ ERROR: Las escenas tienen resoluciones diferentes y no se pueden combinar.\n"
+                    f"Resoluciones detectadas: {', '.join([f'{w}x{h}' for w, h in unique_resolutions])}\n\n"
+                    f"SOLUCIÓN: Debes regenerar todas las escenas con la MISMA orientación (16:9 o 9:16).\n"
+                    f"Ve al Paso 2 y asegúrate de que todas las escenas usen el mismo formato de video."
+                )
+                logger.error(error_msg)
+                raise ValidationException(error_msg)
             
             # Si algún video no tiene audio, usar estrategia especial
             all_have_audio = all(videos_with_audio)
@@ -2289,6 +2895,45 @@ class VideoCompositionService:
             logger.warning(f"Error al verificar audio stream: {e}")
             # Por defecto, asumir que tiene audio si no se puede verificar
             return True
+    
+    @staticmethod
+    def _get_video_resolution(video_path: str) -> tuple:
+        """
+        Obtiene la resolución de un video usando FFprobe
+        
+        Args:
+            video_path: Path al archivo de video
+            
+        Returns:
+            Tupla (width, height)
+        """
+        import subprocess
+        
+        try:
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'v:0',
+                    '-show_entries', 'stream=width,height',
+                    '-of', 'csv=s=x:p=0',
+                    video_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                width, height = map(int, result.stdout.strip().split('x'))
+                return (width, height)
+            else:
+                logger.warning(f"No se pudo obtener resolución del video: {result.stderr}")
+                return (1280, 720)  # Default
+                
+        except Exception as e:
+            logger.warning(f"Error al obtener resolución: {e}")
+            return (1280, 720)  # Default
 
 
 # ====================

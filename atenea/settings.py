@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     # Third party
-    'whitenoise',  # Para servir archivos estáticos
+    # 'whitenoise',  # Para servir archivos estáticos (comentado temporalmente)
     'tailwind',
     'theme',  # App de Tailwind
     'django_celery_beat',  # Celery Beat para tareas periódicas
@@ -64,7 +64,7 @@ if DEBUG:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir archivos estáticos
+    # 'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir archivos estáticos (comentado temporalmente)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -190,6 +190,21 @@ GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
 VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
+ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
+
+# ElevenLabs Defaults
+ELEVENLABS_DEFAULT_MODEL = config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5')
+ELEVENLABS_DEFAULT_VOICE_ID = config('ELEVENLABS_DEFAULT_VOICE_ID', default='pFZP5JQG7iQjIQuC4Bku')
+ELEVENLABS_DEFAULT_VOICE_NAME = config('ELEVENLABS_DEFAULT_VOICE_NAME', default='Aria')
+ELEVENLABS_DEFAULT_LANGUAGE = config('ELEVENLABS_DEFAULT_LANGUAGE', default='es')
+ELEVENLABS_DEFAULT_STABILITY = config('ELEVENLABS_DEFAULT_STABILITY', default=0.5, cast=float)
+ELEVENLABS_DEFAULT_SIMILARITY_BOOST = config('ELEVENLABS_DEFAULT_SIMILARITY_BOOST', default=0.75, cast=float)
+ELEVENLABS_DEFAULT_STYLE = config('ELEVENLABS_DEFAULT_STYLE', default=0.0, cast=float)
+ELEVENLABS_DEFAULT_SPEED = config('ELEVENLABS_DEFAULT_SPEED', default=1.0, cast=float)
+
+# HeyGen Defaults
+HEYGEN_DEFAULT_AVATAR_ID = config('HEYGEN_DEFAULT_AVATAR_ID', default='Kayla-incasualsuit-20220818')
+HEYGEN_DEFAULT_VOICE_ID = config('HEYGEN_DEFAULT_VOICE_ID', default='es-ES-ElviraNeural')
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://redis-13128.c12.us-east-1-4.ec2.redns.redis-cloud.com:13128')

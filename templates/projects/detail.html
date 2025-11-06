@@ -23,6 +23,9 @@
             <a href="{% url 'core:image_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 + Imagen
             </a>
+            <a href="{% url 'core:audio_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                + Audio
+            </a>
             <a href="{% url 'core:script_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 + Guión
             </a>
@@ -264,6 +267,60 @@
     <p class="text-gray-600 mb-4">Comienza creando tu primera imagen con IA</p>
     <a href="{% url 'core:image_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
         Crear Imagen
+    </a>
+</div>
+{% endif %}
+
+<!-- Audios Section -->
+{% if audios %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Audios</h2>
+    </div>
+    
+    <div class="space-y-3">
+        {% for audio_data in audios_with_urls %}
+        {% with audio=audio_data.audio %}
+        <a href="{% url 'core:audio_detail' audio.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
+            <div class="w-16 h-16 bg-green-100 rounded-md flex-shrink-0 flex items-center justify-center">
+                <span class="text-3xl">🎙️</span>
+            </div>
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="font-semibold text-gray-900">{{ audio.title }}</div>
+                <div class="text-sm text-gray-500">
+                    <span>{{ audio.voice_name }}</span>
+                    {% if audio.duration %}
+                    <span class="ml-4">{{ audio.duration|floatformat:1 }}s</span>
+                    {% endif %}
+                    <span class="ml-4">{{ audio.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                {% if audio.status == 'completed' and audio_data.signed_url %}
+                <audio controls class="w-48">
+                    <source src="{{ audio_data.signed_url }}" type="audio/mpeg">
+                </audio>
+                {% endif %}
+                <span class="px-3 py-1 rounded-md text-xs font-semibold 
+                    {% if audio.status == 'completed' %}bg-green-500 text-white
+                    {% elif audio.status == 'processing' %}bg-yellow-500 text-white
+                    {% elif audio.status == 'error' %}bg-red-500 text-white
+                    {% else %}bg-gray-500 text-white{% endif %}">
+                    {{ audio.get_status_display }}
+                </span>
+            </div>
+        </a>
+        {% endwith %}
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
+    <div class="text-6xl mb-4 opacity-30">🎙️</div>
+    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay audios</h3>
+    <p class="text-gray-600 mb-4">Comienza creando tu primer audio con ElevenLabs TTS</p>
+    <a href="{% url 'core:audio_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
+        Crear Audio
     </a>
 </div>
 {% endif %}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Project, Video, Image, Script, Scene
+from .models import Project, Video, Image, Audio, Script, Scene
 
 
 @admin.register(Project)
@@ -57,6 +57,42 @@ class ImageAdmin(admin.ModelAdmin):
         }),
         ('Metadatos', {
             'fields': ('width', 'height', 'aspect_ratio', 'metadata')
+        }),
+        ('Control de Errores', {
+            'fields': ('error_message',)
+        }),
+        ('Fechas', {
+            'fields': ('created_at', 'updated_at', 'completed_at')
+        }),
+    )
+
+
+@admin.register(Audio)
+class AudioAdmin(admin.ModelAdmin):
+    list_display = ['title', 'project', 'voice_name', 'status', 'duration', 'created_at']
+    list_filter = ['status', 'voice_name', 'model_id', 'language_code', 'created_at']
+    search_fields = ['title', 'project__name', 'text', 'voice_name']
+    readonly_fields = ['created_at', 'updated_at', 'completed_at', 'external_id']
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('project', 'title', 'status')
+        }),
+        ('Contenido', {
+            'fields': ('text',)
+        }),
+        ('Configuración de Voz', {
+            'fields': ('voice_id', 'voice_name', 'model_id', 'language_code', 'voice_settings')
+        }),
+        ('Almacenamiento', {
+            'fields': ('gcs_path', 'external_id')
+        }),
+        ('Metadatos', {
+            'fields': ('duration', 'file_size', 'format', 'sample_rate', 'metadata')
+        }),
+        ('Alignment', {
+            'fields': ('alignment',),
+            'classes': ('collapse',)
         }),
         ('Control de Errores', {
             'fields': ('error_message',)

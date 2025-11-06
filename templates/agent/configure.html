@@ -160,15 +160,14 @@
                             </div>
                         </div>
 
-                        <!-- Script Text (Editable) -->
+                        <!-- Script Text Preview (Click to edit in Inspector) -->
                         <div class="mt-4">
                             <label class="text-sm font-medium text-gray-700 mb-1 block">Texto del Guión</label>
-                            <textarea 
-                                rows="3"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                readonly
-                            >{{ scene.script_text }}</textarea>
-                            <p class="mt-1 text-xs text-gray-500">(Edición disponible próximamente)</p>
+                            <div class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-700 cursor-pointer hover:border-blue-400 transition-colors"
+                                 onclick="openInspector({{ scene.id }})">
+                                <p class="line-clamp-3">{{ scene.script_text }}</p>
+                            </div>
+                            <p class="mt-1 text-xs text-blue-600">💡 Haz clic en "Inspector" para editar el guión y prompt visual</p>
                         </div>
 
                         <!-- Service Selector -->
@@ -259,17 +258,56 @@
             <!-- Script Text Editor with Character Counter -->
             <div>
                 <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm font-medium text-gray-700">Guión de la Escena</label>
+                    <label class="text-sm font-medium text-gray-700">🎙️ Guión/Narración (para Audio)</label>
                     <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
                 </div>
                 <textarea 
                     id="inspector-script-text"
-                    rows="6"
+                    rows="5"
                     maxlength="1000"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                     oninput="updateCharCounter()"
+                    placeholder="Texto que se narrará con ElevenLabs o HeyGen..."
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">Máximo 1000 caracteres para Sora2 y Veo3</p>
+                <p class="mt-1 text-xs text-gray-500">Este texto se usa para generar el audio con ElevenLabs o la voz del avatar en HeyGen</p>
+            </div>
+            
+            <!-- Visual Prompt Editor -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-medium text-gray-700">🎬 Prompt Visual (para Video)</label>
+                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 / 2000</span>
+                </div>
+                <textarea 
+                    id="inspector-visual-prompt"
+                    rows="5"
+                    maxlength="2000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    oninput="updateVisualCharCounter()"
+                    placeholder="Descripción visual cinematográfica para Veo, Sora o Vuela (en inglés)..."
+                ></textarea>
+                <p class="mt-1 text-xs text-gray-500">Descripción visual detallada en inglés para generar el video. No aplica a HeyGen (usa avatar y background).</p>
+            </div>
+            
+            <!-- Voice Selector (for audio scenes) -->
+            <div id="inspector-voice-section">
+                <label class="text-sm font-medium text-gray-700 mb-2 block">🎙️ Voz de Narración</label>
+                <input type="hidden" id="inspector-voice-id" value="">
+                <input type="hidden" id="inspector-voice-name" value="">
+                
+                <div id="inspector-voice-selected" class="mb-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <p class="text-sm font-bold text-green-900" id="inspector-selected-voice-name">Voz por defecto del script</p>
+                            <p class="text-xs text-green-600" id="inspector-selected-voice-category">Se usará la voz global</p>
+                        </div>
+                        <button type="button" onclick="openInspectorVoiceModal()" 
+                                class="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition">
+                            Cambiar
+                        </button>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Solo aplica a escenas Veo/Sora/Vuela con audio habilitado</p>
             </div>
             
             <!-- AI Service Selector -->
@@ -439,9 +477,46 @@
 
 {% if script %}
 <script>
+// ==========================================
+// VARIABLES GLOBALES - DEBEN IR AL INICIO
+// ==========================================
+var currentInspectorSceneId = null;
+var avatarsCache = null;
+var voicesCache = null;
+
+// Cache de datos de escenas para el inspector
+var scenesInspectorData = {};
+var scenesRawData = `{
+    {% for scene_data in scenes_with_urls %}
+    "{{ scene_data.scene.id }}": {
+        "scene_id": "{{ scene_data.scene.scene_id }}",
+        "summary": "{{ scene_data.scene.summary|escapejs }}",
+        "script_text": "{{ scene_data.scene.script_text|escapejs }}",
+        "visual_prompt": "{{ scene_data.scene.visual_prompt|default:""|escapejs }}",
+        "ai_service": "{{ scene_data.scene.ai_service }}",
+        "ai_config": {{ scene_data.ai_config_json|safe }},
+        "duration_sec": {{ scene_data.scene.duration_sec }},
+        "audio_voice_id": "{{ scene_data.scene.audio_voice_id|default:"" }}",
+        "audio_voice_name": "{{ scene_data.scene.audio_voice_name|default:"" }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+}`;
+
+console.log('Raw scenes data:', scenesRawData);
+
+try {
+    scenesInspectorData = JSON.parse(scenesRawData);
+    console.log('✓ scenesInspectorData inicializado correctamente con', Object.keys(scenesInspectorData).length, 'escenas');
+} catch(e) {
+    console.error('❌ Error inicializando scenesInspectorData:', e);
+    console.error('Raw data que causó el error:', scenesRawData);
+    scenesInspectorData = {};
+}
+
 // Script ya procesado, mostrar escenas
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Script procesado, mostrando escenas');
+    console.log('scenesInspectorData:', scenesInspectorData);
     
     // Inicializar configuraciones de cada escena
     {% for scene_data in scenes_with_urls %}
@@ -656,10 +731,6 @@ function saveSceneAiConfig(sceneId, key, value) {
     aiConfig[key] = value;
     saveSceneConfig(sceneId, { ai_config: aiConfig });
 }
-
-// Cache para avatares y voces
-let avatarsCache = null;
-let voicesCache = null;
 
 // Cargar avatares y voces de HeyGen
 async function loadHeyGenAssets() {
@@ -1462,39 +1533,50 @@ async function saveNewScene(event) {
 // INSPECTOR PANEL
 // ==================
 
-let currentInspectorSceneId = null;
-
-// Cache de datos de escenas para el inspector
-const scenesInspectorData = {
-    {% for scene_data in scenes_with_urls %}
-    {{ scene_data.scene.id }}: {
-        scene_id: '{{ scene_data.scene.scene_id }}',
-        summary: '{{ scene_data.scene.summary|escapejs }}',
-        script_text: `{{ scene_data.scene.script_text|escapejs }}`,
-        ai_service: '{{ scene_data.scene.ai_service }}',
-        ai_config: {{ scene_data.scene.ai_config|safe }},
-        duration_sec: {{ scene_data.scene.duration_sec }}
-    },
-    {% endfor %}
-};
-
 function openInspector(sceneId) {
+    console.log('Opening inspector for scene:', sceneId);
+    console.log('typeof scenesInspectorData:', typeof scenesInspectorData);
+    console.log('scenesInspectorData:', scenesInspectorData);
+    
+    if (!scenesInspectorData) {
+        alert('Error: Los datos de las escenas no están disponibles. Por favor recarga la página.');
+        return;
+    }
+    
+    console.log('Available scenes:', Object.keys(scenesInspectorData));
+    
     currentInspectorSceneId = sceneId;
     const scene = scenesInspectorData[sceneId];
     
     if (!scene) {
         console.error('Escena no encontrada:', sceneId);
+        console.error('scenesInspectorData:', scenesInspectorData);
+        alert(`Error: No se encontró la escena ${sceneId} en los datos`);
         return;
     }
     
     // Llenar datos del inspector
-    document.getElementById('inspector-scene-title').textContent = scene.scene_id;
-    document.getElementById('inspector-scene-summary').textContent = scene.summary;
-    document.getElementById('inspector-script-text').value = scene.script_text;
-    document.getElementById('inspector-service-select').value = scene.ai_service;
+    document.getElementById('inspector-scene-title').textContent = scene.scene_id || '';
+    document.getElementById('inspector-scene-summary').textContent = scene.summary || '';
+    document.getElementById('inspector-script-text').value = scene.script_text || '';
+    document.getElementById('inspector-visual-prompt').value = scene.visual_prompt || '';
+    document.getElementById('inspector-service-select').value = scene.ai_service || 'gemini_veo';
     
-    // Actualizar contador de caracteres
+    // Llenar datos de voz
+    document.getElementById('inspector-voice-id').value = scene.audio_voice_id || '';
+    document.getElementById('inspector-voice-name').value = scene.audio_voice_name || '';
+    
+    if (scene.audio_voice_name) {
+        document.getElementById('inspector-selected-voice-name').textContent = scene.audio_voice_name;
+        document.getElementById('inspector-selected-voice-category').textContent = 'Voz personalizada para esta escena';
+    } else {
+        document.getElementById('inspector-selected-voice-name').textContent = 'Voz por defecto del script';
+        document.getElementById('inspector-selected-voice-category').textContent = 'Se usará la voz global';
+    }
+    
+    // Actualizar contadores de caracteres
     updateCharCounter();
+    updateVisualCharCounter();
     
     // Actualizar configuración dinámica
     updateInspectorConfig();
@@ -1525,6 +1607,26 @@ function updateCharCounter() {
         counter.classList.add('text-red-600', 'font-bold');
         counter.classList.remove('text-gray-500');
     } else if (charCount > 800) {
+        counter.classList.add('text-yellow-600', 'font-bold');
+        counter.classList.remove('text-gray-500', 'text-red-600');
+    } else {
+        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateVisualCharCounter() {
+    const text = document.getElementById('inspector-visual-prompt').value;
+    const charCount = text.length;
+    const counter = document.getElementById('inspector-visual-char-count');
+    
+    counter.textContent = `${charCount} / 2000`;
+    
+    // Cambiar color si se acerca al límite
+    if (charCount > 1800) {
+        counter.classList.add('text-red-600', 'font-bold');
+        counter.classList.remove('text-gray-500');
+    } else if (charCount > 1600) {
         counter.classList.add('text-yellow-600', 'font-bold');
         counter.classList.remove('text-gray-500', 'text-red-600');
     } else {
@@ -1741,11 +1843,17 @@ async function saveInspectorChanges() {
     if (!currentInspectorSceneId) return;
     
     const scriptText = document.getElementById('inspector-script-text').value;
+    const visualPrompt = document.getElementById('inspector-visual-prompt').value;
     const service = document.getElementById('inspector-service-select').value;
+    const voiceId = document.getElementById('inspector-voice-id').value;
+    const voiceName = document.getElementById('inspector-voice-name').value;
     
     const data = {
         script_text: scriptText,
+        visual_prompt: visualPrompt,
         ai_service: service,
+        audio_voice_id: voiceId,
+        audio_voice_name: voiceName,
         ai_config: {}
     };
     
@@ -1803,7 +1911,10 @@ async function saveInspectorChanges() {
             
             // Actualizar cache local
             scenesInspectorData[currentInspectorSceneId].script_text = scriptText;
+            scenesInspectorData[currentInspectorSceneId].visual_prompt = visualPrompt;
             scenesInspectorData[currentInspectorSceneId].ai_service = service;
+            scenesInspectorData[currentInspectorSceneId].audio_voice_id = voiceId;
+            scenesInspectorData[currentInspectorSceneId].audio_voice_name = voiceName;
             scenesInspectorData[currentInspectorSceneId].ai_config = data.ai_config;
             
             // Mostrar indicador de éxito
@@ -1825,6 +1936,158 @@ async function saveInspectorChanges() {
         console.error('Error:', error);
         alert('Error al guardar cambios');
     }
+}
+
+// ==================
+// VOICE SELECTOR FOR INSPECTOR
+// ==================
+
+let voicesCacheInspector = null;
+
+async function openInspectorVoiceModal() {
+    // Cargar voces si no están en cache
+    if (!voicesCacheInspector) {
+        try {
+            const response = await fetch('{% url "core:api_list_elevenlabs_voices" %}');
+            const data = await response.json();
+            voicesCacheInspector = data.voices || [];
+        } catch (error) {
+            console.error('Error cargando voces:', error);
+            alert('Error al cargar voces de ElevenLabs');
+            return;
+        }
+    }
+    
+    // Crear y mostrar modal
+    createInspectorVoiceModal();
+}
+
+function createInspectorVoiceModal() {
+    // Eliminar modal anterior si existe
+    const existingModal = document.getElementById('voice-modal-inspector');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Crear modal
+    const modal = document.createElement('div');
+    modal.id = 'voice-modal-inspector';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Catálogo de Voces ElevenLabs</h2>
+                    <p class="text-green-100 text-sm mt-1">${voicesCacheInspector.length} voces disponibles</p>
+                </div>
+                <button type="button" onclick="closeInspectorVoiceModal()" 
+                        class="text-white hover:text-green-100 text-3xl leading-none">
+                    &times;
+                </button>
+            </div>
+            
+            <!-- Buscador -->
+            <div class="px-6 py-4 bg-gray-50 border-b">
+                <input type="text" id="voice-search-inspector" placeholder="🔍 Buscar por nombre, acento, género..." 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                       oninput="filterVoicesInspector(this.value)">
+            </div>
+            
+            <!-- Lista de Voces -->
+            <div class="overflow-y-auto p-6" style="max-height: calc(90vh - 200px);">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="voices-grid-inspector">
+                    ${renderInspectorVoiceCards()}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function renderInspectorVoiceCards() {
+    if (!voicesCacheInspector || voicesCacheInspector.length === 0) {
+        return '<div class="col-span-3 text-center py-12"><p class="text-gray-500">No hay voces disponibles</p></div>';
+    }
+    
+    return voicesCacheInspector.map(voice => {
+        const labels = voice.labels || {};
+        const labelsHtml = Object.values(labels).map(label => 
+            `<span class="inline-block bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">${label}</span>`
+        ).join('');
+        
+        return `
+            <div class="voice-card border-2 border-gray-200 rounded-xl p-5 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
+                 data-voice-id="${voice.voice_id}"
+                 data-voice-name="${voice.name}"
+                 data-voice-category="${voice.category || 'premade'}"
+                 onclick="selectInspectorVoice('${voice.voice_id}', '${voice.name}', '${voice.category || 'premade'}')">
+                
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1">
+                        <h3 class="font-bold text-gray-900 text-lg">${voice.name}</h3>
+                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">${voice.category || 'premade'}</p>
+                    </div>
+                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">🎙️</span>
+                    </div>
+                </div>
+                
+                ${voice.description ? `<p class="text-sm text-gray-700 mb-3">${voice.description}</p>` : ''}
+                
+                ${labelsHtml ? `<div class="flex flex-wrap gap-1 mb-3">${labelsHtml}</div>` : ''}
+                
+                ${voice.preview_url ? `
+                    <div class="mt-3" onclick="event.stopPropagation();">
+                        <audio controls preload="none" class="w-full h-8">
+                            <source src="${voice.preview_url}" type="audio/mpeg">
+                        </audio>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function closeInspectorVoiceModal() {
+    const modal = document.getElementById('voice-modal-inspector');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function selectInspectorVoice(voiceId, voiceName, voiceCategory) {
+    // Actualizar campos hidden
+    document.getElementById('inspector-voice-id').value = voiceId;
+    document.getElementById('inspector-voice-name').value = voiceName;
+    
+    // Actualizar UI
+    document.getElementById('inspector-selected-voice-name').textContent = voiceName;
+    document.getElementById('inspector-selected-voice-category').textContent = voiceCategory + ' (personalizada)';
+    
+    // Cerrar modal
+    closeInspectorVoiceModal();
+    
+    console.log('Voz seleccionada para escena:', voiceName, voiceId);
+}
+
+function filterVoicesInspector(searchTerm) {
+    const cards = document.querySelectorAll('#voices-grid-inspector .voice-card');
+    const term = searchTerm.toLowerCase();
+    
+    cards.forEach(card => {
+        const voiceName = card.dataset.voiceName.toLowerCase();
+        const voiceCategory = card.dataset.voiceCategory.toLowerCase();
+        const text = card.textContent.toLowerCase();
+        
+        if (voiceName.includes(term) || voiceCategory.includes(term) || text.includes(term)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 }
 </script>
 {% endif %}
@@ -1857,7 +2120,10 @@ document.addEventListener('DOMContentLoaded', function() {
             'desired_duration_min': agentContent.duration,
             'video_type': agentContent.video_type || 'general',
             'video_orientation': agentContent.video_orientation || '16:9',
-            'generate_previews': agentContent.generate_previews !== false ? 'true' : 'false'
+            'generate_previews': agentContent.generate_previews !== false ? 'true' : 'false',
+            'enable_audio': agentContent.enable_audio !== false ? 'true' : 'false',
+            'default_voice_id': agentContent.default_voice_id || 'pFZP5JQG7iQjIQuC4Bku',
+            'default_voice_name': agentContent.default_voice_name || 'Aria'
         })
     })
     .then(response => response.json())

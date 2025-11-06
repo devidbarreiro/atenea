@@ -20,10 +20,11 @@ from django.db import models
 from django.db.models import Max
 from django.contrib.auth import authenticate, login, logout
 import os
+import json
 
-from .models import Project, Video, Image, Script, Scene
-from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, ScriptForm
-from .services import ProjectService, VideoService, ImageService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+from .models import Project, Video, Image, Audio, Script, Scene
+from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
+from .services import ProjectService, VideoService, ImageService, AudioService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
 from django.template.loader import render_to_string
 import logging
 
@@ -69,6 +70,9 @@ class ServiceMixin:
     
     def get_image_service(self):
         return ImageService()
+    
+    def get_audio_service(self):
+        return AudioService()
     
     def get_api_service(self):
         return APIService()
@@ -329,10 +333,36 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         # Obtener guiones del proyecto
         scripts = self.object.scripts.select_related('project').order_by('-created_at')
         
+        # Obtener audios del proyecto
+        audios = self.object.audios.select_related('project').order_by('-created_at')
+        
+        # Generar URLs firmadas para audios completados
+        audio_service = AudioService()
+        audios_with_urls = []
+        
+        for audio in audios:
+            if audio.status == 'completed' and audio.gcs_path:
+                try:
+                    audio_data = audio_service.get_audio_with_signed_url(audio)
+                    audios_with_urls.append(audio_data)
+                except Exception as e:
+                    # Si falla, agregar sin URL firmada
+                    audios_with_urls.append({
+                        'audio': audio,
+                        'signed_url': None
+                    })
+            else:
+                audios_with_urls.append({
+                    'audio': audio,
+                    'signed_url': None
+                })
+        
         context['videos'] = videos
         context['videos_with_urls'] = videos_with_urls
         context['images'] = images
         context['images_with_urls'] = images_with_urls
+        context['audios'] = audios
+        context['audios_with_urls'] = audios_with_urls
         context['scripts'] = scripts
         
         return context
@@ -802,6 +832,21 @@ class ListImageAssetsView(ServiceMixin, View):
             }, status=500)
 
 
+class ListElevenLabsVoicesView(ServiceMixin, View):
+    """Lista voces de ElevenLabs"""
+    
+    def get(self, request):
+        try:
+            audio_service = AudioService()
+            voices = audio_service.list_voices()
+            return JsonResponse({'voices': voices})
+        except ServiceException as e:
+            return JsonResponse({
+                'error': str(e),
+                'voices': []
+            }, status=500)
+
+
 # ====================
 # IMAGE VIEWS
 # ====================
@@ -1009,6 +1054,179 @@ class ImageGenerateView(ServiceMixin, View):
             messages.error(request, f'Error inesperado: {str(e)}')
         
         return redirect('core:image_detail', image_id=image.pk)
+
+
+# ====================
+# AUDIO VIEWS
+# ====================
+
+class AudioDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de un audio"""
+    model = Audio
+    template_name = 'audios/detail.html'
+    context_object_name = 'audio'
+    pk_url_kwarg = 'audio_id'
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {'label': self.object.title, 'url': None}
+        ]
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Usar servicio para obtener URL firmada
+        audio_service = self.get_audio_service()
+        audio_data = audio_service.get_audio_with_signed_url(self.object)
+        
+        context.update(audio_data)
+        return context
+
+
+class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+    """Crear nuevo audio"""
+    template_name = 'audios/create.html'
+    form_class = AudioForm
+    
+    def get_project(self):
+        """Obtener proyecto del contexto"""
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        
+        # Listar voces disponibles
+        try:
+            audio_service = self.get_audio_service()
+            voices = audio_service.list_voices()
+            context['voices'] = voices
+        except Exception as e:
+            logger.error(f"Error al listar voces: {e}")
+            context['voices'] = []
+            messages.warning(self.request, 'No se pudieron cargar las voces disponibles')
+        
+        return context
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {
+                'label': project.name, 
+                'url': reverse('core:project_detail', args=[project.pk])
+            },
+            {'label': 'Nuevo Audio', 'url': None}
+        ]
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de audio"""
+        project = self.get_project()
+        audio_service = self.get_audio_service()
+        
+        # Obtener datos básicos
+        title = request.POST.get('title')
+        text = request.POST.get('text')
+        voice_id = request.POST.get('voice_id')
+        voice_name = request.POST.get('voice_name')
+        
+        # Validaciones básicas
+        if not all([title, text, voice_id]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            # Crear audio usando servicio
+            audio = audio_service.create_audio(
+                project=project,
+                title=title,
+                text=text,
+                voice_id=voice_id,
+                voice_name=voice_name
+            )
+            
+            messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
+            return redirect('core:audio_detail', audio_id=audio.pk)
+            
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class AudioDeleteView(BreadcrumbMixin, DeleteView):
+    """Eliminar audio"""
+    model = Audio
+    template_name = 'audios/delete.html'
+    context_object_name = 'audio'
+    pk_url_kwarg = 'audio_id'
+    
+    def get_success_url(self):
+        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {
+                'label': self.object.title, 
+                'url': reverse('core:audio_detail', args=[self.object.pk])
+            },
+            {'label': 'Eliminar', 'url': None}
+        ]
+    
+    def delete(self, request, *args, **kwargs):
+        """Override para eliminar archivo de GCS"""
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        
+        # Eliminar de GCS si existe
+        if self.object.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                gcs_storage.delete_file(self.object.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al eliminar archivo: {e}")
+        
+        audio_title = self.object.title
+        self.object.delete()
+        
+        messages.success(request, f'Audio "{audio_title}" eliminado')
+        return redirect(success_url)
+
+
+# ====================
+# AUDIO ACTIONS
+# ====================
+
+class AudioGenerateView(ServiceMixin, View):
+    """Generar audio usando ElevenLabs API"""
+    
+    def post(self, request, audio_id):
+        audio = get_object_or_404(Audio, pk=audio_id)
+        audio_service = self.get_audio_service()
+        
+        try:
+            gcs_path = audio_service.generate_audio(audio)
+            messages.success(
+                request, 
+                'Audio generado exitosamente.'
+            )
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+        
+        return redirect('core:audio_detail', audio_id=audio.pk)
 
 
 # ====================
@@ -1344,6 +1562,11 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 scenes_with_urls = []
                 for scene in scenes:
                     scene_data = SceneService().get_scene_with_signed_urls(scene)
+                    # Serializar ai_config a JSON string para el template
+                    if 'scene' in scene_data and scene_data['scene'].ai_config:
+                        scene_data['ai_config_json'] = json.dumps(scene_data['scene'].ai_config)
+                    else:
+                        scene_data['ai_config_json'] = '{}'
                     scenes_with_urls.append(scene_data)
                 
                 context = {
@@ -1383,6 +1606,9 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
         video_type = request.POST.get('video_type', 'general')
         video_orientation = request.POST.get('video_orientation', '16:9')
         generate_previews = request.POST.get('generate_previews', 'true').lower() == 'true'
+        enable_audio = request.POST.get('enable_audio', 'true').lower() == 'true'
+        default_voice_id = request.POST.get('default_voice_id', 'pFZP5JQG7iQjIQuC4Bku')
+        default_voice_name = request.POST.get('default_voice_name', 'Aria')
         
         if not script_content:
             messages.error(request, 'El contenido del script es requerido')
@@ -1399,6 +1625,9 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 video_type=video_type,
                 video_orientation=video_orientation,
                 generate_previews=generate_previews,
+                enable_audio=enable_audio,
+                default_voice_id=default_voice_id if enable_audio else None,
+                default_voice_name=default_voice_name if enable_audio else None,
                 status='pending'
             )
             
@@ -1463,6 +1692,11 @@ class AgentScenesView(BreadcrumbMixin, ServiceMixin, View):
             scenes_with_urls = []
             for scene in scenes:
                 scene_data = SceneService().get_scene_with_signed_urls(scene)
+                # Serializar ai_config a JSON string para el template
+                if 'scene' in scene_data and scene_data['scene'].ai_config:
+                    scene_data['ai_config_json'] = json.dumps(scene_data['scene'].ai_config)
+                else:
+                    scene_data['ai_config_json'] = '{}'
                 scenes_with_urls.append(scene_data)
             
             context = {
@@ -1805,10 +2039,15 @@ class SceneStatusView(View):
                 'status': 'success',
                 'scene_id': scene.id,
                 'video_status': scene.video_status,
+                'audio_status': scene.audio_status,
+                'final_video_status': scene.final_video_status,
                 'preview_status': scene.preview_image_status,
                 'video_url': scene_data.get('video_url'),
+                'audio_url': scene_data.get('audio_url'),
+                'final_video_url': scene_data.get('final_video_url'),
                 'preview_url': scene_data.get('preview_image_url'),
-                'error_message': scene.error_message
+                'error_message': scene.error_message,
+                'audio_error_message': scene.audio_error_message
             })
             
         except Exception as e:
@@ -2127,6 +2366,20 @@ class SceneUpdateConfigView(View):
                 scene.script_text = data['script_text']
                 logger.info(f"  script_text actualizado")
             
+            # Actualizar visual_prompt si viene
+            if 'visual_prompt' in data:
+                scene.visual_prompt = data['visual_prompt']
+                logger.info(f"  visual_prompt actualizado")
+            
+            # Actualizar audio_voice_id y audio_voice_name si vienen
+            if 'audio_voice_id' in data:
+                scene.audio_voice_id = data['audio_voice_id']
+                logger.info(f"  audio_voice_id actualizado a: {data['audio_voice_id']}")
+            
+            if 'audio_voice_name' in data:
+                scene.audio_voice_name = data['audio_voice_name']
+                logger.info(f"  audio_voice_name actualizado a: {data['audio_voice_name']}")
+            
             # Actualizar order si viene (para drag & drop)
             if 'order' in data:
                 scene.order = int(data['order'])
@@ -2233,6 +2486,118 @@ class SceneRegenerateView(View):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Error al regenerar escena: {str(e)}'
+            }, status=500)
+
+
+class SceneGenerateAudioView(View):
+    """Generar audio para una escena manualmente"""
+    
+    def post(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            data = json.loads(request.body)
+            script_text = data.get('script_text')
+            voice_id = data.get('voice_id')
+            voice_name = data.get('voice_name')
+            
+            if not script_text:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'El guión no puede estar vacío'
+                }, status=400)
+            
+            if not voice_id:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Debes especificar un voice_id'
+                }, status=400)
+            
+            logger.info(f"=== GENERANDO AUDIO MANUAL PARA ESCENA {scene.scene_id} ===")
+            logger.info(f"  Texto: {script_text[:100]}...")
+            logger.info(f"  Voz: {voice_name} ({voice_id})")
+            
+            # Actualizar script_text y voz si se proporcionaron
+            scene.script_text = script_text
+            scene.audio_voice_id = voice_id
+            scene.audio_voice_name = voice_name
+            scene.save(update_fields=['script_text', 'audio_voice_id', 'audio_voice_name', 'updated_at'])
+            
+            # Generar audio
+            scene_service = SceneService()
+            scene_service._generate_scene_audio(scene, voice_id, voice_name)
+            
+            # Obtener URL firmada del audio
+            audio_url = None
+            if scene.audio_gcs_path:
+                from .storage.gcs import gcs_storage
+                audio_url = gcs_storage.get_signed_url(scene.audio_gcs_path, expiration=3600)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Audio generado correctamente',
+                'audio_url': audio_url
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al generar audio para escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al generar audio: {str(e)}'
+            }, status=500)
+
+
+class SceneCombineAudioView(View):
+    """Forzar combinación de video + audio manualmente"""
+    
+    def post(self, request, scene_id):
+        try:
+            scene = get_object_or_404(Scene, id=scene_id)
+            
+            # Verificar que el video y audio estén completados
+            if scene.video_status != 'completed':
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'El video no está completado'
+                }, status=400)
+            
+            if scene.audio_status != 'completed':
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'El audio no está completado'
+                }, status=400)
+            
+            logger.info(f"=== COMBINACIÓN MANUAL SOLICITADA PARA ESCENA {scene.scene_id} ===")
+            
+            # Resetear el estado del video final a pending para permitir la recombinación
+            scene.final_video_status = 'pending'
+            scene.save(update_fields=['final_video_status', 'updated_at'])
+            
+            # Combinar
+            scene_service = SceneService()
+            scene_service._auto_combine_video_audio_if_ready(scene)
+            
+            # Refrescar para obtener el estado actualizado
+            scene.refresh_from_db()
+            
+            # Obtener URL firmada si está listo
+            final_video_url = None
+            if scene.final_video_status == 'completed' and scene.final_video_gcs_path:
+                from .storage.gcs import gcs_storage
+                final_video_url = gcs_storage.get_signed_url(scene.final_video_gcs_path, expiration=3600)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Video combinado correctamente',
+                'final_video_url': final_video_url,
+                'final_video_status': scene.final_video_status
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al combinar video+audio para escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al combinar: {str(e)}'
             }, status=500)
 
 

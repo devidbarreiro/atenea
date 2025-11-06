@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Eliminar Audio - {{ audio.title }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white shadow-md rounded-lg p-8">
+            <h1 class="text-2xl font-bold mb-6 text-red-600">🗑️ Eliminar Audio</h1>
+            
+            <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+                <p class="text-red-700">
+                    <strong>⚠️ Advertencia:</strong> Esta acción no se puede deshacer.
+                </p>
+            </div>
+
+            <p class="text-gray-700 mb-6">
+                ¿Estás seguro de que quieres eliminar el audio <strong>"{{ audio.title }}"</strong>?
+            </p>
+
+            <div class="bg-gray-50 p-4 rounded mb-6">
+                <dl class="space-y-2">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Título</dt>
+                        <dd class="text-sm text-gray-900">{{ audio.title }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Voz</dt>
+                        <dd class="text-sm text-gray-900">{{ audio.voice_name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Estado</dt>
+                        <dd class="text-sm text-gray-900">{{ audio.get_status_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Creado</dt>
+                        <dd class="text-sm text-gray-900">{{ audio.created_at|date:"d/m/Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="flex gap-4">
+                    <button type="submit" class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                        Sí, eliminar
+                    </button>
+                    <a href="{% url 'core:audio_detail' audio.id %}" 
+                       class="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
