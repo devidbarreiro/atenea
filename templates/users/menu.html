@@ -211,12 +211,12 @@
             <div x-show="open" 
                 x-transition
                 @click.outside="open = false"
-                class="absolute right-20 mt-20 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2">
+                class="absolute mt-40 w-35 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2">
 
                 <p class="text-gray-700 text-sm mb-2 font-semibold">Filtros</p>
-                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded">Solo activos</button>
-                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded">Solo staff</button>
-                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded">Todos</button>
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('activos')">Solo activos</button>
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('staff')">Solo staff</button>
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('todos')">Todos</button>
 
             </div>
         </div>
@@ -279,8 +279,10 @@
                     <div x-show="open" @click.outside="open = false" 
                         x-transition
                         class="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-20 z-index-5">
-                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" @click="alert('Cambiar contraseña {{ user.username }}')">Cambiar contraseña</button>
-                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600" @click="alert('Eliminar usuario {{ user.username }}')">Eliminar</button>
+                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
+                        @click="cambiarPassword('{{user.id}}', '{{user.username}}')">Cambiar contraseña</button>
+                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600"
+                         @click="eliminarUsuario('{{ user.id }}', '{{ user.username }}')">Eliminar</button>
                     </div>
                 </div>
             </td>
@@ -346,16 +348,63 @@ function userAdmin() {
     search: '',
     selectAll: false,
     selected: [],
+    filter: "todos", //filtro todos por defecto
+
+    filteredRows() {
+        const rows = [...document.querySelectorAll('#tabla-usuarios tbody tr')];
+        return rows.filter(row => {
+            const username = row.querySelector('.username input').value.toLowerCase();
+            const matchesSearch = username.includes(this.search.toLowerCase());
+
+            if (!matchesSearch) return false;
+
+            if (this.filter === 'activos') {
+                return row.querySelector('.is_active select').value === 'True';
+            }
+            if (this.filter === 'staff') {
+                return row.querySelector('.is_staff select').value === 'True';
+            }
+
+            return true; //todos
+        });
+    },
+
+    applyFilter(type) {
+        this.filter = type;
+
+        // Actualizar selectAll y selected al aplicar el filtro
+        const visibleRows = this.filteredRows();
+        this.selectAll = this.selected.length === visibleRows.length;
+
+        //Mostrar/ocultar filas segun el filtro
+        const rows = document.querySelectorAll('#tabla-usuarios tbody tr');
+        rows.forEach(row => {
+            const isActive = row.querySelector('.is_active select').value === 'True';
+            const isStaff = row.querySelector('.is_staff select').value === 'True';
+            let shouldShow = true;
+
+            if (this.filter === 'activos' && !isActive) {
+                shouldShow = false;
+            } else if (this.filter === 'staff' && !isStaff) {
+                shouldShow = false;
+            }
+
+            row.style.display = shouldShow ? '' : 'none';
+        });
+
+        //reset selectAll si no hay filas visibles
+        this.selectAll = this.filteredRows().length > 0 && this.selected.length === this.filteredRows().length;
+    },
+
 
     // logia para seleccionar todos los checkbox visibles al hacer click en el checkbox del header
     toggleAll() {
-      const rows = [...document.querySelectorAll('#tabla-usuarios tbody tr')]
-      .filter(row => row.offsetParent !== null);
-      if (this.selectAll) {
-        this.selected = rows.map(row => row.dataset.id);
-      } else {
-        this.selected = [];
-      }
+        const rows = this.filteredRows();
+        if (this.selectAll) {
+            this.selected = rows.map(row => row.dataset.id);
+        } else {
+            this.selected = [];
+        }
     },
     
     //logica para seleccionar un unico checkbox
@@ -367,9 +416,9 @@ function userAdmin() {
         this.selected.push(id);
       }
 
-      const visibleRows = [...document.querySelectorAll('#tabla-usuarios tbody tr')]
-      .filter(row => row.offsetParent !== null);
-      this.selectAll = this.selected.length === visibleRows.length;
+    const visibleRows = this.filteredRows();
+    this.selectAll = this.selected.length === visibleRows.length;
+
     },
 
     //logica para eliminar todos los elementos seleccionados por checkbox
@@ -450,28 +499,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
         filas.forEach(row => {
             const original = JSON.parse(row.dataset.original);
-            const changes = {};
 
+            // Capturamos los valores actuales
             const username = row.querySelector('.username input').value;
-            if (username !== original.username) changes.username = username;
-
             const email = row.querySelector('.email input').value;
-            if (email !== original.email) changes.email = email;
-
             const is_staff = row.querySelector('.is_staff select').value;
-            if (is_staff !== original.is_staff.toString()) changes.is_staff = is_staff;
-
             const is_active = row.querySelector('.is_active select').value;
-            if (is_active !== original.is_active.toString()) changes.is_active = is_active;
 
-            if (Object.keys(changes).length > 0) {
+            // Verificamos si hubo algún cambio
+            const haCambiado =
+                username !== original.username ||
+                email !== original.email ||
+                is_staff !== original.is_staff.toString() ||
+                is_active !== original.is_active.toString();
+
+            // Solo si hay cambios, enviamos toda la fila completa
+            if (haCambiado) {
                 formData.append(`usuarios[${index}][id]`, row.dataset.id);
-                Object.entries(changes).forEach(([campo, valor]) => {
-                    formData.append(`usuarios[${index}][${campo}]`, valor);
-                });
+                formData.append(`usuarios[${index}][username]`, username);
+                formData.append(`usuarios[${index}][email]`, email);
+                formData.append(`usuarios[${index}][is_staff]`, is_staff);
+                formData.append(`usuarios[${index}][is_active]`, is_active);
                 index++;
             }
         });
+
 
         if (index === 0) {
             alert('No hay cambios que guardar.');
@@ -516,6 +568,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Eliminar un unico usuario
+    window.eliminarUsuario = function(userId, username) {
+        if (!confirm(`¿Seguro que deseas eliminar al usuario "${username}"?`)) return;
+
+        const formData = new FormData();
+        formData.append('accion', 'eliminar_usuario'); // 👈 ESTA LÍNEA ES CLAVE
+        formData.append('usuario_id', userId);
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Usuario "${username}" eliminado correctamente`);
+                const row = document.querySelector(`#tabla-usuarios tr[data-id="${userId}"]`);
+                if (row) row.remove();
+            } else {
+                alert('❌ Error al eliminar: ' + data.error);
+            }
+        })
+        .catch(err => alert('❌ Error de red: ' + err.message));
+    };
+
+
     // Eliminar usuarios seleccionados
     document.getElementById('delete-selected').addEventListener('click', () => {
         const filasSeleccionadas = Array.from(document.querySelectorAll('#tabla-usuarios tbody tr'))
@@ -554,6 +636,39 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Cambiar contraseña de un usuario
+    window.cambiarPassword = function(userId, username) {
+        const nuevaPassword = prompt(`Ingrese la nueva contraseña para el usuario "${username}":`);
+        if (nuevaPassword === null || nuevaPassword.trim() === '') {
+            alert('La contraseña no puede estar vacía.');
+            return;
+        }
+
+        // Enviar solicitud para cambiar la contraseña
+        const formData = new FormData();
+        formData.append('accion', 'cambiar_password');
+        formData.append('usuario_id', userId);
+        formData.append('nueva_password', nuevaPassword);
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Contraseña cambiada correctamente');
+            } else {
+                alert('❌ Error al cambiar la contraseña: ' + data.error);
+            }
+        })
+        .catch(err => alert('❌ Error de red: ' + err.message));
+    }
 });
 </script>
 

@@ -2801,16 +2801,49 @@ class UserMenuView(View):
         return render(request, self.template_name, {'users': users, 'form': form})
 
     def post(self, request):
-        # --- Eliminación AJAX ---
+        # --- Acciones AJAX individuales ---
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            accion = request.POST.get('accion')
+
+            # Cambiar contraseña
+            if accion == 'cambiar_password':
+                user_id = request.POST.get('usuario_id')
+                nueva = request.POST.get('nueva_password')
+                # Validar que la nueva contraseña no esté vacía
+                if not nueva or nueva.strip() == '':
+                    return JsonResponse({'success': False, 'error': 'La nueva contraseña no puede estar vacía.'})
+                try:
+                    user = User.objects.get(id=user_id)
+                    user.set_password(nueva)
+                    user.save()
+                    return JsonResponse({'success': True})
+                except User.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Usuario no encontrado'})
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': str(e)})
+
+            # Eliminar usuario individual
+            elif accion == 'eliminar_usuario':
+                user_id = request.POST.get('usuario_id')
+                try:
+                    if str(request.user.id) == str(user_id):
+                        return JsonResponse({'success': False, 'error': 'No puedes eliminar tu propio usuario.'})
+                    user = User.objects.get(id=user_id)
+                    user.delete()
+                    return JsonResponse({'success': True})
+                except User.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Usuario no encontrado'})
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': str(e)})
+
+            # --- Eliminación masiva o edición existente ---
             try:
-                # Si se está eliminando
+                # Si se está eliminando en masa
                 if any(k.startswith('usuarios_a_eliminar') for k in request.POST):
                     ids_a_eliminar = [
                         request.POST[k] for k in request.POST if k.startswith('usuarios_a_eliminar')
                     ]
 
-                    # Evitar que el superusuario actual se elimine a sí mismo
                     if str(request.user.id) in ids_a_eliminar:
                         return JsonResponse({
                             'success': False,
@@ -2820,13 +2853,11 @@ class UserMenuView(View):
                     eliminados = User.objects.filter(id__in=ids_a_eliminar)
                     count = eliminados.count()
                     eliminados.delete()
-
                     return JsonResponse({'success': True, 'deleted_count': count})
 
-                #  Si se está actualizando
+                # Si se están actualizando usuarios
                 usuarios = []
 
-                # Recolectar datos de usuarios actualizados
                 for key in request.POST:
                     if key.startswith('usuarios['):
                         idx = key.split('[')[1].split(']')[0]
@@ -2845,7 +2876,6 @@ class UserMenuView(View):
                     nuevo_username = u.get('username', user.username).strip()
                     nuevo_email = u.get('email', user.email).strip()
 
-                    # Validar duplicados
                     if User.objects.exclude(id=user.id).filter(username=nuevo_username).exists():
                         return JsonResponse({
                             'success': False,
@@ -2870,7 +2900,7 @@ class UserMenuView(View):
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save(commit=False)
-            user.set_password(form.cleaned_data['password'])  # Hashea la contraseña
+            user.set_password(form.cleaned_data['password'])
             user.save()
             messages.success(request, '✅ Usuario creado correctamente.')
         else:
