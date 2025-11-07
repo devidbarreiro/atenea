@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from .models import Project, Video, Image, Script, VIDEO_TYPES, IMAGE_TYPES
 from django.contrib.auth.models import User
+from django.contrib.auth.models import Group
 
 
 class ProjectForm(forms.ModelForm):
@@ -823,6 +824,13 @@ class ScriptForm(forms.Form):
 
 class CustomUserCreationForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput)
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label='Roles',
+        help_text='Asigna uno o varios roles al usuario'
+    )
 
     class Meta:
         model = User

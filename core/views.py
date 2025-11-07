@@ -6,7 +6,7 @@ from django.views.generic import (
     ListView, DetailView, CreateView, UpdateView, DeleteView, View
 )
 from django.views.generic.edit import FormView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin, PermissionRequiredMixin
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
@@ -14,13 +14,14 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import permission_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
 from django.db.models import Max
 from django.contrib.auth import authenticate, login, logout
 import os
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from .forms import CustomUserCreationForm
 from django.db import IntegrityError
 
@@ -2788,17 +2789,23 @@ class VuelaAIVideoDetailsView(View):
 # MANAGEMENT USERS
 # ====================
 
-class UserMenuView(View):
+class UserMenuView(PermissionRequiredMixin, View):
+    permission_required = 'auth.view_user'
+    raise_exception = False
+    login_url = 'core:dashboard'
     template_name = 'users/menu.html'
 
+    def handle_no_permission(self):
+        # Mostrar mensaje amigable y redirigir cuando no tiene permiso
+        messages.error(self.request, 'No tienes permiso para acceder a esta página.')
+        return redirect(self.login_url)
+
     def get(self, request):
-        if not request.user.is_superuser:
-            messages.error(request, 'No tienes permiso para acceder a esta página.')
-            return redirect('core:dashboard')
 
         users = User.objects.all()
         form = CustomUserCreationForm()
-        return render(request, self.template_name, {'users': users, 'form': form})
+        groups = Group.objects.all()
+        return render(request, self.template_name, {'users': users, 'form': form, 'groups': groups})
 
     def post(self, request):
         # --- Acciones AJAX individuales ---
@@ -2812,6 +2819,9 @@ class UserMenuView(View):
                 # Validar que la nueva contraseña no esté vacía
                 if not nueva or nueva.strip() == '':
                     return JsonResponse({'success': False, 'error': 'La nueva contraseña no puede estar vacía.'})
+                # Permission: only allow if user has change_user or is changing own password
+                if not (request.user.has_perm('auth.change_user') or str(request.user.id) == str(user_id)):
+                    return JsonResponse({'success': False, 'error': 'No tienes permiso para cambiar la contraseña.'})
                 try:
                     user = User.objects.get(id=user_id)
                     user.set_password(nueva)
@@ -2825,6 +2835,9 @@ class UserMenuView(View):
             # Eliminar usuario individual
             elif accion == 'eliminar_usuario':
                 user_id = request.POST.get('usuario_id')
+                # Permission: require delete_user
+                if not request.user.has_perm('auth.delete_user'):
+                    return JsonResponse({'success': False, 'error': 'No tienes permiso para eliminar usuarios.'})
                 try:
                     if str(request.user.id) == str(user_id):
                         return JsonResponse({'success': False, 'error': 'No puedes eliminar tu propio usuario.'})
@@ -2840,6 +2853,9 @@ class UserMenuView(View):
             try:
                 # Si se está eliminando en masa
                 if any(k.startswith('usuarios_a_eliminar') for k in request.POST):
+                    # Permission: require delete_user for bulk deletes
+                    if not request.user.has_perm('auth.delete_user'):
+                        return JsonResponse({'success': False, 'error': 'No tienes permiso para eliminar usuarios.'})
                     ids_a_eliminar = [
                         request.POST[k] for k in request.POST if k.startswith('usuarios_a_eliminar')
                     ]
@@ -2887,6 +2903,15 @@ class UserMenuView(View):
                     user.is_staff = u.get('is_staff', 'False').lower() == 'true'
                     user.is_active = u.get('is_active', 'False').lower() == 'true'
                     user.save()
+                    # Update groups if provided (comma separated ids)
+                    if 'groups' in u:
+                        try:
+                            group_ids = [int(x) for x in u['groups'].split(',') if x]
+                            groups_qs = Group.objects.filter(id__in=group_ids)
+                            user.groups.set(groups_qs)
+                        except Exception:
+                            # ignore malformed group input
+                            pass
 
                 return JsonResponse({'success': True})
 
@@ -2901,7 +2926,14 @@ class UserMenuView(View):
         if form.is_valid():
             user = form.save(commit=False)
             user.set_password(form.cleaned_data['password'])
+            user.is_staff = 'staff' in request.POST
+            user.is_active = 'active' in request.POST
             user.save()
+            # Assign groups (roles) if provided (supports multiple selection)
+            group_ids = request.POST.getlist('groups') or request.POST.getlist('group')
+            if group_ids:
+                groups_qs = Group.objects.filter(id__in=group_ids)
+                user.groups.set(groups_qs)
             messages.success(request, '✅ Usuario creado correctamente.')
         else:
             friendly_names = {
@@ -2909,6 +2941,8 @@ class UserMenuView(View):
                 'email': 'Correo electrónico',
                 'password': 'Contraseña',
                 'password_confirm': 'Confirmar contraseña',
+                'staff': 'Permisos de Staff',
+                'active': 'Usuario activo',
                 '__all__': 'Error general'
             }
             for field, errors in form.errors.items():
