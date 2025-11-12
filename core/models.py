@@ -943,3 +943,112 @@ class Scene(models.Model):
             self.final_video_status == 'pending' and
             self.needs_audio()
         )
+
+
+class Music(models.Model):
+    """
+    Modelo para almacenar pistas de música generadas con ElevenLabs Music
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='music_tracks',
+        help_text='Proyecto al que pertenece esta música'
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text='Nombre descriptivo de la pista musical'
+    )
+    prompt = models.TextField(
+        help_text='Prompt usado para generar la música'
+    )
+    duration_ms = models.IntegerField(
+        help_text='Duración de la música en milisegundos'
+    )
+    
+    # Composition Plan (opcional, si se usó)
+    composition_plan = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Plan de composición detallado (JSON) usado para generar la música'
+    )
+    
+    # Metadata de la canción generada
+    song_metadata = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Metadatos de la canción generada (tempo, key, mood, etc.)'
+    )
+    
+    # Almacenamiento en GCS
+    gcs_path = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='Path en GCS donde está almacenada la música'
+    )
+    
+    # Estado de generación
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('generating', 'Generando'),
+        ('completed', 'Completado'),
+        ('error', 'Error'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True
+    )
+    
+    # Campos de ElevenLabs
+    elevenlabs_track_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='ID del track en ElevenLabs (si aplica)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha y hora en que se generó la música'
+    )
+    
+    class Meta:
+        db_table = 'music'
+        ordering = ['-created_at']
+        verbose_name = 'Música'
+        verbose_name_plural = 'Músicas'
+    
+    def __str__(self):
+        return f"{self.name} - {self.project.name}"
+    
+    def mark_as_generating(self):
+        """Marca la música como en proceso de generación"""
+        self.status = 'generating'
+        self.error_message = None
+        self.save(update_fields=['status', 'error_message', 'updated_at'])
+    
+    def mark_as_completed(self, gcs_path: str, song_metadata: dict = None):
+        """Marca la música como completada"""
+        from django.utils import timezone
+        self.status = 'completed'
+        self.gcs_path = gcs_path
+        if song_metadata:
+            self.song_metadata = song_metadata
+        self.generated_at = timezone.now()
+        self.save(update_fields=['status', 'gcs_path', 'song_metadata', 'generated_at', 'updated_at'])
+    
+    def mark_as_error(self, error_message: str):
+        """Marca la música como error"""
+        self.status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['status', 'error_message', 'updated_at'])

@@ -1548,9 +1548,11 @@ class SceneService:
                     if ai_service == 'heygen_avatar_iv':
                         ai_config['image_key'] = ''  # Se llenará si hay imagen de preview
                 elif ai_service == 'gemini_veo':
+                    # Convertir duration_sec a int (viene como string desde n8n)
+                    duration = int(scene_data.get('duration_sec', 8))
                     ai_config = {
                         'veo_model': 'veo-2.0-generate-001',
-                        'duration': min(8, scene_data.get('duration_sec', 8)),  # Max 8s
+                        'duration': min(8, duration),  # Max 8s para Gemini Veo
                         'aspect_ratio': video_orientation,  # Heredado del script
                         'sample_count': 1,
                         'enhance_prompt': True,
@@ -1564,9 +1566,11 @@ class SceneService:
                     else:
                         sora_size = '1280x720'  # Horizontal (default)
                     
+                    # Convertir duration_sec a int (viene como string desde n8n)
+                    duration = int(scene_data.get('duration_sec', 8))
                     ai_config = {
                         'sora_model': 'sora-2',
-                        'duration': min(12, scene_data.get('duration_sec', 8)),  # Max 12s
+                        'duration': min(12, duration),  # Max 12s para Sora
                         'size': sora_size  # Heredado del script
                     }
                 elif ai_service == 'vuela_ai':
@@ -1586,6 +1590,34 @@ class SceneService:
                         'add_background_music': False
                     }
                 
+                # Procesar visual_prompt: puede venir como objeto o string
+                visual_prompt_data = scene_data.get('visual_prompt', '')
+                visual_prompt_str = ''
+                
+                if isinstance(visual_prompt_data, dict):
+                    # Si es objeto, construir prompt completo combinando todos los campos
+                    prompt_parts = []
+                    if visual_prompt_data.get('description'):
+                        prompt_parts.append(visual_prompt_data['description'])
+                    if visual_prompt_data.get('camera'):
+                        prompt_parts.append(f"Camera: {visual_prompt_data['camera']}")
+                    if visual_prompt_data.get('lighting'):
+                        prompt_parts.append(f"Lighting: {visual_prompt_data['lighting']}")
+                    if visual_prompt_data.get('composition'):
+                        prompt_parts.append(f"Composition: {visual_prompt_data['composition']}")
+                    if visual_prompt_data.get('atmosphere'):
+                        prompt_parts.append(f"Atmosphere: {visual_prompt_data['atmosphere']}")
+                    if visual_prompt_data.get('style_reference'):
+                        prompt_parts.append(f"Style: {visual_prompt_data['style_reference']}")
+                    if visual_prompt_data.get('continuity_notes'):
+                        prompt_parts.append(f"Continuity: {visual_prompt_data['continuity_notes']}")
+                    
+                    visual_prompt_str = '. '.join(prompt_parts)
+                    # Guardar también el objeto completo en ai_config para referencia
+                    ai_config['visual_prompt_object'] = visual_prompt_data
+                elif isinstance(visual_prompt_data, str):
+                    visual_prompt_str = visual_prompt_data
+                
                 # Crear escena
                 scene = Scene.objects.create(
                     script=script,
@@ -1593,8 +1625,8 @@ class SceneService:
                 scene_id=scene_data.get('id'),
                 summary=scene_data.get('summary', ''),
                 script_text=scene_data.get('script_text', ''),
-                visual_prompt=scene_data.get('visual_prompt', ''),
-                duration_sec=scene_data.get('duration_sec', 0),
+                visual_prompt=visual_prompt_str,
+                duration_sec=int(scene_data.get('duration_sec', 0)),  # Convertir a int
                     avatar=scene_data.get('avatar', 'no'),
                     platform=scene_data.get('platform', 'gemini_veo'),
                     broll=scene_data.get('broll', []),
@@ -3027,6 +3059,12 @@ class N8nService:
                     'project': data.get('project'),
                     'scenes': data.get('scenes')
                 }
+                # Incluir characters si viene en la respuesta
+                if 'characters' in data:
+                    output_data['characters'] = data.get('characters')
+                    logger.info(f"Script {script_id}: {len(data['characters'])} personajes recibidos")
+                else:
+                    logger.warning(f"Script {script_id}: No se recibieron 'characters' en la respuesta de n8n")
             
             # Validar estructura de datos procesados
             if 'project' not in output_data or 'scenes' not in output_data:
@@ -3253,3 +3291,148 @@ Bienvenidos al mundo del marketing digital. Hoy vamos a explorar las estrategias
         except Exception as e:
             logger.error(f"Error al comunicar con OpenAI: {e}")
             raise ServiceException(f"Error al procesar mensaje: {str(e)}")
+
+
+# ====================
+# ELEVENLABS MUSIC SERVICE
+# ====================
+
+class ElevenLabsMusicService:
+    """Servicio para generar música con ElevenLabs Music API"""
+    
+    def __init__(self):
+        from elevenlabs.client import ElevenLabs
+        self.client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
+        
+    def generate_music(self, music_obj):
+        """
+        Genera música usando ElevenLabs Music API
+        
+        Args:
+            music_obj: Objeto Music de Django
+            
+        Returns:
+            dict con 'gcs_path' y 'song_metadata'
+            
+        Raises:
+            ServiceException: Si falla la generación
+        """
+        try:
+            # Marcar como generando
+            music_obj.mark_as_generating()
+            
+            logger.info(f"Generando música con ElevenLabs: {music_obj.name}")
+            
+            # Generar música con composición detallada
+            if music_obj.composition_plan:
+                # Usar composition_plan si existe
+                track_details = self.client.music.compose_detailed(
+                    composition_plan=music_obj.composition_plan,
+                )
+            else:
+                # Generar desde prompt
+                track_details = self.client.music.compose_detailed(
+                    prompt=music_obj.prompt,
+                    music_length_ms=music_obj.duration_ms,
+                )
+            
+            # Obtener audio bytes
+            audio_bytes = track_details.audio
+            
+            # Obtener metadata
+            song_metadata = track_details.json.get('song_metadata', {}) if hasattr(track_details, 'json') else {}
+            composition_plan_used = track_details.json.get('composition_plan', {}) if hasattr(track_details, 'json') else {}
+            
+            # Guardar composition_plan si no existía
+            if not music_obj.composition_plan and composition_plan_used:
+                music_obj.composition_plan = composition_plan_used
+                music_obj.save(update_fields=['composition_plan'])
+            
+            # Subir a GCS
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            gcs_destination = f"music/project_{music_obj.project.id}/{timestamp}_{music_obj.name.replace(' ', '_')}.mp3"
+            
+            logger.info(f"Subiendo música a GCS: {gcs_destination}")
+            gcs_path = gcs_storage.upload_from_bytes(
+                file_content=audio_bytes,
+                destination_path=gcs_destination,
+                content_type='audio/mpeg'
+            )
+            
+            # Marcar como completado
+            music_obj.mark_as_completed(gcs_path, song_metadata)
+            
+            logger.info(f"✓ Música generada exitosamente: {gcs_path}")
+            
+            return {
+                'gcs_path': gcs_path,
+                'song_metadata': song_metadata,
+                'composition_plan': composition_plan_used
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Manejar errores específicos de ElevenLabs
+            if hasattr(e, 'body') and isinstance(e.body, dict):
+                detail = e.body.get('detail', {})
+                
+                # Error de acceso limitado (requiere aceptar términos adicionales)
+                if detail.get('status') == 'limited_access':
+                    error_msg = (
+                        "⚠️ ElevenLabs Music requiere acceso especial. "
+                        "Debes aceptar términos adicionales en https://elevenlabs.io/music-terms "
+                        "y contactar a tu equipo de cuenta de ElevenLabs para habilitar esta funcionalidad."
+                    )
+                
+                # Error de prompt con material protegido por copyright
+                elif detail.get('status') == 'bad_prompt':
+                    prompt_suggestion = detail.get('data', {}).get('prompt_suggestion', '')
+                    error_msg = f"Prompt contiene material protegido. Sugerencia: {prompt_suggestion}"
+                
+                # Error de composition_plan con material protegido
+                elif detail.get('status') == 'bad_composition_plan':
+                    plan_suggestion = detail.get('data', {}).get('composition_plan_suggestion', {})
+                    error_msg = f"Composition plan contiene material protegido. Se sugiere un plan alternativo."
+            
+            logger.error(f"✗ Error al generar música: {error_msg}")
+            music_obj.mark_as_error(error_msg)
+            raise ServiceException(error_msg)
+    
+    def create_composition_plan(self, prompt: str, duration_ms: int):
+        """
+        Crea un composition plan desde un prompt
+        
+        Args:
+            prompt: Descripción de la música deseada
+            duration_ms: Duración en milisegundos
+            
+        Returns:
+            dict con el composition plan
+            
+        Raises:
+            ServiceException: Si falla la creación
+        """
+        try:
+            logger.info(f"Creando composition plan con ElevenLabs")
+            
+            composition_plan = self.client.music.composition_plan.create(
+                prompt=prompt,
+                music_length_ms=duration_ms,
+            )
+            
+            logger.info(f"✓ Composition plan creado exitosamente")
+            return composition_plan
+            
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Manejar errores de material protegido
+            if hasattr(e, 'body') and isinstance(e.body, dict):
+                detail = e.body.get('detail', {})
+                if detail.get('status') == 'bad_prompt':
+                    prompt_suggestion = detail.get('data', {}).get('prompt_suggestion', '')
+                    error_msg = f"Prompt contiene material protegido. Sugerencia: {prompt_suggestion}"
+            
+            logger.error(f"✗ Error al crear composition plan: {error_msg}")
+            raise ServiceException(error_msg)

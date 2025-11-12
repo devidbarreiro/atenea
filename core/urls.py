@@ -36,6 +36,14 @@ urlpatterns = [
     path('audios/<int:audio_id>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
     path('audios/<int:audio_id>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
     
+    # Music
+    path('projects/<int:project_id>/music/create/', views.MusicCreateView.as_view(), name='music_create'),
+    path('music/<int:music_id>/', views.MusicDetailView.as_view(), name='music_detail'),
+    path('music/<int:music_id>/delete/', views.MusicDeleteView.as_view(), name='music_delete'),
+    path('music/<int:music_id>/generate/', views.MusicGenerateView.as_view(), name='music_generate'),
+    path('music/<int:music_id>/status/', views.MusicStatusView.as_view(), name='music_status'),
+    path('music/<int:music_id>/composition-plan/', views.MusicCompositionPlanView.as_view(), name='music_composition_plan'),
+    
     # Scripts
     path('projects/<int:project_id>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
     path('scripts/<int:script_id>/', views.ScriptDetailView.as_view(), name='script_detail'),

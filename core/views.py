@@ -22,7 +22,7 @@ from django.contrib.auth import authenticate, login, logout
 import os
 import json
 
-from .models import Project, Video, Image, Audio, Script, Scene
+from .models import Project, Video, Image, Audio, Script, Scene, Music
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
 from django.template.loader import render_to_string
@@ -3141,6 +3141,245 @@ class VuelaAIVideoDetailsView(View):
             
         except Exception as e:
             logger.error(f"Error al obtener detalles de video Vuela.ai: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+# ====================
+# MUSIC VIEWS
+# ====================
+
+class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
+    """Crear nueva música con ElevenLabs Music"""
+    template_name = 'music/create.html'
+    
+    def get_project(self):
+        """Obtener proyecto del contexto"""
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self):
+        """Preparar contexto para el template"""
+        project = self.get_project()
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        return context
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {
+                'label': project.name, 
+                'url': reverse('core:project_detail', args=[project.pk])
+            },
+            {'label': '🎵 Nueva Música', 'url': None}
+        ]
+    
+    def get(self, request, *args, **kwargs):
+        """Mostrar formulario de creación"""
+        context = self.get_context_data()
+        return render(request, self.template_name, context)
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de música"""
+        from .models import Music
+        
+        project = self.get_project()
+        
+        # Obtener datos básicos
+        name = request.POST.get('name')
+        prompt = request.POST.get('prompt')
+        duration_sec = request.POST.get('duration_sec', 30)
+        
+        # Validaciones básicas
+        if not all([name, prompt]):
+            messages.error(request, 'El nombre y el prompt son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            duration_ms = int(duration_sec) * 1000
+            
+            # Crear objeto Music
+            music = Music.objects.create(
+                project=project,
+                name=name,
+                prompt=prompt,
+                duration_ms=duration_ms,
+                status='pending'
+            )
+            
+            messages.success(request, f'Música "{name}" creada. Ahora puedes generarla.')
+            return redirect('core:music_detail', music_id=music.pk)
+            
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class MusicDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
+    """Vista de detalle de música"""
+    model = Music
+    template_name = 'music/detail.html'
+    context_object_name = 'music'
+    pk_url_kwarg = 'music_id'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Obtener URL firmada si existe el archivo
+        if self.object.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                context['signed_url'] = gcs_storage.get_signed_url(self.object.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al obtener URL firmada: {e}")
+                context['signed_url'] = None
+        
+        return context
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {'label': f'🎵 {self.object.name}', 'url': None}
+        ]
+
+
+class MusicDeleteView(BreadcrumbMixin, DeleteView):
+    """Eliminar música"""
+    model = Music
+    template_name = 'music/delete.html'
+    context_object_name = 'music'
+    pk_url_kwarg = 'music_id'
+    
+    def get_success_url(self):
+        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+    
+    def get_breadcrumbs(self):
+        return [
+            {
+                'label': self.object.project.name, 
+                'url': reverse('core:project_detail', args=[self.object.project.pk])
+            },
+            {
+                'label': self.object.name, 
+                'url': reverse('core:music_detail', args=[self.object.pk])
+            },
+            {'label': 'Eliminar', 'url': None}
+        ]
+    
+    def delete(self, request, *args, **kwargs):
+        """Override para eliminar archivo de GCS"""
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        
+        # Eliminar de GCS si existe
+        if self.object.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                gcs_storage.delete_file(self.object.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al eliminar archivo: {e}")
+        
+        music_name = self.object.name
+        self.object.delete()
+        
+        messages.success(request, f'Música "{music_name}" eliminada')
+        return redirect(success_url)
+
+
+class MusicGenerateView(ServiceMixin, View):
+    """Generar música usando ElevenLabs Music API"""
+    
+    def post(self, request, music_id):
+        from .models import Music
+        from .services import ElevenLabsMusicService
+        
+        music = get_object_or_404(Music, pk=music_id)
+        
+        try:
+            music_service = ElevenLabsMusicService()
+            result = music_service.generate_music(music)
+            
+            messages.success(request, f'Música "{music.name}" generada exitosamente!')
+            return redirect('core:music_detail', music_id=music.pk)
+            
+        except ServiceException as e:
+            messages.error(request, str(e))
+            return redirect('core:music_detail', music_id=music.pk)
+        except Exception as e:
+            logger.error(f"Error al generar música: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:music_detail', music_id=music.pk)
+
+
+class MusicStatusView(View):
+    """API endpoint para verificar el estado de la música"""
+    
+    def get(self, request, music_id):
+        from .models import Music
+        
+        music = get_object_or_404(Music, pk=music_id)
+        
+        response_data = {
+            'status': music.status,
+            'error_message': music.error_message
+        }
+        
+        if music.status == 'completed' and music.gcs_path:
+            try:
+                from .storage.gcs import gcs_storage
+                response_data['signed_url'] = gcs_storage.get_signed_url(music.gcs_path)
+                response_data['song_metadata'] = music.song_metadata
+            except Exception as e:
+                logger.error(f"Error al obtener URL firmada: {e}")
+        
+        return JsonResponse(response_data)
+
+
+class MusicCompositionPlanView(View):
+    """API endpoint para crear un composition plan"""
+    
+    def post(self, request, music_id):
+        from .models import Music
+        from .services import ElevenLabsMusicService
+        import json
+        
+        music = get_object_or_404(Music, pk=music_id)
+        
+        try:
+            data = json.loads(request.body)
+            prompt = data.get('prompt', music.prompt)
+            duration_ms = data.get('duration_ms', music.duration_ms)
+            
+            music_service = ElevenLabsMusicService()
+            composition_plan = music_service.create_composition_plan(prompt, duration_ms)
+            
+            # Guardar el plan en el objeto Music
+            music.composition_plan = composition_plan
+            music.save(update_fields=['composition_plan'])
+            
+            return JsonResponse({
+                'status': 'success',
+                'composition_plan': composition_plan
+            })
+            
+        except ServiceException as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except Exception as e:
+            logger.error(f"Error al crear composition plan: {e}")
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
