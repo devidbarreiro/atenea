@@ -9,6 +9,9 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+# Global app-use permission (set to a permission string like 'core.use_app' to enforce)
+# If None, middleware will not enforce a global "use the app" permission.
+REQUIRED_APP_PERMISSION = None
 
 from pathlib import Path
 import os

@@ -9,6 +9,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from .models import Project, Video, Image, Script, VIDEO_TYPES, IMAGE_TYPES
 from django.contrib.auth.models import User
 from django.contrib.auth.models import Group
+from django.contrib.auth.forms import SetPasswordForm
 
 
 class ProjectForm(forms.ModelForm):
@@ -834,19 +835,53 @@ class CustomUserCreationForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password']
+        fields = ['username', 'email']
 
-    def clean_password(self):
-        password = self.cleaned_data.get('password')
-        password_confirm = self.data.get('password_confirm')
-        if password != password_confirm:
-            raise ValidationError("Las contraseñas no coinciden.")
-        if len(password) < 8:
-            raise ValidationError("La contraseña debe tener al menos 8 caracteres.")
-        if not re.search(r"\d", password):
-            raise ValidationError("La contraseña debe contener al menos un número.")
-        if not re.search(r"[A-Z]", password):
-            raise ValidationError("La contraseña debe contener al menos una letra mayúscula.")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-\[\]\\;/+=]", password):
-            raise ValidationError("La contraseña debe contener al menos un carácter especial.")
+
+class PendingUserCreationForm(forms.ModelForm):
+    """Formulario para crear un usuario en estado 'pendiente' (sin pedir contraseña).
+
+    Este formulario solo solicita username, email y roles. La contraseña se genera
+    automáticamente y el usuario se crea con is_active=False. El proceso de activación
+    se realiza mediante link por correo donde el usuario establecerá su contraseña.
+    """
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label='Roles',
+        help_text='Asigna uno o varios roles al usuario'
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'groups']
+
+
+class ActivationSetPasswordForm(SetPasswordForm):
+    """Set password form for activation with custom complexity rules.
+
+    Inherits Django's SetPasswordForm (includes matching validation between
+    new_password1 and new_password2) and adds complexity checks:
+      - minimum 6 characters
+      - at least one lowercase
+      - at least one uppercase
+      - at least one digit
+      - at least one special character
+    """
+
+    def clean_new_password1(self):
+        password = self.cleaned_data.get('new_password1')
+        if not password:
+            raise ValidationError('La contraseña es requerida.')
+        if len(password) < 6:
+            raise ValidationError('La contraseña debe tener al menos 6 caracteres.')
+        if not re.search(r'[a-z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra minúscula.')
+        if not re.search(r'[A-Z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra mayúscula.')
+        if not re.search(r'\d', password):
+            raise ValidationError('La contraseña debe contener al menos un número.')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
+            raise ValidationError('La contraseña debe contener al menos un carácter especial.')
         return password

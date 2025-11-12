@@ -9,22 +9,26 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=User)
 def send_user_credentials(sender, instance, created, **kwargs):
-    if created:
+    # Only send credentials email if the user was created AND is_active is True.
+    # For pending users (created by the admin flow with is_active=False) we
+    # must NOT send a credentials email (they will receive the activation link).
+    if created and instance.is_active:
         try:
             subject = "Tus credenciales de acceso"
+            # NOTE: Do not include the raw password (it's hashed). If you need to
+            # notify with a password, generate and store a plaintext one temporarily
+            # in a secure flow. For now we will only include username and login URL.
             message = f"""Hola {instance.username},
 
 Se ha creado tu cuenta en nuestro sistema.
 
-Tus credenciales son:
 Usuario: {instance.username}
-Contraseña: {instance.password}
 
 Puedes iniciar sesión en: {settings.DEFAULT_DOMAIN if hasattr(settings, 'DEFAULT_DOMAIN') else 'http://localhost:8000'}/login
 
 Saludos,
 El equipo de Atenea"""
-            
+
             from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@atenea.local')
             send_mail(
                 subject=subject,
