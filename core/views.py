@@ -2912,14 +2912,29 @@ class UserMenuView(View):
 
     def dispatch(self, request, *args, **kwargs):
         # Check if user has at least one permission to manage users
-        has_admin_access = (
-            request.user.has_perm('auth.view_user') or
-            request.user.has_perm('auth.change_user') or
-            request.user.has_perm('auth.delete_user') or
-            request.user.is_superuser
-        )
-        
-        has_create_access = request.user.has_perm('auth.add_user') or request.user.is_superuser
+        # Compute granular admin/create access. We intentionally treat a user
+        # that only has add_user (crear) as NOT having admin access even if they
+        # accidentally also received view_user. Admin access requires change/delete
+        # or view when the user isn't a create-only account.
+        has_change = request.user.has_perm('auth.change_user')
+        has_delete = request.user.has_perm('auth.delete_user')
+        has_view = request.user.has_perm('auth.view_user')
+        has_add = request.user.has_perm('auth.add_user')
+
+        # Superuser shortcut
+        if request.user.is_superuser:
+            has_admin_access = True
+            has_create_access = True
+        else:
+            # Admin access if change or delete
+            if has_change or has_delete:
+                has_admin_access = True
+            else:
+                # If only view is present, allow admin access only if user is NOT a create-only account
+                is_create_only = has_add and not (has_change or has_delete)
+                has_admin_access = has_view and not is_create_only
+
+            has_create_access = has_add
         
         # If user has neither admin nor create permissions, deny access
         if not (has_admin_access or has_create_access):
@@ -2929,26 +2944,34 @@ class UserMenuView(View):
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request):
-        # Determine access flags for template and data loading
-        has_admin_access = (
-            request.user.is_superuser or
-            request.user.has_perm('auth.view_user') or
-            request.user.has_perm('auth.change_user') or
-            request.user.has_perm('auth.delete_user')
-        )
+        # Determine access flags for template and data loading (same logic as dispatch)
+        has_change = request.user.has_perm('auth.change_user')
+        has_delete = request.user.has_perm('auth.delete_user')
+        has_view = request.user.has_perm('auth.view_user')
+        has_add = request.user.has_perm('auth.add_user')
 
-        has_create_access = request.user.is_superuser or request.user.has_perm('auth.add_user')
+        if request.user.is_superuser:
+            has_admin_access = True
+            has_create_access = True
+        else:
+            if has_change or has_delete:
+                has_admin_access = True
+            else:
+                is_create_only = has_add and not (has_change or has_delete)
+                has_admin_access = has_view and not is_create_only
+
+            has_create_access = has_add
 
         form = CustomUserCreationForm()
 
-        # Only load the full users/groups dataset if the current user has admin access
+        # Load groups always (needed for the create form). Only load the
+        # full users list when the user has admin access.
+        groups = Group.objects.all()
         if has_admin_access:
             users = User.objects.all()
-            groups = Group.objects.all()
         else:
             # For create-only users, don't load the admin list
             users = []
-            groups = Group.objects.none()
 
         # Determine whether the current user belongs to an "editar" role or has change_user
         can_reset_password = (

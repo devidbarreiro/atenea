@@ -11,7 +11,7 @@
 
 <!-- ----------- Content Options ----------- -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <!-- Create Users Card (always visible; disabled style if no add permission) -->
+    <!-- Create Users Card -->
     <div id="user-create-card"
         {% if has_create_access %}
         onclick="selectContentType('user-create')"
@@ -21,41 +21,54 @@
         data-disabled="true"
         {% endif %}>
         <div class="flex flex-col items-center text-center">
-            <div class="w-16 h-16 {% if perms.auth.add_user %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8 {% if not perms.auth.add_user %}text-gray-500{% endif %}">
+            <div class="w-16 h-16 {% if has_create_access %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8 {% if not has_create_access %}text-gray-500{% endif %}">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
             </div>
-            <h3 class="text-xl font-semibold {% if perms.auth.add_user %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">Crear Usuarios</h3>
-            <p class="{% if perms.auth.add_user %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
-                {% if perms.auth.add_user %}
-                Crea un usuario de cero con su correo, nombre de usuario, contraseña y permisos
+            <h3 class="text-xl font-semibold {% if has_create_access %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">
+                Crear Usuarios
+            </h3>
+            <p class="{% if has_create_access %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
+                {% if has_create_access %}
+                Crea un usuario de cero con su correo, nombre de usuario, contraseña y permisos.
                 {% else %}
-                No tienes permisos para crear usuarios
+                No tienes permisos para crear usuarios.
                 {% endif %}
             </p>
         </div>
     </div>
-    
 
-    <!-- Admin Users Card: only visible to users with admin access (view/change/delete or superuser) -->
-    {% if has_admin_access %}
+    <!-- Admin Users Card -->
     <div id="user-admin-card"
+        {% if has_admin_access %}
         onclick="selectContentType('user-admin')"
-        class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 hover:border-blue-600 p-6 hover:shadow-xl transition-all duration-300">
+        class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 p-6 hover:border-blue-600 hover:shadow-xl transition-all duration-300"
+        {% else %}
+        class="content-card bg-gray-200 rounded-lg border-2 border-gray-400 p-6 opacity-70 cursor-not-allowed transition-all duration-300"
+        data-disabled="true"
+        {% endif %}>
         <div class="flex flex-col items-center text-center">
-            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8">
+            <div class="w-16 h-16 {% if has_admin_access %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8 {% if not has_admin_access %}text-gray-500{% endif %}">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 </svg>
             </div>
-            <h3 class="text-xl font-semibold text-gray-900 mb-2">Administrar Usuarios</h3>
-            <p class="text-gray-600 text-sm">Consulta una lista con todos los usuarios, elimina o cambia su correo, nombre de usuario, contraseña y permisos. Si seleccionas varios usuarios realizaras una modificacion en masa con todos los que tengas seleccionados</p>
+            <h3 class="text-xl font-semibold {% if has_admin_access %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">
+                Administrar Usuarios
+            </h3>
+            <p class="{% if has_admin_access %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
+                {% if has_admin_access %}
+                Consulta una lista con todos los usuarios, elimina o modifica su información y permisos.
+                {% else %}
+                No tienes permisos para administrar usuarios.
+                {% endif %}
+            </p>
         </div>
     </div>
-    {% endif %}
 </div>
+
 
 <!-- Mensajes -->
 
@@ -89,9 +102,9 @@
         
         {% csrf_token %}
 
-        {% if not perms.auth.add_user %}
-        <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">No tienes permisos para crear usuarios desde aquí.</div>
-        {% endif %}
+    {% if not has_create_access %}
+    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">No tienes permisos para crear usuarios desde aquí.</div>
+    {% endif %}
 
         <!-- Usuario -->
         <div class="relative mb-6">
@@ -103,7 +116,7 @@
             </span>
          <input type="text" name="username" placeholder="Usuario" autocomplete="off"
              class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium"
-             {% if not perms.auth.add_user %}disabled{% endif %}>
+             {% if not has_create_access %}disabled{% endif %}>
         </div>
 
         <!-- Correo -->
@@ -116,7 +129,7 @@
             </span>
          <input type="text" name="email" placeholder="Correo" autocomplete="off"
              class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium"
-             {% if not perms.auth.add_user %}disabled{% endif %}>
+             {% if not has_create_access %}disabled{% endif %}>
         </div>
         <div class="grid grid-cols-1 mb-6" id="permisions">
             <p class="text-sm text-gray-600 text-justify">El usuario se creará en estado "Pendiente" y recibirá un correo para activar su cuenta y establecer una contraseña.</p>
@@ -134,8 +147,8 @@
                            value="{{ g.id }}" 
                            class="group-checkbox scale-125 accent-blue-600 mr-2" 
                            data-group-name="{{ g.name }}"
-                           {% if not perms.auth.add_user %}disabled{% endif %}>
-                    <span class="{% if not perms.auth.add_user %}text-gray-500{% endif %}">{{ g.name }}</span>
+                           {% if not has_create_access %}disabled{% endif %}>
+                    <span class="{% if not has_create_access %}text-gray-500{% endif %}">{{ g.name }}</span>
                 </label>
                 {% endfor %}
             </div>
@@ -143,7 +156,7 @@
         {% endif %}
 
         <!-- Botón -->
-        <button type="submit" class="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-900 transition-colors font-semibold text-lg" {% if not perms.auth.add_user %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>
+        <button type="submit" class="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-900 transition-colors font-semibold text-lg" {% if not has_create_access %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>
             Crear Usuario
         </button>
     </form>
@@ -349,8 +362,16 @@ function selectContentType(type) {
         document.getElementById('user-create-form').scrollIntoView({ behavior: 'smooth' });
         botonesAcciones.classList.add('hidden');
     } else if (type === 'user-admin') {
+        // Prevent opening admin if card is disabled
+        const adminCard = document.getElementById('user-admin-card');
+        if (adminCard && adminCard.dataset && adminCard.dataset.disabled === 'true') {
+            alert('No tienes permisos para administrar usuarios');
+            return;
+        }
+
         document.getElementById('user-admin-card').classList.replace('border-gray-300', 'border-blue-600');
-        document.getElementById('user-admin-form').classList.remove('hidden');
+        const adminForm = document.getElementById('user-admin-form');
+        if (adminForm) adminForm.classList.remove('hidden');
         document.getElementById('user-admin-form').scrollIntoView({ behavior: 'smooth' });
         botonesAcciones.classList.remove('hidden');
 
