@@ -238,7 +238,7 @@
     </div>
     
     <!-- Inspector Panel (Right Side) -->
-    <div id="inspector-panel" class="hidden fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l border-gray-200 z-40 overflow-y-auto">
+    <div id="inspector-panel" class="hidden fixed right-0 top-0 h-full w-1/2 bg-white shadow-2xl border-l border-gray-200 z-40 overflow-y-auto">
         <div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
             <h3 class="text-lg font-bold text-gray-900">Inspector de Escena</h3>
             <button onclick="closeInspector()" class="text-gray-500 hover:text-gray-700">
@@ -276,17 +276,16 @@
             <div>
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm font-medium text-gray-700">🎬 Prompt Visual (para Video)</label>
-                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 / 2000</span>
+                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 caracteres</span>
                 </div>
                 <textarea 
                     id="inspector-visual-prompt"
-                    rows="5"
-                    maxlength="2000"
+                    rows="8"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                     oninput="updateVisualCharCounter()"
-                    placeholder="Descripción visual cinematográfica para Veo, Sora o Vuela (en inglés)..."
+                    placeholder="Descripción visual cinematográfica para Veo, Sora o Vuela (en inglés)... ✨ SIN LÍMITES - Sé tan detallado como necesites para lograr la visión cinematográfica perfecta"
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">Descripción visual detallada en inglés para generar el video. No aplica a HeyGen (usa avatar y background).</p>
+                <p class="mt-1 text-xs text-blue-600">💡 <strong>Sin límites de caracteres.</strong> Más detalle = mejor resultado. Describe todos los aspectos visuales, cámara, iluminación, composición, atmósfera, estilo y continuidad.</p>
             </div>
             
             <!-- Voice Selector (for audio scenes) -->
@@ -1620,17 +1619,18 @@ function updateVisualCharCounter() {
     const charCount = text.length;
     const counter = document.getElementById('inspector-visual-char-count');
     
-    counter.textContent = `${charCount} / 2000`;
+    // Sin límites - solo muestra el conteo
+    counter.textContent = `${charCount} caracteres`;
     
-    // Cambiar color si se acerca al límite
-    if (charCount > 1800) {
-        counter.classList.add('text-red-600', 'font-bold');
-        counter.classList.remove('text-gray-500');
-    } else if (charCount > 1600) {
-        counter.classList.add('text-yellow-600', 'font-bold');
-        counter.classList.remove('text-gray-500', 'text-red-600');
+    // Color verde para prompts extensos (mejor calidad)
+    if (charCount > 1000) {
+        counter.classList.add('text-green-600', 'font-semibold');
+        counter.classList.remove('text-gray-500', 'text-blue-600');
+    } else if (charCount > 500) {
+        counter.classList.add('text-blue-600', 'font-semibold');
+        counter.classList.remove('text-gray-500', 'text-green-600');
     } else {
-        counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.remove('text-green-600', 'text-blue-600', 'font-semibold', 'font-bold');
         counter.classList.add('text-gray-500');
     }
 }
