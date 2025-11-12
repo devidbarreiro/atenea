@@ -8,14 +8,6 @@ class LoginRequiredMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-<<<<<<< HEAD
-        # URLs que no requieren login
-        exempt_urls = [
-            reverse('core:login'),
-            reverse('core:logout'),
-            reverse('core:signup'),
-        ]
-=======
         # URLs que no requieren login o deben permitirse siempre (login/logout/no_permissions)
         try:
             exempt_urls = set([
@@ -26,7 +18,6 @@ class LoginRequiredMiddleware:
         except Exception:
             # If URL reversing fails during some startup phase, default to empty set
             exempt_urls = set()
->>>>>>> f5abafd (Role-based permissions system, automatic password creation with link sent to set password and activate account, views for users without permissions, bug fixes, visual improvements)
 
         # Allow activation links (they look like /users/activate/<uid>/<token>/)
         if request.path.startswith('/users/activate/'):
