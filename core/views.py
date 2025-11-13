@@ -2451,6 +2451,7 @@ class SceneRegenerateView(View):
                 scene_id=new_scene_id,
                 summary=original_scene.summary,
                 script_text=original_scene.script_text,
+                visual_prompt=original_scene.visual_prompt,
                 duration_sec=original_scene.duration_sec,
                 avatar=original_scene.avatar,
                 platform=original_scene.platform,

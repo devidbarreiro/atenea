@@ -1902,12 +1902,14 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         
         client = SoraClient(api_key=settings.OPENAI_API_KEY)
         
-        # Usar el script_text de la escena como prompt
-        prompt = scene.script_text
-        
-        # Si hay B-roll, agregar contexto visual
-        if scene.broll:
-            prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            # Fallback: usar script_text + broll
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
         
         model = scene.ai_config.get('sora_model', 'sora-2')
         duration = int(scene.ai_config.get('duration', 8))
