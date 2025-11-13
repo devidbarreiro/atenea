@@ -2493,6 +2493,30 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             
             logger.info(f"Video original tiene audio: {has_original_audio}")
             
+            # Obtener duraciones para decidir la estrategia
+            video_duration_cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ]
+            audio_duration_cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                audio_path
+            ]
+            
+            video_duration_result = subprocess.run(video_duration_cmd, capture_output=True, text=True)
+            audio_duration_result = subprocess.run(audio_duration_cmd, capture_output=True, text=True)
+            
+            video_duration = float(video_duration_result.stdout.strip()) if video_duration_result.returncode == 0 else None
+            audio_duration = float(audio_duration_result.stdout.strip()) if audio_duration_result.returncode == 0 else None
+            
+            logger.info(f"Duración video: {video_duration}s, Duración audio: {audio_duration}s")
+            
             # Combinar con FFmpeg
             # Estrategia: ELIMINAR completamente el audio del video y REEMPLAZAR con ElevenLabs TTS
             ffmpeg_cmd = [
@@ -2505,10 +2529,23 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 '-c:a', 'aac',         # Encodear audio a AAC
                 '-b:a', '192k',        # Bitrate de audio 192kbps
                 '-ar', '44100',        # Sample rate 44.1kHz
-                '-shortest',           # Si el audio es más largo que el video, cortarlo
-                '-y',                  # Sobrescribir sin preguntar
-                output_path
             ]
+            
+            # Solo usar -shortest si el audio es más largo que el video
+            # Si el video es más largo, extender el audio con silencio para que coincida
+            if video_duration and audio_duration:
+                if audio_duration > video_duration:
+                    # Audio más largo: cortar al video
+                    ffmpeg_cmd.append('-shortest')
+                    logger.info("Audio más largo que video: usando -shortest para cortar audio")
+                elif video_duration > audio_duration:
+                    # Video más largo: extender audio con silencio
+                    pad_duration = video_duration - audio_duration
+                    ffmpeg_cmd.extend(['-af', f'apad=pad_dur={pad_duration}'])
+                    logger.info(f"Video más largo que audio: extendiendo audio con {pad_duration}s de silencio")
+                # Si son iguales, no hacer nada especial
+            
+            ffmpeg_cmd.extend(['-y', output_path])
             
             logger.info(f"Ejecutando FFmpeg para REEMPLAZAR audio del video con ElevenLabs TTS")
             logger.info(f"Comando: {' '.join(ffmpeg_cmd)}")

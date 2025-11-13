@@ -839,9 +839,13 @@ class ListElevenLabsVoicesView(ServiceMixin, View):
         try:
             audio_service = AudioService()
             voices = audio_service.list_voices()
-            return JsonResponse({'voices': voices})
+            return JsonResponse({
+                'status': 'success',
+                'voices': voices
+            })
         except ServiceException as e:
             return JsonResponse({
+                'status': 'error',
                 'error': str(e),
                 'voices': []
             }, status=500)

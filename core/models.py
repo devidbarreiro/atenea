@@ -1052,3 +1052,9 @@ class Music(models.Model):
         self.status = 'error'
         self.error_message = error_message
         self.save(update_fields=['status', 'error_message', 'updated_at'])
+    
+    def duration_seconds(self):
+        """Retorna la duración en segundos de forma segura"""
+        if self.duration_ms is None:
+            return 0
+        return round(self.duration_ms / 1000.0, 2)
