@@ -4,7 +4,7 @@ Formularios Django para validación de datos
 
 from django import forms
 from django.core.validators import MinValueValidator, MaxValueValidator
-from .models import Project, Video, Image, Script, VIDEO_TYPES, IMAGE_TYPES
+from .models import Project, Video, Image, Audio, Script, VIDEO_TYPES, IMAGE_TYPES
 
 
 class ProjectForm(forms.ModelForm):
@@ -812,5 +812,53 @@ class ScriptForm(forms.Form):
         }),
         label='Duración Deseada (minutos)',
         help_text='Duración aproximada del video final en minutos'
+    )
+
+
+# ====================
+# AUDIO FORMS
+# ====================
+
+class AudioForm(forms.Form):
+    """Formulario para crear audios con ElevenLabs TTS"""
+    
+    title = forms.CharField(
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Título del audio',
+            'required': True,
+        }),
+        label='Título',
+        help_text='Nombre descriptivo para identificar el audio'
+    )
+    
+    text = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'placeholder': 'Escribe el texto que quieres convertir a voz...',
+            'rows': 8,
+            'required': True,
+        }),
+        label='Texto',
+        help_text='El texto que será convertido a voz por ElevenLabs'
+    )
+    
+    voice_id = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'ID de la voz',
+            'required': True,
+            'readonly': 'readonly',
+        }),
+        label='Voz',
+        help_text='Selecciona una voz del catálogo (se autocompletará)'
+    )
+    
+    voice_name = forms.CharField(
+        max_length=100,
+        required=False,
+        widget=forms.HiddenInput()
     )
 
