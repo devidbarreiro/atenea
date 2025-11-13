@@ -139,9 +139,9 @@
         {% if groups %}
         <div class="grid grid-cols-1 mb-6">
             <p class="font-semibold mb-2">Roles</p>
-            <div class="flex flex-wrap gap-3">
+            <div class="grid grid-cols-3 gap-3">
                 {% for g in groups %}
-                <label class="inline-flex items-center mr-4">
+                <label class="items-center mr-4">
                     <input type="checkbox" 
                            name="groups" 
                            value="{{ g.id }}" 

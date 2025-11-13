@@ -3238,8 +3238,9 @@ def activate_account(request, uidb64, token):
                 messages.error(request, "Ocurrió un error al activar la cuenta. Por favor intenta de nuevo o contacta con el administrador.")
         else:
             # Form invalid: log details for debugging
-            logger.warning(f"ActivationSetPasswordForm invalid for user {getattr(user, 'pk', None)}: %s", form.errors.as_json())
-            messages.error(request, 'Por favor, corrige los errores del formulario.')
+            for field, errors in form.errors.items():
+                messages.error(request, errors)
+                break
     else:
         logger.info(f"Activation GET for uid={uidb64} user_id={getattr(user, 'pk', None)}")
         form = ActivationSetPasswordForm(user=user)
