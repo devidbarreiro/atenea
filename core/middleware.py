@@ -82,7 +82,6 @@ class LoginRequiredMiddleware:
                 if view_name == 'core:user_menu' and (user_perms & self.MANAGEMENT_PERMS):
                     pass
                 else:
-                    messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                     return redirect('core:no_permissions')
 
         # Check permission requirement if any
@@ -92,7 +91,6 @@ class LoginRequiredMiddleware:
                     if view_name == 'core:user_menu' and (user_perms & self.MANAGEMENT_PERMS):
                         pass
                     else:
-                        messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                         return redirect('core:no_permissions')
             except Exception:
                 pass
@@ -118,7 +116,6 @@ class LoginRequiredMiddleware:
                 pass
             
             if view_name == 'core:dashboard' or (self._dashboard_path and request.path.startswith(self._dashboard_path)):
-                messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                 return redirect('core:no_permissions')
 
             return redirect('core:no_permissions')

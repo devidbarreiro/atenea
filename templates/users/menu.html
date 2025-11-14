@@ -156,7 +156,13 @@
         {% endif %}
 
         <!-- Botón -->
-        <button type="submit" class="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-900 transition-colors font-semibold text-lg" {% if not has_create_access %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>
+        <button type="submit" class="w-full py-2 rounded-lg font-semibold text-lg
+                {% if has_create_access %}
+                    bg-black text-white hover:bg-gray-900
+                {% else %}
+                    bg-gray-400 text-gray-700 opacity-50 cursor-not-allowed
+                {% endif %}"
+            {% if not has_create_access %}disabled{% endif %}>
             Crear Usuario
         </button>
     </form>
@@ -711,6 +717,13 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('.email input').value = original.email;
             row.querySelector('.is_staff select').value = original.is_staff.toString();
             row.querySelector('.is_active select').value = original.is_active.toString();
+            
+            // Restaurar grupos/roles también
+            const originalGroupIds = (original.groups || '').split(',').filter(id => id);
+            const roleCheckboxes = row.querySelectorAll('.role-checkbox');
+            roleCheckboxes.forEach(cb => {
+                cb.checked = originalGroupIds.includes(cb.value);
+            });
         });
 
         // Deshabilitar botones de nuevo

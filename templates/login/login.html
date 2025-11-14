@@ -36,7 +36,7 @@
                    class="w-full pl-10 pr-10 py-2 border-b-2 border-gray-300 text-gray-700 focus:text-black focus:border-black focus:ring-1 focus:ring-black outline-none rounded-sm transition-colors font-medium">
             
                 <button type="button" @click="show = !show"
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 focus:outline-none" tapindex="-1">
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 focus:outline-none" tabindex="-1">
 
                 <!-- Heroicon Eye -->
                 <svg x-show="!show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
@@ -65,14 +65,6 @@
         <button type="submit" class="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-900 transition-colors font-semibold text-lg">
             Entrar
         </button>
-
-        <!-- Enlace de registro -->
-        <div class="mt-6 text-center">
-            <p class="text-sm text-gray-600">
-                ¿No tienes cuenta? 
-                <a href="{% url 'core:signup' %}" class="text-black font-semibold hover:underline">Regístrate aquí</a>
-            </p>
-        </div>
     </form>
 </div>
 {% endblock %}
