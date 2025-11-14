@@ -824,7 +824,10 @@ class ScriptForm(forms.Form):
 # ====================
 
 class CustomUserCreationForm(forms.ModelForm):
-    password = forms.CharField(widget=forms.PasswordInput)
+    password = forms.CharField(
+        widget=forms.PasswordInput,
+        label='Contraseña'
+    )
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.all(),
         required=False,
@@ -836,6 +839,35 @@ class CustomUserCreationForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'email']
+    
+    # Validar y guardar la contraseña
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        if not password:
+            raise ValidationError('La contraseña es requerida.')
+        # Usar la misma validación que ActivationSetPasswordForm
+        if len(password) < 6:
+            raise ValidationError('La contraseña debe tener al menos 6 caracteres.')
+        if not re.search(r'[a-z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra minúscula.')
+        if not re.search(r'[A-Z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra mayúscula.')
+        if not re.search(r'\d', password):
+            raise ValidationError('La contraseña debe contener al menos un número.')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
+            raise ValidationError('La contraseña debe contener al menos un carácter especial.')
+        return password
+    
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        password = self.cleaned_data.get('password')
+        if password:
+            user.set_password(password)
+        if commit:
+            user.save()
+            if 'groups' in self.cleaned_data:
+                user.groups.set(self.cleaned_data['groups'])
+        return user
 
 
 class PendingUserCreationForm(forms.ModelForm):
@@ -845,6 +877,13 @@ class PendingUserCreationForm(forms.ModelForm):
     automáticamente y el usuario se crea con is_active=False. El proceso de activación
     se realiza mediante link por correo donde el usuario establecerá su contraseña.
     """
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if User.objects.filter(email=email).exists():
+            raise ValidationError("Ya existe un usuario con este email.")
+        return email
+
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.all(),
         required=False,

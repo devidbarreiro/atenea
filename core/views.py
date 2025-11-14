@@ -3225,11 +3225,13 @@ def activate_account(request, uidb64, token):
     if user.is_active:
         messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
         return redirect('core:login')
+
     # If someone else is currently authenticated on this browser, log them out
     if request.user.is_authenticated and request.user.pk != user.pk:
         # logout the current session and inform the user
         logout(request)
         messages.info(request, 'La sesión anterior se ha cerrado para continuar con la activación de la cuenta.')
+        
     # Procesar contraseña y activar (con logging y manejo de errores)
     if request.method == 'POST':
         logger.info(f"Activation POST received for uid={uidb64} user_id={getattr(user, 'pk', None)}")
