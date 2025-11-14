@@ -2969,7 +2969,8 @@ class UserMenuView(View):
         # full users list when the user has admin access.
         groups = Group.objects.all()
         if has_admin_access:
-            users = User.objects.all()
+            # Prefetch groups para evitar N+1 queries
+            users = User.objects.prefetch_related('groups').all()
         else:
             # For create-only users, don't load the admin list
             users = []
@@ -3231,23 +3232,14 @@ def activate_account(request, uidb64, token):
         form = ActivationSetPasswordForm(user=user, data=request.POST)
         if form.is_valid():
             try:
-                # Marcar activo antes de guardar la contraseña
-                user.is_active = True
-
                 # Guardar la contraseña (SetPasswordForm.save() llama a user.save())
                 form.save()
 
-                # Asegurar que el flag is_active quede persistido
-                try:
-                    user.save(update_fields=["is_active"])
-                except Exception as e:
-                    # Log y reintentar un save completo si falla el update_fields
-                    logger.exception(f"Error saving is_active flag for user {user.pk}: {e}")
-                    user.save()
-
+                # Marcar activo antes de guardar la contraseña
+                user.is_active = True
+                user.save(update_fields=["is_active"])
                 # Refrescar desde la base de datos para verificar
                 user.refresh_from_db()
-                logger.info(f"Post-activation user.is_active={user.is_active} for user_id={user.pk}")
 
                 if user.is_active:
                     messages.success(request, "Tu cuenta ha sido activada. Ahora puedes iniciar sesión.")
