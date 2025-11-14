@@ -3204,28 +3204,32 @@ def activate_account(request, uidb64, token):
     try:
         uid = force_str(urlsafe_base64_decode(uidb64))
         user = User.objects.get(pk=uid)
+        # Validar token ANTES de usar el usuario
+        if not default_token_generator.check_token(user, token):
+            user = None #invalidar si token no coincide
     except Exception:
         user = None
 
     # If token is invalid or user not found, render an informative page instead of redirecting
-    if user is None or not default_token_generator.check_token(user, token):
+    if user is None:
         return render(request, 'users/activation_invalid.html', {
-            'user_obj': user,
+            'user_obj': None,
             'message': 'El enlace de activación no es válido o ha expirado.'
         })
 
     # If someone else is currently authenticated on this browser, log them out
     # so the activation can proceed for the target account. This avoids errors
     # when trying to activate while another session is active.
+
+    # verifica si la cuenta esta activa y redirije al login 
+    if user.is_active:
+        messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
+        return redirect('core:login')
+    # If someone else is currently authenticated on this browser, log them out
     if request.user.is_authenticated and request.user.pk != user.pk:
         # logout the current session and inform the user
         logout(request)
         messages.info(request, 'La sesión anterior se ha cerrado para continuar con la activación de la cuenta.')
-        # verifica si la cuenta esta activa y redirije al login 
-    if user.is_active:
-        messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
-        return redirect('core:login')
-    
     # Procesar contraseña y activar (con logging y manejo de errores)
     if request.method == 'POST':
         logger.info(f"Activation POST received for uid={uidb64} user_id={getattr(user, 'pk', None)}")
