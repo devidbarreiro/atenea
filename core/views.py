@@ -2937,6 +2937,8 @@ class UserMenuView(View):
     # ------------------------------
     @staticmethod
     def validar_password(password):
+        if not password:
+            return "La contraseña no puede estar vacía."
         if len(password) < 6:
             return "La contraseña debe tener al menos 6 caracteres."
         if not re.search(r'[a-z]', password):
@@ -2958,9 +2960,6 @@ class UserMenuView(View):
             if accion == 'cambiar_password':
                 user_id = request.POST.get('usuario_id')
                 nueva = request.POST.get('nueva_password')
-                # Validar que la nueva contraseña no esté vacía
-                if not nueva or nueva.strip() == '':
-                    return JsonResponse({'success': False, 'error': 'La nueva contraseña no puede estar vacía.'})
 
                 # Validar complejidad de la contraseña
                 error_pwd = self.validar_password(nueva)

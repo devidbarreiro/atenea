@@ -303,7 +303,7 @@
                         class="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-20 z-index-5">
                         {% if request.user.id|stringformat:"s" == user.id|stringformat:"s" or can_reset_password %}
                         <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
-                        @click="cambiarPassword('{{user.id}}', '{{user.username}}')">Cambiar contraseña</button>
+                        @click="abrirPasswordModal('{{ user.id }}', '{{ user.username }}')">Cambiar contraseña</button>
                         {% endif %}
                         {% if perms.auth.delete_user %}
                         <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600"
@@ -336,6 +336,61 @@
         Guardar cambios
     </button>
 </div>
+
+<!-- Modal Cambiar Contraseña -->
+<div id="modal-cambiar-password" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <form id="cambiar-password-form" method="post"
+          class="bg-white p-10 rounded-xl shadow-lg w-96 border-t-4 border-black transition-all hover:shadow-2xl">
+
+        {% csrf_token %}
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-900">
+            Cambiar contraseña de <span id="modal-username" class="font-semibold"></span>
+        </h2>
+
+        <input type="hidden" name="user_id" id="modal-user-id">
+
+        <!-- Nueva contraseña -->
+        <div class="relative mb-6" x-data="{ show: false }">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <!-- Heroicon Lock -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+            </span>
+            <input :type="show ? 'text' : 'password'" name="new_password" id="new_password" placeholder="Nueva contraseña" required
+                   class="w-full pl-10 pr-10 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium">
+            <button type="button" @click="show = !show"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 focus:outline-none" tabindex="-1">
+                <svg x-show="!show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                     stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+                <svg x-show="show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                     stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="flex justify-end space-x-4">
+            <button type="button" onclick="closePasswordModal()"
+                    class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+                Cancelar
+            </button>
+            <button type="submit"
+                    class="w-full px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-900 transition">
+                Cambiar contraseña
+            </button>
+        </div>
+
+    </form>
+</div>
+
 
 <script>
 function selectContentType(type) {
@@ -908,15 +963,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Cambiar contraseña de un usuario
-    window.cambiarPassword = function(userId, username) {
-        const nuevaPassword = prompt(`Ingrese la nueva contraseña para el usuario "${username}":`);
-        if (nuevaPassword === null || nuevaPassword.trim() === '') {
+    // Abrir modal de cambiar contraseña
+    window.abrirPasswordModal = function(userId, username) {
+        document.getElementById('modal-user-id').value = userId;
+        document.getElementById('modal-username').textContent = username;
+        document.getElementById('new_password').value = '';
+        document.getElementById('modal-cambiar-password').classList.remove('hidden');
+    };
+
+    // Cerrar modal
+    window.closePasswordModal = function() {
+        document.getElementById('modal-cambiar-password').classList.add('hidden');
+    };
+
+    // Enviar formulario del modal
+    document.getElementById('cambiar-password-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const userId = document.getElementById('modal-user-id').value;
+        const nuevaPassword = document.getElementById('new_password').value.trim();
+
+        if (!nuevaPassword) {
             alert('La contraseña no puede estar vacía.');
             return;
         }
 
-        // Enviar solicitud para cambiar la contraseña
         const formData = new FormData();
         formData.append('accion', 'cambiar_password');
         formData.append('usuario_id', userId);
@@ -934,12 +1005,13 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             if (data.success) {
                 alert('✅ Contraseña cambiada correctamente');
+                closePasswordModal();
             } else {
                 alert('❌ Error al cambiar la contraseña: ' + data.error);
             }
         })
         .catch(err => alert('❌ Error de red: ' + err.message));
-    }
+    });
 });
 </script>
 
