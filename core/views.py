@@ -36,6 +36,7 @@ from django.contrib.auth.forms import SetPasswordForm
 from django.utils.crypto import get_random_string
 from django.conf import settings
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -2989,6 +2990,23 @@ class UserMenuView(View):
             'has_create_access': has_create_access,
         })
 
+    # ------------------------------
+    #  VALIDACIÓN DE CONTRASEÑA
+    # ------------------------------
+    @staticmethod
+    def validar_password(password):
+        if len(password) < 6:
+            return "La contraseña debe tener al menos 6 caracteres."
+        if not re.search(r'[a-z]', password):
+            return "La contraseña debe contener al menos una letra minúscula."
+        if not re.search(r'[A-Z]', password):
+            return "La contraseña debe contener al menos una letra mayúscula."
+        if not re.search(r'\d', password):
+            return "La contraseña debe contener al menos un número."
+        if not re.search(r'[^A-Za-z0-9]', password):
+            return "La contraseña debe contener al menos un carácter especial."
+        return None
+
     def post(self, request):
         # --- Acciones AJAX individuales ---
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3001,6 +3019,12 @@ class UserMenuView(View):
                 # Validar que la nueva contraseña no esté vacía
                 if not nueva or nueva.strip() == '':
                     return JsonResponse({'success': False, 'error': 'La nueva contraseña no puede estar vacía.'})
+
+                # Validar complejidad de la contraseña
+                error_pwd = self.validar_password(nueva)
+                if error_pwd:
+                    return JsonResponse({'success': False, 'error': error_pwd})
+
                 # Permission: only allow if user is changing own password or has the 'editar' role / change permission
                 has_edit_role = (
                     request.user.is_superuser or
