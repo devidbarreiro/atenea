@@ -1,11 +1,18 @@
 from django.shortcuts import redirect
 from django.urls import reverse, resolve, Resolver404
 from django.conf import settings
+from django.contrib import messages
 
 
 class LoginRequiredMiddleware:
+    MANAGEMENT_PERMS = {'auth.add_user', 'auth.change_user', 'auth.view_user', 'auth.delete_user'}
     def __init__(self, get_response):
         self.get_response = get_response
+        # Cachear dashboard path
+        try:
+            self._dashboard_path = reverse('core:dashboard')
+        except Exception:
+            self._dashboard_path = None
 
     def __call__(self, request):
         # URLs que no requieren login o deben permitirse siempre (login/logout/no_permissions)
@@ -72,24 +79,20 @@ class LoginRequiredMiddleware:
         if required_group:
             if not request.user.groups.filter(name__iexact=required_group).exists():
                 # allow access to user_menu if user has management perms
-                management_perms = set([
-                    'auth.add_user', 'auth.change_user', 'auth.view_user', 'auth.delete_user'
-                ])
-                if view_name == 'core:user_menu' and (user_perms & management_perms):
+                if view_name == 'core:user_menu' and (user_perms & self.MANAGEMENT_PERMS):
                     pass
                 else:
+                    messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                     return redirect('core:no_permissions')
 
         # Check permission requirement if any
         if required_perm:
             try:
                 if not request.user.has_perm(required_perm):
-                    management_perms = set([
-                        'auth.add_user', 'auth.change_user', 'auth.view_user', 'auth.delete_user'
-                    ])
-                    if view_name == 'core:user_menu' and (user_perms & management_perms):
+                    if view_name == 'core:user_menu' and (user_perms & self.MANAGEMENT_PERMS):
                         pass
                     else:
+                        messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                         return redirect('core:no_permissions')
             except Exception:
                 pass
@@ -99,9 +102,6 @@ class LoginRequiredMiddleware:
         # to the `no_permissions` page. Exception: allow access to the user_menu if they
         # have add_user permission (management-only accounts).
         # user_perms already computed above
-        management_perms = set([
-            'auth.add_user', 'auth.change_user', 'auth.view_user', 'auth.delete_user'
-        ])
 
         # If user has no permissions at all -> redirect to no_permissions
         if not user_perms:
@@ -109,28 +109,16 @@ class LoginRequiredMiddleware:
 
         # If user's permissions are only management-related, restrict access to
         # the rest of the app. Allow access to the user_menu if they have add_user.
-        if user_perms.issubset(management_perms):
-            # Resolve view name when possible to make redirection decisions robust
-            try:
-                match = resolve(request.path_info)
-                view_name = match.view_name
-            except Resolver404:
-                view_name = None
-
+        if user_perms.issubset(self.MANAGEMENT_PERMS):
             # allow user_menu if they have add_user
             try:
                 if request.user.has_perm('auth.add_user') and view_name == 'core:user_menu':
                     return self.get_response(request)
             except Exception:
                 pass
-
-            # Explicitly block dashboard (some routes may not match path exactly)
-            try:
-                dashboard_path = reverse('core:dashboard')
-            except Exception:
-                dashboard_path = None
-
-            if view_name == 'core:dashboard' or (dashboard_path and request.path.startswith(dashboard_path)):
+            
+            if view_name == 'core:dashboard' or (self._dashboard_path and request.path.startswith(self._dashboard_path)):
+                messages.error(request, "No tienes permisos para acceder al panel de gestión de usuarios.")
                 return redirect('core:no_permissions')
 
             return redirect('core:no_permissions')
