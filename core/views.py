@@ -788,48 +788,63 @@ class VideoStatusView(ServiceMixin, View):
 # ====================
 
 class ListAvatarsView(ServiceMixin, View):
-    """Lista avatares de HeyGen"""
+    """Lista avatares de HeyGen con manejo robusto de errores"""
     
     def get(self, request):
         try:
             api_service = self.get_api_service()
             avatars = api_service.list_avatars()
-            return JsonResponse({'avatars': avatars})
-        except ServiceException as e:
             return JsonResponse({
-                'error': str(e),
+                'avatars': avatars,
+                'cached': False
+            })
+        except ServiceException as e:
+            logger.error(f"Error crítico al listar avatares: {e}")
+            return JsonResponse({
+                'error': 'No se pudieron cargar los avatares. Por favor, intenta de nuevo más tarde.',
+                'error_detail': str(e),
                 'avatars': []
-            }, status=500)
+            }, status=503)  # 503 Service Unavailable es más apropiado que 500
 
 
 class ListVoicesView(ServiceMixin, View):
-    """Lista voces de HeyGen"""
+    """Lista voces de HeyGen con manejo robusto de errores"""
     
     def get(self, request):
         try:
             api_service = self.get_api_service()
             voices = api_service.list_voices()
-            return JsonResponse({'voices': voices})
-        except ServiceException as e:
             return JsonResponse({
-                'error': str(e),
+                'voices': voices,
+                'cached': False
+            })
+        except ServiceException as e:
+            logger.error(f"Error crítico al listar voces: {e}")
+            return JsonResponse({
+                'error': 'No se pudieron cargar las voces. Por favor, intenta de nuevo más tarde.',
+                'error_detail': str(e),
                 'voices': []
-            }, status=500)
+            }, status=503)  # 503 Service Unavailable es más apropiado que 500
 
 
 class ListImageAssetsView(ServiceMixin, View):
-    """Lista imágenes disponibles en HeyGen"""
+    """Lista imágenes disponibles en HeyGen con manejo robusto de errores"""
     
     def get(self, request):
         try:
             api_service = self.get_api_service()
             assets = api_service.list_image_assets()
-            return JsonResponse({'assets': assets})
-        except ServiceException as e:
             return JsonResponse({
-                'error': str(e),
-                'assets': []
-            }, status=500)
+                'image_assets': assets,
+                'cached': False
+            })
+        except ServiceException as e:
+            logger.error(f"Error crítico al listar image assets: {e}")
+            return JsonResponse({
+                'error': 'No se pudieron cargar los assets. Por favor, intenta de nuevo más tarde.',
+                'error_detail': str(e),
+                'image_assets': []
+            }, status=503)  # 503 Service Unavailable es más apropiado que 500
 
 
 class ListElevenLabsVoicesView(ServiceMixin, View):

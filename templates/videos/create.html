@@ -310,14 +310,23 @@ function showConfig(type) {
     }
 }
 
-// Cargar avatares HeyGen V2
-async function loadAvatars() {
+// Cargar avatares HeyGen V2 con retry automático
+async function loadAvatars(retryCount = 0) {
     const select = document.getElementById('avatar-select');
-    select.innerHTML = '<option value="">Cargando...</option>';
+    const maxRetries = 2;
+    
+    select.innerHTML = retryCount > 0 
+        ? `<option value="">Reintentando (${retryCount}/${maxRetries})...</option>`
+        : '<option value="">Cargando...</option>';
     
     try {
         const response = await fetch('{% url "core:api_list_avatars" %}');
         const data = await response.json();
+        
+        // Verificar si hay error en la respuesta
+        if (data.error && data.avatars.length === 0) {
+            throw new Error(data.error);
+        }
         
         select.innerHTML = '<option value="">Selecciona un avatar</option>';
         data.avatars.forEach(avatar => {
@@ -326,20 +335,45 @@ async function loadAvatars() {
             option.textContent = avatar.avatar_name;
             select.appendChild(option);
         });
+        
+        // Mostrar indicador si es data cacheada
+        if (data.cached) {
+            console.log('Avatares cargados desde caché');
+        }
     } catch (error) {
         console.error('Error cargando avatares:', error);
-        select.innerHTML = '<option value="">Error al cargar avatares</option>';
+        
+        // Reintentar automáticamente si no hemos alcanzado el máximo
+        if (retryCount < maxRetries) {
+            setTimeout(() => loadAvatars(retryCount + 1), 2000);
+        } else {
+            select.innerHTML = '<option value="">⚠️ Error al cargar. Click para reintentar</option>';
+            select.addEventListener('focus', () => {
+                if (select.value === '') {
+                    loadAvatars(0);
+                }
+            }, { once: true });
+        }
     }
 }
 
-// Cargar voces HeyGen V2
-async function loadVoices() {
+// Cargar voces HeyGen V2 con retry automático
+async function loadVoices(retryCount = 0) {
     const select = document.getElementById('voice-select');
-    select.innerHTML = '<option value="">Cargando...</option>';
+    const maxRetries = 2;
+    
+    select.innerHTML = retryCount > 0 
+        ? `<option value="">Reintentando (${retryCount}/${maxRetries})...</option>`
+        : '<option value="">Cargando...</option>';
     
     try {
         const response = await fetch('{% url "core:api_list_voices" %}');
         const data = await response.json();
+        
+        // Verificar si hay error en la respuesta
+        if (data.error && data.voices.length === 0) {
+            throw new Error(data.error);
+        }
         
         select.innerHTML = '<option value="">Selecciona una voz</option>';
         data.voices.forEach(voice => {
@@ -348,9 +382,25 @@ async function loadVoices() {
             option.textContent = `${voice.display_name} (${voice.language})`;
             select.appendChild(option);
         });
+        
+        // Mostrar indicador si es data cacheada
+        if (data.cached) {
+            console.log('Voces cargadas desde caché');
+        }
     } catch (error) {
         console.error('Error cargando voces:', error);
-        select.innerHTML = '<option value="">Error al cargar voces</option>';
+        
+        // Reintentar automáticamente si no hemos alcanzado el máximo
+        if (retryCount < maxRetries) {
+            setTimeout(() => loadVoices(retryCount + 1), 2000);
+        } else {
+            select.innerHTML = '<option value="">⚠️ Error al cargar. Click para reintentar</option>';
+            select.addEventListener('focus', () => {
+                if (select.value === '') {
+                    loadVoices(0);
+                }
+            }, { once: true });
+        }
     }
 }
 

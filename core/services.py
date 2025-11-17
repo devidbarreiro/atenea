@@ -823,7 +823,12 @@ class VideoService:
 # ====================
 
 class APIService:
-    """Servicio para endpoints de API externa"""
+    """Servicio para endpoints de API externa con caché robusto"""
+    
+    # Duración del caché en segundos (1 hora)
+    CACHE_TTL = 3600
+    # Duración del caché obsoleto (stale) en segundos (24 horas)
+    STALE_CACHE_TTL = 86400
     
     def __init__(self):
         self.heygen_client = None
@@ -836,31 +841,181 @@ class APIService:
             self.heygen_client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
         return self.heygen_client
     
-    def list_avatars(self) -> List[Dict]:
-        """Lista avatares disponibles de HeyGen"""
+    def _get_stale_cache(self, cache_key: str):
+        """Obtiene datos obsoletos del caché (stale cache)"""
+        from django.core.cache import cache
+        stale_key = f"{cache_key}_stale"
+        return cache.get(stale_key)
+    
+    def _set_stale_cache(self, cache_key: str, data: List[Dict]):
+        """Guarda datos en el caché obsoleto (stale cache)"""
+        from django.core.cache import cache
+        stale_key = f"{cache_key}_stale"
+        cache.set(stale_key, data, self.STALE_CACHE_TTL)
+    
+    def list_avatars(self, use_cache: bool = True) -> List[Dict]:
+        """
+        Lista avatares disponibles de HeyGen con caché robusto (stale-while-revalidate)
+        
+        Args:
+            use_cache: Si True, intenta usar caché. Si False, fuerza petición a la API.
+        
+        Returns:
+            Lista de avatares
+            
+        Raises:
+            ServiceException: Si falla la petición después de todos los reintentos y no hay caché obsoleto
+        """
+        from django.core.cache import cache
+        
+        cache_key = 'heygen_avatars'
+        
+        # Intentar obtener del caché fresco si está habilitado
+        if use_cache:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.debug("Usando avatares desde caché fresco")
+                return cached_data
+        
+        # Intentar obtener datos obsoletos como fallback antes de hacer la petición
+        stale_data = self._get_stale_cache(cache_key)
+        
         try:
             client = self._get_heygen_client()
-            return client.list_avatars()
+            avatars = client.list_avatars()
+            
+            # Guardar en caché fresco y obsoleto
+            cache.set(cache_key, avatars, self.CACHE_TTL)
+            self._set_stale_cache(cache_key, avatars)
+            logger.debug(f"Avatares guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            
+            return avatars
         except Exception as e:
-            logger.error(f"Error al listar avatares: {e}")
+            logger.error(f"Error al listar avatares después de reintentos: {e}")
+            
+            # Si hay datos obsoletos disponibles, usarlos como fallback
+            if stale_data is not None:
+                logger.warning("⚠️ Usando avatares en caché obsoleto como fallback (API no disponible)")
+                return stale_data
+            
+            # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.warning("⚠️ Usando avatares en caché fresco como último recurso")
+                return cached_data
+            
+            # No hay datos disponibles en ningún caché
+            logger.error("❌ No hay datos de avatares disponibles (ni API ni caché)")
             raise ServiceException(str(e))
     
-    def list_voices(self) -> List[Dict]:
-        """Lista voces disponibles de HeyGen"""
+    def list_voices(self, use_cache: bool = True) -> List[Dict]:
+        """
+        Lista voces disponibles de HeyGen con caché robusto (stale-while-revalidate)
+        
+        Args:
+            use_cache: Si True, intenta usar caché. Si False, fuerza petición a la API.
+        
+        Returns:
+            Lista de voces
+            
+        Raises:
+            ServiceException: Si falla la petición después de todos los reintentos y no hay caché obsoleto
+        """
+        from django.core.cache import cache
+        
+        cache_key = 'heygen_voices'
+        
+        # Intentar obtener del caché fresco si está habilitado
+        if use_cache:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.debug("Usando voces desde caché fresco")
+                return cached_data
+        
+        # Intentar obtener datos obsoletos como fallback antes de hacer la petición
+        stale_data = self._get_stale_cache(cache_key)
+        
         try:
             client = self._get_heygen_client()
-            return client.list_voices()
+            voices = client.list_voices()
+            
+            # Guardar en caché fresco y obsoleto
+            cache.set(cache_key, voices, self.CACHE_TTL)
+            self._set_stale_cache(cache_key, voices)
+            logger.debug(f"Voces guardadas en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            
+            return voices
         except Exception as e:
-            logger.error(f"Error al listar voces: {e}")
+            logger.error(f"Error al listar voces después de reintentos: {e}")
+            
+            # Si hay datos obsoletos disponibles, usarlos como fallback
+            if stale_data is not None:
+                logger.warning("⚠️ Usando voces en caché obsoleto como fallback (API no disponible)")
+                return stale_data
+            
+            # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.warning("⚠️ Usando voces en caché fresco como último recurso")
+                return cached_data
+            
+            # No hay datos disponibles en ningún caché
+            logger.error("❌ No hay datos de voces disponibles (ni API ni caché)")
             raise ServiceException(str(e))
     
-    def list_image_assets(self) -> List[Dict]:
-        """Lista imágenes disponibles en HeyGen"""
+    def list_image_assets(self, use_cache: bool = True) -> List[Dict]:
+        """
+        Lista imágenes disponibles en HeyGen con caché robusto (stale-while-revalidate)
+        
+        Args:
+            use_cache: Si True, intenta usar caché. Si False, fuerza petición a la API.
+        
+        Returns:
+            Lista de image assets
+            
+        Raises:
+            ServiceException: Si falla la petición después de todos los reintentos y no hay caché obsoleto
+        """
+        from django.core.cache import cache
+        
+        cache_key = 'heygen_image_assets'
+        
+        # Intentar obtener del caché fresco si está habilitado
+        if use_cache:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.debug("Usando image assets desde caché fresco")
+                return cached_data
+        
+        # Intentar obtener datos obsoletos como fallback antes de hacer la petición
+        stale_data = self._get_stale_cache(cache_key)
+        
         try:
             client = self._get_heygen_client()
-            return client.list_image_assets()
+            image_assets = client.list_image_assets()
+            
+            # Guardar en caché fresco y obsoleto
+            cache.set(cache_key, image_assets, self.CACHE_TTL)
+            self._set_stale_cache(cache_key, image_assets)
+            logger.debug(f"Image assets guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            
+            return image_assets
         except Exception as e:
-            logger.error(f"Error al listar image assets: {e}")
+            logger.error(f"Error al listar image assets después de reintentos: {e}")
+            
+            # Si hay datos obsoletos disponibles, usarlos como fallback
+            if stale_data is not None:
+                logger.warning("⚠️ Usando image assets en caché obsoleto como fallback (API no disponible)")
+                return stale_data
+            
+            # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.warning("⚠️ Usando image assets en caché fresco como último recurso")
+                return cached_data
+            
+            # No hay datos disponibles en ningún caché
+            logger.error("❌ No hay datos de image assets disponibles (ni API ni caché)")
             raise ServiceException(str(e))
 
 

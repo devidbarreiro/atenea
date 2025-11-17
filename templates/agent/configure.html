@@ -739,7 +739,7 @@ async function loadHeyGenAssets() {
     ]);
 }
 
-async function loadAvatars() {
+async function loadAvatars(retryCount = 0) {
     // Usar cache si existe
     if (avatarsCache) {
         populateAvatarSelects(avatarsCache);
@@ -747,25 +747,46 @@ async function loadAvatars() {
     }
     
     const selects = document.querySelectorAll('[data-config-field="avatar_id"]');
+    const maxRetries = 2;
+    const loadingMsg = retryCount > 0 
+        ? `Reintentando avatares (${retryCount}/${maxRetries})...`
+        : 'Cargando avatares...';
+    
     selects.forEach(select => {
-        select.innerHTML = '<option value="">Cargando avatares...</option>';
+        select.innerHTML = `<option value="">${loadingMsg}</option>`;
     });
     
     try {
         const response = await fetch('{% url "core:api_list_avatars" %}');
         const data = await response.json();
         
+        // Verificar si hay error en la respuesta
+        if (data.error && data.avatars.length === 0) {
+            throw new Error(data.error);
+        }
+        
         avatarsCache = data.avatars; // Guardar en cache
         populateAvatarSelects(data.avatars);
+        
+        // Log si es data cacheada del servidor
+        if (data.cached) {
+            console.log('Avatares cargados desde caché del servidor');
+        }
     } catch (error) {
         console.error('Error cargando avatares:', error);
-        selects.forEach(select => {
-            select.innerHTML = '<option value="">Error al cargar avatares</option>';
-        });
+        
+        // Reintentar automáticamente si no hemos alcanzado el máximo
+        if (retryCount < maxRetries) {
+            setTimeout(() => loadAvatars(retryCount + 1), 2000);
+        } else {
+            selects.forEach(select => {
+                select.innerHTML = '<option value="">⚠️ Error. Recarga la página</option>';
+            });
+        }
     }
 }
 
-async function loadVoices() {
+async function loadVoices(retryCount = 0) {
     // Usar cache si existe
     if (voicesCache) {
         populateVoiceSelects(voicesCache);
@@ -773,21 +794,42 @@ async function loadVoices() {
     }
     
     const selects = document.querySelectorAll('[data-config-field="voice_id"]');
+    const maxRetries = 2;
+    const loadingMsg = retryCount > 0 
+        ? `Reintentando voces (${retryCount}/${maxRetries})...`
+        : 'Cargando voces...';
+    
     selects.forEach(select => {
-        select.innerHTML = '<option value="">Cargando voces...</option>';
+        select.innerHTML = `<option value="">${loadingMsg}</option>`;
     });
     
     try {
         const response = await fetch('{% url "core:api_list_voices" %}');
         const data = await response.json();
         
+        // Verificar si hay error en la respuesta
+        if (data.error && data.voices.length === 0) {
+            throw new Error(data.error);
+        }
+        
         voicesCache = data.voices; // Guardar en cache
         populateVoiceSelects(data.voices);
+        
+        // Log si es data cacheada del servidor
+        if (data.cached) {
+            console.log('Voces cargadas desde caché del servidor');
+        }
     } catch (error) {
         console.error('Error cargando voces:', error);
-        selects.forEach(select => {
-            select.innerHTML = '<option value="">Error al cargar voces</option>';
-        });
+        
+        // Reintentar automáticamente si no hemos alcanzado el máximo
+        if (retryCount < maxRetries) {
+            setTimeout(() => loadVoices(retryCount + 1), 2000);
+        } else {
+            selects.forEach(select => {
+                select.innerHTML = '<option value="">⚠️ Error. Recarga la página</option>';
+            });
+        }
     }
 }
 
