@@ -214,9 +214,10 @@
             <div x-show="open" 
                 x-transition
                 @click.outside="open = false"
-                class="absolute mt-40 w-35 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2">
+                class="absolute mt-40 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2">
 
-                <p class="text-gray-700 text-sm mb-2 font-semibold">Filtros</p>
+                <p class="text-gray-700 text-sm mb-2 font-semibold text-center">Filtros</p>
+                <hr class="mb-1">
                 <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('activos')">Solo activos</button>
                 <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('staff')">Solo staff</button>
                 <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('todos')">Todos</button>
@@ -290,17 +291,21 @@
                 </select>
             </td>
             <td class="px-4 py-2 border-b border-gray-200 relative">
-                <div x-data="{ open: false }" class="relative">
-                    <button @click="open = !open" class="mt-1 w-5">
+                <div x-data="popupMenu()" class="relative">
+                    <button @click="toggle($event)" class="mt-1 w-5">
                         <!-- Boton mas opciones || heroicons ellipsis-horizontal -->
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 mt-1">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
                         </svg>
                     </button>
 
-                    <div x-show="open" @click.outside="open = false" 
-                        x-transition
-                        class="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-20 z-index-5">
+                    <div 
+                    x-show="open" 
+                    @click.outside="open = false" 
+                    x-transition
+                    x-cloak
+                    class="fixed w-40 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+                    :style="{top: y + 'px', left: x + 'px'}">
                         {% if request.user.id|stringformat:"s" == user.id|stringformat:"s" or can_reset_password %}
                         <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
                         @click="abrirPasswordModal('{{ user.id }}', '{{ user.username }}')">Cambiar contraseña</button>
@@ -393,6 +398,47 @@
 
 
 <script>
+function popupMenu() {
+    return {
+        open: false,
+        x: 0,
+        y: 0,
+        menuWidth: 180, // Ajusta según el ancho real (en px)
+        menuHeight: 30, // Ajusta basado en la altura estimada
+        toggle(event) {
+            this.open = !this.open;
+            
+            if (this.open) {
+                const clickX = event.clientX;
+                const clickY = event.clientY;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                // Ajustar para que el menú no se salga de la ventana
+                const adjustedX = (clickX + this.menuWidth > viewportWidth)
+                    ? viewportWidth - this.menuWidth - 10 // Padding de 10px
+                    : clickX;
+
+                const adjustedY = (clickY + this.menuHeight > viewportHeight)
+                    ? viewportHeight - this.menuHeight - 10
+                    : clickY + 8; // +8px para separarlo del botón
+
+                this.x = adjustedX;
+                this.y = adjustedY;
+
+                // Cerrar menú si la ventana cambia
+                window.addEventListener('resize', this.closeOnResize.bind(this));
+                window.addEventListener('scroll', this.closeOnResize.bind(this));
+            }
+        },
+        closeOnResize() {
+            this.open = false;
+            window.removeEventListener('resize', this.closeOnResize.bind(this));
+            window.removeEventListener('scroll', this.closeOnResize.bind(this));
+        }
+    }
+}
+
 function selectContentType(type) {
     // Prevent action if card is disabled
     if (type === 'user-create' && document.getElementById('user-create-card').dataset.disabled === 'true') {
