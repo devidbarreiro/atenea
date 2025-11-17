@@ -1,0 +1,1064 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Menú de Usuarios - Atenea{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-4xl font-bold mb-2">Menú de Usuarios</h1>
+    <p class="text-gray-600">Elige entre crear un usuario o administrarlos</p>
+</div>
+
+<!-- ----------- Content Options ----------- -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <!-- Create Users Card -->
+    <div id="user-create-card"
+        {% if has_create_access %}
+        onclick="selectContentType('user-create')"
+        class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 p-6 hover:border-blue-600 hover:shadow-xl transition-all duration-300"
+        {% else %}
+        class="content-card bg-gray-200 rounded-lg border-2 border-gray-400 p-6 opacity-70 cursor-not-allowed transition-all duration-300"
+        data-disabled="true"
+        {% endif %}>
+        <div class="flex flex-col items-center text-center">
+            <div class="w-16 h-16 {% if has_create_access %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8 {% if not has_create_access %}text-gray-500{% endif %}">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold {% if has_create_access %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">
+                Crear Usuarios
+            </h3>
+            <p class="{% if has_create_access %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
+                {% if has_create_access %}
+                Crea un usuario de cero con su correo, nombre de usuario, contraseña y permisos.
+                {% else %}
+                No tienes permisos para crear usuarios.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Admin Users Card -->
+    <div id="user-admin-card"
+        {% if has_admin_access %}
+        onclick="selectContentType('user-admin')"
+        class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 p-6 hover:border-blue-600 hover:shadow-xl transition-all duration-300"
+        {% else %}
+        class="content-card bg-gray-200 rounded-lg border-2 border-gray-400 p-6 opacity-70 cursor-not-allowed transition-all duration-300"
+        data-disabled="true"
+        {% endif %}>
+        <div class="flex flex-col items-center text-center">
+            <div class="w-16 h-16 {% if has_admin_access %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8 {% if not has_admin_access %}text-gray-500{% endif %}">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold {% if has_admin_access %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">
+                Administrar Usuarios
+            </h3>
+            <p class="{% if has_admin_access %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
+                {% if has_admin_access %}
+                Consulta una lista con todos los usuarios, elimina o modifica su información y permisos.
+                {% else %}
+                No tienes permisos para administrar usuarios.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+</div>
+
+
+<!-- Mensajes -->
+
+<div class="container mx-auto mt-4">
+    {% for message in messages %}
+        <div x-data="{ show: true }" x-show="show" 
+             class="border px-4 py-3 rounded mb-6 relative
+                {% if message.tags == 'success' %}
+                    bg-green-100 border-green-400 text-green-700
+                {% elif message.tags == 'error' %}
+                    bg-red-100 border-red-400 text-red-700
+                {% endif %}"
+             role="alert">
+            
+            <span class="whitespace-pre-line">{{ message}}</span>
+            
+            <button @click="show = false" 
+                    class="absolute top-0 right-0 mt-2 mr-2 text-lg font-bold focus:outline-none">
+                &times;
+            </button>
+        </div>
+    {% endfor %}
+</div>
+
+
+
+
+<!--  -----------User Form - Create ----------- -->
+<div id="user-create-form" class="hidden w-full p-6 content flex justify-center">
+    <form id="create-user-form" method="post" class="bg-white p-10 rounded-xl shadow-lg w-96 border-t-4 border-black transition-all hover:shadow-2xl">
+        
+        {% csrf_token %}
+
+    {% if not has_create_access %}
+    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">No tienes permisos para crear usuarios desde aquí.</div>
+    {% endif %}
+
+        <!-- Usuario -->
+        <div class="relative mb-6">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <!-- Heroicon User -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+            </span>
+         <input type="text" name="username" placeholder="Usuario" autocomplete="off"
+             class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium"
+             {% if not has_create_access %}disabled{% endif %}>
+        </div>
+
+        <!-- Correo -->
+        <div class="relative mb-6">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <!-- Heroicon Envelope -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+            </span>
+         <input type="text" name="email" placeholder="Correo" autocomplete="off"
+             class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium"
+             {% if not has_create_access %}disabled{% endif %}>
+        </div>
+        <div class="grid grid-cols-1 mb-6" id="permisions">
+            <p class="text-sm text-gray-600 text-justify">El usuario se creará en estado "Pendiente" y recibirá un correo para activar su cuenta y establecer una contraseña.</p>
+        </div>
+
+        <!-- Roles (Groups) -->
+        {% if groups %}
+        <div class="grid grid-cols-1 mb-6">
+            <p class="font-semibold mb-2">Roles</p>
+            <div class="grid grid-cols-3 gap-3">
+                {% for g in groups %}
+                <label class="items-center mr-4">
+                    <input type="checkbox" 
+                           name="groups" 
+                           value="{{ g.id }}" 
+                           class="group-checkbox scale-125 accent-blue-600 mr-2" 
+                           data-group-name="{{ g.name }}"
+                           {% if not has_create_access %}disabled{% endif %}>
+                    <span class="{% if not has_create_access %}text-gray-500{% endif %}">{{ g.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Botón -->
+        <button type="submit" class="w-full py-2 rounded-lg font-semibold text-lg
+                {% if has_create_access %}
+                    bg-black text-white hover:bg-gray-900
+                {% else %}
+                    bg-gray-400 text-gray-700 opacity-50 cursor-not-allowed
+                {% endif %}"
+            {% if not has_create_access %}disabled{% endif %}>
+            Crear Usuario
+        </button>
+    </form>
+</div>
+<!-- end create form -->
+
+
+
+
+<!-- ----------- Script Form - Admin ----------- -->
+{% if has_admin_access %}
+<div id="user-admin-form" 
+    class="hidden w-full bg-white p-6 rounded-md shadow overflow-y-auto"
+    style="max-height: calc(100vh - 200px);"
+    x-data="userAdmin()">
+
+  <div>
+    <div class="mb-4 flex items-center" x-data="{open: false}">
+        <input type="text" 
+             placeholder="Buscar usuario..." 
+             x-model="search"
+             class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
+
+        <div class="flex items-center space-x-4 ml-2">   
+            <!-- Boton eliminar || heroicons trash -->
+            {% if perms.auth.delete_user %}
+            <button id="delete-selected" class="w-5">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 hover:text-red-600">
+                        <path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 1 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 1 0-1.498-.058l-.347 9a.75.75 0 0 0 1.5.058l.345-9Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            {% endif %}
+            
+            <!-- Boton editar || heroicons pencil -->
+            {% if perms.auth.change_user %}
+            <button id="edit-table" class="w-5" title="Editar tabla (activar edición)">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 hover:text-blue-600">
+                    <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32L19.513 8.2Z" />
+                </svg>
+            </button>
+            {% endif %}
+
+            <!-- Boton filtrar || heroicons funnel -->
+            <button id="filter" class="w-5" @click="open = !open" class="p-1">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 hover:text-blue-600">
+                    <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            <div x-show="open" 
+                x-transition
+                @click.outside="open = false"
+                class="absolute mt-40 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2">
+
+                <p class="text-gray-700 text-sm mb-2 font-semibold text-center">Filtros</p>
+                <hr class="mb-1">
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('activos')">Solo activos</button>
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('staff')">Solo staff</button>
+                <button class="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 rounded" @click="applyFilter('todos')">Todos</button>
+
+            </div>
+        </div>
+    </div>
+
+    <table id="tabla-usuarios" class="min-w-full bg-white border border-gray-200">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-1 text-left border-b border-gray-200 w-2">
+            <input type="checkbox" x-model="selectAll" @change="toggleAll" class="accent-blue-600 h-4 w-4 mt-2">
+          </th>
+            <th class="px-4 py-2 text-left border-b border-gray-200">Username</th>
+            <th class="px-4 py-2 text-left border-b border-gray-200">Email</th>
+            {# One column per role/group #}
+            {% for g in groups %}
+            <th class="px-1 py-2 text-center text-sm border-b border-gray-200">{{ g.name }}</th>
+            {% endfor %}
+            <th class="px-4 py-2 text-left border-b border-gray-200">Staff</th>
+            <th class="px-4 py-2 text-left border-b border-gray-200">Active</th>
+            <th class="px-4 py-2 text-left border-b border-gray-200 w-1">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr class="hover:bg-gray-50"
+            data-id="{{ user.id }}"
+            x-model="selectAll"
+            x-show="search === '' || '{{ user.username }}'.toLowerCase().includes(search.toLowerCase())">
+            <td class="px-4 py-2 border-b border-gray-200">
+                <input 
+                type="checkbox" 
+                class="form-checkbox accent-blue-600 h-4 w-4"
+                @change="toggleOne('{{user.id}}')"
+                :checked="selected.includes('{{user.id}}')">
+            </td>
+            <td class="username border-b border-gray-200">
+                <input type="text" value="{{ user.username }}" class="editable w-full bg-transparent  py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            </td>
+            <td class="email border-b border-gray-200">
+                <input type="text" value="{{ user.email }}" class="editable w-full bg-transparent  py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            </td>
+
+            {# Role columns: one checkbox per group. Checkbox value is group id and has class role-checkbox. #}
+            {% for g in groups %}
+            <td class="roles-cell w-12 border-b border-gray-200 text-center">
+                <input type="checkbox"
+                       class="role-checkbox editable mx-auto h-4 w-4 accent-blue-600"
+                       data-group-id="{{ g.id }}"
+                       data-group-name="{{ g.name|lower }}"
+                       data-is-admin="{% if g.name == 'admin' %}true{% else %}false{% endif %}"
+                       value="{{ g.id }}"
+                       {% if g in user.groups.all %}checked{% endif %}
+                       />
+            </td>
+            {% endfor %}
+
+            <td class="is_staff w-16 border-b border-gray-200">
+                <select class="editable w-16 text-sm bg-transparent py-1 px-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="True" {% if user.is_staff %}selected{% endif %}>Si</option>
+                    <option value="False" {% if not user.is_staff %}selected{% endif %}>No</option>
+                </select>
+            </td>
+            <td class="is_active w-20 border-b border-gray-200">
+                <select class="editable w-22 text-sm bg-transparent py-1 px-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="True" {% if user.is_active %}selected{% endif %}>Activo</option>
+                    <option value="False" {% if not user.is_active %}selected{% endif %}>Inactivo</option>
+                </select>
+            </td>
+            <td class="px-4 py-2 border-b border-gray-200 relative">
+                <div x-data="popupMenu()" class="relative">
+                    <button @click="toggle($event)" class="mt-1 w-5">
+                        <!-- Boton mas opciones || heroicons ellipsis-horizontal -->
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 mt-1">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                        </svg>
+                    </button>
+
+                    <div 
+                    x-show="open" 
+                    @click.outside="open = false" 
+                    x-transition
+                    x-cloak
+                    class="fixed w-40 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+                    :style="{top: y + 'px', left: x + 'px'}">
+                        {% if request.user.id|stringformat:"s" == user.id|stringformat:"s" or can_reset_password %}
+                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
+                        @click="abrirPasswordModal('{{ user.id }}', '{{ user.username }}')">Cambiar contraseña</button>
+                        {% endif %}
+                        {% if perms.auth.delete_user %}
+                        <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600"
+                         @click="eliminarUsuario('{{ user.id }}', '{{ user.username }}')">Eliminar</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Botón Guardar/Cancelar Cambios -->
+<div id="botones-acciones" 
+     class="w-full flex justify-between items-center mt-6 px-8 hidden">
+
+    <button id="cancelar"
+            disabled
+            class="bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg hover:bg-red-700 transition opacity-50 cursor-not-allowed">
+        Cancelar cambios
+    </button>
+        
+    <button id="guardar"
+            disabled
+            class="bg-black text-white px-5 py-3 rounded-lg shadow-lg hover:bg-gray-900 transition opacity-50 cursor-not-allowed">
+        Guardar cambios
+    </button>
+</div>
+
+<!-- Modal Cambiar Contraseña -->
+<div id="modal-cambiar-password" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <form id="cambiar-password-form" method="post"
+          class="bg-white p-10 rounded-xl shadow-lg w-96 border-t-4 border-black transition-all hover:shadow-2xl">
+
+        {% csrf_token %}
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-900">
+            Cambiar contraseña de <span id="modal-username" class="font-semibold"></span>
+        </h2>
+
+        <input type="hidden" name="user_id" id="modal-user-id">
+
+        <!-- Nueva contraseña -->
+        <div class="relative mb-6" x-data="{ show: false }">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <!-- Heroicon Lock -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+            </span>
+            <input :type="show ? 'text' : 'password'" name="new_password" id="new_password" placeholder="Nueva contraseña" required
+                   class="w-full pl-10 pr-10 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium">
+            <button type="button" @click="show = !show"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 focus:outline-none" tabindex="-1">
+                <svg x-show="!show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                     stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+                <svg x-show="show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                     stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                          d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="flex justify-end space-x-4">
+            <button type="button" onclick="closePasswordModal()"
+                    class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+                Cancelar
+            </button>
+            <button type="submit"
+                    class="w-full px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-900 transition">
+                Cambiar contraseña
+            </button>
+        </div>
+
+    </form>
+</div>
+
+
+<script>
+function popupMenu() {
+    return {
+        open: false,
+        x: 0,
+        y: 0,
+        menuWidth: 180, // Ajusta según el ancho real (en px)
+        menuHeight: 30, // Ajusta basado en la altura estimada
+        toggle(event) {
+            this.open = !this.open;
+            
+            if (this.open) {
+                const clickX = event.clientX;
+                const clickY = event.clientY;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                // Ajustar para que el menú no se salga de la ventana
+                const adjustedX = (clickX + this.menuWidth > viewportWidth)
+                    ? viewportWidth - this.menuWidth - 10 // Padding de 10px
+                    : clickX;
+
+                const adjustedY = (clickY + this.menuHeight > viewportHeight)
+                    ? viewportHeight - this.menuHeight - 10
+                    : clickY + 8; // +8px para separarlo del botón
+
+                this.x = adjustedX;
+                this.y = adjustedY;
+
+                // Cerrar menú si la ventana cambia
+                window.addEventListener('resize', this.closeOnResize.bind(this));
+                window.addEventListener('scroll', this.closeOnResize.bind(this));
+            }
+        },
+        closeOnResize() {
+            this.open = false;
+            window.removeEventListener('resize', this.closeOnResize.bind(this));
+            window.removeEventListener('scroll', this.closeOnResize.bind(this));
+        }
+    }
+}
+
+function selectContentType(type) {
+    // Prevent action if card is disabled
+    if (type === 'user-create' && document.getElementById('user-create-card').dataset.disabled === 'true') {
+        alert('No tienes permisos para crear usuarios');
+        return;
+    }
+
+    const cards = ['user-create-card', 'user-admin-card'];
+    const forms = ['user-create-form', 'user-admin-form'];
+    const botonesAcciones = document.getElementById('botones-acciones');
+    const botonGuardar = document.getElementById('guardar');
+    const botonCancelar = document.getElementById('cancelar');
+    const botonEditar = document.getElementById('edit-table');
+
+    // Reiniciar estados
+    cards.forEach(card => {
+        const el = document.getElementById(card);
+        if (el) el.classList.replace('border-blue-600', 'border-gray-300');
+    });
+    forms.forEach(form => {
+        const el = document.getElementById(form);
+        if (el) el.classList.add('hidden');
+    });
+
+    if (type === 'user-create') {
+        document.getElementById('user-create-card').classList.replace('border-gray-300', 'border-blue-600');
+        document.getElementById('user-create-form').classList.remove('hidden');
+        document.getElementById('user-create-form').scrollIntoView({ behavior: 'smooth' });
+        botonesAcciones.classList.add('hidden');
+    } else if (type === 'user-admin') {
+        // Prevent opening admin if card is disabled
+        const adminCard = document.getElementById('user-admin-card');
+        if (adminCard && adminCard.dataset && adminCard.dataset.disabled === 'true') {
+            alert('No tienes permisos para administrar usuarios');
+            return;
+        }
+
+        document.getElementById('user-admin-card').classList.replace('border-gray-300', 'border-blue-600');
+        const adminForm = document.getElementById('user-admin-form');
+        if (adminForm) adminForm.classList.remove('hidden');
+        document.getElementById('user-admin-form').scrollIntoView({ behavior: 'smooth' });
+        botonesAcciones.classList.remove('hidden');
+
+        botonGuardar.disabled = true;
+        botonCancelar.disabled = true;
+        // enable edit button if present (it's only rendered for users with change permission)
+        if (botonEditar) {
+            botonEditar.disabled = false;
+            botonEditar.classList.remove('cursor-not-allowed');
+        }
+        botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// Handle dependencies and admin toggling for role checkboxes inside a table row
+function handleRoleChangeInRow(changed) {
+    const row = changed.closest('tr');
+    if (!row) return;
+
+    const roleName = (changed.dataset.groupName || '').toLowerCase();
+    const all = Array.from(row.querySelectorAll('.role-checkbox'));
+    const admin = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'admin');
+    const view = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'ver');
+    const edit = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'editar');
+    const del = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'borrar');
+
+    // If admin toggled -> set/unset all others
+    if (roleName === 'admin') {
+        const checked = !!changed.checked;
+        all.forEach(cb => cb.checked = checked);
+        // If enabling admin, ensure dependencies
+        if (checked && view) view.checked = true;
+        return;
+    }
+
+    // If edit or delete checked -> ensure view is checked
+    if ((roleName === 'editar' || roleName === 'borrar') && changed.checked) {
+        if (view && !view.checked) view.checked = true;
+    }
+
+    // If view unchecked -> unset edit and delete
+    if (roleName === 'ver' && !changed.checked) {
+        if (edit) edit.checked = false;
+        if (del) del.checked = false;
+    }
+
+    // After any change, update admin checkbox: admin is checked only if all non-admin are checked
+    if (admin) {
+        const nonAdmin = all.filter(cb => (cb.dataset.groupName || '').toLowerCase() !== 'admin');
+        admin.checked = nonAdmin.length > 0 && nonAdmin.every(cb => cb.checked);
+    }
+}
+
+function userAdmin() {
+  return {
+    search: '',
+    selectAll: false,
+    selected: [],
+    filter: "todos", //filtro todos por defecto
+
+    filteredRows() {
+        const rows = [...document.querySelectorAll('#tabla-usuarios tbody tr')];
+        return rows.filter(row => {
+            const username = row.querySelector('.username input').value.toLowerCase();
+            const matchesSearch = username.includes(this.search.toLowerCase());
+
+            if (!matchesSearch) return false;
+
+            if (this.filter === 'activos') {
+                return row.querySelector('.is_active select').value === 'True';
+            }
+            if (this.filter === 'staff') {
+                return row.querySelector('.is_staff select').value === 'True';
+            }
+
+            return true; //todos
+        });
+    },
+
+    applyFilter(type) {
+        this.filter = type;
+
+        // Actualizar selectAll y selected al aplicar el filtro
+        const visibleRows = this.filteredRows();
+        this.selectAll = this.selected.length === visibleRows.length;
+
+        //Mostrar/ocultar filas segun el filtro
+        const rows = document.querySelectorAll('#tabla-usuarios tbody tr');
+        rows.forEach(row => {
+            const isActive = row.querySelector('.is_active select').value === 'True';
+            const isStaff = row.querySelector('.is_staff select').value === 'True';
+            let shouldShow = true;
+
+            if (this.filter === 'activos' && !isActive) {
+                shouldShow = false;
+            } else if (this.filter === 'staff' && !isStaff) {
+                shouldShow = false;
+            }
+
+            row.style.display = shouldShow ? '' : 'none';
+        });
+
+        //reset selectAll si no hay filas visibles
+        this.selectAll = this.filteredRows().length > 0 && this.selected.length === this.filteredRows().length;
+    },
+
+
+    // logia para seleccionar todos los checkbox visibles al hacer click en el checkbox del header
+    toggleAll() {
+        const rows = this.filteredRows();
+        if (this.selectAll) {
+            this.selected = rows.map(row => row.dataset.id);
+        } else {
+            this.selected = [];
+        }
+    },
+    
+    //logica para seleccionar un unico checkbox
+    toggleOne(id) {
+      const i = this.selected.indexOf(id);
+      if (i > -1) {
+        this.selected.splice(i, 1);
+      } else {
+        this.selected.push(id);
+      }
+
+    const visibleRows = this.filteredRows();
+    this.selectAll = this.selected.length === visibleRows.length;
+
+    },
+
+    //logica para eliminar todos los elementos seleccionados por checkbox
+    deleteSelected() {
+      if (this.selected.length === 0) return;
+      if (confirm(`¿Eliminar ${this.selected.length} usuarios seleccionados?`)) {
+        this.selected.forEach(id => {
+          const row = document.querySelector(`#tabla-usuarios tr[data-id="${id}"]`);
+          if (row) row.remove();
+        });
+        this.selected = [];
+        this.selectAll = false;
+      }
+    }
+  }
+}
+
+
+// Sincronizar checkbox de "admin" con otros roles en el formulario de creación
+function syncAdminCheckbox(checkbox) {
+    const isAdmin = checkbox.checked;
+    const form = checkbox.closest('form');
+    if (!form) return;
+
+    const all = Array.from(form.querySelectorAll('.group-checkbox'));
+    const admin = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'admin');
+
+    // If admin toggled, apply to all
+    if ((checkbox.dataset.groupName || '').toLowerCase() === 'admin') {
+        all.forEach(cb => cb.checked = isAdmin);
+        // enforce dependencies when enabling
+        if (isAdmin) ensureDependenciesForCreateForm(form);
+        return;
+    }
+
+    // if non-admin toggled -> enforce create-form dependencies for this change
+    handleCreateFormDependency(checkbox);
+
+    // update admin checkbox to reflect state of others
+    if (admin) {
+        const nonAdmin = all.filter(cb => (cb.dataset.groupName || '').toLowerCase() !== 'admin' && !cb.disabled);
+        admin.checked = nonAdmin.length > 0 && nonAdmin.every(cb => cb.checked);
+    }
+}
+
+// Manejar dependencia entre ver/editar/borrar en el create form
+function handleCreateFormDependency(changedCheckbox) {
+    const role = (changedCheckbox.dataset.groupName || '').toLowerCase();
+    const form = changedCheckbox.closest('form');
+    if (!form) return;
+
+    // Helper: find checkbox whose data-group-name contains any of the keywords
+    function findByKeywords(keys) {
+        const all = Array.from(form.querySelectorAll('.group-checkbox'));
+        return all.find(cb => {
+            const name = (cb.dataset.groupName || '').toLowerCase();
+            return keys.some(k => name.includes(k));
+        });
+    }
+
+    const viewCh = findByKeywords(['ver', 'view']);
+    const editCh = findByKeywords(['editar', 'edit']);
+    const delCh = findByKeywords(['borrar', 'delete', 'del']);
+
+    // If edit or delete is checked -> ensure view are checked
+    if ((role.includes('editar') || role.includes('editar') || role.includes('edit') || role.includes('borrar') || role.includes('delete') || role.includes('del')) && changedCheckbox.checked) {
+        if (viewCh && !viewCh.checked) viewCh.checked = true;
+    }
+
+    // If view unchecked -> unset edit and delete
+    if ((role.includes('ver') || role.includes('view')) && !changedCheckbox.checked) {
+        if (editCh) editCh.checked = false;
+        if (delCh) delCh.checked = false;
+    }
+}
+
+function ensureDependenciesForCreateForm(form) {
+    if (!form) form = document.querySelector('#create-user-form');
+    if (!form) return;
+
+    function findByKeywords(keys) {
+        const all = Array.from(form.querySelectorAll('.group-checkbox'));
+        return all.find(cb => {
+            const name = (cb.dataset.groupName || '').toLowerCase();
+            return keys.some(k => name.includes(k));
+        });
+    }
+
+    const viewCh = findByKeywords(['ver', 'view']);
+    const editCh = findByKeywords(['editar', 'edit']);
+    const delCh = findByKeywords(['borrar', 'delete', 'del']);
+
+    if (editCh && editCh.checked && viewCh && !viewCh.checked) viewCh.checked = true;
+    if (delCh && delCh.checked && viewCh && !viewCh.checked) viewCh.checked = true;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Sincronizar checkboxes de grupo en el formulario de creación
+    const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+    groupCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            syncAdminCheckbox(this);
+        });
+    });
+
+    const filas = document.querySelectorAll('#tabla-usuarios tr[data-id]');
+    const botonGuardar = document.getElementById('guardar');
+    const botonCancelar = document.getElementById('cancelar');
+    const botonEditar = document.getElementById('edit-table');
+    const botonEliminar = document.getElementById('delete-selected');
+
+    // Make all editable fields readonly/disabled by default. Only users
+    // with `auth.change_user` will see the edit button and can toggle edit mode.
+    const defaultEditables = document.querySelectorAll('.editable');
+    defaultEditables.forEach(el => el.setAttribute('disabled', ''));
+    let isEditing = false;
+
+    // Toggle edit mode when pencil is clicked (only present if user has perm).
+    if (botonEditar) {
+        botonEditar.addEventListener('click', () => {
+            isEditing = !isEditing;
+            const editables = document.querySelectorAll('.editable');
+            if (isEditing) {
+                // enable fields for editing; save/cancel remain disabled until input changes
+                editables.forEach(el => {
+                    el.removeAttribute('disabled');
+                    el.classList.add('border', 'border-gray-300', 'rounded-md');
+                });
+                botonEditar.classList.add('text-blue-600');
+                botonGuardar.disabled = true;
+                botonCancelar.disabled = true;
+                botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+                botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                 // Sincronizar checkboxes de grupo en el formulario de creación
+                const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+                groupCheckboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', function() {
+                        syncAdminCheckbox(this);
+                        activarBotones(); // misma lógica que en la tabla admin
+                    });
+                });
+            } else {
+                // exit edit mode and revert changes
+                botonCancelar.click();
+                editables.forEach(el => {
+                    el.setAttribute('disabled', '');
+                    el.classList.remove('border', 'border-gray-300', 'rounded-md');
+                });
+                botonEditar.classList.remove('text-blue-600');
+            }
+        });
+    }
+
+    // Guardar estado original de cada fila (incluye grupos)
+    filas.forEach(row => {
+        // obtener grupos marcados inicialmente en esta fila
+        const groupCheckboxes = Array.from(row.querySelectorAll('.role-checkbox'));
+        const groupIds = groupCheckboxes.filter(cb => cb.checked).map(cb => cb.value).join(',');
+
+        row.dataset.original = JSON.stringify({
+            username: row.querySelector('.username input').value,
+            email: row.querySelector('.email input').value,
+            is_staff: row.querySelector('.is_staff select').value,
+            is_active: row.querySelector('.is_active select').value,
+            groups: groupIds
+        });
+    });
+
+    let cambiosPendientes = false;
+
+    const activarBotones = () => {
+        if (cambiosPendientes) return;
+        cambiosPendientes = true;
+        botonGuardar.disabled = false;
+        botonCancelar.disabled = false;
+        botonGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.remove('opacity-50', 'cursor-not-allowed');
+    };
+
+    filas.forEach(row => {
+        row.addEventListener('input', activarBotones);
+        row.addEventListener('change', activarBotones);
+    });
+
+    // Attach change listeners to role-checkboxes inside the admin table rows
+    const rowRoleCheckboxes = document.querySelectorAll('#tabla-usuarios .role-checkbox');
+    rowRoleCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            try {
+                handleRoleChangeInRow(this);
+            } catch (e) {
+                console.error('Error handling role change in row:', e);
+            }
+            activarBotones();
+        });
+    });
+
+    botonCancelar.addEventListener('click', () => {
+        if (botonCancelar.disabled) return;
+
+        filas.forEach(row => {
+            const original = JSON.parse(row.dataset.original);
+
+            // Restaurar cada campo
+            row.querySelector('.username input').value = original.username;
+            row.querySelector('.email input').value = original.email;
+            row.querySelector('.is_staff select').value = original.is_staff.toString();
+            row.querySelector('.is_active select').value = original.is_active.toString();
+            
+            // Restaurar grupos/roles también
+            const originalGroupIds = (original.groups || '').split(',').filter(id => id);
+            const roleCheckboxes = row.querySelectorAll('.role-checkbox');
+            roleCheckboxes.forEach(cb => {
+                cb.checked = originalGroupIds.includes(cb.value);
+            });
+        });
+
+        // Deshabilitar botones de nuevo
+        cambiosPendientes = false;
+        botonGuardar.disabled = true;
+        botonCancelar.disabled = true;
+        botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+        botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+        // After cancelling, also disable editables and exit edit mode
+        const editables = document.querySelectorAll('.editable');
+        editables.forEach(el => el.setAttribute('disabled', ''));
+        if (botonEditar) {
+            isEditing = false;
+            botonEditar.classList.remove('text-blue-600');
+        }
+    });
+
+    botonGuardar.addEventListener('click', () => {
+        if (botonGuardar.disabled) return;
+
+        const formData = new FormData();
+        let index = 0;
+
+        filas.forEach(row => {
+            const original = JSON.parse(row.dataset.original);
+
+            // Capturamos los valores actuales
+            const username = row.querySelector('.username input').value;
+            const email = row.querySelector('.email input').value;
+            const is_staff = row.querySelector('.is_staff select').value;
+            const is_active = row.querySelector('.is_active select').value;
+
+            // Capturar grupos actuales
+            const currentGroupCheckboxes = Array.from(row.querySelectorAll('.role-checkbox'));
+            const currentGroupIds = currentGroupCheckboxes.filter(cb => cb.checked).map(cb => cb.value).join(',');
+
+            // Verificamos si hubo algún cambio (incluye grupos)
+            const haCambiado =
+                username !== original.username ||
+                email !== original.email ||
+                is_staff !== original.is_staff.toString() ||
+                is_active !== original.is_active.toString() ||
+                currentGroupIds !== (original.groups || '');
+
+            // Solo si hay cambios, enviamos toda la fila completa
+            if (haCambiado) {
+                formData.append(`usuarios[${index}][id]`, row.dataset.id);
+                formData.append(`usuarios[${index}][username]`, username);
+                formData.append(`usuarios[${index}][email]`, email);
+                formData.append(`usuarios[${index}][is_staff]`, is_staff);
+                formData.append(`usuarios[${index}][is_active]`, is_active);
+                // enviar grupos como lista separada por comas
+                formData.append(`usuarios[${index}][groups]`, currentGroupIds);
+                index++;
+            }
+        });
+
+
+        if (index === 0) {
+            alert('No hay cambios que guardar.');
+            return;
+        }
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Cambios guardados correctamente');
+                // Actualizar los "originales" solo de los campos modificados
+                filas.forEach(row => {
+                    const original = JSON.parse(row.dataset.original);
+                    const current = {
+                        username: row.querySelector('.username input').value,
+                        email: row.querySelector('.email input').value,
+                        is_staff: row.querySelector('.is_staff select').value,
+                        is_active: row.querySelector('.is_active select').value,
+                        groups: Array.from(row.querySelectorAll('.role-checkbox')).filter(cb => cb.checked).map(cb => cb.value).join(',')
+                    };
+
+                    // update only fields that changed (including groups)
+                    Object.keys(current).forEach(key => {
+                        if (current[key] !== original[key]) original[key] = current[key];
+                    });
+
+                    row.dataset.original = JSON.stringify(original);
+                });
+
+                cambiosPendientes = false;
+                botonGuardar.disabled = true;
+                botonCancelar.disabled = true;
+                botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+                botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
+                // After saving, disable editable fields again and exit edit mode
+                const editables = document.querySelectorAll('.editable');
+                editables.forEach(el => el.setAttribute('disabled', ''));
+                if (botonEditar) {
+                    isEditing = false;
+                    botonEditar.classList.remove('text-blue-600');
+                }
+            } else {
+                alert('❌ Error al guardar: ' + data.error);
+            }
+        });
+    });
+
+    // Eliminar un unico usuario
+    window.eliminarUsuario = function(userId, username) {
+        if (!confirm(`¿Seguro que deseas eliminar al usuario "${username}"?`)) return;
+
+        const formData = new FormData();
+        formData.append('accion', 'eliminar_usuario');
+        formData.append('usuario_id', userId);
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Usuario "${username}" eliminado correctamente`);
+                const row = document.querySelector(`#tabla-usuarios tr[data-id="${userId}"]`);
+                if (row) row.remove();
+            } else {
+                alert('❌ Error al eliminar: ' + data.error);
+            }
+        })
+        .catch(err => alert('❌ Error de red: ' + err.message));
+    };
+
+
+    // Eliminar usuarios seleccionados
+    const deleteSelectedBtn = document.getElementById('delete-selected');
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', () => {
+            const filasSeleccionadas = Array.from(document.querySelectorAll('#tabla-usuarios tbody tr'))
+                .filter(row => row.querySelector('input[type="checkbox"]').checked);
+
+        if (filasSeleccionadas.length === 0) {
+            alert('No hay usuarios seleccionados para eliminar.');
+            return;
+        }
+
+        if (!confirm(`¿Estás seguro de que deseas eliminar ${filasSeleccionadas.length} usuario(s)? Esta acción no se puede deshacer.`)) {
+            return;
+        }
+
+        const formData = new FormData();
+        filasSeleccionadas.forEach((row, index) => {
+            formData.append(`usuarios_a_eliminar[${index}]`, row.dataset.id);
+        });
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Usuarios eliminados correctamente');
+                // Eliminar filas de la tabla
+                filasSeleccionadas.forEach(row => row.remove());
+            } else {
+                alert('❌ Error al eliminar: ' + data.error);
+            }
+        });
+        });
+    }
+
+    // Abrir modal de cambiar contraseña
+    window.abrirPasswordModal = function(userId, username) {
+        document.getElementById('modal-user-id').value = userId;
+        document.getElementById('modal-username').textContent = username;
+        document.getElementById('new_password').value = '';
+        document.getElementById('modal-cambiar-password').classList.remove('hidden');
+    };
+
+    // Cerrar modal
+    window.closePasswordModal = function() {
+        document.getElementById('modal-cambiar-password').classList.add('hidden');
+    };
+
+    // Enviar formulario del modal
+    document.getElementById('cambiar-password-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const userId = document.getElementById('modal-user-id').value;
+        const nuevaPassword = document.getElementById('new_password').value.trim();
+
+        if (!nuevaPassword) {
+            alert('La contraseña no puede estar vacía.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('accion', 'cambiar_password');
+        formData.append('usuario_id', userId);
+        formData.append('nueva_password', nuevaPassword);
+
+        fetch("{% url 'core:user_menu' %}", {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Contraseña cambiada correctamente');
+                closePasswordModal();
+            } else {
+                alert('❌ Error al cambiar la contraseña: ' + data.error);
+            }
+        })
+        .catch(err => alert('❌ Error de red: ' + err.message));
+    });
+});
+</script>
+
+{% endblock %}

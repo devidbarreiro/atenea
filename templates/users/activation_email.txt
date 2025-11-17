@@ -1,0 +1,12 @@
+Hola {{ user.username }},
+
+Has sido invitado a crear una cuenta en Atenea.
+
+Para activar tu cuenta y elegir una contraseña segura, haz clic en el siguiente enlace:
+
+{{ activation_url }}
+
+Si no solicitaste esta cuenta, puedes ignorar este correo.
+
+Saludos,
+El equipo de Atenea

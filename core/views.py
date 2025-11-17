@@ -6,7 +6,7 @@ from django.views.generic import (
     ListView, DetailView, CreateView, UpdateView, DeleteView, View
 )
 from django.views.generic.edit import FormView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin, PermissionRequiredMixin
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
@@ -14,21 +14,118 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import permission_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
 from django.db.models import Max
 from django.contrib.auth import authenticate, login, logout
 import os
+from django.contrib.auth.models import User, Group
+from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSetPasswordForm
+from django.db import IntegrityError
 import json
 
 from .models import Project, Video, Image, Audio, Script, Scene, Music
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
 from django.template.loader import render_to_string
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.contrib.auth.forms import SetPasswordForm
+from django.utils.crypto import get_random_string
+from django.conf import settings
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def no_permissions(request):
+    """
+    View para mostrar mensaje de 'sin permisos' y botones de redirección
+    según roles (usar, ver, crear, editar, borrar).
+    Detecta roles en grupos, atributos o permisos relacionados.
+    """
+    user = request.user
+    expected_roles = {"usar", "ver", "crear", "editar", "borrar"}
+
+    roles_found = set()
+
+    # 1) Grupos
+    try:
+        groups = {g.strip().lower() for g in user.groups.values_list("name", flat=True)}
+        roles_found |= (groups & expected_roles)
+    except Exception:
+        pass
+
+    # 2) Atributo ManyToMany 'roles'
+    if hasattr(user, "roles"):
+        try:
+            role_names = {r.strip().lower() for r in user.roles.values_list("name", flat=True)}
+            roles_found |= (role_names & expected_roles)
+        except Exception:
+            try:
+                roles_found |= {r.name.strip().lower() for r in user.roles.all()} & expected_roles
+            except Exception:
+                pass
+
+    # 3) Campo string 'role'
+    if hasattr(user, "role"):
+        val = getattr(user, "role")
+        if isinstance(val, str):
+            for token in val.split(","):
+                t = token.strip().lower()
+                if t in expected_roles:
+                    roles_found.add(t)
+
+    # 4) Permisos (busca subcadenas)
+    try:
+        perms = user.get_all_permissions()
+        for perm in perms:
+            for role in expected_roles:
+                if role in perm:
+                    roles_found.add(role)
+    except Exception:
+        pass
+
+    # 5) Permisos de gestión de usuarios (original)
+    management_perms = {
+        "auth.add_user", "auth.change_user", "auth.view_user", "auth.delete_user"
+    }
+    try:
+        user_perms_full = set(user.get_all_permissions())
+    except Exception:
+        user_perms_full = set()
+
+    # Si tiene solo permisos de gestión de usuarios O alguno de los roles clave
+    has_management_perms = bool(user_perms_full) and user_perms_full.issubset(management_perms)
+    # Definir roles que también cuentan como "solo gestión"
+    management_roles = {"crear", "ver", "borrar", "editar", "admin"}
+    has_management_roles = bool(roles_found & management_roles)
+    only_management = has_management_perms or has_management_roles
+
+    no_perms = not (user_perms_full or roles_found)
+
+    # Contexto
+    context = {
+        "only_management": only_management,
+        "no_perms": no_perms,
+        "roles_found": sorted(list(roles_found)),
+        "can_usar": "usar" in roles_found,
+        "can_ver": "ver" in roles_found,
+        "can_crear": "crear" in roles_found,
+        "can_editar": "editar" in roles_found,
+        "can_borrar": "borrar" in roles_found,
+    }
+
+    return render(request, "no_permissions.html", context)
+
 
 
 # ====================
@@ -103,6 +200,23 @@ class LoginView(View):
         if user is not None:
             login(request, user)
             messages.success(request, f"Bienvenido, {user.username} 👋")
+
+            # After login, if the user has no permissions at all, redirect to a friendly page
+            # that explains the account is active but no permissions have been assigned.
+            # Also if the user's permissions are only user-management related, show a variant
+            # that includes a button to go to the user management panel.
+            user_perms = user.get_all_permissions()
+            management_perms = set([
+                'auth.add_user', 'auth.change_user', 'auth.view_user', 'auth.delete_user'
+            ])
+
+            if not user_perms:
+                return redirect('core:no_permissions')
+
+            # if all permissions are subset of management_perms, redirect to same page
+            if user_perms and set(user_perms).issubset(management_perms):
+                return redirect('core:no_permissions')
+
             return redirect('core:dashboard')
         else:
             messages.error(request, "Usuario o contraseña incorrectos.")
@@ -119,66 +233,7 @@ class LogoutView(View):
         logout(request)
         messages.info(request, "Has cerrado sesión correctamente 👋")
         return redirect('core:login')
-
-
-class SignupView(View):
-    """Registro de nuevos usuarios"""
-    template_name = 'login/signup.html'
-
-    def get_context(self):
-        """Contexto extra para el template"""
-        return {
-            'hide_header': True,
-        }
-
-    def get(self, request):
-        return render(request, self.template_name, self.get_context())
-
-    def post(self, request):
-        from django.contrib.auth.models import User
         
-        username = request.POST.get('username', '').strip()
-        email = request.POST.get('email', '').strip()
-        password = request.POST.get('password', '').strip()
-        password_confirm = request.POST.get('password_confirm', '').strip()
-
-        # Validaciones básicas
-        if not all([username, email, password, password_confirm]):
-            messages.error(request, 'Todos los campos son requeridos')
-            return render(request, self.template_name, self.get_context())
-
-        if password != password_confirm:
-            messages.error(request, 'Las contraseñas no coinciden')
-            return render(request, self.template_name, self.get_context())
-
-        if len(password) < 8:
-            messages.error(request, 'La contraseña debe tener al menos 8 caracteres')
-            return render(request, self.template_name, self.get_context())
-
-        # Verificar si el usuario ya existe
-        if User.objects.filter(username=username).exists():
-            messages.error(request, 'Este nombre de usuario ya está en uso')
-            return render(request, self.template_name, self.get_context())
-
-        if User.objects.filter(email=email).exists():
-            messages.error(request, 'Este correo electrónico ya está registrado')
-            return render(request, self.template_name, self.get_context())
-
-        try:
-            # Crear usuario
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
-            messages.success(request, f'Cuenta creada exitosamente. Bienvenido, {username}! 👋')
-            # Autenticar y hacer login automáticamente
-            login(request, user)
-            return redirect('core:dashboard')
-        except Exception as e:
-            messages.error(request, f'Error al crear la cuenta: {str(e)}')
-            return render(request, self.template_name, self.get_context())
-
 # ====================
 # DASHBOARD
 # ====================
@@ -3165,6 +3220,380 @@ class VuelaAIVideoDetailsView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=500)
+        
+# ====================
+# MANAGEMENT USERS
+# ====================
+
+class UserMenuView(View):
+    """
+    User management view with permission-based access control.
+    
+    Access logic:
+    - Users with view_user, change_user, or delete_user can access the admin panel
+    - Users with add_user can access ONLY the create panel (not the admin list)
+    - Superusers can access everything
+    """
+    login_url = 'core:dashboard'
+    template_name = 'users/menu.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        # Check if user has at least one permission to manage users
+        # Compute granular admin/create access. We intentionally treat a user
+        # that only has add_user (crear) as NOT having admin access even if they
+        # accidentally also received view_user. Admin access requires change/delete
+        # or view when the user isn't a create-only account.
+        has_change = request.user.has_perm('auth.change_user')
+        has_delete = request.user.has_perm('auth.delete_user')
+        has_view = request.user.has_perm('auth.view_user')
+        has_add = request.user.has_perm('auth.add_user')
+
+        # Superuser shortcut
+        if request.user.is_superuser:
+            has_admin_access = True
+            has_create_access = True
+        else:
+            # Admin access if change or delete
+            if has_change or has_delete:
+                has_admin_access = True
+            else:
+                # If only view is present, allow admin access only if user is NOT a create-only account
+                is_create_only = has_add and not (has_change or has_delete)
+                has_admin_access = has_view and not is_create_only
+
+            has_create_access = has_add
+        
+        # If user has neither admin nor create permissions, deny access
+        if not (has_admin_access or has_create_access):
+            messages.error(request, 'No tienes permiso para acceder a esta página.')
+            return redirect(self.login_url)
+        
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        # Determine access flags for template and data loading (same logic as dispatch)
+        has_change = request.user.has_perm('auth.change_user')
+        has_delete = request.user.has_perm('auth.delete_user')
+        has_view = request.user.has_perm('auth.view_user')
+        has_add = request.user.has_perm('auth.add_user')
+
+        if request.user.is_superuser:
+            has_admin_access = True
+            has_create_access = True
+        else:
+            if has_change or has_delete:
+                has_admin_access = True
+            else:
+                is_create_only = has_add and not (has_change or has_delete)
+                has_admin_access = has_view and not is_create_only
+
+            has_create_access = has_add
+
+        form = CustomUserCreationForm()
+
+        # Load groups always (needed for the create form). Only load the
+        # full users list when the user has admin access.
+        groups = Group.objects.all()
+        if has_admin_access:
+            # Prefetch groups para evitar N+1 queries
+            users = User.objects.prefetch_related('groups').all()
+        else:
+            # For create-only users, don't load the admin list
+            users = []
+
+        # Determine whether the current user belongs to an "editar" role or has change_user
+        can_reset_password = (
+            request.user.is_superuser or
+            request.user.has_perm('auth.change_user') or
+            request.user.groups.filter(name__icontains='editar').exists()
+        )
+
+        return render(request, self.template_name, {
+            'users': users,
+            'form': form,
+            'groups': groups,
+            'can_reset_password': can_reset_password,
+            'has_admin_access': has_admin_access,
+            'has_create_access': has_create_access,
+        })
+
+    # ------------------------------
+    #  VALIDACIÓN DE CONTRASEÑA
+    # ------------------------------
+    @staticmethod
+    def validar_password(password):
+        if not password:
+            return "La contraseña no puede estar vacía."
+        if len(password) < 6:
+            return "La contraseña debe tener al menos 6 caracteres."
+        if not re.search(r'[a-z]', password):
+            return "La contraseña debe contener al menos una letra minúscula."
+        if not re.search(r'[A-Z]', password):
+            return "La contraseña debe contener al menos una letra mayúscula."
+        if not re.search(r'\d', password):
+            return "La contraseña debe contener al menos un número."
+        if not re.search(r'[^A-Za-z0-9]', password):
+            return "La contraseña debe contener al menos un carácter especial."
+        return None
+
+    def post(self, request):
+        # --- Acciones AJAX individuales ---
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            accion = request.POST.get('accion')
+
+            # Cambiar contraseña
+            if accion == 'cambiar_password':
+                user_id = request.POST.get('usuario_id')
+                nueva = request.POST.get('nueva_password')
+
+                # Validar complejidad de la contraseña
+                error_pwd = self.validar_password(nueva)
+                if error_pwd:
+                    return JsonResponse({'success': False, 'error': error_pwd})
+
+                # Permission: only allow if user is changing own password or has the 'editar' role / change permission
+                has_edit_role = (
+                    request.user.is_superuser or
+                    request.user.has_perm('auth.change_user') or
+                    request.user.groups.filter(name__icontains='editar').exists()
+                )
+
+                if not (has_edit_role or str(request.user.id) == str(user_id)):
+                    return JsonResponse({'success': False, 'error': 'No tienes permiso para cambiar la contraseña.'})
+                try:
+                    user = User.objects.get(id=user_id)
+                    user.set_password(nueva)
+                    user.save()
+                    return JsonResponse({'success': True})
+                except User.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Usuario no encontrado'})
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': str(e)})
+
+            # Eliminar usuario individual
+            elif accion == 'eliminar_usuario':
+                user_id = request.POST.get('usuario_id')
+                # Permission: require delete_user
+                if not request.user.has_perm('auth.delete_user'):
+                    return JsonResponse({'success': False, 'error': 'No tienes permiso para eliminar usuarios.'})
+                try:
+                    if str(request.user.id) == str(user_id):
+                        return JsonResponse({'success': False, 'error': 'No puedes eliminar tu propio usuario.'})
+                    user = User.objects.get(id=user_id)
+                    user.delete()
+                    return JsonResponse({'success': True})
+                except User.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Usuario no encontrado'})
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': str(e)})
+
+            # --- Eliminación masiva o edición existente ---
+            # Server-side permission checks for bulk operations
+            # If the request tries to update users (usuarios[...] keys) require change permission
+            if any(k.startswith('usuarios[') for k in request.POST):
+                if not request.user.has_perm('auth.change_user'):
+                    return JsonResponse({'success': False, 'error': 'No tienes permiso para modificar usuarios.'})
+
+            try:
+                # Si se está eliminando en masa
+                if any(k.startswith('usuarios_a_eliminar') for k in request.POST):
+                    # Permission: require delete_user for bulk deletes
+                    if not request.user.has_perm('auth.delete_user'):
+                        return JsonResponse({'success': False, 'error': 'No tienes permiso para eliminar usuarios.'})
+                    ids_a_eliminar = [
+                        request.POST[k] for k in request.POST if k.startswith('usuarios_a_eliminar')
+                    ]
+
+                    if str(request.user.id) in ids_a_eliminar:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'No puedes eliminar tu propio usuario.'
+                        })
+
+                    eliminados = User.objects.filter(id__in=ids_a_eliminar)
+                    count = eliminados.count()
+                    eliminados.delete()
+                    return JsonResponse({'success': True, 'deleted_count': count})
+
+                # Si se están actualizando usuarios
+                usuarios = []
+
+                for key in request.POST:
+                    if key.startswith('usuarios['):
+                        idx = key.split('[')[1].split(']')[0]
+                        campo = key.split('[')[2].split(']')[0]
+                        valor = request.POST[key]
+
+                        while len(usuarios) <= int(idx):
+                            usuarios.append({})
+                        usuarios[int(idx)][campo] = valor
+
+                for u in usuarios:
+                    if 'id' not in u:
+                        continue
+
+                    user = User.objects.get(id=u['id'])
+                    nuevo_username = u.get('username', user.username).strip()
+                    nuevo_email = u.get('email', user.email).strip()
+
+                    if User.objects.exclude(id=user.id).filter(username=nuevo_username).exists():
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'El nombre de usuario "{nuevo_username}" ya está en uso.'
+                        })
+
+                    user.username = nuevo_username
+                    user.email = nuevo_email
+                    user.is_staff = u.get('is_staff', 'False').lower() == 'true'
+                    user.is_active = u.get('is_active', 'False').lower() == 'true'
+                    user.save()
+                    # Update groups if provided (comma separated ids)
+                    if 'groups' in u:
+                        try:
+                            group_ids = [int(x) for x in u['groups'].split(',') if x]
+                            groups_qs = Group.objects.filter(id__in=group_ids)
+                            user.groups.set(groups_qs)
+                        except Exception:
+                            # ignore malformed group input
+                            pass
+
+                return JsonResponse({'success': True})
+
+            except IntegrityError:
+                return JsonResponse({'success': False, 'error': 'Usuario duplicado.'})
+            except Exception as e:
+                print("❌ Error al guardar/eliminar:", e)
+                return JsonResponse({'success': False, 'error': str(e)})
+
+        # --- Creación normal (formulario clásico) ---
+        # Ensure the requesting user has permission to create users
+        if not request.user.has_perm('auth.add_user'):
+            messages.error(request, 'No tienes permiso para crear usuarios.')
+            return redirect('core:user_menu')
+
+        # Use PendingUserCreationForm: create a user with a strong random password and set is_active=False
+        form = PendingUserCreationForm(request.POST)
+        if form.is_valid():
+            try:
+                user = form.save(commit=False)
+                # generate a secure random hidden password
+                random_pw = get_random_string(50)
+                user.set_password(random_pw)
+                user.is_active = False  # pending
+                user.is_staff = 'staff' in request.POST
+                user.save()
+
+                # Assign groups
+                group_ids = request.POST.getlist('groups') or request.POST.getlist('group')
+                if group_ids:
+                    groups_qs = Group.objects.filter(id__in=group_ids)
+                    user.groups.set(groups_qs)
+
+                # Build activation link
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                activation_url = request.build_absolute_uri(reverse('core:activate_account', args=[uid, token]))
+
+                # Send activation email
+                try:
+                    context = {'user': user, 'activation_url': activation_url}
+                    subject = 'Activa tu cuenta en Atenea'
+                    message = render_to_string('users/activation_email.txt', context)
+                    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+                    from django.core.mail import send_mail
+                    send_mail(subject, message, from_email, [user.email], fail_silently=False)
+                except Exception as e:
+                    logger.error(f"Error enviando email de activación a {user.email}: {e}")
+
+                messages.success(request, '✅ Usuario creado en estado pendiente. Se ha enviado un correo de activación.')
+            except Exception as e:
+                logger.exception('Error creando usuario pendiente')
+                messages.error(request, f'Error creando usuario: {e}')
+        else:
+            friendly_names = {
+                'username': 'Usuario',
+                'email': 'Correo electrónico',
+                'groups': 'Roles',
+                '__all__': 'Error general'
+            }
+            for field, errors in form.errors.items():
+                field_name = friendly_names.get(field, field.capitalize())
+                for error in errors:
+                    messages.error(request, f"{field_name}: {error}")
+
+        return redirect('core:user_menu')
+
+
+def activate_account(request, uidb64, token):
+    """Activate account view: user follows email link, sets password, and is activated."""
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+        # Validar token ANTES de usar el usuario
+        if not default_token_generator.check_token(user, token):
+            user = None #invalidar si token no coincide
+    except Exception:
+        user = None
+
+    # If token is invalid or user not found, render an informative page instead of redirecting
+    if user is None:
+        return render(request, 'users/activation_invalid.html', {
+            'user_obj': None,
+            'message': 'El enlace de activación no es válido o ha expirado.'
+        })
+
+    # If someone else is currently authenticated on this browser, log them out
+    # so the activation can proceed for the target account. This avoids errors
+    # when trying to activate while another session is active.
+
+    # verifica si la cuenta esta activa y redirije al login 
+    if user.is_active:
+        messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
+        return redirect('core:login')
+
+    # If someone else is currently authenticated on this browser, log them out
+    if request.user.is_authenticated and request.user.pk != user.pk:
+        # logout the current session and inform the user
+        logout(request)
+        messages.info(request, 'La sesión anterior se ha cerrado para continuar con la activación de la cuenta.')
+        
+    # Procesar contraseña y activar (con logging y manejo de errores)
+    if request.method == 'POST':
+        logger.info(f"Activation POST received for uid={uidb64} user_id={getattr(user, 'pk', None)}")
+        form = ActivationSetPasswordForm(user=user, data=request.POST)
+        if form.is_valid():
+            try:
+                # Guardar la contraseña (SetPasswordForm.save() llama a user.save())
+                form.save()
+
+                # Marcar activo antes de guardar la contraseña
+                user.is_active = True
+                user.save(update_fields=["is_active"])
+                # Refrescar desde la base de datos para verificar
+                user.refresh_from_db()
+
+                if user.is_active:
+                    messages.success(request, "Tu cuenta ha sido activada. Ahora puedes iniciar sesión.")
+                else:
+                    messages.warning(request, "Tu contraseña se guardó pero no se pudo activar la cuenta automáticamente. Contacta con el administrador.")
+
+                return redirect("core:login")
+
+            except Exception as e:
+                # Capturar cualquier excepción durante el guardado para depuración
+                logger.exception(f"Exception during account activation for user {getattr(user, 'pk', None)}: {e}")
+                messages.error(request, "Ocurrió un error al activar la cuenta. Por favor intenta de nuevo o contacta con el administrador.")
+        else:
+            # Form invalid: log details for debugging
+            for field, errors in form.errors.items():
+                messages.error(request, errors)
+                break
+    else:
+        logger.info(f"Activation GET for uid={uidb64} user_id={getattr(user, 'pk', None)}")
+        form = ActivationSetPasswordForm(user=user)
+
+    return render(request, 'users/activate_account.html', {'form': form, 'user': user})
+
 
 
 # ====================

@@ -2,9 +2,14 @@
 Formularios Django para validación de datos
 """
 
+import re
 from django import forms
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from .models import Project, Video, Image, Audio, Script, VIDEO_TYPES, IMAGE_TYPES
+from django.contrib.auth.models import User
+from django.contrib.auth.models import Group
+from django.contrib.auth.forms import SetPasswordForm
 
 
 class ProjectForm(forms.ModelForm):
@@ -814,7 +819,111 @@ class ScriptForm(forms.Form):
         help_text='Duración aproximada del video final en minutos'
     )
 
+# ====================
+# PASSWORD VALIDATION FORMS
+# ====================
 
+class CustomUserCreationForm(forms.ModelForm):
+    password = forms.CharField(
+        widget=forms.PasswordInput,
+        label='Contraseña'
+    )
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label='Roles',
+        help_text='Asigna uno o varios roles al usuario'
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email']
+    
+    # Validar y guardar la contraseña
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        if not password:
+            raise ValidationError('La contraseña es requerida.')
+        # Usar la misma validación que ActivationSetPasswordForm
+        if len(password) < 6:
+            raise ValidationError('La contraseña debe tener al menos 6 caracteres.')
+        if not re.search(r'[a-z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra minúscula.')
+        if not re.search(r'[A-Z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra mayúscula.')
+        if not re.search(r'\d', password):
+            raise ValidationError('La contraseña debe contener al menos un número.')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
+            raise ValidationError('La contraseña debe contener al menos un carácter especial.')
+        return password
+    
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        password = self.cleaned_data.get('password')
+        if password:
+            user.set_password(password)
+        if commit:
+            user.save()
+            if 'groups' in self.cleaned_data:
+                user.groups.set(self.cleaned_data['groups'])
+        return user
+
+
+class PendingUserCreationForm(forms.ModelForm):
+    """Formulario para crear un usuario en estado 'pendiente' (sin pedir contraseña).
+
+    Este formulario solo solicita username, email y roles. La contraseña se genera
+    automáticamente y el usuario se crea con is_active=False. El proceso de activación
+    se realiza mediante link por correo donde el usuario establecerá su contraseña.
+    """
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if User.objects.filter(email=email).exists():
+            raise ValidationError("Ya existe un usuario con este email.")
+        return email
+
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label='Roles',
+        help_text='Asigna uno o varios roles al usuario'
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'groups']
+
+
+class ActivationSetPasswordForm(SetPasswordForm):
+    """Set password form for activation with custom complexity rules.
+
+    Inherits Django's SetPasswordForm (includes matching validation between
+    new_password1 and new_password2) and adds complexity checks:
+      - minimum 6 characters
+      - at least one lowercase
+      - at least one uppercase
+      - at least one digit
+      - at least one special character
+    """
+
+    def clean_new_password1(self):
+        password = self.cleaned_data.get('new_password1')
+        if not password:
+            raise ValidationError('La contraseña es requerida.')
+        if len(password) < 6:
+            raise ValidationError('La contraseña debe tener al menos 6 caracteres.')
+        if not re.search(r'[a-z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra minúscula.')
+        if not re.search(r'[A-Z]', password):
+            raise ValidationError('La contraseña debe contener al menos una letra mayúscula.')
+        if not re.search(r'\d', password):
+            raise ValidationError('La contraseña debe contener al menos un número.')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
+            raise ValidationError('La contraseña debe contener al menos un carácter especial.')
+        return password
 # ====================
 # AUDIO FORMS
 # ====================
