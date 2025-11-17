@@ -249,3 +249,26 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
+# ====================================
+# LANGCHAIN & AGENT CONFIGURATION
+# ====================================
+
+# LangSmith Configuration (Observabilidad)
+LANGSMITH_API_KEY = config('LANGSMITH_API_KEY', default='')
+LANGSMITH_PROJECT = config('LANGSMITH_PROJECT', default='atenea-script-agent')
+
+# LLM Provider Configuration
+DEFAULT_LLM_PROVIDER = config('DEFAULT_LLM_PROVIDER', default='openai')  # 'openai' or 'gemini'
+DEFAULT_LLM_MODEL = config('DEFAULT_LLM_MODEL', default=None)  # None = use default for provider
+LLM_TEMPERATURE = config('LLM_TEMPERATURE', default=0.7, cast=float)
+LLM_MAX_RETRIES = config('LLM_MAX_RETRIES', default=2, cast=int)
+
+# Agent Cache Configuration
+AGENT_CACHE_TTL = config('AGENT_CACHE_TTL', default=86400, cast=int)  # 24 horas en segundos
+AGENT_CACHE_ENABLED = config('AGENT_CACHE_ENABLED', default=True, cast=bool)
+
+# Rate Limiting (para implementar después)
+AGENT_RATE_LIMIT_PER_USER = config('AGENT_RATE_LIMIT_PER_USER', default=10, cast=int)  # requests/hora
+AGENT_RATE_LIMIT_PER_PROJECT = config('AGENT_RATE_LIMIT_PER_PROJECT', default=5, cast=int)  # requests/hora
+AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=int)  # requests/hora
+
