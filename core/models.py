@@ -42,6 +42,13 @@ IMAGE_STATUS = [
     ('error', 'Error'),
 ]
 
+AUDIO_STATUS = [
+    ('pending', 'Pendiente'),
+    ('processing', 'Procesando'),
+    ('completed', 'Completado'),
+    ('error', 'Error'),
+]
+
 SCRIPT_STATUS = [
     ('pending', 'Pendiente'),
     ('processing', 'Procesando'),
@@ -313,6 +320,146 @@ class Image(models.Model):
         self.save(update_fields=['status', 'error_message', 'updated_at'])
 
 
+class Audio(models.Model):
+    """Modelo para audios generados por ElevenLabs TTS"""
+    
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='audios'
+    )
+    title = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=20,
+        choices=AUDIO_STATUS,
+        default='pending'
+    )
+    
+    # Contenido
+    text = models.TextField(help_text='Texto para convertir a voz')
+    
+    # Configuración de voz
+    voice_id = models.CharField(
+        max_length=100,
+        help_text='ID de la voz en ElevenLabs'
+    )
+    voice_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Nombre de la voz (para mostrar en UI)'
+    )
+    model_id = models.CharField(
+        max_length=100,
+        default='eleven_turbo_v2_5',
+        help_text='Modelo de ElevenLabs (eleven_turbo_v2_5, eleven_multilingual_v2, etc.)'
+    )
+    language_code = models.CharField(
+        max_length=10,
+        default='es',
+        help_text='Código de idioma (ISO 639-1)'
+    )
+    
+    # Configuración de voice settings (guardados como JSONField para flexibilidad)
+    voice_settings = models.JSONField(
+        default=dict,
+        help_text='Configuración de voz: stability, similarity_boost, style, speed'
+    )
+    
+    # Almacenamiento
+    gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta del audio en Google Cloud Storage'
+    )
+    
+    # Metadatos del audio
+    duration = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Duración del audio en segundos'
+    )
+    file_size = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Tamaño del archivo en bytes'
+    )
+    format = models.CharField(
+        max_length=10,
+        default='mp3',
+        help_text='Formato del audio (mp3, wav, etc.)'
+    )
+    sample_rate = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Sample rate del audio (44100, 48000, etc.)'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        help_text='Metadata adicional de la API'
+    )
+    
+    # Alignment data (timestamps carácter por carácter)
+    alignment = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Datos de sincronización carácter por carácter'
+    )
+    
+    # Control de errores
+    error_message = models.TextField(blank=True, null=True)
+    
+    # API response tracking
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='ID de la generación en ElevenLabs (si aplica)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Audio'
+        verbose_name_plural = 'Audios'
+
+    def __str__(self):
+        return f"{self.title} ({self.voice_name or self.voice_id})"
+
+    def mark_as_processing(self):
+        """Marca el audio como procesando"""
+        self.status = 'processing'
+        self.save(update_fields=['status', 'updated_at'])
+
+    def mark_as_completed(self, gcs_path=None, duration=None, metadata=None, alignment=None):
+        """Marca el audio como completado"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        if gcs_path:
+            self.gcs_path = gcs_path
+        if duration:
+            self.duration = duration
+        if metadata:
+            self.metadata = metadata
+        if alignment:
+            self.alignment = alignment
+        self.save(update_fields=[
+            'status', 'completed_at', 'gcs_path', 'duration', 
+            'metadata', 'alignment', 'updated_at'
+        ])
+
+    def mark_as_error(self, error_message):
+        """Marca el audio con error"""
+        self.status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['status', 'error_message', 'updated_at'])
+
+
 class Script(models.Model):
     """Modelo para guiones procesados por n8n"""
     
@@ -396,6 +543,24 @@ class Script(models.Model):
         help_text='Duración total estimada en minutos'
     )
     
+    # Configuración de audio global (ElevenLabs)
+    default_voice_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='ID de voz por defecto de ElevenLabs para todas las escenas'
+    )
+    default_voice_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Nombre de voz por defecto de ElevenLabs'
+    )
+    enable_audio = models.BooleanField(
+        default=True,
+        help_text='Si True, genera audio automáticamente para escenas Veo/Sora'
+    )
+    
     # Control de errores
     error_message = models.TextField(blank=True, null=True)
     
@@ -475,7 +640,12 @@ class Scene(models.Model):
         help_text='Resumen breve del contenido de la escena'
     )
     script_text = models.TextField(
-        help_text='Texto literal y completo del guión para esta escena'
+        help_text='Texto literal y completo del guión para narración (HeyGen + ElevenLabs)'
+    )
+    visual_prompt = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Prompt visual para generar el video (Veo/Sora/Vuela) - en inglés'
     )
     duration_sec = models.IntegerField(
         help_text='Duración de la escena en segundos'
@@ -598,6 +768,56 @@ class Scene(models.Model):
         help_text='Mensaje de error si falla la generación del video'
     )
     
+    # Audio generado con ElevenLabs (para escenas Veo/Sora)
+    audio_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta del audio narrado en GCS (ElevenLabs TTS)'
+    )
+    audio_status = models.CharField(
+        max_length=20,
+        choices=SCENE_STATUS,
+        default='pending',
+        help_text='Estado de generación del audio'
+    )
+    audio_voice_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='ID de la voz de ElevenLabs usada'
+    )
+    audio_voice_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Nombre de la voz de ElevenLabs'
+    )
+    audio_duration = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Duración del audio en segundos'
+    )
+    audio_error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Mensaje de error si falla la generación del audio'
+    )
+    
+    # Video final combinado (video + audio)
+    final_video_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Ruta del video final con audio combinado en GCS'
+    )
+    final_video_status = models.CharField(
+        max_length=20,
+        choices=SCENE_STATUS,
+        default='pending',
+        help_text='Estado de combinación del video final'
+    )
+    
     # Historial de versiones (para regeneración)
     version = models.IntegerField(
         default=1,
@@ -669,3 +889,172 @@ class Scene(models.Model):
         self.video_status = 'error'
         self.error_message = error_message
         self.save(update_fields=['video_status', 'error_message', 'updated_at'])
+    
+    def mark_audio_as_processing(self):
+        """Marca el audio como procesando"""
+        self.audio_status = 'processing'
+        self.save(update_fields=['audio_status', 'updated_at'])
+    
+    def mark_audio_as_completed(self, gcs_path: str, duration: float = None, voice_id: str = None, voice_name: str = None):
+        """Marca el audio como completado"""
+        self.audio_status = 'completed'
+        self.audio_gcs_path = gcs_path
+        if duration:
+            self.audio_duration = duration
+        if voice_id:
+            self.audio_voice_id = voice_id
+        if voice_name:
+            self.audio_voice_name = voice_name
+        self.save(update_fields=['audio_status', 'audio_gcs_path', 'audio_duration', 'audio_voice_id', 'audio_voice_name', 'updated_at'])
+    
+    def mark_audio_as_error(self, error_message: str):
+        """Marca el audio como error"""
+        self.audio_status = 'error'
+        self.audio_error_message = error_message
+        self.save(update_fields=['audio_status', 'audio_error_message', 'updated_at'])
+    
+    def mark_final_video_as_processing(self):
+        """Marca el video final como procesando"""
+        self.final_video_status = 'processing'
+        self.save(update_fields=['final_video_status', 'updated_at'])
+    
+    def mark_final_video_as_completed(self, gcs_path: str):
+        """Marca el video final como completado"""
+        self.final_video_status = 'completed'
+        self.final_video_gcs_path = gcs_path
+        self.completed_at = timezone.now()
+        self.save(update_fields=['final_video_status', 'final_video_gcs_path', 'completed_at', 'updated_at'])
+    
+    def mark_final_video_as_error(self, error_message: str):
+        """Marca el video final como error"""
+        self.final_video_status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['final_video_status', 'error_message', 'updated_at'])
+    
+    def needs_audio(self) -> bool:
+        """Determina si esta escena necesita audio (Veo/Sora sin avatar)"""
+        return self.ai_service in ['gemini_veo', 'sora', 'vuela_ai'] and self.video_status == 'completed'
+    
+    def needs_combination(self) -> bool:
+        """Determina si esta escena necesita combinar video+audio"""
+        return (
+            self.video_status == 'completed' and 
+            self.audio_status == 'completed' and 
+            self.final_video_status == 'pending' and
+            self.needs_audio()
+        )
+
+
+class Music(models.Model):
+    """
+    Modelo para almacenar pistas de música generadas con ElevenLabs Music
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='music_tracks',
+        help_text='Proyecto al que pertenece esta música'
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text='Nombre descriptivo de la pista musical'
+    )
+    prompt = models.TextField(
+        help_text='Prompt usado para generar la música'
+    )
+    duration_ms = models.IntegerField(
+        help_text='Duración de la música en milisegundos'
+    )
+    
+    # Composition Plan (opcional, si se usó)
+    composition_plan = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Plan de composición detallado (JSON) usado para generar la música'
+    )
+    
+    # Metadata de la canción generada
+    song_metadata = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Metadatos de la canción generada (tempo, key, mood, etc.)'
+    )
+    
+    # Almacenamiento en GCS
+    gcs_path = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='Path en GCS donde está almacenada la música'
+    )
+    
+    # Estado de generación
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('generating', 'Generando'),
+        ('completed', 'Completado'),
+        ('error', 'Error'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True
+    )
+    
+    # Campos de ElevenLabs
+    elevenlabs_track_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='ID del track en ElevenLabs (si aplica)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha y hora en que se generó la música'
+    )
+    
+    class Meta:
+        db_table = 'music'
+        ordering = ['-created_at']
+        verbose_name = 'Música'
+        verbose_name_plural = 'Músicas'
+    
+    def __str__(self):
+        return f"{self.name} - {self.project.name}"
+    
+    def mark_as_generating(self):
+        """Marca la música como en proceso de generación"""
+        self.status = 'generating'
+        self.error_message = None
+        self.save(update_fields=['status', 'error_message', 'updated_at'])
+    
+    def mark_as_completed(self, gcs_path: str, song_metadata: dict = None):
+        """Marca la música como completada"""
+        from django.utils import timezone
+        self.status = 'completed'
+        self.gcs_path = gcs_path
+        if song_metadata:
+            self.song_metadata = song_metadata
+        self.generated_at = timezone.now()
+        self.save(update_fields=['status', 'gcs_path', 'song_metadata', 'generated_at', 'updated_at'])
+    
+    def mark_as_error(self, error_message: str):
+        """Marca la música como error"""
+        self.status = 'error'
+        self.error_message = error_message
+        self.save(update_fields=['status', 'error_message', 'updated_at'])
+    
+    def duration_seconds(self):
+        """Retorna la duración en segundos de forma segura"""
+        if self.duration_ms is None:
+            return 0
+        return round(self.duration_ms / 1000.0, 2)

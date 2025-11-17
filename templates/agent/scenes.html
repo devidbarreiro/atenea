@@ -78,12 +78,32 @@
                 </div>
 
                 <!-- Video Preview -->
-                <div class="w-64 h-40 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0">
-                    {% if scene.video_status == 'completed' and scene_data.video_url %}
+                <div class="w-64 h-40 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 relative">
+                    {% if scene.final_video_status == 'completed' and scene_data.final_video_url %}
+                        <!-- Video final combinado (video + audio ElevenLabs) -->
+                        <video src="{{ scene_data.final_video_url }}" 
+                               controls 
+                               class="w-full h-full object-cover">
+                        </video>
+                        <div class="absolute top-2 left-2 px-2 py-1 bg-purple-600 text-white text-xs font-bold rounded shadow">
+                            🎙️ CON AUDIO TTS
+                        </div>
+                    {% elif scene.video_status == 'completed' and scene_data.video_url %}
+                        <!-- Video original (sin audio o con audio original) -->
                         <video src="{{ scene_data.video_url }}" 
                                controls 
                                class="w-full h-full object-cover">
                         </video>
+                        {% if scene.needs_audio %}
+                        <div class="absolute top-2 left-2 px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded shadow">
+                            📹 SIN AUDIO TTS
+                        </div>
+                        {% endif %}
+                    {% elif scene.final_video_status == 'processing' or scene.audio_status == 'processing' %}
+                        <div class="w-full h-full flex flex-col items-center justify-center text-white">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-3"></div>
+                            <p class="text-sm">Combinando audio...</p>
+                        </div>
                     {% elif scene.video_status == 'processing' or scene.video_status == 'pending' %}
                         <div class="w-full h-full flex flex-col items-center justify-center text-white">
                             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-3"></div>
@@ -140,6 +160,41 @@
                         <p id="script-preview-{{ scene.id }}" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">{{ scene.script_text|truncatewords:30 }}</p>
                     </div>
                     
+                    <!-- Audio Player (si está generado) -->
+                    {% if scene.audio_status == 'completed' and scene_data.audio_url %}
+                    <div class="mb-3">
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">🎙️ Audio (ElevenLabs TTS)</label>
+                        <audio controls class="w-full" style="height: 32px;">
+                            <source src="{{ scene_data.audio_url }}" type="audio/mpeg">
+                            Tu navegador no soporta el elemento de audio.
+                        </audio>
+                        <div class="flex items-center justify-between mt-1 text-xs text-gray-500">
+                            <span>Voz: {{ scene.audio_voice_name|default:"Predeterminada" }}</span>
+                            {% if scene.audio_duration %}
+                            <span>Duración: {{ scene.audio_duration|floatformat:1 }}s</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% elif scene.audio_status == 'processing' %}
+                    <div class="mb-3">
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">🎙️ Audio (ElevenLabs TTS)</label>
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 flex items-center gap-2 text-xs text-yellow-800">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600"></div>
+                            <span>Generando audio...</span>
+                        </div>
+                    </div>
+                    {% elif scene.audio_status == 'error' %}
+                    <div class="mb-3">
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">🎙️ Audio (ElevenLabs TTS)</label>
+                        <div class="bg-red-50 border border-red-200 rounded-md p-2 flex items-center gap-2 text-xs text-red-800">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Error al generar audio</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
                     <!-- Service Info -->
                     <div class="mb-3 flex items-center gap-2 text-xs text-gray-500">
                         <span class="px-2 py-1 bg-gray-100 rounded">{{ scene.get_ai_service_display }}</span>
@@ -176,6 +231,15 @@
                             class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50">
                             Regenerar
                         </button>
+                        
+                        <!-- Botón para combinar video+audio manualmente -->
+                        {% if scene.video_status == 'completed' and scene.audio_status == 'completed' and scene.final_video_status != 'completed' and scene.needs_audio %}
+                        <button 
+                            onclick="combineVideoAudio({{ scene.id }})"
+                            class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 flex items-center gap-1">
+                            🎙️ Combinar Audio
+                        </button>
+                        {% endif %}
                         
                         <!-- Version Selector -->
                         <div class="relative ml-auto">
@@ -243,20 +307,37 @@
                 <p id="inspector-scene-summary" class="text-sm text-gray-600"></p>
             </div>
             
-            <!-- Script Text Editor with Character Counter -->
+            <!-- Script Text Editor (para narración/audio) -->
             <div>
                 <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm font-medium text-gray-700">Guión de la Escena</label>
-                    <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                    <label class="text-sm font-medium text-gray-700">🎙️ Guión/Narración (para Audio)</label>
+                    <span id="inspector-script-char-count" class="text-xs text-gray-500">0 / 5000</span>
                 </div>
                 <textarea 
                     id="inspector-script-text"
-                    rows="6"
-                    maxlength="1000"
+                    rows="4"
+                    maxlength="5000"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-                    oninput="updateCharCounter()"
+                    oninput="updateInspectorScriptCharCounter()"
+                    placeholder="Texto que se narrará con ElevenLabs TTS"
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">Máximo 1000 caracteres para Sora2 y Veo3</p>
+                <p class="mt-1 text-xs text-gray-500">Para la narración de audio con ElevenLabs</p>
+            </div>
+            
+            <!-- Visual Prompt Editor (para video) -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-medium text-gray-700">🎬 Prompt Visual (para Video)</label>
+                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 caracteres</span>
+                </div>
+                <textarea 
+                    id="inspector-visual-prompt"
+                    rows="6"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    oninput="updateInspectorVisualCharCounter()"
+                    placeholder="Descripción visual para generar el video (Sora, Veo, Vuela.ai) ✨ SIN LÍMITES - Más detalle = mejor resultado"
+                ></textarea>
+                <p class="mt-1 text-xs text-blue-600">💡 <strong>Sin límites.</strong> Solo para Sora, Veo y Vuela.ai. Sé tan detallado como necesites.</p>
             </div>
             
             <!-- AI Service Selector -->
@@ -279,6 +360,54 @@
                 <!-- Se llenará dinámicamente -->
             </div>
             
+            <!-- Audio Section (ElevenLabs TTS) -->
+            <div id="inspector-audio-section" class="border-t pt-4">
+                <h5 class="text-sm font-bold text-gray-900 mb-3">🎙️ Audio (ElevenLabs TTS)</h5>
+                
+                <!-- Voice Selector -->
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-medium text-gray-700">Voz para Narración</label>
+                        <button 
+                            type="button"
+                            onclick="openInspectorVoiceModal()"
+                            class="text-xs text-blue-600 hover:text-blue-700">
+                            📋 Ver catálogo
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input 
+                            type="text"
+                            id="inspector-voice-display"
+                            readonly
+                            value="Sin voz seleccionada"
+                            class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-700">
+                        <input type="hidden" id="inspector-audio-voice-id">
+                        <input type="hidden" id="inspector-audio-voice-name">
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">Se usará para narrar el guión (solo Sora, Veo, Vuela.ai)</p>
+                </div>
+                
+                <!-- Audio Player (si ya está generado) -->
+                <div id="inspector-audio-player-container" class="hidden mb-3">
+                    <label class="text-sm font-medium text-gray-700 mb-2 block">Audio Generado</label>
+                    <audio id="inspector-audio-player" controls class="w-full mb-2">
+                        <source id="inspector-audio-source" type="audio/mpeg">
+                        Tu navegador no soporta audio.
+                    </audio>
+                    <div id="inspector-audio-status" class="text-xs text-gray-600"></div>
+                </div>
+                
+                <!-- Generate/Regenerate Audio Button -->
+                <button 
+                    type="button"
+                    id="inspector-generate-audio-btn"
+                    onclick="generateInspectorAudio()"
+                    class="w-full px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors">
+                    🎵 Generar Audio
+                </button>
+            </div>
+            
             <!-- Save Button -->
             <div class="sticky bottom-0 bg-white pt-4 border-t border-gray-200">
                 <button 
@@ -292,6 +421,41 @@
     
     <!-- Overlay when inspector is open -->
     <div id="inspector-overlay" class="hidden fixed inset-0 bg-black bg-opacity-30 z-30" onclick="closeInspector()"></div>
+    
+    <!-- Modal para seleccionar Voz de ElevenLabs (Inspector) -->
+    <div id="inspector-voice-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-900">Seleccionar Voz de ElevenLabs</h3>
+                <button onclick="closeInspectorVoiceModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Search -->
+            <div class="px-6 py-3 border-b border-gray-200">
+                <input 
+                    type="text" 
+                    id="inspector-voice-search"
+                    placeholder="Buscar por nombre, idioma, etiquetas..."
+                    oninput="filterInspectorVoices()"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            </div>
+            
+            <!-- Voices Grid -->
+            <div id="inspector-voices-container" class="flex-1 overflow-y-auto p-6">
+                <div class="flex items-center justify-center py-12">
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                        <p class="text-gray-600">Cargando voces...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 </div>
 
@@ -700,15 +864,27 @@ let avatarsCache = null;
 let voicesCache = null;
 
 // Cache para guardar datos de escenas
-const scenesData = {
-    {% for scene_data in scenes_with_urls %}
-    {{ scene_data.scene.id }}: {
-        script_text: `{{ scene_data.scene.script_text|escapejs }}`,
-        ai_service: '{{ scene_data.scene.ai_service }}',
-        ai_config: {{ scene_data.scene.ai_config|safe }}
-    },
-    {% endfor %}
-};
+const scenesData = {};
+try {
+    const rawData = {
+        {% for scene_data in scenes_with_urls %}
+        {{ scene_data.scene.id }}: {
+            script_text: `{{ scene_data.scene.script_text|escapejs }}`,
+            visual_prompt: `{{ scene_data.scene.visual_prompt|default:""|escapejs }}`,
+            ai_service: '{{ scene_data.scene.ai_service }}',
+            ai_config: {{ scene_data.ai_config_json|safe }},
+            audio_voice_id: '{{ scene_data.scene.audio_voice_id|default:"" }}',
+            audio_voice_name: '{{ scene_data.scene.audio_voice_name|default:"" }}',
+            audio_status: '{{ scene_data.scene.audio_status }}',
+            audio_url: '{{ scene_data.audio_url|default:"" }}'
+        },
+        {% endfor %}
+    };
+    Object.assign(scenesData, rawData);
+    console.log('✓ scenesData inicializado con', Object.keys(scenesData).length, 'escenas');
+} catch(e) {
+    console.error('❌ Error inicializando scenesData:', e);
+}
 
 function openEditModal(sceneId) {
     currentEditSceneId = sceneId;
@@ -960,11 +1136,41 @@ function openInspector(sceneId) {
     // Llenar datos del inspector
     document.getElementById('inspector-scene-title').textContent = scene.ai_service + ' - Escena ' + sceneId;
     document.getElementById('inspector-scene-summary').textContent = 'Configuración detallada';
+    
+    // Campos de texto
     document.getElementById('inspector-script-text').value = scene.script_text;
+    document.getElementById('inspector-visual-prompt').value = scene.visual_prompt || '';
     document.getElementById('inspector-service-select').value = scene.ai_service;
     
-    // Actualizar contador de caracteres
-    updateCharCounter();
+    // Datos de audio
+    document.getElementById('inspector-audio-voice-id').value = scene.audio_voice_id || '';
+    document.getElementById('inspector-audio-voice-name').value = scene.audio_voice_name || '';
+    document.getElementById('inspector-voice-display').value = scene.audio_voice_name || 'Sin voz seleccionada';
+    
+    // Mostrar/ocultar player de audio
+    if (scene.audio_status === 'completed' && scene.audio_url) {
+        document.getElementById('inspector-audio-player-container').classList.remove('hidden');
+        document.getElementById('inspector-audio-source').src = scene.audio_url;
+        document.getElementById('inspector-audio-player').load();
+        document.getElementById('inspector-audio-status').textContent = '✓ Audio generado correctamente';
+        document.getElementById('inspector-generate-audio-btn').textContent = '🔄 Regenerar Audio';
+    } else if (scene.audio_status === 'processing') {
+        document.getElementById('inspector-audio-player-container').classList.add('hidden');
+        document.getElementById('inspector-generate-audio-btn').textContent = '⏳ Generando...';
+        document.getElementById('inspector-generate-audio-btn').disabled = true;
+    } else if (scene.audio_status === 'error') {
+        document.getElementById('inspector-audio-player-container').classList.add('hidden');
+        document.getElementById('inspector-generate-audio-btn').textContent = '⚠️ Reintentar Audio';
+        document.getElementById('inspector-generate-audio-btn').disabled = false;
+    } else {
+        document.getElementById('inspector-audio-player-container').classList.add('hidden');
+        document.getElementById('inspector-generate-audio-btn').textContent = '🎵 Generar Audio';
+        document.getElementById('inspector-generate-audio-btn').disabled = false;
+    }
+    
+    // Actualizar contadores de caracteres
+    updateInspectorScriptCharCounter();
+    updateInspectorVisualCharCounter();
     
     // Actualizar configuración dinámica
     updateInspectorConfig();
@@ -983,22 +1189,43 @@ function closeInspector() {
     currentInspectorSceneId = null;
 }
 
-function updateCharCounter() {
-    const text = document.getElementById('inspector-script-text').value;
-    const charCount = text.length;
-    const counter = document.getElementById('inspector-char-count');
+function updateInspectorScriptCharCounter() {
+    const textarea = document.getElementById('inspector-script-text');
+    const counter = document.getElementById('inspector-script-char-count');
+    const charCount = textarea.value.length;
+    const maxChars = 5000;
     
-    counter.textContent = `${charCount} / 1000`;
+    counter.textContent = `${charCount} / ${maxChars}`;
     
-    // Cambiar color si se acerca al límite
-    if (charCount > 900) {
+    if (charCount > maxChars * 0.9) {
         counter.classList.add('text-red-600', 'font-bold');
         counter.classList.remove('text-gray-500');
-    } else if (charCount > 800) {
+    } else if (charCount > maxChars * 0.8) {
         counter.classList.add('text-yellow-600', 'font-bold');
         counter.classList.remove('text-gray-500', 'text-red-600');
     } else {
         counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
+        counter.classList.add('text-gray-500');
+    }
+}
+
+function updateInspectorVisualCharCounter() {
+    const textarea = document.getElementById('inspector-visual-prompt');
+    const counter = document.getElementById('inspector-visual-char-count');
+    const charCount = textarea.value.length;
+    
+    // Sin límites - solo muestra el conteo
+    counter.textContent = `${charCount} caracteres`;
+    
+    // Color verde para prompts extensos (mejor calidad)
+    if (charCount > 1000) {
+        counter.classList.add('text-green-600', 'font-semibold');
+        counter.classList.remove('text-gray-500', 'text-blue-600');
+    } else if (charCount > 500) {
+        counter.classList.add('text-blue-600', 'font-semibold');
+        counter.classList.remove('text-gray-500', 'text-green-600');
+    } else {
+        counter.classList.remove('text-green-600', 'text-blue-600', 'font-semibold', 'font-bold');
         counter.classList.add('text-gray-500');
     }
 }
@@ -1104,12 +1331,18 @@ async function saveInspectorChanges() {
     if (!currentInspectorSceneId) return;
     
     const scriptText = document.getElementById('inspector-script-text').value;
+    const visualPrompt = document.getElementById('inspector-visual-prompt').value;
     const service = document.getElementById('inspector-service-select').value;
+    const audioVoiceId = document.getElementById('inspector-audio-voice-id').value;
+    const audioVoiceName = document.getElementById('inspector-audio-voice-name').value;
     
     const data = {
         script_text: scriptText,
+        visual_prompt: visualPrompt,
         ai_service: service,
-        ai_config: {}
+        ai_config: {},
+        audio_voice_id: audioVoiceId,
+        audio_voice_name: audioVoiceName
     };
     
     if (service === 'gemini_veo') {
@@ -1171,6 +1404,211 @@ async function saveInspectorChanges() {
     } catch (error) {
         console.error('Error:', error);
         alert('Error al guardar cambios');
+    }
+}
+
+// ===== MODAL DE VOZ ELEVENLABS (INSPECTOR) =====
+var inspectorVoicesData = [];
+
+async function openInspectorVoiceModal() {
+    document.getElementById('inspector-voice-modal').classList.remove('hidden');
+    await loadInspectorVoices();
+}
+
+function closeInspectorVoiceModal() {
+    document.getElementById('inspector-voice-modal').classList.add('hidden');
+}
+
+async function loadInspectorVoices() {
+    try {
+        const response = await fetch('{% url "core:api_list_elevenlabs_voices" %}');
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.voices) {
+            inspectorVoicesData = data.voices;
+            displayInspectorVoices(inspectorVoicesData);
+        } else {
+            document.getElementById('inspector-voices-container').innerHTML = `
+                <div class="text-center py-8 text-red-600">
+                    <p>Error al cargar voces: ${data.message || 'Error desconocido'}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error al listar voces:', error);
+        document.getElementById('inspector-voices-container').innerHTML = `
+            <div class="text-center py-8 text-red-600">
+                <p>Error al cargar voces. Por favor, intenta de nuevo.</p>
+            </div>
+        `;
+    }
+}
+
+function displayInspectorVoices(voices) {
+    const container = document.getElementById('inspector-voices-container');
+    
+    if (voices.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-gray-600"><p>No se encontraron voces.</p></div>';
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${voices.map(voice => `
+                <div class="border border-gray-200 rounded-lg p-4 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer"
+                     onclick="selectInspectorVoice('${voice.voice_id}', '${voice.name}')">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-gray-900">${voice.name}</h4>
+                            <p class="text-xs text-gray-600">${voice.voice_id}</p>
+                        </div>
+                        ${voice.preview_url ? `
+                            <button 
+                                onclick="event.stopPropagation(); playInspectorVoicePreview('${voice.preview_url}')"
+                                class="ml-2 p-2 text-purple-600 hover:bg-purple-50 rounded-full transition-colors">
+                                ▶️
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div class="flex flex-wrap gap-1 mb-2">
+                        ${voice.labels ? Object.entries(voice.labels).map(([key, value]) => `
+                            <span class="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">${value}</span>
+                        `).join('') : ''}
+                    </div>
+                    ${voice.description ? `<p class="text-xs text-gray-600 line-clamp-2">${voice.description}</p>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function filterInspectorVoices() {
+    const searchTerm = document.getElementById('inspector-voice-search').value.toLowerCase();
+    const filtered = inspectorVoicesData.filter(voice => 
+        voice.name.toLowerCase().includes(searchTerm) ||
+        voice.voice_id.toLowerCase().includes(searchTerm) ||
+        (voice.description && voice.description.toLowerCase().includes(searchTerm)) ||
+        (voice.labels && Object.values(voice.labels).some(label => 
+            label.toLowerCase().includes(searchTerm)
+        ))
+    );
+    displayInspectorVoices(filtered);
+}
+
+function selectInspectorVoice(voiceId, voiceName) {
+    document.getElementById('inspector-audio-voice-id').value = voiceId;
+    document.getElementById('inspector-audio-voice-name').value = voiceName;
+    document.getElementById('inspector-voice-display').value = voiceName;
+    closeInspectorVoiceModal();
+    console.log(`Voz seleccionada: ${voiceName} (${voiceId})`);
+}
+
+let inspectorAudioPreview = null;
+function playInspectorVoicePreview(previewUrl) {
+    if (inspectorAudioPreview) {
+        inspectorAudioPreview.pause();
+    }
+    inspectorAudioPreview = new Audio(previewUrl);
+    inspectorAudioPreview.play().catch(err => console.error('Error reproduciendo preview:', err));
+}
+
+// ===== COMBINAR VIDEO+AUDIO MANUALMENTE =====
+async function combineVideoAudio(sceneId) {
+    if (!confirm('¿Combinar el video con el audio de ElevenLabs? Esto creará una nueva versión del video con la narración TTS.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/scenes/${sceneId}/combine-audio/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            alert('✅ Video combinado correctamente con el audio de ElevenLabs');
+            window.location.reload();
+        } else {
+            alert('❌ Error: ' + (result.message || 'Error desconocido'));
+        }
+    } catch (error) {
+        console.error('Error al combinar video+audio:', error);
+        alert('❌ Error al combinar video+audio. Por favor, intenta de nuevo.');
+    }
+}
+
+// ===== GENERAR AUDIO EN INSPECTOR =====
+async function generateInspectorAudio() {
+    if (!currentInspectorSceneId) {
+        alert('No hay escena seleccionada');
+        return;
+    }
+    
+    const scriptText = document.getElementById('inspector-script-text').value;
+    const voiceId = document.getElementById('inspector-audio-voice-id').value;
+    const voiceName = document.getElementById('inspector-audio-voice-name').value;
+    
+    if (!scriptText) {
+        alert('El guión no puede estar vacío');
+        return;
+    }
+    
+    if (!voiceId) {
+        alert('Debes seleccionar una voz');
+        return;
+    }
+    
+    const btn = document.getElementById('inspector-generate-audio-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Generando audio...';
+    
+    try {
+        const response = await fetch(`/scenes/${currentInspectorSceneId}/generate-audio/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                script_text: scriptText,
+                voice_id: voiceId,
+                voice_name: voiceName
+            })
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            alert('Audio generado correctamente');
+            
+            // Actualizar datos locales
+            scenesData[currentInspectorSceneId].audio_status = 'completed';
+            scenesData[currentInspectorSceneId].audio_url = result.audio_url;
+            scenesData[currentInspectorSceneId].audio_voice_id = voiceId;
+            scenesData[currentInspectorSceneId].audio_voice_name = voiceName;
+            
+            // Actualizar UI
+            document.getElementById('inspector-audio-player-container').classList.remove('hidden');
+            document.getElementById('inspector-audio-source').src = result.audio_url;
+            document.getElementById('inspector-audio-player').load();
+            document.getElementById('inspector-audio-status').textContent = '✓ Audio generado correctamente';
+            btn.textContent = '🔄 Regenerar Audio';
+            btn.disabled = false;
+            
+            // Recargar la página para mostrar el audio en la tarjeta de la escena
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            alert('Error al generar audio: ' + (result.message || 'Error desconocido'));
+            btn.textContent = '⚠️ Error - Reintentar';
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Error al generar audio:', error);
+        alert('Error al generar audio. Por favor, intenta de nuevo.');
+        btn.textContent = '⚠️ Error - Reintentar';
+        btn.disabled = false;
     }
 }
 

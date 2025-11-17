@@ -30,6 +30,20 @@ urlpatterns = [
     path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     
+    # Audios
+    path('projects/<int:project_id>/audios/create/', views.AudioCreateView.as_view(), name='audio_create'),
+    path('audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='audio_detail'),
+    path('audios/<int:audio_id>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
+    path('audios/<int:audio_id>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
+    
+    # Music
+    path('projects/<int:project_id>/music/create/', views.MusicCreateView.as_view(), name='music_create'),
+    path('music/<int:music_id>/', views.MusicDetailView.as_view(), name='music_detail'),
+    path('music/<int:music_id>/delete/', views.MusicDeleteView.as_view(), name='music_delete'),
+    path('music/<int:music_id>/generate/', views.MusicGenerateView.as_view(), name='music_generate'),
+    path('music/<int:music_id>/status/', views.MusicStatusView.as_view(), name='music_status'),
+    path('music/<int:music_id>/composition-plan/', views.MusicCompositionPlanView.as_view(), name='music_composition_plan'),
+    
     # Scripts
     path('projects/<int:project_id>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
     path('scripts/<int:script_id>/', views.ScriptDetailView.as_view(), name='script_detail'),
@@ -45,6 +59,7 @@ urlpatterns = [
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),
     path('api/image-assets/', views.ListImageAssetsView.as_view(), name='api_list_image_assets'),
+    path('api/elevenlabs/voices/', views.ListElevenLabsVoicesView.as_view(), name='api_list_elevenlabs_voices'),
     
     # Webhooks
     path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
@@ -66,6 +81,8 @@ urlpatterns = [
     path('scenes/<int:scene_id>/generate/', views.SceneGenerateView.as_view(), name='scene_generate'),
     path('scenes/<int:scene_id>/status/', views.SceneStatusView.as_view(), name='scene_status'),
     path('scenes/<int:scene_id>/update/', views.SceneUpdateConfigView.as_view(), name='scene_update'),
+    path('scenes/<int:scene_id>/generate-audio/', views.SceneGenerateAudioView.as_view(), name='scene_generate_audio'),
+    path('scenes/<int:scene_id>/combine-audio/', views.SceneCombineAudioView.as_view(), name='scene_combine_audio'),
     path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
     path('scenes/<int:scene_id>/versions/', views.SceneVersionsView.as_view(), name='scene_versions'),
     

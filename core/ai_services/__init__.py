@@ -14,6 +14,7 @@ from .vuela_ai import (
     VuelaMediaType,
     VuelaVoiceStyle
 )
+from .elevenlabs import ElevenLabsClient
 
 __all__ = [
     'BaseAIClient',
@@ -30,4 +31,5 @@ __all__ = [
     'VuelaAnimationType',
     'VuelaMediaType',
     'VuelaVoiceStyle',
+    'ElevenLabsClient',
 ]
