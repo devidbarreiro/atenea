@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Acceso restringido - Atenea{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto text-center p-8 bg-white rounded-md shadow border border-gray-300 hover:shadow-lg transition-shadow">
+    <h1 class="text-3xl font-extrabold mb-4">Parece que no puedes usar la aplicación 🤔</h1>
+    <p class="text-gray-700 mb-6 text-justify">
+        Tu cuenta ha sido activada y funciona correctamente, pero no se te han asignado permisos para acceder a la aplicación principal.
+        Contacta con tu superior para solicitar los permisos necesarios.
+    </p>
+    {% if only_management %}
+        <h2 class="text-3xl mt-6 mb-3 font-extrabold">Pero buenas noticias 😎</h2>
+        <h2 class="font-bold">Tienes permisos para gestionar los usuarios !!</h3>
+        <a href="{% url 'core:user_menu' %}" class="inline-block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 transition mt-4">
+            Ir al panel de gestión de usuarios
+        </a>
+    {% elif no_perms %}
+        <p class="text-gray-600 mt-4">Si crees que deberías tener acceso, habla con tu administrador para que te asignen los roles adecuados.</p>
+
+    {% else %}
+        <p class="text-gray-600 mt-4">Si estás viendo esto por error, por favor contacta con soporte.</p>
+    {% endif %}
+</div>
+{% endblock %}

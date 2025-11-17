@@ -7,7 +7,7 @@ urlpatterns = [
     # Authentication
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
-    path('signup/', views.SignupView.as_view(), name='signup'),
+
 
     # Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
@@ -95,5 +95,10 @@ urlpatterns = [
     path('api/vuela/validate-token/', views.VuelaAIValidateTokenView.as_view(), name='vuela_validate_token'),
     path('api/vuela/videos/', views.VuelaAIListVideosView.as_view(), name='vuela_list_videos'),
     path('api/vuela/videos/<str:video_id>/', views.VuelaAIVideoDetailsView.as_view(), name='vuela_video_details'),
+
+    # User Management
+    path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
+    path('users/activate/<uidb64>/<token>/', views.activate_account, name='activate_account'),
+    path('no-permissions/', views.no_permissions, name='no_permissions'),
 ]
 
