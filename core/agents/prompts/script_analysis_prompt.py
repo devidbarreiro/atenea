@@ -2,7 +2,7 @@
 Prompt para análisis de guiones y generación de escenas
 """
 
-from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
 
 def get_script_analysis_prompt() -> ChatPromptTemplate:

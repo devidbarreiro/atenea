@@ -4,8 +4,24 @@ Soporta OpenAI y Gemini con fallback automático
 """
 
 import logging
+import os
 from typing import Optional, Literal
-from django.conf import settings
+
+try:
+    from django.conf import settings
+    # Verificar si Django está configurado
+    try:
+        _django_configured = settings.configured
+        DJANGO_AVAILABLE = True
+    except (RuntimeError, AttributeError):
+        # Django no está configurado
+        DJANGO_AVAILABLE = False
+        settings = None
+except (ImportError, RuntimeError):
+    # Django no está disponible o no está configurado
+    DJANGO_AVAILABLE = False
+    settings = None
+
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -48,9 +64,17 @@ class LLMFactory:
         Raises:
             ValueError: Si OPENAI_API_KEY no está configurada
         """
-        api_key = getattr(settings, 'OPENAI_API_KEY', None)
+        # Intentar obtener API key de Django settings o variables de entorno
+        api_key = None
+        if DJANGO_AVAILABLE and settings and settings.configured:
+            api_key = getattr(settings, 'OPENAI_API_KEY', None)
+        
+        # Fallback a variable de entorno si Django no está disponible
         if not api_key:
-            raise ValueError('OPENAI_API_KEY no está configurada en settings')
+            api_key = os.getenv('OPENAI_API_KEY')
+        
+        if not api_key:
+            raise ValueError('OPENAI_API_KEY no está configurada. Debe estar en Django settings o variable de entorno OPENAI_API_KEY')
         
         return ChatOpenAI(
             model=model_name,
@@ -79,9 +103,17 @@ class LLMFactory:
         Raises:
             ValueError: Si GEMINI_API_KEY no está configurada
         """
-        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        # Intentar obtener API key de Django settings o variables de entorno
+        api_key = None
+        if DJANGO_AVAILABLE and settings and settings.configured:
+            api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        
+        # Fallback a variable de entorno si Django no está disponible
         if not api_key:
-            raise ValueError('GEMINI_API_KEY no está configurada en settings')
+            api_key = os.getenv('GEMINI_API_KEY')
+        
+        if not api_key:
+            raise ValueError('GEMINI_API_KEY no está configurada. Debe estar en Django settings o variable de entorno GEMINI_API_KEY')
         
         return ChatGoogleGenerativeAI(
             model=model_name,

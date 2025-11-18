@@ -28,7 +28,8 @@ import json
 
 from .models import Project, Video, Image, Audio, Script, Scene, Music
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
-from .services import ProjectService, VideoService, ImageService, AudioService, APIService, N8nService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+# N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -40,6 +41,28 @@ import logging
 import re
 
 logger = logging.getLogger(__name__)
+
+
+# ====================
+# HELPER FUNCTIONS
+# ====================
+
+def get_script_service():
+    """
+    Retorna el servicio de procesamiento de guiones según feature flag.
+    Permite alternar entre n8n (legacy) y LangChain (nuevo) sin cambiar código.
+    """
+    from django.conf import settings
+    if getattr(settings, 'USE_LANGCHAIN_AGENT', False):
+        from core.services_agent import ScriptAgentService
+        return ScriptAgentService()
+    else:
+        # DEPRECATED: N8nService está comentado, usar ScriptAgentService siempre
+        # from core.services import N8nService
+        # return N8nService()
+        # Fallback: usar ScriptAgentService si n8n no está disponible
+        from core.services_agent import ScriptAgentService
+        return ScriptAgentService()
 
 
 from django.shortcuts import render
@@ -1357,7 +1380,9 @@ class ScriptStatusPartialView(View):
     def get(self, request, script_id):
         from django.template.loader import render_to_string
         from django.http import HttpResponse
-        from .services import RedisService, N8nService
+        from .services import RedisService
+        # DEPRECATED: N8nService está comentado
+        # from .services import RedisService, N8nService
         script = get_object_or_404(Script, pk=script_id)
         
         # Log del polling
@@ -1369,6 +1394,8 @@ class ScriptStatusPartialView(View):
         logger.info(f"Timestamp: {timezone.now()}")
         
         # Si está procesando, verificar Redis
+        # DEPRECATED: Este código de Redis+N8n ya no se usa con LangChain
+        # El procesamiento ahora es síncrono, no necesita polling
         if script.status == 'processing':
             try:
                 redis_service = RedisService()
@@ -1376,9 +1403,10 @@ class ScriptStatusPartialView(View):
                 
                 if result:
                     logger.info(f"✓ Resultado encontrado en Redis para guión {script_id}")
-                    # Procesar resultado como si fuera webhook
-                    n8n_service = N8nService()
-                    script = n8n_service.process_webhook_response(result)
+                    # DEPRECATED: N8nService está comentado
+                    # n8n_service = N8nService()
+                    # script = n8n_service.process_webhook_response(result)
+                    logger.warning(f"Redis polling detectado pero N8nService está deprecado. Usar ScriptAgentService.")
                     logger.info(f"✓ Guión {script_id} actualizado desde Redis")
                 else:
                     logger.info(f"⏳ No hay resultado aún en Redis para guión {script_id}")
@@ -1467,16 +1495,30 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 status='pending'
             )
             
-            # Enviar a n8n para procesamiento (en background)
-            n8n_service = N8nService()
-            try:
-                n8n_service.send_script_for_processing(script)
-                messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
-            except Exception as e:
-                messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
+            # Procesar guión con el servicio configurado (n8n o LangChain)
+            service = get_script_service()
             
-            # Redirigir inmediatamente al detalle del guión
-            return redirect('core:script_detail', script_id=script.pk)
+            # LangChain procesa síncronamente, n8n es asíncrono
+            if hasattr(service, 'process_script'):
+                # LangChain: procesamiento síncrono
+                try:
+                    script = service.process_script(script)
+                    messages.success(request, f'Guión "{title}" procesado exitosamente.')
+                    return redirect('core:script_detail', script_id=script.pk)
+                except Exception as e:
+                    logger.error(f"Error al procesar guión con LangChain: {e}")
+                    messages.error(request, f'Error al procesar guión: {str(e)}')
+                    return redirect('core:script_detail', script_id=script.pk)
+            else:
+                # n8n: procesamiento asíncrono (comportamiento original)
+                try:
+                    service.send_script_for_processing(script)
+                    messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
+                except Exception as e:
+                    messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
+                
+                # Redirigir inmediatamente al detalle del guión
+                return redirect('core:script_detail', script_id=script.pk)
             
         except Exception as e:
             messages.error(request, f'Error inesperado: {str(e)}')
@@ -1533,12 +1575,23 @@ class ScriptRetryView(ServiceMixin, View):
             script.error_message = None
             script.save()
             
-            # Reenviar a n8n
-            n8n_service = N8nService()
-            if n8n_service.send_script_for_processing(script):
-                messages.success(request, f'Guión "{script.title}" reenviado para procesamiento.')
+            # Reprocesar con el servicio configurado (n8n o LangChain)
+            service = get_script_service()
+            
+            if hasattr(service, 'process_script'):
+                # LangChain: procesamiento síncrono
+                try:
+                    script = service.process_script(script)
+                    messages.success(request, f'Guión "{script.title}" reprocesado exitosamente.')
+                except Exception as e:
+                    logger.error(f"Error al reprocesar guión con LangChain: {e}")
+                    messages.error(request, f'Error al reprocesar guión: {str(e)}')
             else:
-                messages.error(request, f'Error al reenviar guión "{script.title}".')
+                # n8n: procesamiento asíncrono (comportamiento original)
+                if service.send_script_for_processing(script):
+                    messages.success(request, f'Guión "{script.title}" reenviado para procesamiento.')
+                else:
+                    messages.error(request, f'Error al reenviar guión "{script.title}".')
             
             # Si es petición HTMX, devolver template parcial
             if request.headers.get('HX-Request'):
@@ -1705,21 +1758,30 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 status='pending'
             )
             
-            # Enviar a n8n
-            from .services import N8nService
-            n8n_service = N8nService()
+            # Procesar con el servicio configurado (n8n o LangChain)
+            service = get_script_service()
             
             try:
-                n8n_service.send_script_for_processing(script)
-                
-                # Redirigir a la misma página con script_id para polling
-                return JsonResponse({
-                    'status': 'success',
-                    'script_id': script.id,
-                    'message': 'Script enviado para procesamiento'
-                })
+                if hasattr(service, 'process_script'):
+                    # LangChain: procesamiento síncrono
+                    script = service.process_script(script)
+                    return JsonResponse({
+                        'status': 'success',
+                        'script_id': script.id,
+                        'scenes_count': script.db_scenes.count(),
+                        'message': 'Script procesado exitosamente'
+                    })
+                else:
+                    # n8n: procesamiento asíncrono (comportamiento original)
+                    service.send_script_for_processing(script)
+                    return JsonResponse({
+                        'status': 'success',
+                        'script_id': script.id,
+                        'message': 'Script enviado para procesamiento'
+                    })
                 
             except Exception as e:
+                logger.error(f"Error al procesar guión: {e}")
                 script.mark_as_error(str(e))
                 return JsonResponse({
                     'status': 'error',
@@ -2731,64 +2793,77 @@ class SceneVersionsView(View):
 # WEBHOOK INTEGRATION
 # ====================
 
-class N8nWebhookView(View):
-    """Webhook para recibir respuestas de n8n"""
-    
-    from django.views.decorators.csrf import csrf_exempt
-    from django.utils.decorators import method_decorator
-    
-    @method_decorator(csrf_exempt)
-    def dispatch(self, *args, **kwargs):
-        return super().dispatch(*args, **kwargs)
-    
-    def post(self, request):
-        """Procesar respuesta del webhook de n8n"""
-        try:
-            import json
-            
-            # Log de inicio
-            logger.info("=" * 80)
-            logger.info("=== WEBHOOK N8N RECIBIDO ===")
-            logger.info(f"Timestamp: {timezone.now()}")
-            logger.info(f"Request headers: {dict(request.headers)}")
-            logger.info(f"Request body (raw): {request.body.decode('utf-8')}")
-            
-            # Obtener datos del webhook
-            data = json.loads(request.body)
-            
-            # Log de los datos parseados
-            logger.info(f"Datos parseados:")
-            logger.info(f"  - status: {data.get('status')}")
-            logger.info(f"  - script_id: {data.get('script_id')}")
-            logger.info(f"  - message: {data.get('message')}")
-            logger.info(f"  - project: {data.get('project', {})}")
-            logger.info(f"  - scenes count: {len(data.get('scenes', []))}")
-            
-            # Procesar respuesta usando el servicio
-            n8n_service = N8nService()
-            script = n8n_service.process_webhook_response(data)
-            
-            logger.info(f"✓ Webhook n8n procesado exitosamente para guión {script.id}")
-            logger.info(f"  - Nuevo estado: {script.status}")
-            logger.info(f"  - Escenas guardadas: {len(script.scenes)}")
-            logger.info("=" * 80)
-            
-            return JsonResponse({
-                'status': 'success', 
-                'message': 'Datos procesados',
-                'script_id': script.id
-            })
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"✗ JSON inválido en webhook: {e}")
-            return JsonResponse({'error': 'JSON inválido'}, status=400)
-        except (ValidationException, ServiceException) as e:
-            logger.error(f"✗ Error de validación en webhook n8n: {e}")
-            return JsonResponse({'error': str(e)}, status=400)
-        except Exception as e:
-            logger.error(f"✗ Error inesperado en webhook n8n: {e}")
-            logger.exception("Traceback completo:")
-            return JsonResponse({'error': 'Error interno'}, status=500)
+# DEPRECATED: Esta clase ya no se usa. Reemplazada por ScriptAgentService (LangChain)
+# Código comentado para referencia histórica
+# class N8nWebhookView(View):
+#     """Webhook para recibir respuestas de n8n"""
+#     
+#     from django.views.decorators.csrf import csrf_exempt
+#     from django.utils.decorators import method_decorator
+#     
+#     @method_decorator(csrf_exempt)
+#     def dispatch(self, *args, **kwargs):
+#         return super().dispatch(*args, **kwargs)
+#     
+#     def post(self, request):
+#         """Procesar respuesta del webhook de n8n - DEPRECATED con LangChain"""
+#         from django.conf import settings
+#         
+#         # Si LangChain está activo, este endpoint no debería usarse
+#         if getattr(settings, 'USE_LANGCHAIN_AGENT', False):
+#             logger.warning("N8nWebhookView llamado pero LangChain está activo")
+#             return JsonResponse({
+#                 'status': 'deprecated',
+#                 'message': 'Este endpoint ya no se usa con LangChain. El procesamiento es síncrono ahora.'
+#             }, status=410)  # 410 Gone
+#         
+#         try:
+#             import json
+#             
+#             # Log de inicio
+#             logger.info("=" * 80)
+#             logger.info("=== WEBHOOK N8N RECIBIDO ===")
+#             logger.info(f"Timestamp: {timezone.now()}")
+#             logger.info(f"Request headers: {dict(request.headers)}")
+#             logger.info(f"Request body (raw): {request.body.decode('utf-8')}")
+#             
+#             # Obtener datos del webhook
+#             data = json.loads(request.body)
+#             
+#             # Log de los datos parseados
+#             logger.info(f"Datos parseados:")
+#             logger.info(f"  - status: {data.get('status')}")
+#             logger.info(f"  - script_id: {data.get('script_id')}")
+#             logger.info(f"  - message: {data.get('message')}")
+#             logger.info(f"  - project: {data.get('project', {})}")
+#             logger.info(f"  - scenes count: {len(data.get('scenes', []))}")
+#             
+#             # Procesar respuesta usando el servicio (solo n8n en este punto)
+#             from core.services import N8nService
+#             n8n_service = N8nService()
+#             script = n8n_service.process_webhook_response(data)
+#             
+#             logger.info(f"✓ Webhook n8n procesado exitosamente para guión {script.id}")
+#             logger.info(f"  - Nuevo estado: {script.status}")
+#             logger.info(f"  - Escenas guardadas: {len(script.scenes)}")
+#             logger.info("=" * 80)
+#             
+#             return JsonResponse({
+#                 'status': 'success', 
+#                 'message': 'Datos procesados',
+#                 'script_id': script.id
+#             })
+#             
+#         except json.JSONDecodeError as e:
+#             logger.error(f"✗ JSON inválido en webhook: {e}")
+#             return JsonResponse({'error': 'JSON inválido'}, status=400)
+#         except (ValidationException, ServiceException) as e:
+#             logger.error(f"✗ Error de validación en webhook n8n: {e}")
+#             return JsonResponse({'error': str(e)}, status=400)
+#         except Exception as e:
+#             logger.error(f"✗ Error inesperado en webhook n8n: {e}")
+#             logger.exception("Traceback completo:")
+#             return JsonResponse({'error': 'Error interno'}, status=500)
 
 
 # ====================

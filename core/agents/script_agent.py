@@ -12,12 +12,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from core.llm.factory import LLMFactory
 from core.agents.prompts.script_analysis_prompt import get_script_analysis_prompt
-from core.agents.tools import (
-    validate_all_scenes_durations,
-    validate_json_structure,
-    auto_correct_all_scenes,
-    validate_platform_avatar_consistency
-)
+from core.agents.tools.duration_validator import validate_all_scenes_durations
+from core.agents.tools.json_validator import validate_json_structure
+from core.agents.tools.auto_corrector import auto_correct_all_scenes
+from core.agents.tools.platform_selector import validate_platform_avatar_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +106,9 @@ class ScriptAgent:
     
     def _analyze_script_node(self, state: AgentState) -> AgentState:
         """Nodo: Analiza el guión con el LLM"""
-        logger.info(f"Analizando guión (duración: {state['duration_min']} min)")
+        logger.info("🔵 [NODO] analyze_script - Iniciando análisis del guión")
+        logger.info(f"   Duración: {state['duration_min']} min")
+        logger.info(f"   Texto: {len(state['script_text'])} caracteres")
         
         # Crear mensajes
         messages = self.prompt_template.format_messages(
@@ -118,6 +118,7 @@ class ScriptAgent:
         
         # Invocar LLM
         try:
+            logger.debug(f"📤 Invocando LLM ({self.llm_provider}/{self.llm_model or 'default'})")
             response = self.llm.invoke(messages)
             response_text = response.content if hasattr(response, 'content') else str(response)
             
@@ -133,17 +134,19 @@ class ScriptAgent:
                 'model': self.llm_model or 'default'
             }
             
-            logger.info(f"Respuesta recibida del LLM ({len(response_text)} caracteres)")
+            logger.info(f"✅ [NODO] analyze_script - Completado")
+            logger.info(f"   Respuesta: {len(response_text)} caracteres")
+            logger.info(f"   Tokens: {input_tokens} input + {output_tokens} output")
             
         except Exception as e:
-            logger.error(f"Error al invocar LLM: {e}")
+            logger.error(f"❌ [NODO] analyze_script - Error: {e}")
             raise
         
         return state
     
     def _parse_response_node(self, state: AgentState) -> AgentState:
         """Nodo: Parsea la respuesta JSON del LLM"""
-        logger.info("Parseando respuesta JSON")
+        logger.info("🔵 [NODO] parse_response - Parseando respuesta JSON")
         
         response_text = state['llm_response']
         
@@ -153,17 +156,21 @@ class ScriptAgent:
         try:
             parsed = json.loads(json_text)
             state['parsed_json'] = parsed
-            logger.info(f"JSON parseado exitosamente ({len(parsed.get('scenes', []))} escenas)")
+            scenes_count = len(parsed.get('scenes', []))
+            logger.info(f"✅ [NODO] parse_response - Completado")
+            logger.info(f"   Escenas encontradas: {scenes_count}")
+            logger.info(f"   Project mode: {parsed.get('project', {}).get('platform_mode', 'N/A')}")
         except json.JSONDecodeError as e:
-            logger.error(f"Error al parsear JSON: {e}")
-            logger.error(f"Respuesta recibida: {response_text[:500]}...")
+            logger.error(f"❌ [NODO] parse_response - Error al parsear JSON")
+            logger.error(f"   Error: {str(e)}")
+            logger.error(f"   Respuesta recibida (primeros 500 chars): {response_text[:500]}...")
             raise ValueError(f"Respuesta del LLM no es JSON válido: {str(e)}")
         
         return state
     
     def _validate_output_node(self, state: AgentState) -> AgentState:
         """Nodo: Valida la estructura y duraciones"""
-        logger.info("Validando salida")
+        logger.info("🔵 [NODO] validate_output - Validando salida")
         
         parsed = state['parsed_json']
         errors = []
@@ -172,7 +179,11 @@ class ScriptAgent:
         structure_validation = validate_json_structure.invoke({'data': parsed})
         if not structure_validation['valid']:
             errors.extend(structure_validation['errors'])
-            logger.warning(f"Errores de estructura: {structure_validation['errors']}")
+            logger.warning(f"⚠️  Errores de estructura: {len(structure_validation['errors'])}")
+            for error in structure_validation['errors'][:3]:  # Mostrar primeros 3
+                logger.warning(f"   - {error}")
+        else:
+            logger.debug("✅ Estructura JSON válida")
         
         # Validar duraciones
         scenes = parsed.get('scenes', [])
@@ -180,15 +191,26 @@ class ScriptAgent:
             duration_validation = validate_all_scenes_durations.invoke({'scenes': scenes})
             if not duration_validation['all_valid']:
                 errors.extend(duration_validation['errors'])
-                logger.warning(f"Errores de duración: {duration_validation['errors']}")
+                logger.warning(f"⚠️  Errores de duración: {len(duration_validation['errors'])}")
+                for error in duration_validation['errors'][:3]:
+                    logger.warning(f"   - {error}")
+            else:
+                logger.debug("✅ Duraciones válidas")
             
             # Validar consistencia platform/avatar
             consistency_validation = validate_platform_avatar_consistency.invoke({'scenes': scenes})
             if not consistency_validation['valid']:
                 errors.extend(consistency_validation['errors'])
-                logger.warning(f"Errores de consistencia: {consistency_validation['errors']}")
+                logger.warning(f"⚠️  Errores de consistencia: {len(consistency_validation['errors'])}")
+            else:
+                logger.debug("✅ Consistencia platform/avatar válida")
         
         state['validation_errors'] = errors
+        
+        if errors:
+            logger.warning(f"❌ [NODO] validate_output - {len(errors)} errores encontrados")
+        else:
+            logger.info(f"✅ [NODO] validate_output - Validación exitosa")
         
         return state
     
@@ -201,7 +223,7 @@ class ScriptAgent:
     
     def _auto_correct_node(self, state: AgentState) -> AgentState:
         """Nodo: Corrige errores automáticamente"""
-        logger.info("Aplicando corrección automática")
+        logger.info("🔵 [NODO] auto_correct - Aplicando corrección automática")
         
         parsed = state['parsed_json']
         scenes = parsed.get('scenes', [])
@@ -211,19 +233,21 @@ class ScriptAgent:
             parsed['scenes'] = correction_result['corrected_scenes']
             
             corrections = []
-            for scene_idx, scene in enumerate(correction_result['corrected_scenes']):
-                # Las correcciones ya están aplicadas en las escenas
-                pass
+            total_corrections = correction_result['total_corrections']
             
             state['parsed_json'] = parsed
             state['corrections_applied'] = corrections
-            logger.info(f"Correcciones aplicadas: {correction_result['total_corrections']}")
+            
+            if total_corrections > 0:
+                logger.info(f"✅ [NODO] auto_correct - {total_corrections} correcciones aplicadas")
+            else:
+                logger.info(f"✅ [NODO] auto_correct - No se requirieron correcciones")
         
         return state
     
     def _format_output_node(self, state: AgentState) -> AgentState:
         """Nodo: Formatea la salida final"""
-        logger.info("Formateando salida final")
+        logger.info("🔵 [NODO] format_output - Formateando salida final")
         
         parsed = state['parsed_json']
         
@@ -236,6 +260,11 @@ class ScriptAgent:
         }
         
         state['final_output'] = formatted
+        
+        scenes_count = len(formatted.get('scenes', []))
+        logger.info(f"✅ [NODO] format_output - Completado")
+        logger.info(f"   Escenas finales: {scenes_count}")
+        logger.info(f"   Personajes: {len(formatted.get('characters', []))}")
         
         return state
     
@@ -291,7 +320,13 @@ class ScriptAgent:
         Raises:
             ValueError: Si el procesamiento falla después de todos los reintentos
         """
-        logger.info(f"Procesando guión (ID: {script_id}, duración: {duration_min} min)")
+        logger.info("=" * 80)
+        logger.info(f"🚀 INICIANDO PROCESAMIENTO DE GUION")
+        logger.info(f"   Script ID: {script_id}")
+        logger.info(f"   Duración: {duration_min} min")
+        logger.info(f"   Proveedor LLM: {self.llm_provider}")
+        logger.info(f"   Modelo: {self.llm_model or 'default'}")
+        logger.info("=" * 80)
         
         # Estado inicial
         initial_state: AgentState = {
@@ -309,14 +344,23 @@ class ScriptAgent:
         last_error = None
         for attempt in range(self.max_retries + 1):
             try:
+                logger.info(f"🔄 Intento {attempt + 1}/{self.max_retries + 1}")
                 result = self.agent_executor.invoke(initial_state)
                 
                 if result.get('final_output'):
-                    logger.info(f"✓ Guión procesado exitosamente (intento {attempt + 1})")
+                    scenes_count = len(result['final_output'].get('scenes', []))
+                    metrics = result.get('metrics', {})
+                    
+                    logger.info("=" * 80)
+                    logger.info(f"✅ PROCESAMIENTO COMPLETADO EXITOSAMENTE")
+                    logger.info(f"   Escenas generadas: {scenes_count}")
+                    logger.info(f"   Tokens usados: {metrics.get('input_tokens', 0)} + {metrics.get('output_tokens', 0)}")
+                    logger.info(f"   Intento: {attempt + 1}")
+                    logger.info("=" * 80)
                     
                     # Agregar métricas a la salida
                     output = result['final_output'].copy()
-                    output['_metrics'] = result.get('metrics', {})
+                    output['_metrics'] = metrics
                     output['_corrections'] = result.get('corrections_applied', [])
                     
                     return output
@@ -325,12 +369,58 @@ class ScriptAgent:
                     
             except Exception as e:
                 last_error = e
-                logger.warning(f"Intento {attempt + 1} falló: {e}")
+                logger.warning(f"⚠️  Intento {attempt + 1} falló: {e}")
                 if attempt < self.max_retries:
-                    logger.info(f"Reintentando... ({attempt + 1}/{self.max_retries})")
+                    logger.info(f"🔄 Reintentando... ({attempt + 1}/{self.max_retries})")
                 else:
-                    logger.error(f"Todos los intentos fallaron")
+                    logger.error(f"❌ Todos los intentos fallaron")
         
         # Si llegamos aquí, todos los intentos fallaron
+        logger.error("=" * 80)
+        logger.error(f"❌ ERROR FINAL: No se pudo procesar después de {self.max_retries + 1} intentos")
+        logger.error(f"   Último error: {str(last_error)}")
+        logger.error("=" * 80)
         raise ValueError(f"Error al procesar guión después de {self.max_retries + 1} intentos: {str(last_error)}")
+
+
+# ====================
+# FACTORY FUNCTION PARA LANGGRAPH STUDIO
+# ====================
+
+def create_script_agent_graph():
+    """
+    Factory function para crear el grafo del agente.
+    Usado por LangGraph Studio para visualización.
+    
+    Returns:
+        StateGraph: Grafo SIN compilar (Studio lo compila internamente)
+    """
+    import os
+    import sys
+    
+    # Configurar Django
+    if 'django' not in sys.modules or not sys.modules.get('django').conf.settings.configured:
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'atenea.settings')
+        import django
+        django.setup()
+    
+    try:
+        # Crear el agente
+        agent = ScriptAgent(
+            llm_provider='openai',
+            llm_model=None,
+            temperature=0.7,
+            max_retries=2
+        )
+        
+        # Devolver grafo SIN compilar
+        # LangGraph Studio lo compila internamente para visualización
+        return agent.graph
+        
+    except Exception as e:
+        # Loguear el error para debugging
+        import traceback
+        logger.error(f"Error en create_script_agent_graph: {e}")
+        logger.error(traceback.format_exc())
+        raise
 

@@ -88,18 +88,24 @@ class AgentMetrics:
         
         # Contador total de requests
         total_key = f"{AgentMetrics.CACHE_PREFIX}total:{today}"
-        cache.incr(total_key, ignore_missing=True)
-        cache.expire(total_key, AgentMetrics.CACHE_TTL)
+        try:
+            cache.incr(total_key)
+        except (ValueError, TypeError):
+            cache.set(total_key, 1, timeout=AgentMetrics.CACHE_TTL)
         
         # Contador por proveedor
         provider_key = f"{AgentMetrics.CACHE_PREFIX}provider:{provider}:{today}"
-        cache.incr(provider_key, ignore_missing=True)
-        cache.expire(provider_key, AgentMetrics.CACHE_TTL)
+        try:
+            cache.incr(provider_key)
+        except (ValueError, TypeError):
+            cache.set(provider_key, 1, timeout=AgentMetrics.CACHE_TTL)
         
         # Contador de éxito/error
         status_key = f"{AgentMetrics.CACHE_PREFIX}status:{'success' if success else 'error'}:{today}"
-        cache.incr(status_key, ignore_missing=True)
-        cache.expire(status_key, AgentMetrics.CACHE_TTL)
+        try:
+            cache.incr(status_key)
+        except (ValueError, TypeError):
+            cache.set(status_key, 1, timeout=AgentMetrics.CACHE_TTL)
     
     @staticmethod
     def get_daily_stats(date: Optional[str] = None) -> Dict[str, Any]:

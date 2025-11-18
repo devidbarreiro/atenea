@@ -3165,139 +3165,141 @@ class VideoCompositionService:
 # ====================
 # N8N INTEGRATION SERVICE
 # ====================
+# DEPRECATED: Este servicio ya no se usa. Reemplazado por ScriptAgentService (LangChain)
+# Código comentado para referencia histórica, pero no se ejecuta cuando USE_LANGCHAIN_AGENT=True
 
-class N8nService:
-    """Servicio para integrar con n8n para procesamiento de guiones"""
-    
-    def __init__(self):
-        self.webhook_url = "https://n8n.nxhumans.com/webhook/6e03a7df-1812-446e-a776-9a5b4ab543c8"
-    
-    def send_script_for_processing(self, script):
-        """Enviar guión a n8n para procesamiento"""
-        try:
-            import requests
-            
-            # Preparar datos para enviar (solo guión y duración)
-            data = {
-                'script_id': script.id,
-                'guion': script.original_script,
-                'duracion_minutos': script.desired_duration_min
-            }
-            
-            # Marcar como procesando
-            script.mark_as_processing()
-            
-            # Enviar a n8n
-            response = requests.post(
-                self.webhook_url,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"Guión {script.id} enviado exitosamente a n8n")
-                return True
-            else:
-                script.mark_as_error(f"Error HTTP {response.status_code}: {response.text}")
-                logger.error(f"Error al enviar guión a n8n: {response.status_code} - {response.text}")
-                return False
-                
-        except requests.exceptions.Timeout as e:
-            # Timeout no es un error fatal, n8n puede estar procesando
-            logger.warning(f"Timeout al enviar guión a n8n (puede estar procesando): {e}")
-            return True  # Consideramos que se envió correctamente
-        except requests.exceptions.RequestException as e:
-            script.mark_as_error(f"Error de conexión: {str(e)}")
-            logger.error(f"Error de conexión al enviar guión a n8n: {e}")
-            return False
-        except Exception as e:
-            script.mark_as_error(f"Error inesperado: {str(e)}")
-            logger.error(f"Error inesperado al enviar guión a n8n: {e}")
-            return False
-    
-    def process_webhook_response(self, data):
-        """Procesar respuesta del webhook de n8n"""
-        try:
-            # Validar que tenemos la estructura esperada
-            if 'status' not in data:
-                raise ValidationException("Estructura de respuesta inválida del webhook")
-            
-            # Verificar que el procesamiento fue exitoso
-            if data.get('status') != 'success':
-                raise ValidationException(f"Error en n8n: {data.get('message', 'Error desconocido')}")
-            
-            # Obtener el script_id
-            script_id = data.get('script_id')
-            if not script_id:
-                raise ValidationException("No se encontró script_id en la respuesta")
-            
-            try:
-                script = Script.objects.get(id=script_id)
-            except Script.DoesNotExist:
-                raise ValidationException(f"Guión con ID {script_id} no encontrado")
-            
-            # Preparar datos procesados
-            output_data = {}
-            
-            # Si viene con 'output' (estructura original)
-            if 'output' in data:
-                output_data = data.get('output')
-                # Si output_data es un string (JSON stringificado), parsearlo
-                if isinstance(output_data, str):
-                    import json
-                    output_data = json.loads(output_data)
-            
-            # Si viene con 'project' y 'scenes' directamente (estructura nueva)
-            elif 'project' in data and 'scenes' in data:
-                output_data = {
-                    'project': data.get('project'),
-                    'scenes': data.get('scenes')
-                }
-                # Incluir characters si viene en la respuesta
-                if 'characters' in data:
-                    output_data['characters'] = data.get('characters')
-                    logger.info(f"Script {script_id}: {len(data['characters'])} personajes recibidos")
-                else:
-                    logger.warning(f"Script {script_id}: No se recibieron 'characters' en la respuesta de n8n")
-            
-            # Validar estructura de datos procesados
-            if 'project' not in output_data or 'scenes' not in output_data:
-                raise ValidationException("Estructura de datos procesados inválida")
-            
-            # Marcar como completado con los datos procesados
-            script.mark_as_completed(output_data)
-            
-            # Si es flujo del agente, crear objetos Scene en la BD
-            if script.agent_flow:
-                logger.info(f"Script {script_id} es del flujo del agente, creando escenas en BD...")
-                scenes_data = output_data.get('scenes', [])
-                
-                if scenes_data:
-                    # Crear escenas usando SceneService
-                    created_scenes = SceneService.create_scenes_from_n8n_data(script, scenes_data)
-                    
-                    # Iniciar generación de preview images solo si está habilitado
-                    if script.generate_previews:
-                        scene_service = SceneService()
-                        for scene in created_scenes:
-                            try:
-                                # TODO: Idealmente esto debería ser async o con Celery
-                                # Por ahora lo hacemos síncrono
-                                scene_service.generate_preview_image(scene)
-                            except Exception as e:
-                                # No bloqueamos si falla una preview image
-                                logger.error(f"Error al generar preview para escena {scene.scene_id}: {e}")
-                    else:
-                        logger.info(f"✓ Generación de previews deshabilitada (script.generate_previews=False)")
-                    
-                    logger.info(f"✓ {len(created_scenes)} escenas creadas para script {script_id}")
-            
-            logger.info(f"Guión {script_id} procesado exitosamente por n8n")
-            return script
-            
-        except Exception as e:
-            logger.error(f"Error al procesar respuesta del webhook: {e}")
-            raise ServiceException(f"Error al procesar respuesta: {str(e)}")
+# class N8nService:
+#     """Servicio para integrar con n8n para procesamiento de guiones"""
+#     
+#     def __init__(self):
+#         self.webhook_url = "https://n8n.nxhumans.com/webhook/6e03a7df-1812-446e-a776-9a5b4ab543c8"
+#     
+#     def send_script_for_processing(self, script):
+#         """Enviar guión a n8n para procesamiento"""
+#         try:
+#             import requests
+#             
+#             # Preparar datos para enviar (solo guión y duración)
+#             data = {
+#                 'script_id': script.id,
+#                 'guion': script.original_script,
+#                 'duracion_minutos': script.desired_duration_min
+#             }
+#             
+#             # Marcar como procesando
+#             script.mark_as_processing()
+#             
+#             # Enviar a n8n
+#             response = requests.post(
+#                 self.webhook_url,
+#                 json=data,
+#                 timeout=30
+#             )
+#             
+#             if response.status_code == 200:
+#                 logger.info(f"Guión {script.id} enviado exitosamente a n8n")
+#                 return True
+#             else:
+#                 script.mark_as_error(f"Error HTTP {response.status_code}: {response.text}")
+#                 logger.error(f"Error al enviar guión a n8n: {response.status_code} - {response.text}")
+#                 return False
+#                 
+#         except requests.exceptions.Timeout as e:
+#             # Timeout no es un error fatal, n8n puede estar procesando
+#             logger.warning(f"Timeout al enviar guión a n8n (puede estar procesando): {e}")
+#             return True  # Consideramos que se envió correctamente
+#         except requests.exceptions.RequestException as e:
+#             script.mark_as_error(f"Error de conexión: {str(e)}")
+#             logger.error(f"Error de conexión al enviar guión a n8n: {e}")
+#             return False
+#         except Exception as e:
+#             script.mark_as_error(f"Error inesperado: {str(e)}")
+#             logger.error(f"Error inesperado al enviar guión a n8n: {e}")
+#             return False
+#     
+#     def process_webhook_response(self, data):
+#         """Procesar respuesta del webhook de n8n"""
+#         try:
+#             # Validar que tenemos la estructura esperada
+#             if 'status' not in data:
+#                 raise ValidationException("Estructura de respuesta inválida del webhook")
+#             
+#             # Verificar que el procesamiento fue exitoso
+#             if data.get('status') != 'success':
+#                 raise ValidationException(f"Error en n8n: {data.get('message', 'Error desconocido')}")
+#             
+#             # Obtener el script_id
+#             script_id = data.get('script_id')
+#             if not script_id:
+#                 raise ValidationException("No se encontró script_id en la respuesta")
+#             
+#             try:
+#                 script = Script.objects.get(id=script_id)
+#             except Script.DoesNotExist:
+#                 raise ValidationException(f"Guión con ID {script_id} no encontrado")
+#             
+#             # Preparar datos procesados
+#             output_data = {}
+#             
+#             # Si viene con 'output' (estructura original)
+#             if 'output' in data:
+#                 output_data = data.get('output')
+#                 # Si output_data es un string (JSON stringificado), parsearlo
+#                 if isinstance(output_data, str):
+#                     import json
+#                     output_data = json.loads(output_data)
+#             
+#             # Si viene con 'project' y 'scenes' directamente (estructura nueva)
+#             elif 'project' in data and 'scenes' in data:
+#                 output_data = {
+#                     'project': data.get('project'),
+#                     'scenes': data.get('scenes')
+#                 }
+#                 # Incluir characters si viene en la respuesta
+#                 if 'characters' in data:
+#                     output_data['characters'] = data.get('characters')
+#                     logger.info(f"Script {script_id}: {len(data['characters'])} personajes recibidos")
+#                 else:
+#                     logger.warning(f"Script {script_id}: No se recibieron 'characters' en la respuesta de n8n")
+#             
+#             # Validar estructura de datos procesados
+#             if 'project' not in output_data or 'scenes' not in output_data:
+#                 raise ValidationException("Estructura de datos procesados inválida")
+#             
+#             # Marcar como completado con los datos procesados
+#             script.mark_as_completed(output_data)
+#             
+#             # Si es flujo del agente, crear objetos Scene en la BD
+#             if script.agent_flow:
+#                 logger.info(f"Script {script_id} es del flujo del agente, creando escenas en BD...")
+#                 scenes_data = output_data.get('scenes', [])
+#                 
+#                 if scenes_data:
+#                     # Crear escenas usando SceneService
+#                     created_scenes = SceneService.create_scenes_from_n8n_data(script, scenes_data)
+#                     
+#                     # Iniciar generación de preview images solo si está habilitado
+#                     if script.generate_previews:
+#                         scene_service = SceneService()
+#                         for scene in created_scenes:
+#                             try:
+#                                 # TODO: Idealmente esto debería ser async o con Celery
+#                                 # Por ahora lo hacemos síncrono
+#                                 scene_service.generate_preview_image(scene)
+#                             except Exception as e:
+#                                 # No bloqueamos si falla una preview image
+#                                 logger.error(f"Error al generar preview para escena {scene.scene_id}: {e}")
+#                     else:
+#                         logger.info(f"✓ Generación de previews deshabilitada (script.generate_previews=False)")
+#                     
+#                     logger.info(f"✓ {len(created_scenes)} escenas creadas para script {script_id}")
+#             
+#             logger.info(f"Guión {script_id} procesado exitosamente por n8n")
+#             return script
+#             
+#         except Exception as e:
+#             logger.error(f"Error al procesar respuesta del webhook: {e}")
+#             raise ServiceException(f"Error al procesar respuesta: {str(e)}")
 
 
 class RedisService:
