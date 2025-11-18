@@ -57,12 +57,9 @@ def get_script_service():
         from core.services_agent import ScriptAgentService
         return ScriptAgentService()
     else:
-        # DEPRECATED: N8nService está comentado, usar ScriptAgentService siempre
-        # from core.services import N8nService
-        # return N8nService()
-        # Fallback: usar ScriptAgentService si n8n no está disponible
-        from core.services_agent import ScriptAgentService
-        return ScriptAgentService()
+        # Usar N8nService cuando USE_LANGCHAIN_AGENT=False (comportamiento legacy)
+        from core.services import N8nService
+        return N8nService()
 
 
 from django.shortcuts import render
