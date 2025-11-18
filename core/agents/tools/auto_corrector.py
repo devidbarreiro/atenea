@@ -97,18 +97,25 @@ def auto_correct_all_scenes(scenes: List[Dict]) -> Dict[str, any]:
         scenes: Lista de escenas a corregir
         
     Returns:
-        Dict con 'corrected_scenes' (list), 'total_corrections' (int)
+        Dict con 'corrected_scenes' (list), 'total_corrections' (int), 'all_corrections' (list)
     """
     corrected_scenes = []
     total_corrections = 0
+    all_corrections = []
     
-    for scene in scenes:
+    for idx, scene in enumerate(scenes):
         result = auto_correct_scene.invoke({'scene': scene})
         corrected_scenes.append(result['corrected_scene'])
-        total_corrections += len(result['corrections_applied'])
+        scene_corrections = result['corrections_applied']
+        total_corrections += len(scene_corrections)
+        
+        # Agregar correcciones con contexto de escena
+        for correction in scene_corrections:
+            all_corrections.append(f"Escena {idx + 1}: {correction}")
     
     return {
         'corrected_scenes': corrected_scenes,
-        'total_corrections': total_corrections
+        'total_corrections': total_corrections,
+        'all_corrections': all_corrections
     }
 

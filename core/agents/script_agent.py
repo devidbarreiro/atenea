@@ -232,7 +232,8 @@ class ScriptAgent:
             correction_result = auto_correct_all_scenes.invoke({'scenes': scenes})
             parsed['scenes'] = correction_result['corrected_scenes']
             
-            corrections = []
+            # Obtener correcciones detalladas del resultado
+            corrections = correction_result.get('all_corrections', [])
             total_corrections = correction_result['total_corrections']
             
             state['parsed_json'] = parsed
