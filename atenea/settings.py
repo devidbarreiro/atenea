@@ -279,6 +279,9 @@ LLM_MAX_RETRIES = config('LLM_MAX_RETRIES', default=2, cast=int)
 AGENT_CACHE_TTL = config('AGENT_CACHE_TTL', default=86400, cast=int)  # 24 horas en segundos
 AGENT_CACHE_ENABLED = config('AGENT_CACHE_ENABLED', default=True, cast=bool)
 
+# Feature Flag: Usar LangChain en lugar de n8n
+USE_LANGCHAIN_AGENT = config('USE_LANGCHAIN_AGENT', default=False, cast=bool)
+
 # Rate Limiting (para implementar después)
 AGENT_RATE_LIMIT_PER_USER = config('AGENT_RATE_LIMIT_PER_USER', default=10, cast=int)  # requests/hora
 AGENT_RATE_LIMIT_PER_PROJECT = config('AGENT_RATE_LIMIT_PER_PROJECT', default=5, cast=int)  # requests/hora
