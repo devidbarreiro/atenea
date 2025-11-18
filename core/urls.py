@@ -62,7 +62,8 @@ urlpatterns = [
     path('api/elevenlabs/voices/', views.ListElevenLabsVoicesView.as_view(), name='api_list_elevenlabs_voices'),
     
     # Webhooks
-    path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
+    # DEPRECATED: N8nWebhookView está comentado, ya no se usa con LangChain
+    # path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
     
     # Agent Video Flow
     path('projects/<int:project_id>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
