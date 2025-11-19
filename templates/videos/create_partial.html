@@ -1,0 +1,15 @@
+{% load static %}
+
+<!-- Wrapper para mantener consistencia con detail.html -->
+<div id="project-tabs-container" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div class="p-6">
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Video</h2>
+            <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {% include 'videos/_form.html' %}
+        </div>
+    </div>
+</div>

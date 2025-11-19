@@ -3,447 +3,635 @@
 {% block title %}{{ project.name }} - Atenea{% endblock %}
 
 {% block content %}
-<!-- Header del Proyecto -->
-<div class="mb-8">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">{{ project.name }}</h1>
-            {% if project.description %}
-            <p class="text-gray-600">{{ project.description }}</p>
+<div data-project-detail class="flex flex-col lg:flex-row gap-0">
+    <!-- Sidebar del proyecto - Pegada a la sidebar principal -->
+    <aside x-data="{ 
+        sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true'
+    }"
+    x-init="
+        sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        window.addEventListener('sidebar-toggled', (e) => {
+            sidebarCollapsed = e.detail.collapsed;
+        });
+    "
+    :class="{
+        'lg:left-16': sidebarCollapsed,
+        'lg:left-64': !sidebarCollapsed
+    }"
+    class="lg:w-80 flex-shrink-0 lg:fixed lg:top-0 lg:h-screen lg:overflow-y-auto lg:z-30 bg-white border-r border-gray-200 transition-all duration-300">
+        <div class="p-6">
+            <!-- Información del proyecto -->
+            <div class="mb-6">
+                {% include 'projects/partials/project_name.html' with project=project user_role=user_role %}
+                {% if project.description %}
+                <p class="text-sm text-gray-600 mt-2">{{ project.description }}</p>
+                {% endif %}
+                <div class="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>Creado {{ project.created_at|date:"d M Y" }}</span>
+                </div>
+            </div>
+
+            <!-- Estadísticas -->
+            <div class="space-y-3 mb-6">
+                <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm">🎬</span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-700">Videos</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-lg font-bold text-blue-600">{{ project.video_count }}</div>
+                        <div class="text-xs text-gray-500">{{ project.completed_videos }} completados</div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm">🖼️</span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-700">Imágenes</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-lg font-bold text-purple-600">{{ project.image_count }}</div>
+                        <div class="text-xs text-gray-500">{{ project.completed_images }} completadas</div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm">📝</span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-700">Guiones</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-lg font-bold text-orange-600">{{ project.script_count }}</div>
+                        <div class="text-xs text-gray-500">{{ project.completed_scripts }} completados</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acciones del proyecto -->
+            <div class="border-t border-gray-200 pt-6 space-y-2">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Acciones</h3>
+                
+                <!-- Botón principal: Crear -->
+                <div x-data="{ open: false }" class="relative">
+                    <button @click="open = !open" 
+                            class="w-full bg-black text-white hover:bg-gray-800 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        Crear Nuevo
+                    </button>
+                    
+                    <!-- Dropdown de creación -->
+                    <div x-show="open" 
+                         @click.away="open = false"
+                         x-cloak
+                         x-transition
+                         class="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2">
+                        <button hx-get="{% url 'core:video_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:video_create' project.id %}"
+                                @click="open = false"
+                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>🎬</span> Video
+                        </button>
+                        <button hx-get="{% url 'core:image_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:image_create' project.id %}"
+                                @click="open = false"
+                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>🖼️</span> Imagen
+                        </button>
+                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:audio_create' project.id %}"
+                                @click="open = false"
+                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>🎙️</span> Audio
+                        </button>
+                        <a href="{% url 'core:music_create' project.id %}" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>🎵</span> Música
+                        </a>
+                        <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:script_create' project.id %}"
+                                @click="open = false"
+                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>📝</span> Guión
+                        </button>
+                        <div class="border-t border-gray-200 my-2"></div>
+                        <a href="{% url 'core:agent_create' project.id %}" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>✨</span> Video con Agente
+                        </a>
+                    </div>
+                </div>
+                
+                {% if user_role == 'owner' %}
+                <a href="{% url 'core:project_delete' project.id %}" 
+                   class="w-full bg-red-50 text-red-700 hover:bg-red-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    Eliminar Proyecto
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- Gestión de Colaboradores -->
+            {% if user_role == 'owner' or user_role == 'editor' %}
+            <div class="border-t border-gray-200 pt-6 mt-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Colaboradores</h3>
+                <div class="space-y-2">
+                    <button hx-get="{% url 'core:project_invite_partial' project.id %}" 
+                            hx-target="#project-dynamic-content" 
+                            hx-swap="innerHTML"
+                            hx-push-url="{% url 'core:project_invite' project.id %}"
+                            class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                        </svg>
+                        Invitar Usuario
+                    </button>
+                    <button hx-get="{% url 'core:project_invitations_partial' project.id %}" 
+                            hx-target="#project-dynamic-content" 
+                            hx-swap="innerHTML"
+                            hx-push-url="{% url 'core:project_invitations' project.id %}"
+                            class="w-full bg-gray-50 text-gray-700 hover:bg-gray-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Ver Invitaciones
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Información de miembros -->
+            {% if project_owner or project_members %}
+            <div class="border-t border-gray-200 pt-6 mt-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Miembros</h3>
+                <div class="space-y-2">
+                    {% if project_owner %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-700">
+                            {{ project_owner.username|first|upper }}
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">{{ project_owner.username }}</div>
+                            <div class="text-xs text-gray-500">Propietario</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% for member in project_members %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-700">
+                            {{ member.user.username|first|upper }}
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">{{ member.user.username }}</div>
+                            <div class="text-xs text-gray-500">{{ member.get_role_display }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
             {% endif %}
         </div>
-        <div class="flex gap-2">
-            <a href="{% url 'core:agent_create' project.id %}" 
-               class="bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 px-4 py-2 rounded-md text-sm font-medium transition-all shadow-md hover:shadow-lg flex items-center gap-2">
-                <span>✨</span> Generar Video con Agente
-            </a>
-            <a href="{% url 'core:video_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                + Video
-            </a>
-            <a href="{% url 'core:image_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                + Imagen
-            </a>
-            <a href="{% url 'core:audio_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                + Audio
-            </a>
-            <a href="{% url 'core:music_create' project.id %}" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 px-4 py-2 rounded-md text-sm font-medium transition-all shadow-sm hover:shadow-md flex items-center gap-1">
-                🎵 Música
-            </a>
-            <a href="{% url 'core:script_create' project.id %}" class="bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                + Guión
-            </a>
-            <a href="{% url 'core:project_delete' project.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                Eliminar
-            </a>
-            <a href="{% url 'core:dashboard' %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                Volver
-            </a>
-        </div>
-    </div>
+    </aside>
 
-    <!-- Estadísticas del Proyecto -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-            <div class="text-sm text-gray-600 mb-1">Videos</div>
-            <div class="text-3xl font-bold text-blue-600">{{ project.video_count }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ project.completed_videos }} completados</div>
-        </div>
-        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-            <div class="text-sm text-gray-600 mb-1">Imágenes</div>
-            <div class="text-3xl font-bold text-purple-600">{{ project.image_count }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ project.completed_images }} completadas</div>
-        </div>
-        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-            <div class="text-sm text-gray-600 mb-1">Guiones</div>
-            <div class="text-3xl font-bold text-orange-600">{{ project.script_count }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ project.completed_scripts }} completados</div>
-        </div>
-        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-            <div class="text-sm text-gray-600 mb-1">Total Media</div>
-            <div class="text-3xl font-bold text-gray-900">{{ project.video_count|add:project.image_count|add:project.script_count }}</div>
-            <div class="text-xs text-gray-500 mt-1">Videos + Imágenes + Guiones</div>
-        </div>
-        <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-            <div class="text-sm text-gray-600 mb-1">Creado</div>
-            <div class="text-3xl font-bold text-gray-900">{{ project.created_at|date:"d" }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ project.created_at|date:"M Y" }}</div>
-        </div>
-    </div>
-</div>
-
-<!-- Videos Section -->
-{% if videos %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold text-gray-900">Videos</h2>
-        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-            <button 
-                @click="view = 'grid'; 
-                        document.getElementById('videos-grid').classList.remove('hidden'); 
-                        document.getElementById('videos-list').classList.add('hidden')"
-                :class="view === 'grid' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                ⊞ Cuadrícula
-            </button>
-            <button 
-                @click="view = 'list'; 
-                        document.getElementById('videos-grid').classList.add('hidden'); 
-                        document.getElementById('videos-list').classList.remove('hidden')"
-                :class="view === 'list' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                ☰ Lista
-            </button>
-        </div>
-    </div>
-    
-    <!-- Vista Cuadrícula -->
-    <div id="videos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {% for video_data in videos_with_urls %}
-        {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
-            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
-                    {% if video.status == 'completed' %}bg-green-500 text-white
-                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif video.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ video.get_status_display }}
-                </span>
-                {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                    <div class="absolute w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl">▶</div>
-                {% else %}
-                    <span class="text-5xl opacity-30">🎬</span>
+    <!-- Barra de navegación fija -->
+    <div x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' }"
+         x-init="window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; })"
+         :style="'left: ' + (window.innerWidth >= 1024 ? ((sidebarCollapsed ? 64 : 256) + 320) + 'px' : '0')"
+         class="fixed top-0 right-0 bg-white border-b border-gray-200 z-20 shadow-sm transition-all duration-300">
+        <nav class="flex -mb-px px-6 overflow-x-auto" aria-label="Tabs">
+            <a href="{% url 'core:project_videos' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'videos' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Videos
+                {% if videos %}
+                <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ videos|length }}</span>
                 {% endif %}
-            </div>
-            <div class="p-4">
-                <div class="font-semibold mb-1 truncate text-gray-900">{{ video.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">{{ video.get_type_display }}</div>
-                <div class="flex justify-between text-xs text-gray-400">
-                    <span>{{ video.created_at|date:"d/m/Y" }}</span>
-                    <span>{{ video.created_at|date:"H:i" }}</span>
-                </div>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-
-    <!-- Vista Lista -->
-    <div id="videos-list" class="hidden space-y-3">
-        {% for video_data in videos_with_urls %}
-        {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                {% else %}
-                    <span class="text-3xl opacity-30">🎬</span>
+            </a>
+            <a href="{% url 'core:project_images' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'images' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Imágenes
+                {% if images %}
+                <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ images|length }}</span>
                 {% endif %}
-            </div>
-            <div class="flex-1 flex flex-col justify-center">
-                <div class="font-semibold text-gray-900">{{ video.title }}</div>
-                <div class="text-sm text-gray-500">
-                    <span>{{ video.get_type_display }}</span>
-                    <span class="ml-4">{{ video.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <span class="px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if video.status == 'completed' %}bg-green-500 text-white
-                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif video.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ video.get_status_display }}
-                </span>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
-    <div class="text-6xl mb-4 opacity-30">🎬</div>
-    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay videos</h3>
-    <p class="text-gray-600 mb-4">Comienza creando tu primer video con IA</p>
-    <a href="{% url 'core:video_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
-        Crear Video
-    </a>
-</div>
-{% endif %}
-
-<!-- Images Section -->
-{% if images %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold text-gray-900">Imágenes</h2>
-        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-            <button 
-                @click="view = 'grid'; 
-                        document.getElementById('images-grid').classList.remove('hidden'); 
-                        document.getElementById('images-list').classList.add('hidden')"
-                :class="view === 'grid' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                ⊞ Cuadrícula
-            </button>
-            <button 
-                @click="view = 'list'; 
-                        document.getElementById('images-grid').classList.add('hidden'); 
-                        document.getElementById('images-list').classList.remove('hidden')"
-                :class="view === 'list' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                ☰ Lista
-            </button>
-        </div>
-    </div>
-    
-    <!-- Vista Cuadrícula -->
-    <div id="images-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {% for image_data in images_with_urls %}
-        {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
-            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
-                    {% if image.status == 'completed' %}bg-green-500 text-white
-                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif image.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ image.get_status_display }}
-                </span>
-                {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
-                {% else %}
-                    <span class="text-5xl opacity-30">🖼️</span>
+            </a>
+            <a href="{% url 'core:project_audios' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'audios' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Audios
+                {% if audios %}
+                <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ audios|length }}</span>
                 {% endif %}
-            </div>
-            <div class="p-4">
-                <div class="font-semibold mb-1 truncate text-gray-900">{{ image.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">{{ image.get_type_display }}</div>
-                <div class="flex justify-between text-xs text-gray-400">
-                    <span>{{ image.created_at|date:"d/m/Y" }}</span>
-                    <span>{{ image.created_at|date:"H:i" }}</span>
-                </div>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-
-    <!-- Vista Lista -->
-    <div id="images-list" class="hidden space-y-3">
-        {% for image_data in images_with_urls %}
-        {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
-                {% else %}
-                    <span class="text-3xl opacity-30">🖼️</span>
+            </a>
+            <a href="{% url 'core:project_music' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'music' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Música
+            </a>
+            <a href="{% url 'core:project_scripts' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'scripts' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Guiones
+                {% if scripts %}
+                <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ scripts|length }}</span>
                 {% endif %}
-            </div>
-            <div class="flex-1 flex flex-col justify-center">
-                <div class="font-semibold text-gray-900">{{ image.title }}</div>
-                <div class="text-sm text-gray-500">
-                    <span>{{ image.get_type_display }}</span>
-                    <span class="ml-4">{{ image.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <span class="px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if image.status == 'completed' %}bg-green-500 text-white
-                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif image.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ image.get_status_display }}
-                </span>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
+            </a>
+            <a href="{% url 'core:project_agent' project.id %}"
+               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'agent' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+                Video con Agente
+            </a>
+        </nav>
     </div>
-</div>
-{% else %}
-<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
-    <div class="text-6xl mb-4 opacity-30">🖼️</div>
-    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay imágenes</h3>
-    <p class="text-gray-600 mb-4">Comienza creando tu primera imagen con IA</p>
-    <a href="{% url 'core:image_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
-        Crear Imagen
-    </a>
-</div>
-{% endif %}
 
-<!-- Audios Section -->
-{% if audios %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold text-gray-900">Audios</h2>
-    </div>
-    
-    <div class="space-y-3">
-        {% for audio_data in audios_with_urls %}
-        {% with audio=audio_data.audio %}
-        <a href="{% url 'core:audio_detail' audio.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <div class="w-16 h-16 bg-green-100 rounded-md flex-shrink-0 flex items-center justify-center">
-                <span class="text-3xl">🎙️</span>
-            </div>
-            <div class="flex-1 flex flex-col justify-center">
-                <div class="font-semibold text-gray-900">{{ audio.title }}</div>
-                <div class="text-sm text-gray-500">
-                    <span>{{ audio.voice_name }}</span>
-                    {% if audio.duration %}
-                    <span class="ml-4">{{ audio.duration|floatformat:1 }}s</span>
+    <!-- Contenido principal - Con margen para la sidebar del proyecto y la barra fija -->
+    <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
+        <!-- Contenido dinámico -->
+        <div id="project-dynamic-content">
+        <!-- Tabs para navegar entre tipos de contenido -->
+        <div id="project-tabs-container" 
+             x-data="{ 
+            activeTab: '{{ active_tab }}'
+        }" 
+        class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+            <!-- Tab Content -->
+            <div class="p-6">
+                <!-- Videos Tab -->
+                <div x-show="activeTab === 'videos'" x-cloak>
+                    {% if videos %}
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900">Videos del Proyecto</h2>
+                        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                            <button @click="view = 'grid'; document.getElementById('videos-grid').classList.remove('hidden'); document.getElementById('videos-list').classList.add('hidden')"
+                                    :class="view === 'grid' ? 'bg-gray-100' : ''"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                                ⊞
+                            </button>
+                            <button @click="view = 'list'; document.getElementById('videos-grid').classList.add('hidden'); document.getElementById('videos-list').classList.remove('hidden')"
+                                    :class="view === 'list' ? 'bg-gray-100' : ''"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                                ☰
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="videos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for video_data in videos_with_urls %}
+                        {% with video=video_data.video %}
+                        <a href="{% url 'core:video_detail' video.id %}" class="group bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
+                            <div class="relative w-full aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
+                                <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
+                                    {% if video.status == 'completed' %}bg-green-500 text-white
+                                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif video.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ video.get_status_display }}
+                                </span>
+                                {% if video.status == 'completed' and video_data.signed_url %}
+                                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
+                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
+                                        <div class="w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">▶</div>
+                                    </div>
+                                {% else %}
+                                    <span class="text-4xl opacity-30">🎬</span>
+                                {% endif %}
+                            </div>
+                            <div class="p-3">
+                                <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ video.title }}</div>
+                                <div class="text-xs text-gray-500">{{ video.get_type_display }} • {{ video.created_at|date:"d/m/Y" }}</div>
+                            </div>
+                        </a>
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+
+                    <div id="videos-list" class="hidden space-y-2">
+                        {% for video_data in videos_with_urls %}
+                        {% with video=video_data.video %}
+                        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
+                            <div class="w-24 h-16 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                {% if video.status == 'completed' and video_data.signed_url %}
+                                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
+                                {% else %}
+                                    <span class="text-2xl opacity-30">🎬</span>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-sm text-gray-900 truncate">{{ video.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ video.get_type_display }} • {{ video.created_at|date:"d/m/Y H:i" }}</div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="px-2 py-1 rounded text-xs font-semibold 
+                                    {% if video.status == 'completed' %}bg-green-500 text-white
+                                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif video.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ video.get_status_display }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">🎬</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay videos</h3>
+                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer video</p>
+                        <button hx-get="{% url 'core:video_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:video_create' project.id %}"
+                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear Video
+                        </button>
+                    </div>
                     {% endif %}
-                    <span class="ml-4">{{ audio.created_at|date:"d/m/Y H:i" }}</span>
                 </div>
-            </div>
-            <div class="flex items-center gap-3">
-                {% if audio.status == 'completed' and audio_data.signed_url %}
-                <audio controls class="w-48">
-                    <source src="{{ audio_data.signed_url }}" type="audio/mpeg">
-                </audio>
-                {% endif %}
-                <span class="px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if audio.status == 'completed' %}bg-green-500 text-white
-                    {% elif audio.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif audio.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ audio.get_status_display }}
-                </span>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
-    <div class="text-6xl mb-4 opacity-30">🎙️</div>
-    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay audios</h3>
-    <p class="text-gray-600 mb-4">Comienza creando tu primer audio con ElevenLabs TTS</p>
-    <a href="{% url 'core:audio_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
-        Crear Audio
-    </a>
-</div>
-{% endif %}
 
-<!-- Scripts Section -->
-{% if scripts %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold text-gray-900">Guiones</h2>
-        <div class="flex gap-2">
-            <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-                <button 
-                    @click="view = 'grid'; 
-                            document.getElementById('scripts-grid').classList.remove('hidden'); 
-                            document.getElementById('scripts-list').classList.add('hidden')"
-                    :class="view === 'grid' ? 'bg-gray-100' : ''"
-                    class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                    ⊞ Cuadrícula
-                </button>
-                <button 
-                    @click="view = 'list'; 
-                            document.getElementById('scripts-grid').classList.add('hidden'); 
-                            document.getElementById('scripts-list').classList.remove('hidden')"
-                    :class="view === 'list' ? 'bg-gray-100' : ''"
-                    class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                    ☰ Lista
-                </button>
-            </div>
-            <a href="{% url 'core:script_create' project.id %}" 
-               class="bg-orange-500 text-white hover:bg-orange-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                + Guión
-            </a>
-        </div>
-    </div>
-    
-    <!-- Vista Cuadrícula -->
-    <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {% for script in scripts %}
-        <div class="script-card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200">
-            <a href="{% url 'core:script_detail' script.id %}" class="block">
-                <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                    <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold z-10
-                        {% if script.status == 'completed' %}bg-green-500 text-white
-                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
-                        {% elif script.status == 'error' %}bg-red-500 text-white
-                        {% else %}bg-gray-500 text-white{% endif %}">
-                        {{ script.get_status_display }}
-                    </span>
-                    <span class="text-5xl opacity-30">📝</span>
-                </div>
-                <div class="p-4">
-                    <div class="font-semibold mb-1 truncate text-gray-900">{{ script.title }}</div>
-                    <div class="text-sm text-gray-500 mb-2">
-                        {% if script.num_scenes %}
-                            {{ script.num_scenes }} escenas
-                        {% else %}
-                            Guión
-                        {% endif %}
+                <!-- Images Tab -->
+                <div x-show="activeTab === 'images'" x-cloak>
+                    {% if images %}
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900">Imágenes del Proyecto</h2>
+                        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                            <button @click="view = 'grid'; document.getElementById('images-grid').classList.remove('hidden'); document.getElementById('images-list').classList.add('hidden')"
+                                    :class="view === 'grid' ? 'bg-gray-100' : ''"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                                ⊞
+                            </button>
+                            <button @click="view = 'list'; document.getElementById('images-grid').classList.add('hidden'); document.getElementById('images-list').classList.remove('hidden')"
+                                    :class="view === 'list' ? 'bg-gray-100' : ''"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                                ☰
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex justify-between text-xs text-gray-400">
-                        <span>{{ script.created_at|date:"d/m/Y" }}</span>
-                        <span>{{ script.created_at|date:"H:i" }}</span>
+                    
+                    <div id="images-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for image_data in images_with_urls %}
+                        {% with image=image_data.image %}
+                        <a href="{% url 'core:image_detail' image.id %}" class="group bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
+                            <div class="relative w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+                                <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
+                                    {% if image.status == 'completed' %}bg-green-500 text-white
+                                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif image.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ image.get_status_display }}
+                                </span>
+                                {% if image.status == 'completed' and image_data.signed_url %}
+                                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                                {% else %}
+                                    <span class="text-4xl opacity-30">🖼️</span>
+                                {% endif %}
+                            </div>
+                            <div class="p-3">
+                                <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ image.title }}</div>
+                                <div class="text-xs text-gray-500">{{ image.get_type_display }} • {{ image.created_at|date:"d/m/Y" }}</div>
+                            </div>
+                        </a>
+                        {% endwith %}
+                        {% endfor %}
                     </div>
-                </div>
-            </a>
-            <div class="p-4 pt-0">
-                {% include 'partials/script_actions.html' with script=script %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
 
-    <!-- Vista Lista -->
-    <div id="scripts-list" class="hidden space-y-3">
-        {% for script in scripts %}
-        <div class="script-card flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <a href="{% url 'core:script_detail' script.id %}" class="flex gap-4 flex-1">
-                <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
-                    <span class="text-3xl opacity-30">📝</span>
+                    <div id="images-list" class="hidden space-y-2">
+                        {% for image_data in images_with_urls %}
+                        {% with image=image_data.image %}
+                        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
+                            <div class="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                {% if image.status == 'completed' and image_data.signed_url %}
+                                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
+                                {% else %}
+                                    <span class="text-2xl opacity-30">🖼️</span>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-sm text-gray-900 truncate">{{ image.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ image.get_type_display }} • {{ image.created_at|date:"d/m/Y H:i" }}</div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="px-2 py-1 rounded text-xs font-semibold 
+                                    {% if image.status == 'completed' %}bg-green-500 text-white
+                                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif image.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ image.get_status_display }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">🖼️</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay imágenes</h3>
+                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primera imagen</p>
+                        <button hx-get="{% url 'core:image_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:image_create' project.id %}"
+                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear Imagen
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
-                <div class="flex-1 flex flex-col justify-center">
-                    <div class="font-semibold text-gray-900">{{ script.title }}</div>
-                    <div class="text-sm text-gray-500">
-                        <span>
-                            {% if script.num_scenes %}
-                                {{ script.num_scenes }} escenas
-                            {% else %}
-                                Guión
-                            {% endif %}
-                        </span>
-                        <span class="ml-4">{{ script.created_at|date:"d/m/Y H:i" }}</span>
+
+                <!-- Audios Tab -->
+                <div x-show="activeTab === 'audios'" x-cloak>
+                    {% if audios %}
+                    <div class="mb-4">
+                        <h2 class="text-lg font-semibold text-gray-900">Audios del Proyecto</h2>
+                    </div>
+                    <div class="space-y-2">
+                        {% for audio_data in audios_with_urls %}
+                        {% with audio=audio_data.audio %}
+                        <a href="{% url 'core:audio_detail' audio.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex-shrink-0 flex items-center justify-center">
+                                <span class="text-xl">🎙️</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-sm text-gray-900 truncate">{{ audio.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ audio.voice_name }}{% if audio.duration %} • {{ audio.duration|floatformat:1 }}s{% endif %} • {{ audio.created_at|date:"d/m/Y H:i" }}</div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                {% if audio.status == 'completed' and audio_data.signed_url %}
+                                <audio controls class="w-40 h-8">
+                                    <source src="{{ audio_data.signed_url }}" type="audio/mpeg">
+                                </audio>
+                                {% endif %}
+                                <span class="px-2 py-1 rounded text-xs font-semibold 
+                                    {% if audio.status == 'completed' %}bg-green-500 text-white
+                                    {% elif audio.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif audio.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ audio.get_status_display }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">🎙️</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay audios</h3>
+                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer audio</p>
+                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:audio_create' project.id %}"
+                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear Audio
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Scripts Tab -->
+                <div x-show="activeTab === 'scripts'" x-cloak>
+                    {% if scripts %}
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900">Guiones del Proyecto</h2>
+                        <div class="flex gap-2">
+                            <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                                <button @click="view = 'grid'; document.getElementById('scripts-grid').classList.remove('hidden'); document.getElementById('scripts-list').classList.add('hidden')"
+                                        :class="view === 'grid' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                                    ⊞
+                                </button>
+                                <button @click="view = 'list'; document.getElementById('scripts-grid').classList.add('hidden'); document.getElementById('scripts-list').classList.remove('hidden')"
+                                        :class="view === 'list' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                                    ☰
+                                </button>
+                            </div>
+                            <a href="{% url 'core:script_create' project.id %}" 
+                               class="bg-orange-500 text-white hover:bg-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                                + Guión
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for script in scripts %}
+                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
+                            <a href="{% url 'core:script_detail' script.id %}" class="block">
+                                <div class="relative w-full aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
+                                    <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
+                                        {% if script.status == 'completed' %}bg-green-500 text-white
+                                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
+                                        {% elif script.status == 'error' %}bg-red-500 text-white
+                                        {% else %}bg-gray-500 text-white{% endif %}">
+                                        {{ script.get_status_display }}
+                                    </span>
+                                    <span class="text-4xl opacity-30">📝</span>
+                                </div>
+                                <div class="p-3">
+                                    <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ script.title }}</div>
+                                    <div class="text-xs text-gray-500">
+                                        {% if script.num_scenes %}{{ script.num_scenes }} escenas{% else %}Guión{% endif %} • {{ script.created_at|date:"d/m/Y" }}
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="px-3 pb-3">
+                                {% include 'partials/script_actions.html' with script=script %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div id="scripts-list" class="hidden space-y-2">
+                        {% for script in scripts %}
+                        <div class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
+                            <a href="{% url 'core:script_detail' script.id %}" class="flex gap-3 flex-1">
+                                <div class="w-24 h-16 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center">
+                                    <span class="text-2xl opacity-30">📝</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-medium text-sm text-gray-900 truncate">{{ script.title }}</div>
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        {% if script.num_scenes %}{{ script.num_scenes }} escenas{% else %}Guión{% endif %} • {{ script.created_at|date:"d/m/Y H:i" }}
+                                    </div>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="px-2 py-1 rounded text-xs font-semibold 
+                                        {% if script.status == 'completed' %}bg-green-500 text-white
+                                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
+                                        {% elif script.status == 'error' %}bg-red-500 text-white
+                                        {% else %}bg-gray-500 text-white{% endif %}">
+                                        {{ script.get_status_display }}
+                                    </span>
+                                </div>
+                            </a>
+                            <div class="flex items-center">
+                                {% include 'partials/script_actions.html' with script=script %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">📝</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay guiones</h3>
+                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer guión</p>
+                        <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:script_create' project.id %}"
+                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear Guión
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Music Tab -->
+                <div x-show="activeTab === 'music'" x-cloak>
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">🎵</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Próximamente: Música</h3>
+                        <p class="text-sm text-gray-600 mb-4">Genera música con IA para tus proyectos</p>
+                        <a href="{% url 'core:music_create' project.id %}"
+                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear Música
+                        </a>
                     </div>
                 </div>
-                <div class="flex items-center">
-                    <span class="px-3 py-1 rounded-md text-xs font-semibold 
-                        {% if script.status == 'completed' %}bg-green-500 text-white
-                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
-                        {% elif script.status == 'error' %}bg-red-500 text-white
-                        {% else %}bg-gray-500 text-white{% endif %}">
-                        {{ script.get_status_display }}
-                    </span>
+
+                <!-- Agent Tab -->
+                <div x-show="activeTab === 'agent'" x-cloak>
+                    <div class="text-center py-12">
+                        <div class="text-5xl mb-4 opacity-30">✨</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Video con Agente IA</h3>
+                        <p class="text-sm text-gray-600 mb-4">Crea videos guiados por un agente de IA inteligente</p>
+                        <a href="{% url 'core:agent_create' project.id %}"
+                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            Crear con Agente
+                        </a>
+                    </div>
                 </div>
-            </a>
-            <div class="flex items-center">
-                {% include 'partials/script_actions.html' with script=script %}
             </div>
         </div>
-        {% endfor %}
-    </div>
+        </div><!-- cierre project-dynamic-content -->
+    </main>
 </div>
-{% else %}
-<div class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center mb-8">
-    <div class="text-6xl mb-4 opacity-30">📝</div>
-    <h3 class="text-xl font-bold text-gray-800 mb-2">No hay guiones</h3>
-    <p class="text-gray-600 mb-4">Comienza creando tu primer guión para procesar con n8n</p>
-    <a href="{% url 'core:script_create' project.id %}" class="inline-block bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
-        Crear Guión
-    </a>
-</div>
-{% endif %}
 
-<!-- Modal Container for HTMX -->
 {% endblock %}

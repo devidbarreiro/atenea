@@ -10,7 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin, 
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -28,7 +28,7 @@ import json
 
 from .models import Project, Video, Image, Audio, Script, Scene, Music
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
-from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 # N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
@@ -60,6 +60,53 @@ def get_script_service():
         # Usar N8nService cuando USE_LANGCHAIN_AGENT=False (comportamiento legacy)
         from core.services import N8nService
         return N8nService()
+
+
+def send_invitation_email(request, invitation):
+    """
+    Envía un email de invitación a un proyecto
+    
+    Args:
+        request: HttpRequest para construir URLs absolutas
+        invitation: ProjectInvitation a enviar
+    """
+    from .models import ProjectInvitation
+    from django.core.mail import send_mail
+    
+    try:
+        # Construir URL de aceptación
+        accept_url = request.build_absolute_uri(
+            reverse('core:accept_invitation', args=[invitation.token])
+        )
+        
+        # Contexto para el template
+        context = {
+            'invitation': invitation,
+            'project': invitation.project,
+            'invited_by': invitation.invited_by,
+            'accept_url': accept_url,
+            'role_display': invitation.get_role_display(),
+        }
+        
+        # Renderizar mensaje
+        subject = f'Invitación para unirte al proyecto "{invitation.project.name}"'
+        message = render_to_string('projects/invitation_email.txt', context)
+        
+        # Enviar email
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+        send_mail(
+            subject,
+            message,
+            from_email,
+            [invitation.email],
+            fail_silently=False
+        )
+        
+        logger.info(f"Email de invitación enviado a {invitation.email} para proyecto {invitation.project.id}")
+        
+    except Exception as e:
+        logger.error(f"Error enviando email de invitación a {invitation.email}: {e}")
+        # No lanzar excepción para no interrumpir el flujo
 
 
 from django.shortcuts import render
@@ -267,24 +314,46 @@ class DashboardView(ServiceMixin, ListView):
     
     def get_queryset(self):
         """Obtener proyectos optimizado"""
-        return ProjectService.get_user_projects()
+        return ProjectService.get_user_projects(self.request.user)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['show_header'] = True
         
-        # Agregar estadísticas
+        # Obtener proyectos del usuario para filtrar estadísticas
+        user_projects = ProjectService.get_user_projects(self.request.user)
+        user_project_ids = user_projects.values_list('id', flat=True)
+        
+        # Agregar estadísticas filtradas por items del usuario (con y sin proyecto)
+        from django.db.models import Q
         context.update({
-            'total_videos': Video.objects.count(),
-            'total_images': Image.objects.count(),
-            'total_scripts': Script.objects.count(),
-            'completed_videos': Video.objects.filter(status='completed').count(),
-            'processing_videos': Video.objects.filter(status='processing').count(),
-            'completed_scripts': Script.objects.filter(status='completed').count(),
+            'total_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'total_images': Image.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'total_scripts': Script.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'completed_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='completed'
+            ).count(),
+            'processing_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='processing'
+            ).count(),
+            'completed_scripts': Script.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='completed'
+            ).count(),
         })
         
-        # Obtener todos los videos recientes
-        videos = Video.objects.select_related('project').order_by('-created_at')[:20]
+        # Obtener videos recientes del usuario (con y sin proyecto)
+        videos = Video.objects.filter(
+            Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+        ).select_related('project').order_by('-created_at')[:20]
         video_service = self.get_video_service()
         videos_with_urls = []
         
@@ -304,8 +373,10 @@ class DashboardView(ServiceMixin, ListView):
                     'signed_url': None
                 })
         
-        # Obtener todas las imágenes recientes
-        images = Image.objects.select_related('project').order_by('-created_at')[:20]
+        # Obtener imágenes recientes del usuario (con y sin proyecto)
+        images = Image.objects.filter(
+            Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+        ).select_related('project').order_by('-created_at')[:20]
         image_service = self.get_image_service()
         images_with_urls = []
         
@@ -344,10 +415,24 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     context_object_name = 'project'
     pk_url_kwarg = 'project_id'
     
+    def get(self, request, *args, **kwargs):
+        """Si no hay tab especificado, redirigir a /videos/"""
+        if 'tab' not in kwargs:
+            project_id = kwargs.get('project_id')
+            return redirect('core:project_videos', project_id=project_id)
+        return super().get(request, *args, **kwargs)
+    
     def get_object(self, queryset=None):
-        """Obtener proyecto con videos optimizado"""
+        """Obtener proyecto con videos optimizado y verificar permisos"""
         project_id = self.kwargs.get('project_id')
-        return ProjectService.get_project_with_videos(project_id)
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        # Verificar que el usuario tenga acceso
+        if not ProjectService.user_has_access(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes acceso a este proyecto')
+        
+        return project
     
     def get_breadcrumbs(self):
         return [
@@ -440,6 +525,36 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         context['audios_with_urls'] = audios_with_urls
         context['scripts'] = scripts
         
+        # Agregar información de permisos y miembros
+        context['user_role'] = self.object.get_user_role(self.request.user)
+        context['project_owner'] = self.object.owner
+        context['project_members'] = self.object.members.select_related('user').all()
+        
+        # Agregar tab activo desde kwargs (por defecto 'videos')
+        context['active_tab'] = self.kwargs.get('tab', 'videos')
+        
+        return context
+
+
+class ProjectsListView(ServiceMixin, ListView):
+    """Vista de lista de proyectos del usuario"""
+    model = Project
+    template_name = 'projects/list.html'
+    context_object_name = 'projects'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        """Obtener proyectos del usuario"""
+        return ProjectService.get_user_projects(self.request.user)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['show_header'] = True
+        
+        # Agregar estadísticas de proyectos
+        user_projects = ProjectService.get_user_projects(self.request.user)
+        context['total_projects'] = user_projects.count()
+        
         return context
 
 
@@ -462,13 +577,39 @@ class ProjectCreateView(SuccessMessageMixin, BreadcrumbMixin, ServiceMixin, Crea
         """Usar servicio para crear proyecto"""
         try:
             name = form.cleaned_data['name']
-            # TODO: Pasar request.user cuando se implemente autenticación
-            self.object = ProjectService.create_project(name)
+            self.object = ProjectService.create_project(name, owner=self.request.user)
             messages.success(self.request, self.success_message)
             return redirect(self.get_success_url())
         except ValidationException as e:
             form.add_error('name', str(e))
             return self.form_invalid(form)
+
+
+class ProjectUpdateNameView(ServiceMixin, View):
+    """Actualizar nombre del proyecto via HTMX"""
+    
+    def post(self, request, project_id):
+        """Actualizar nombre del proyecto"""
+        project = get_object_or_404(Project, id=project_id)
+        
+        # Verificar permisos
+        if not ProjectService.user_can_edit(project, request.user):
+            return HttpResponse('No tienes permisos para editar este proyecto', status=403)
+        
+        new_name = request.POST.get('name', '').strip()
+        
+        if not new_name:
+            return HttpResponse('El nombre no puede estar vacío', status=400)
+        
+        try:
+            ProjectService.update_project_name(project, new_name, request.user)
+            # Retornar el HTML actualizado del nombre
+            return render(request, 'projects/partials/project_name.html', {
+                'project': project,
+                'user_role': project.get_user_role(request.user)
+            })
+        except ValidationException as e:
+            return HttpResponse(str(e), status=400)
 
 
 class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
@@ -556,23 +697,33 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             return VideoBaseForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Video', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Video', 'url': None}
         ]
     
@@ -597,6 +748,7 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             
             # Crear video usando servicio
             video = video_service.create_video(
+                created_by=request.user,
                 project=project,
                 title=title,
                 video_type=video_type,
@@ -753,6 +905,130 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             config['input_reference_mime_type'] = upload_result['mime_type']
         
         return config
+
+
+class VideoCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear video (sin layout completo)"""
+    template_name = 'videos/create_partial.html'
+    
+    def get_form_class(self):
+        """Determinar formulario según el tipo de video"""
+        if self.request.method == 'GET':
+            return VideoBaseForm
+        video_type = self.request.POST.get('type')
+        if video_type == 'heygen_avatar_v2':
+            return HeyGenAvatarV2Form
+        elif video_type == 'heygen_avatar_iv':
+            return HeyGenAvatarIVForm
+        elif video_type == 'gemini_veo':
+            return GeminiVeoVideoForm
+        elif video_type == 'sora':
+            return SoraVideoForm
+        else:
+            return VideoBaseForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de video según tipo"""
+        project = self.get_project()
+        video_service = self.get_video_service()
+        
+        title = request.POST.get('title')
+        video_type = request.POST.get('type')
+        script = request.POST.get('script')
+        
+        if not all([title, video_type, script]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            config = self._build_video_config(request, video_type, project, video_service)
+            video = video_service.create_video(
+                project=project,
+                title=title,
+                video_type=video_type,
+                script=script,
+                config=config
+            )
+            messages.success(request, f'Video "{title}" creado. Ahora puedes generarlo.')
+            return redirect('core:video_detail', video_id=video.pk)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+    
+    def _build_video_config(self, request, video_type, project, video_service):
+        """Construir configuración según el tipo de video"""
+        config = {}
+        if video_type == 'heygen_avatar_v2':
+            config = self._build_heygen_v2_config(request)
+        elif video_type == 'heygen_avatar_iv':
+            config = self._build_heygen_iv_config(request, project, video_service)
+        elif video_type == 'gemini_veo':
+            config = self._build_veo_config(request, project, video_service)
+        elif video_type == 'sora':
+            config = self._build_sora_config(request, project, video_service)
+        return config
+    
+    def _build_heygen_v2_config(self, request):
+        """Configuración para HeyGen Avatar V2"""
+        return {
+            'avatar_id': request.POST.get('avatar_id'),
+            'voice_id': request.POST.get('voice_id'),
+            'voice_speed': float(request.POST.get('voice_speed', 1.0)),
+            'voice_pitch': int(request.POST.get('voice_pitch', 0)),
+            'test': request.POST.get('test') == 'true'
+        }
+    
+    def _build_heygen_iv_config(self, request, project, video_service):
+        """Configuración para HeyGen Avatar IV"""
+        config = {
+            'voice_id': request.POST.get('voice_id_iv'),
+            'avatar_prompt': request.POST.get('avatar_prompt', ''),
+            'test': request.POST.get('test_iv') == 'true'
+        }
+        
+        avatar_image_id = request.POST.get('avatar_image_id')
+        if avatar_image_id:
+            config['avatar_image_id'] = avatar_image_id
+        
+        return config
+    
+    def _build_veo_config(self, request, project, video_service):
+        """Configuración para Gemini Veo"""
+        return {
+            'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
+            'duration': int(request.POST.get('duration', 8))
+        }
+    
+    def _build_sora_config(self, request, project, video_service):
+        """Configuración para OpenAI Sora"""
+        config = {
+            'duration': int(request.POST.get('duration', 8)),
+            'size': request.POST.get('size', '1280x720'),
+            'sora_model': request.POST.get('sora_model', 'sora-2')
+        }
+        
+        if request.POST.get('use_input_reference') == 'on':
+            input_reference = request.FILES.get('input_reference')
+            if input_reference:
+                upload_result = video_service.upload_sora_input_reference(input_reference, project)
+                config['input_reference_gcs_path'] = upload_result['gcs_path']
+                config['input_reference_mime_type'] = upload_result['mime_type']
+        
+        return config
+
 
 class VideoDeleteView(BreadcrumbMixin, DeleteView):
     """Eliminar video"""
@@ -978,23 +1254,33 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     form_class = GeminiImageForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nueva Imagen', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nueva Imagen', 'url': None}
         ]
     
@@ -1019,11 +1305,12 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             
             # Crear imagen usando servicio
             image = image_service.create_image(
-                project=project,
                 title=title,
                 image_type=image_type,
                 prompt=prompt,
-                config=config
+                config=config,
+                created_by=request.user,
+                project=project
             )
             
             messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
@@ -1078,6 +1365,76 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             
             uploaded_images = image_service.upload_multiple_input_images(input_images, project)
             config['input_images'] = uploaded_images
+        
+        return config
+
+
+class ImageCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear imagen (sin layout completo)"""
+    template_name = 'images/create_partial.html'
+    form_class = GeminiImageForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de imagen"""
+        project = self.get_project()
+        image_service = self.get_image_service()
+        
+        title = request.POST.get('title')
+        image_type = request.POST.get('type')
+        prompt = request.POST.get('prompt')
+        
+        if not all([title, image_type, prompt]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            config = self._build_image_config(request, image_type, project, image_service)
+            image = image_service.create_image(
+                project=project,
+                title=title,
+                image_type=image_type,
+                prompt=prompt,
+                config=config
+            )
+            messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
+            return redirect('core:image_detail', image_id=image.pk)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+    
+    def _build_image_config(self, request, image_type, project, image_service):
+        """Construir configuración según el tipo de imagen"""
+        config = {
+            'aspect_ratio': request.POST.get('aspect_ratio', '1:1'),
+            'response_modalities': request.POST.get('response_modalities', 'image_only')
+        }
+        
+        if image_type == 'image_to_image':
+            input_image = request.FILES.get('input_image')
+            if input_image:
+                upload_result = image_service.upload_input_image(input_image, project)
+                config['input_image_gcs_path'] = upload_result['gcs_path']
+        elif image_type == 'multi_image':
+            input_images = []
+            for i in range(1, 4):
+                img = request.FILES.get(f'input_image_{i}')
+                if img:
+                    upload_result = image_service.upload_input_image(img, project)
+                    input_images.append(upload_result['gcs_path'])
+            config['input_images'] = input_images
         
         return config
 
@@ -1187,14 +1544,20 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     form_class = AudioForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         
         # Listar voces disponibles
         try:
@@ -1210,11 +1573,15 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Audio', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Audio', 'url': None}
         ]
     
@@ -1237,16 +1604,74 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         try:
             # Crear audio usando servicio
             audio = audio_service.create_audio(
+                title=title,
+                text=text,
+                voice_id=voice_id,
+                created_by=request.user,
+                voice_name=voice_name,
+                project=project
+            )
+            
+            messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
+            return redirect('core:audio_detail', audio_id=audio.pk)
+            
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class AudioCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear audio (sin layout completo)"""
+    template_name = 'audios/create_partial.html'
+    form_class = AudioForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        
+        try:
+            audio_service = self.get_audio_service()
+            voices = audio_service.list_voices()
+            context['voices'] = voices
+        except Exception as e:
+            logger.error(f"Error al listar voces: {e}")
+            context['voices'] = []
+            messages.warning(self.request, 'No se pudieron cargar las voces disponibles')
+        
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de audio"""
+        project = self.get_project()
+        audio_service = self.get_audio_service()
+        
+        title = request.POST.get('title')
+        text = request.POST.get('text')
+        voice_id = request.POST.get('voice_id')
+        voice_name = request.POST.get('voice_name')
+        
+        if not all([title, text, voice_id]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            audio = audio_service.create_audio(
                 project=project,
                 title=title,
                 text=text,
                 voice_id=voice_id,
                 voice_name=voice_name
             )
-            
             messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
             return redirect('core:audio_detail', audio_id=audio.pk)
-            
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
             return self.get(request, *args, **kwargs)
@@ -1448,23 +1873,33 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         return ['scripts/create.html']
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Guión', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Guión', 'url': None}
         ]
     
@@ -1489,7 +1924,8 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 title=title,
                 original_script=original_script,
                 desired_duration_min=int(desired_duration_min),
-                status='pending'
+                status='pending',
+                created_by=request.user
             )
             
             # Procesar guión con el servicio configurado (n8n o LangChain)
@@ -1517,6 +1953,66 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 # Redirigir inmediatamente al detalle del guión
                 return redirect('core:script_detail', script_id=script.pk)
             
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class ScriptCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear guión (sin layout completo)"""
+    template_name = 'scripts/create_partial.html'
+    form_class = ScriptForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de guión"""
+        project = self.get_project()
+        
+        title = request.POST.get('title')
+        original_script = request.POST.get('original_script')
+        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        
+        if not all([title, original_script]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            script = Script.objects.create(
+                project=project,
+                title=title,
+                original_script=original_script,
+                desired_duration_min=int(desired_duration_min),
+                status='pending'
+            )
+            
+            service = get_script_service()
+            
+            if hasattr(service, 'process_script'):
+                try:
+                    script = service.process_script(script)
+                    messages.success(request, f'Guión "{title}" procesado exitosamente.')
+                    return redirect('core:script_detail', script_id=script.pk)
+                except Exception as e:
+                    logger.error(f"Error al procesar guión con LangChain: {e}")
+                    messages.error(request, f'Error al procesar guión: {str(e)}')
+                    return redirect('core:script_detail', script_id=script.pk)
+            else:
+                try:
+                    service.send_script_for_processing(script)
+                    messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
+                except Exception as e:
+                    messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
+                
+                return redirect('core:script_detail', script_id=script.pk)
         except Exception as e:
             messages.error(request, f'Error inesperado: {str(e)}')
             return self.get(request, *args, **kwargs)
@@ -1628,7 +2124,10 @@ class AgentCreateView(BreadcrumbMixin, View):
         
         context = {
             'project': project,
-            'breadcrumbs': self.get_breadcrumbs()
+            'breadcrumbs': self.get_breadcrumbs(),
+            'user_role': project.get_user_role(request.user),
+            'project_owner': project.owner,
+            'project_members': project.members.select_related('user').all()
         }
         
         return render(request, self.template_name, context)
@@ -3677,31 +4176,44 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
     template_name = 'music/create.html'
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self):
         """Preparar contexto para el template"""
         project = self.get_project()
         context = {
-            'project': project,
             'breadcrumbs': self.get_breadcrumbs()
         }
+        if project:
+            context.update({
+                'project': project,
+                'user_role': project.get_user_role(self.request.user) if hasattr(self, 'request') else None,
+                'project_owner': project.owner,
+                'project_members': project.members.select_related('user').all()
+            })
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': '🎵 Nueva Música', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': '🎵 Nueva Música', 'url': None}
         ]
     
     def get(self, request, *args, **kwargs):
         """Mostrar formulario de creación"""
+        self.request = request  # Guardar request para get_context_data
         context = self.get_context_data()
         return render(request, self.template_name, context)
     
@@ -3730,7 +4242,8 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
                 name=name,
                 prompt=prompt,
                 duration_ms=duration_ms,
-                status='pending'
+                status='pending',
+                created_by=request.user
             )
             
             messages.success(request, f'Música "{name}" creada. Ahora puedes generarla.')
@@ -3905,3 +4418,358 @@ class MusicCompositionPlanView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=500)
+
+
+# ====================
+# PROJECT INVITATIONS
+# ====================
+
+class ProjectInviteView(BreadcrumbMixin, ServiceMixin, View):
+    """Vista para invitar usuarios a un proyecto"""
+    template_name = 'projects/invite.html'
+    
+    def get_project(self):
+        """Obtener proyecto y verificar permisos"""
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes permisos para invitar usuarios a este proyecto')
+        
+        return project
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Invitar Usuario', 'url': None}
+        ]
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        return render(request, self.template_name, context)
+    
+    def post(self, request, *args, **kwargs):
+        project = self.get_project()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', 'editor')
+        
+        if not email:
+            messages.error(request, 'El email es requerido')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            invitation = InvitationService.create_invitation(
+                project=project,
+                email=email,
+                invited_by=request.user,
+                role=role
+            )
+            
+            # Enviar email de invitación
+            send_invitation_email(request, invitation)
+            
+            messages.success(request, f'Invitación enviada a {email}')
+            # Si es petición HTMX o desde el tab, redirigir al tab de invitaciones
+            if request.headers.get('HX-Request') or request.GET.get('from_tab'):
+                return redirect('core:project_invitations_partial', project_id=project.pk)
+            return redirect('core:project_invitations', project_id=project.pk)
+            
+        except ValidationException as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error al crear invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class ProjectInvitePartialView(ServiceMixin, View):
+    """Vista parcial para el formulario de invitar usuario (sin layout completo)"""
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            return HttpResponse('No tienes permisos', status=403)
+        
+        return project
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        return render(request, 'projects/partials/invite_form.html', {
+            'project': project
+        })
+    
+    def post(self, request, *args, **kwargs):
+        project = self.get_project()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', 'editor')
+        
+        if not email:
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': 'El email es requerido'
+            })
+        
+        try:
+            invitation = InvitationService.create_invitation(
+                project=project,
+                email=email,
+                invited_by=request.user,
+                role=role
+            )
+            
+            # Enviar email de invitación
+            send_invitation_email(request, invitation)
+            
+            # Redirigir al tab de invitaciones para mostrar la lista actualizada
+            return redirect('core:project_invitations_partial', project_id=project.pk)
+            
+        except ValidationException as e:
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': str(e)
+            })
+        except Exception as e:
+            logger.error(f"Error al crear invitación: {e}")
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': f'Error inesperado: {str(e)}'
+            })
+
+
+class ProjectInvitationsListView(BreadcrumbMixin, ServiceMixin, View):
+    """Lista de invitaciones de un proyecto"""
+    template_name = 'projects/invitations.html'
+    
+    def get_project(self):
+        """Obtener proyecto y verificar permisos"""
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes permisos para ver las invitaciones de este proyecto')
+        
+        return project
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Invitaciones', 'url': None}
+        ]
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        
+        try:
+            invitations = InvitationService.get_project_invitations(project, request.user)
+        except ValidationException as e:
+            messages.error(request, str(e))
+            invitations = []
+        
+        context = {
+            'project': project,
+            'invitations': invitations,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        return render(request, self.template_name, context)
+
+
+class ProjectInvitationsPartialView(ServiceMixin, View):
+    """Vista parcial para la lista de invitaciones (sin layout completo)"""
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            return HttpResponse('No tienes permisos', status=403)
+        
+        return project
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        
+        try:
+            invitations = InvitationService.get_project_invitations(project, request.user)
+        except ValidationException as e:
+            invitations = []
+        
+        return render(request, 'projects/partials/invitations_list.html', {
+            'project': project,
+            'invitations': invitations
+        })
+
+
+class AcceptInvitationView(View):
+    """Vista para aceptar una invitación"""
+    
+    def get(self, request, token):
+        from .models import ProjectInvitation
+        
+        try:
+            invitation = ProjectInvitation.objects.get(token=token)
+        except ProjectInvitation.DoesNotExist:
+            messages.error(request, 'Invitación no encontrada')
+            return redirect('core:dashboard')
+        
+        # Verificar que el usuario esté autenticado
+        if not request.user.is_authenticated:
+            messages.info(request, 'Debes iniciar sesión para aceptar la invitación')
+            return redirect('core:login')
+        
+        # Verificar que el email coincida
+        if invitation.email.lower() != request.user.email.lower():
+            messages.error(request, 'Esta invitación es para otro usuario')
+            return redirect('core:dashboard')
+        
+        # Verificar que pueda ser aceptada
+        if not invitation.can_be_accepted():
+            if invitation.is_expired():
+                messages.error(request, 'La invitación ha expirado')
+            else:
+                messages.error(request, 'La invitación no puede ser aceptada')
+            return redirect('core:dashboard')
+        
+        try:
+            InvitationService.accept_invitation(token, request.user)
+            messages.success(request, f'Te has unido al proyecto "{invitation.project.name}"')
+            return redirect('core:project_detail', project_id=invitation.project.pk)
+        except ValidationException as e:
+            messages.error(request, str(e))
+            return redirect('core:dashboard')
+        except Exception as e:
+            logger.error(f"Error al aceptar invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:dashboard')
+
+
+class CancelInvitationView(View):
+    """Vista para cancelar una invitación"""
+    
+    def post(self, request, invitation_id):
+        try:
+            InvitationService.cancel_invitation(int(invitation_id), request.user)
+            messages.success(request, 'Invitación cancelada')
+        except ValidationException as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            logger.error(f"Error al cancelar invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+        
+        # Redirigir a la lista de invitaciones del proyecto
+        from .models import ProjectInvitation
+        try:
+            invitation = ProjectInvitation.objects.get(id=invitation_id)
+            return redirect('core:project_invitations', project_id=invitation.project.pk)
+        except ProjectInvitation.DoesNotExist:
+            return redirect('core:dashboard')
+
+
+# ====================
+# MOVE TO PROJECT VIEWS
+# ====================
+
+class MoveToProjectView(View):
+    """Vista para mover items sin proyecto a un proyecto"""
+    
+    def get(self, request, item_type, item_id):
+        """Mostrar modal con lista de proyectos"""
+        # Mapeo de tipos a modelos
+        model_map = {
+            'video': Video,
+            'image': Image,
+            'audio': Audio,
+            'music': Music,
+            'script': Script
+        }
+        
+        if item_type not in model_map:
+            messages.error(request, 'Tipo de item no válido')
+            return redirect('core:dashboard')
+        
+        # Obtener el item
+        try:
+            item = model_map[item_type].objects.get(id=item_id, created_by=request.user)
+        except model_map[item_type].DoesNotExist:
+            messages.error(request, f'{item_type.capitalize()} no encontrado')
+            return redirect('core:dashboard')
+        
+        # Obtener proyectos del usuario
+        user_projects = ProjectService.get_user_projects(request.user)
+        
+        context = {
+            'item': item,
+            'item_type': item_type,
+            'projects': user_projects
+        }
+        
+        return render(request, 'partials/move_to_project_modal.html', context)
+    
+    def post(self, request, item_type, item_id):
+        """Mover el item al proyecto seleccionado"""
+        # Mapeo de tipos a modelos
+        model_map = {
+            'video': Video,
+            'image': Image,
+            'audio': Audio,
+            'music': Music,
+            'script': Script
+        }
+        
+        if item_type not in model_map:
+            messages.error(request, 'Tipo de item no válido')
+            return redirect('core:dashboard')
+        
+        # Obtener datos
+        project_id = request.POST.get('project_id')
+        if not project_id:
+            messages.error(request, 'Debes seleccionar un proyecto')
+            return redirect('core:dashboard')
+        
+        try:
+            # Obtener el item y verificar permisos
+            item = model_map[item_type].objects.get(id=item_id, created_by=request.user)
+            
+            # Obtener el proyecto y verificar permisos
+            project = Project.objects.get(id=project_id)
+            if not project.has_member(request.user) and project.owner != request.user:
+                messages.error(request, 'No tienes permisos para este proyecto')
+                return redirect('core:dashboard')
+            
+            # Mover el item al proyecto
+            item.project = project
+            item.save()
+            
+            messages.success(request, f'{item_type.capitalize()} movido a "{project.name}"')
+            
+            # Redirigir al detalle del item
+            redirect_map = {
+                'video': 'core:video_detail',
+                'image': 'core:image_detail',
+                'audio': 'core:audio_detail',
+                'music': 'core:music_detail',
+                'script': 'core:script_detail'
+            }
+            
+            return redirect(redirect_map[item_type], **{f'{item_type}_id': item.id})
+            
+        except model_map[item_type].DoesNotExist:
+            messages.error(request, f'{item_type.capitalize()} no encontrado')
+            return redirect('core:dashboard')
+        except Project.DoesNotExist:
+            messages.error(request, 'Proyecto no encontrado')
+            return redirect('core:dashboard')
+        except Exception as e:
+            logger.error(f"Error al mover {item_type} a proyecto: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:dashboard')

@@ -1,0 +1,58 @@
+<div id="move-to-project-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    Mover "{{ item.title|default:item.name }}" a Proyecto
+                </h3>
+                <button @click="$el.closest('#move-to-project-modal').remove()" 
+                        class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <p class="text-sm text-gray-600 mb-4">
+                Selecciona el proyecto al que quieres mover este {{ item_type }}:
+            </p>
+            
+            <form method="post" action="{% url 'core:move_to_project' item_type item.id %}">
+                {% csrf_token %}
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Proyecto <span class="text-red-500">*</span>
+                    </label>
+                    <select name="project_id" required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent">
+                        <option value="">Selecciona un proyecto...</option>
+                        {% for project in projects %}
+                        <option value="{{ project.id }}">{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                    
+                    {% if not projects %}
+                    <p class="text-sm text-amber-600 mt-2">
+                        No tienes proyectos aún. <a href="{% url 'core:project_create' %}" class="underline font-medium">Crear uno</a>
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div class="flex gap-3 justify-end">
+                    <button type="button" 
+                            @click="$el.closest('#move-to-project-modal').remove()"
+                            class="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md font-medium transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 bg-black text-white hover:bg-gray-800 rounded-md font-medium transition-colors"
+                            {% if not projects %}disabled{% endif %}>
+                        Mover a Proyecto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+

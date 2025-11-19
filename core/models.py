@@ -1,5 +1,7 @@
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.models import User
+from django.utils.crypto import get_random_string
 
 # Constantes para choices
 VIDEO_TYPES = [
@@ -75,6 +77,21 @@ SCENE_AI_SERVICES = [
 class Project(models.Model):
     """Modelo para proyectos que agrupan videos"""
     name = models.CharField(max_length=255)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='owned_projects',
+        null=True,
+        blank=True,
+        help_text='Usuario propietario del proyecto'
+    )
+    shared_with = models.ManyToManyField(
+        User,
+        through='ProjectMember',
+        related_name='shared_projects',
+        blank=True,
+        help_text='Usuarios con acceso al proyecto'
+    )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -85,6 +102,20 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def has_access(self, user):
+        """Verifica si un usuario tiene acceso al proyecto"""
+        return self.owner == user or self.members.filter(user=user).exists()
+    
+    def get_user_role(self, user):
+        """Obtiene el rol del usuario en el proyecto"""
+        if self.owner == user:
+            return 'owner'
+        try:
+            member = self.members.get(user=user)
+            return member.role
+        except ProjectMember.DoesNotExist:
+            return None
 
     @property
     def video_count(self):
@@ -133,7 +164,18 @@ class Video(models.Model):
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
-        related_name='videos'
+        related_name='videos',
+        null=True,
+        blank=True,
+        help_text='Proyecto al que pertenece (opcional)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='videos',
+        null=True,
+        blank=True,
+        help_text='Usuario que creó este video'
     )
     title = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=VIDEO_TYPES)
@@ -227,7 +269,18 @@ class Image(models.Model):
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
-        related_name='images'
+        related_name='images',
+        null=True,
+        blank=True,
+        help_text='Proyecto al que pertenece (opcional)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='images',
+        null=True,
+        blank=True,
+        help_text='Usuario que creó esta imagen'
     )
     title = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=IMAGE_TYPES)
@@ -326,7 +379,18 @@ class Audio(models.Model):
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
-        related_name='audios'
+        related_name='audios',
+        null=True,
+        blank=True,
+        help_text='Proyecto al que pertenece (opcional)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='audios',
+        null=True,
+        blank=True,
+        help_text='Usuario que creó este audio'
     )
     title = models.CharField(max_length=255)
     status = models.CharField(
@@ -466,7 +530,18 @@ class Script(models.Model):
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
-        related_name='scripts'
+        related_name='scripts',
+        null=True,
+        blank=True,
+        help_text='Proyecto al que pertenece (opcional)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='scripts',
+        null=True,
+        blank=True,
+        help_text='Usuario que creó este guión'
     )
     title = models.CharField(max_length=255)
     status = models.CharField(
@@ -953,7 +1028,17 @@ class Music(models.Model):
         Project,
         on_delete=models.CASCADE,
         related_name='music_tracks',
-        help_text='Proyecto al que pertenece esta música'
+        null=True,
+        blank=True,
+        help_text='Proyecto al que pertenece (opcional)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='music_tracks',
+        null=True,
+        blank=True,
+        help_text='Usuario que creó esta música'
     )
     name = models.CharField(
         max_length=255,
@@ -1058,3 +1143,129 @@ class Music(models.Model):
         if self.duration_ms is None:
             return 0
         return round(self.duration_ms / 1000.0, 2)
+
+
+# Constantes para roles de proyecto
+PROJECT_ROLES = [
+    ('owner', 'Propietario'),
+    ('editor', 'Editor'),
+]
+
+INVITATION_STATUS = [
+    ('pending', 'Pendiente'),
+    ('accepted', 'Aceptada'),
+    ('expired', 'Expirada'),
+    ('cancelled', 'Cancelada'),
+]
+
+
+class ProjectMember(models.Model):
+    """Usuarios que tienen acceso a un proyecto compartido"""
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='members',
+        help_text='Proyecto al que pertenece el miembro'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='project_memberships',
+        help_text='Usuario miembro del proyecto'
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=PROJECT_ROLES,
+        default='editor',
+        help_text='Rol del usuario en el proyecto'
+    )
+    joined_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha en que el usuario se unió al proyecto'
+    )
+
+    class Meta:
+        unique_together = ['project', 'user']
+        verbose_name = 'Miembro de Proyecto'
+        verbose_name_plural = 'Miembros de Proyectos'
+        ordering = ['-joined_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.project.name} ({self.get_role_display()})"
+
+
+class ProjectInvitation(models.Model):
+    """Invitaciones pendientes para unirse a proyectos"""
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='invitations',
+        help_text='Proyecto al que se invita'
+    )
+    email = models.EmailField(
+        help_text='Email del usuario invitado'
+    )
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sent_invitations',
+        help_text='Usuario que envió la invitación'
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=PROJECT_ROLES,
+        default='editor',
+        help_text='Rol que se asignará al usuario cuando acepte'
+    )
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text='Token único para aceptar la invitación'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=INVITATION_STATUS,
+        default='pending',
+        help_text='Estado de la invitación'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha de creación de la invitación'
+    )
+    expires_at = models.DateTimeField(
+        help_text='Fecha de expiración de la invitación'
+    )
+    accepted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha en que se aceptó la invitación'
+    )
+
+    class Meta:
+        verbose_name = 'Invitación de Proyecto'
+        verbose_name_plural = 'Invitaciones de Proyectos'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['email', 'status']),
+        ]
+
+    def __str__(self):
+        return f"Invitación para {self.email} - {self.project.name}"
+
+    def save(self, *args, **kwargs):
+        """Genera token único si no existe"""
+        if not self.token:
+            self.token = get_random_string(length=64)
+        super().save(*args, **kwargs)
+
+    def is_expired(self):
+        """Verifica si la invitación ha expirado"""
+        return timezone.now() > self.expires_at
+
+    def can_be_accepted(self):
+        """Verifica si la invitación puede ser aceptada"""
+        return (
+            self.status == 'pending' and
+            not self.is_expired()
+        )

@@ -10,7 +10,11 @@
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ video.title }}</h1>
                 <div class="flex items-center gap-4 text-sm text-gray-600">
+                    {% if video.project %}
                     <span>📁 {{ video.project.name }}</span>
+                    {% else %}
+                    <span>📦 Sin proyecto</span>
+                    {% endif %}
                     <span>•</span>
                     <span>{{ video.get_type_display }}</span>
                     <span>•</span>
@@ -26,12 +30,19 @@
                     </button>
                 </form>
                 {% endif %}
+                {% include 'partials/move_to_project_button.html' with item=video item_type='video' %}
                 <a href="{% url 'core:video_delete' video.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Eliminar
                 </a>
+                {% if video.project %}
                 <a href="{% url 'core:project_detail' video.project.id %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Volver
                 </a>
+                {% else %}
+                <a href="{% url 'core:dashboard' %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Volver
+                </a>
+                {% endif %}
             </div>
         </div>
 

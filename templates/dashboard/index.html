@@ -10,17 +10,7 @@
 </div>
 
 <!-- Estadísticas -->
-<div class="stats shadow w-full mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-primary">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Proyectos</div>
-        <div class="stat-value text-3xl font-bold text-primary">{{ projects.count }}</div>
-        <div class="stat-desc text-xs text-gray-500">Total de proyectos</div>
-    </div>
+<div class="stats shadow w-full mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
     
     <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
         <div class="stat-figure text-secondary">
@@ -63,71 +53,6 @@
         <div class="stat-value text-3xl font-bold text-yellow-600">{{ processing_videos }}</div>
         <div class="stat-desc text-xs text-gray-500">En cola</div>
     </div>
-</div>
-
-<!-- Proyectos -->
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">Proyectos</h2>
-        <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md">
-            Nuevo Proyecto
-        </a>
-    </div>
-
-    {% if projects %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for project in projects %}
-        <div class="card bg-white shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-200 rounded-lg overflow-hidden">
-            <div class="card-body p-6">
-                <h2 class="card-title text-xl font-bold mb-2">
-                    {{ project.name }}
-                    {% if project.video_count > 0 %}
-                    <div class="badge badge-secondary bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ project.video_count }}</div>
-                    {% endif %}
-                </h2>
-                
-                <div class="text-sm text-gray-600 space-y-1 mb-4">
-                    <p>📹 {{ project.video_count }} video{{ project.video_count|pluralize }}</p>
-                    <p>🖼️ {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</p>
-                    <p>✅ {{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</p>
-                    <p class="text-xs text-gray-400">📅 {{ project.created_at|date:"d/m/Y" }}</p>
-                </div>
-                
-                <div class="card-actions justify-end mt-4 flex gap-2">
-                    <a href="{% url 'core:project_detail' project.id %}" 
-                       class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
-                        Ver Proyecto
-                    </a>
-                    <a href="{% url 'core:video_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Video
-                    </a>
-                    <a href="{% url 'core:image_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Imagen
-                    </a>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <!-- Estado vacío -->
-    <div class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">📁</div>
-                <h1 class="text-3xl font-bold text-gray-800">No hay proyectos</h1>
-                <p class="py-6 text-gray-600">
-                    Crea tu primer proyecto para comenzar a generar videos e imágenes con IA
-                </p>
-                <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md">
-                    Crear Primer Proyecto
-                </a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
 
 <!-- Videos Recientes -->
@@ -177,7 +102,13 @@
             </div>
             <div class="p-4">
                 <div class="font-semibold mb-1 truncate">{{ video.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">📁 {{ video.project.name }}</div>
+                <div class="text-sm text-gray-500 mb-2">
+                    {% if video.project %}
+                    📁 {{ video.project.name }}
+                    {% else %}
+                    📦 Sin proyecto
+                    {% endif %}
+                </div>
                 <div class="flex justify-between text-xs text-gray-400">
                     <span>{{ video.get_type_display }}</span>
                     <span>{{ video.created_at|date:"d/m/Y" }}</span>
@@ -203,7 +134,11 @@
             <div class="flex-1 flex flex-col justify-center">
                 <div class="font-semibold">{{ video.title }}</div>
                 <div class="text-sm text-gray-500">
+                    {% if video.project %}
                     <span>📁 {{ video.project.name }}</span>
+                    {% else %}
+                    <span>📦 Sin proyecto</span>
+                    {% endif %}
                     <span class="ml-4">{{ video.get_type_display }}</span>
                     <span class="ml-4">{{ video.created_at|date:"d/m/Y H:i" }}</span>
                 </div>
@@ -265,7 +200,13 @@
             </div>
             <div class="p-4">
                 <div class="font-semibold mb-1 truncate">{{ image.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">📁 {{ image.project.name }}</div>
+                <div class="text-sm text-gray-500 mb-2">
+                    {% if image.project %}
+                    📁 {{ image.project.name }}
+                    {% else %}
+                    📦 Sin proyecto
+                    {% endif %}
+                </div>
                 <div class="flex justify-between text-xs text-gray-400">
                     <span>{{ image.get_type_display }}</span>
                     <span>{{ image.created_at|date:"d/m/Y" }}</span>
@@ -291,7 +232,11 @@
             <div class="flex-1 flex flex-col justify-center">
                 <div class="font-semibold">{{ image.title }}</div>
                 <div class="text-sm text-gray-500">
+                    {% if image.project %}
                     <span>📁 {{ image.project.name }}</span>
+                    {% else %}
+                    <span>📦 Sin proyecto</span>
+                    {% endif %}
                     <span class="ml-4">{{ image.get_type_display }}</span>
                     <span class="ml-4">{{ image.created_at|date:"d/m/Y H:i" }}</span>
                 </div>

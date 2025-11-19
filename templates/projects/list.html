@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Proyectos - Atenea{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-8">
+    <h1 class="text-4xl font-bold mb-2">Proyectos</h1>
+    <p class="text-gray-600">Gestiona tus proyectos de generación de contenido IA</p>
+</div>
+
+<!-- Proyectos -->
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Mis Proyectos</h2>
+        <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md">
+            Nuevo Proyecto
+        </a>
+    </div>
+
+    {% if projects %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for project in projects %}
+        <div class="card bg-white shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-200 rounded-lg overflow-hidden">
+            <div class="card-body p-6">
+                <h2 class="card-title text-xl font-bold mb-2">
+                    {{ project.name }}
+                    {% if project.video_count > 0 %}
+                    <div class="badge badge-secondary bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ project.video_count }}</div>
+                    {% endif %}
+                </h2>
+                
+                <div class="text-sm text-gray-600 space-y-1 mb-4">
+                    <p>📹 {{ project.video_count }} video{{ project.video_count|pluralize }}</p>
+                    <p>🖼️ {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</p>
+                    <p>✅ {{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</p>
+                    <p class="text-xs text-gray-400">📅 {{ project.created_at|date:"d/m/Y" }}</p>
+                </div>
+                
+                <div class="card-actions justify-end mt-4 flex gap-2">
+                    <a href="{% url 'core:project_detail' project.id %}" 
+                       class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
+                        Ver Proyecto
+                    </a>
+                    <a href="{% url 'core:video_create' project.id %}" 
+                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
+                        + Video
+                    </a>
+                    <a href="{% url 'core:image_create' project.id %}" 
+                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
+                        + Imagen
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Estado vacío -->
+    <div class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+        <div class="hero-content text-center">
+            <div class="max-w-md">
+                <div class="text-6xl mb-4 opacity-30">📁</div>
+                <h1 class="text-3xl font-bold text-gray-800">No hay proyectos</h1>
+                <p class="py-6 text-gray-600">
+                    Crea tu primer proyecto para comenzar a generar videos e imágenes con IA
+                </p>
+                <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md">
+                    Crear Primer Proyecto
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

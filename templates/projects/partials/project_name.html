@@ -1,0 +1,124 @@
+<div class="flex items-center gap-2 group">
+    <h1 class="text-2xl font-bold text-gray-900" id="project-name-display">{{ project.name }}</h1>
+    {% if user_role == 'owner' or user_role == 'editor' %}
+    <button 
+        onclick="editProjectName()"
+        class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600"
+        title="Editar nombre del proyecto">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+        </svg>
+    </button>
+    {% endif %}
+</div>
+
+<script>
+function editProjectName() {
+    const displayElement = document.getElementById('project-name-display');
+    const currentName = displayElement.textContent.trim();
+    
+    // Crear input
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'text-2xl font-bold text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-black focus:outline-none px-1';
+    input.style.minWidth = '200px';
+    
+    // Reemplazar display con input
+    const parent = displayElement.parentElement;
+    displayElement.style.display = 'none';
+    parent.insertBefore(input, displayElement);
+    input.focus();
+    input.select();
+    
+    // Función para guardar
+    const saveName = () => {
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            // Enviar actualización via HTMX
+            // Función helper para obtener CSRF token
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            
+            // Obtener CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                              document.querySelector('meta[name=csrf-token]')?.content ||
+                              getCookie('csrftoken');
+            
+            fetch(`{% url 'core:project_update_name' project.id %}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfToken
+                },
+                body: `name=${encodeURIComponent(newName)}`
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.text();
+                }
+                return response.text().then(text => {
+                    throw new Error(text || 'Error al actualizar');
+                });
+            })
+            .then(html => {
+                // Reemplazar el contenedor completo con la respuesta
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                const newContent = tempDiv.querySelector('.flex');
+                if (newContent) {
+                    parent.innerHTML = newContent.innerHTML;
+                    // Re-ejecutar el script si existe
+                    const script = tempDiv.querySelector('script');
+                    if (script) {
+                        eval(script.textContent);
+                    }
+                } else {
+                    // Si no hay contenido nuevo, solo actualizar el nombre
+                    displayElement.textContent = newName;
+                    displayElement.style.display = '';
+                    input.remove();
+                }
+            })
+            .catch(error => {
+                alert('Error al actualizar el nombre: ' + error.message);
+                // Restaurar display
+                input.remove();
+                displayElement.style.display = '';
+            });
+        } else {
+            // Cancelar: restaurar display
+            input.remove();
+            displayElement.style.display = '';
+        }
+    };
+    
+    // Guardar al presionar Enter
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveName();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            input.remove();
+            displayElement.style.display = '';
+        }
+    });
+    
+    // Guardar al perder foco
+    input.addEventListener('blur', saveName);
+}
+</script>
+
