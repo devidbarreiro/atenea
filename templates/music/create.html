@@ -1,181 +1,58 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Nueva Música - {{ project.name }}{% endblock %}
+{% block title %}
+{% if project %}
+Crear Música - {{ project.name }}
+{% else %}
+Crear Música
+{% endif %}
+{% endblock %}
 
 {% block content %}
+{% if project %}
+<!-- Layout CON proyecto: con sidebars y barra de navegación fija -->
 <div class="flex min-h-screen bg-gray-50">
     {% include 'includes/sidebar.html' %}
     {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
     {% include 'includes/project_tabs_bar.html' with active_tab='music' project=project %}
 
-    <!-- Contenido principal - Con margen para ambas sidebars y la barra fija -->
+    <!-- Contenido principal -->
     <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
-        <div class="p-6 max-w-5xl mx-auto">
+        <div class="p-6 max-w-4xl mx-auto">
             <!-- Header -->
-            <div class="flex items-center justify-between mb-8">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900 mb-2">🎵 Nueva Música con IA</h1>
-                    <p class="text-gray-600">Genera música original con ElevenLabs Music</p>
-                </div>
-                <a href="{% url 'core:project_music' project.id %}" 
-                   class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition">
-                    ← Volver
-                </a>
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Música</h2>
+                <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
             </div>
-
-            <form method="post" class="space-y-6">
-        {% csrf_token %}
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Panel Principal -->
-            <div class="lg:col-span-2 space-y-6">
-                <!-- Nombre -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        🏷️ Nombre de la Pista
-                    </label>
-                    <input type="text" name="name" required
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                           placeholder="Ej: Epic Background Music">
-                    <p class="text-xs text-gray-500 mt-2">Dale un nombre descriptivo a la música</p>
-                </div>
-
-                <!-- Prompt Musical -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        🎼 Descripción del Estilo Musical
-                    </label>
-                    <textarea name="prompt" required rows="8"
-                              id="music-prompt"
-                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition font-mono text-sm"
-                              placeholder="Create an intense, fast-paced electronic track for a high-adrenaline video scene. Use driving synth arpeggios, punchy drums, distorted bass, glitch effects, and aggressive rhythmic textures. The tempo should be fast, 130–150 bpm, with rising tension, quick transitions, and dynamic energy bursts."></textarea>
-                    <div class="flex justify-between mt-2">
-                        <p class="text-xs text-gray-500">Describe el estilo, instrumentos, tempo, mood y atmósfera deseados (en inglés)</p>
-                        <span id="char-count" class="text-xs text-gray-400">0 caracteres</span>
-                    </div>
-                </div>
-
-                <!-- Ejemplos de Prompts -->
-                <div class="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-5">
-                    <h3 class="text-sm font-bold text-purple-900 mb-3">💡 Ejemplos de Prompts</h3>
-                    <div class="space-y-2 text-xs">
-                        <button type="button" onclick="setPrompt('cinematic')" class="w-full text-left p-3 bg-white rounded-lg hover:bg-purple-50 transition">
-                            <strong class="text-purple-900">Cinematográfico Épico:</strong>
-                            <p class="text-gray-700 mt-1">Create a cinematic orchestral piece with soaring strings, powerful brass, and epic percussion. Build from quiet contemplation to triumphant crescendo. Include choir elements and dynamic tempo changes. Evoke feelings of hope, victory, and inspiration.</p>
-                        </button>
-                        <button type="button" onclick="setPrompt('ambient')" class="w-full text-left p-3 bg-white rounded-lg hover:bg-purple-50 transition">
-                            <strong class="text-purple-900">Ambiental Relajante:</strong>
-                            <p class="text-gray-700 mt-1">Create a calm, atmospheric ambient piece with soft synth pads, gentle piano melodies, and subtle nature sounds. Use slow tempo (60-80 bpm), reverb-heavy textures, and evolving soundscapes. Perfect for meditation or background focus music.</p>
-                        </button>
-                        <button type="button" onclick="setPrompt('upbeat')" class="w-full text-left p-3 bg-white rounded-lg hover:bg-purple-50 transition">
-                            <strong class="text-purple-900">Corporativo Optimista:</strong>
-                            <p class="text-gray-700 mt-1">Create an upbeat, positive corporate track with acoustic guitar, light piano, and subtle percussion. Use major key, steady rhythm (120 bpm), and bright, motivational melody. Inspire confidence and forward movement.</p>
-                        </button>
-                        <button type="button" onclick="setPrompt('electronic')" class="w-full text-left p-3 bg-white rounded-lg hover:bg-purple-50 transition">
-                            <strong class="text-purple-900">Electrónico Enérgico:</strong>
-                            <p class="text-gray-700 mt-1">Create an intense, fast-paced electronic track for a high-adrenaline scene. Use driving synth arpeggios, punchy drums, distorted bass, glitch effects. Tempo 130–150 bpm with rising tension and dynamic energy bursts.</p>
-                        </button>
-                    </div>
-                </div>
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'music/_form.html' %}
             </div>
-
-            <!-- Panel Lateral -->
-            <div class="space-y-6">
-                <!-- Duración -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        ⏱️ Duración
-                    </label>
-                    <div class="flex items-center gap-3">
-                        <input type="number" name="duration_sec" id="duration_sec" value="30" min="5" max="300" required
-                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-center text-2xl font-bold">
-                        <span class="text-gray-600 font-semibold">segundos</span>
-                    </div>
-                    <input type="range" min="5" max="300" value="30" step="5" id="duration-slider"
-                           class="w-full mt-4"
-                           oninput="document.getElementById('duration_sec').value = this.value">
-                    <div class="flex justify-between text-xs text-gray-500 mt-2">
-                        <span>5s</span>
-                        <span>150s</span>
-                        <span>300s (5min)</span>
-                    </div>
-                </div>
-
-                <!-- Info -->
-                <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h3 class="text-sm font-bold text-purple-900 mb-2">🎵 Características</h3>
-                    <ul class="text-xs text-purple-800 space-y-1">
-                        <li>• Música original generada con IA</li>
-                        <li>• Múltiples estilos y géneros</li>
-                        <li>• Control de tempo y mood</li>
-                        <li>• Alta calidad de audio</li>
-                        <li>• Sin derechos de autor</li>
-                    </ul>
-                </div>
-
-                <!-- Advertencia Copyright -->
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h3 class="text-sm font-bold text-yellow-900 mb-2">⚠️ Importante</h3>
-                    <ul class="text-xs text-yellow-800 space-y-1">
-                        <li>• No menciones artistas o bandas por nombre</li>
-                        <li>• No uses letras protegidas por copyright</li>
-                        <li>• Describe el estilo, no copies</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- Botones de Acción -->
-        <div class="flex gap-4 justify-end bg-white shadow-md rounded-lg p-6">
-            <a href="{% url 'core:project_music' project.id %}" 
-               class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold">
-                Cancelar
-            </a>
-            <button type="submit" 
-                    class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition shadow-md hover:shadow-lg font-semibold">
-                🎵 Crear Música
-            </button>
-        </div>
-    </form>
         </div>
     </main>
 </div>
-
-<script>
-// Contador de caracteres
-const textarea = document.getElementById('music-prompt');
-const charCount = document.getElementById('char-count');
-textarea.addEventListener('input', () => {
-    charCount.textContent = `${textarea.value.length} caracteres`;
-});
-
-// Sincronizar slider con input
-const slider = document.getElementById('duration-slider');
-const durationInput = document.getElementById('duration_sec');
-
-slider.addEventListener('input', () => {
-    durationInput.value = slider.value;
-});
-
-durationInput.addEventListener('input', () => {
-    slider.value = durationInput.value;
-});
-
-// Función para establecer prompts de ejemplo
-function setPrompt(type) {
-    const prompts = {
-        'cinematic': 'Create a cinematic orchestral piece with soaring strings, powerful brass, and epic percussion. Build from quiet contemplation to triumphant crescendo. Include choir elements and dynamic tempo changes. Evoke feelings of hope, victory, and inspiration.',
-        'ambient': 'Create a calm, atmospheric ambient piece with soft synth pads, gentle piano melodies, and subtle nature sounds. Use slow tempo (60-80 bpm), reverb-heavy textures, and evolving soundscapes. Perfect for meditation or background focus music.',
-        'upbeat': 'Create an upbeat, positive corporate track with acoustic guitar, light piano, and subtle percussion. Use major key, steady rhythm (120 bpm), and bright, motivational melody. Inspire confidence and forward movement.',
-        'electronic': 'Create an intense, fast-paced electronic track for a high-adrenaline scene. Use driving synth arpeggios, punchy drums, distorted bass, glitch effects. Tempo 130–150 bpm with rising tension and dynamic energy bursts.'
-    };
+{% else %}
+<!-- Layout SIN proyecto: solo sidebar principal -->
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
     
-    textarea.value = prompts[type];
-    charCount.textContent = `${textarea.value.length} caracteres`;
-}
-
-// Actualizar contador inicial
-charCount.textContent = `${textarea.value.length} caracteres`;
-</script>
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-64 p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Música</h2>
+                <p class="text-sm text-gray-600">Música sin proyecto asociado</p>
+            </div>
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'music/_form.html' %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endif %}
 {% endblock %}
-

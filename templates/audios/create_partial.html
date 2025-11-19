@@ -8,7 +8,6 @@
             <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
         </div>
         
-        <!-- Reutilizando el contenido del form original por ahora -->
-        {% include 'audios/create.html' with partial=True %}
+        {% include 'audios/_form.html' %}
     </div>
 </div>

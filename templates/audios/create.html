@@ -1,313 +1,58 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Nuevo Audio - {{ project.name }}{% endblock %}
+{% block title %}
+{% if project %}
+Crear Audio - {{ project.name }}
+{% else %}
+Crear Audio
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-5xl">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-8">
-        <div>
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">🎙️ Nuevo Audio TTS</h1>
-            <p class="text-gray-600">Convierte texto a voz con ElevenLabs</p>
-        </div>
-        <a href="{% url 'core:project_detail' project.id %}" 
-           class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition">
-            ← Volver
-        </a>
-    </div>
+{% if project %}
+<!-- Layout CON proyecto: con sidebars y barra de navegación fija -->
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
+    {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
+    {% include 'includes/project_tabs_bar.html' with active_tab='audios' project=project %}
 
-    <form method="post" class="space-y-6">
-        {% csrf_token %}
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Panel Principal -->
-            <div class="lg:col-span-2 space-y-6">
-                <!-- Título -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        📝 Título del Audio
-                    </label>
-                    <input type="text" name="title" required
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
-                           placeholder="Ej: Narración Capítulo 1">
-                    <p class="text-xs text-gray-500 mt-2">Dale un nombre descriptivo al audio</p>
-                </div>
-
-                <!-- Texto -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        💬 Texto para Convertir a Voz
-                    </label>
-                    <textarea name="text" required rows="12"
-                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition font-mono text-sm"
-                              placeholder="Escribe aquí el texto que quieres convertir a voz...&#10;&#10;Puedes escribir párrafos largos.&#10;El modelo se encargará de la entonación natural."></textarea>
-                    <div class="flex justify-between mt-2">
-                        <p class="text-xs text-gray-500">El texto será convertido a voz usando ElevenLabs TTS</p>
-                        <span id="char-count" class="text-xs text-gray-400">0 caracteres</span>
-                    </div>
-                </div>
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
+        <div class="p-6 max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Audio</h2>
+                <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
             </div>
-
-            <!-- Panel Lateral -->
-            <div class="space-y-6">
-                <!-- Selector de Voz -->
-                <div class="bg-white shadow-md rounded-lg p-6">
-                    <label class="block text-sm font-bold text-gray-900 mb-3">
-                        🎤 Voz de ElevenLabs
-                    </label>
-                    
-                    <input type="hidden" name="voice_id" id="voice_id" required>
-                    <input type="hidden" name="voice_name" id="voice_name">
-                    
-                    <div id="voice-selected" class="hidden mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <p class="text-sm font-bold text-green-900" id="selected-voice-name"></p>
-                                <p class="text-xs text-green-600" id="selected-voice-category"></p>
-                            </div>
-                            <button type="button" onclick="clearVoice()" 
-                                    class="text-green-600 hover:text-green-800">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                            </button>
-                        </div>
-                        <audio id="selected-voice-preview" controls class="w-full"></audio>
-                    </div>
-                    
-                    <button type="button" onclick="openVoiceModal()" 
-                            class="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition shadow-md hover:shadow-lg font-semibold">
-                        Seleccionar Voz
-                    </button>
-                    
-                    <p class="text-xs text-gray-500 mt-3">
-                        Escucha previews y elige la voz que mejor se adapte a tu contenido
-                    </p>
-                </div>
-
-                <!-- Info -->
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 class="text-sm font-bold text-blue-900 mb-2">💡 Consejos</h3>
-                    <ul class="text-xs text-blue-800 space-y-1">
-                        <li>• Usa puntuación para mejorar la entonación</li>
-                        <li>• El modelo respeta pausas y comas</li>
-                        <li>• Textos más largos = mejor contexto</li>
-                        <li>• Formato MP3 a 44.1kHz</li>
-                    </ul>
-                </div>
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'audios/_form.html' %}
             </div>
         </div>
-
-        <!-- Botones de Acción -->
-        <div class="flex gap-4 justify-end bg-white shadow-md rounded-lg p-6">
-            <a href="{% url 'core:project_detail' project.id %}" 
-               class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold">
-                Cancelar
-            </a>
-            <button type="submit" 
-                    class="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition shadow-md hover:shadow-lg font-semibold">
-                Crear Audio
-            </button>
-        </div>
-    </form>
+    </main>
 </div>
-
-<!-- Modal de Voces -->
-<div id="voice-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-        <!-- Header del Modal -->
-        <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex justify-between items-center">
-            <div>
-                <h2 class="text-2xl font-bold text-white">Catálogo de Voces ElevenLabs</h2>
-                <p class="text-green-100 text-sm mt-1">{{ voices|length }} voces disponibles</p>
+{% else %}
+<!-- Layout SIN proyecto: solo sidebar principal -->
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
+    
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-64 p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Audio</h2>
+                <p class="text-sm text-gray-600">Audio sin proyecto asociado</p>
             </div>
-            <button type="button" onclick="closeVoiceModal()" 
-                    class="text-white hover:text-green-100 text-3xl leading-none">
-                &times;
-            </button>
-        </div>
-        
-        <!-- Buscador -->
-        <div class="px-6 py-4 bg-gray-50 border-b">
-            <input type="text" id="voice-search" placeholder="🔍 Buscar por nombre, acento, género..." 
-                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                   oninput="filterVoices(this.value)">
-        </div>
-        
-        <!-- Lista de Voces -->
-        <div class="overflow-y-auto p-6" style="max-height: calc(90vh - 200px);">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="voices-grid">
-                {% for voice in voices %}
-                <div class="voice-card border-2 border-gray-200 rounded-xl p-5 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
-                     data-voice-id="{{ voice.voice_id }}" 
-                     data-voice-name="{{ voice.name }}"
-                     data-voice-category="{{ voice.category }}"
-                     data-voice-preview="{{ voice.preview_url }}"
-                     data-search-text="{{ voice.name|lower }} {{ voice.category|lower }} {{ voice.description|lower }} {% for key, value in voice.labels.items %}{{ value|lower }} {% endfor %}"
-                     onclick="selectVoice(this)">
-                    
-                    <div class="flex items-start justify-between mb-3">
-                        <div class="flex-1">
-                            <h3 class="font-bold text-gray-900 text-lg">{{ voice.name }}</h3>
-                            <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">{{ voice.category }}</p>
-                        </div>
-                        <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span class="text-xl">🎙️</span>
-                        </div>
-                    </div>
-                    
-                    {% if voice.description %}
-                    <p class="text-sm text-gray-700 mb-3 line-clamp-2">{{ voice.description }}</p>
-                    {% endif %}
-                    
-                    <!-- Labels -->
-                    {% if voice.labels %}
-                    <div class="flex flex-wrap gap-1 mb-3">
-                        {% for key, value in voice.labels.items %}
-                        <span class="inline-block bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
-                            {{ value }}
-                        </span>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Preview Audio -->
-                    {% if voice.preview_url %}
-                    <div class="mt-3" onclick="event.stopPropagation();">
-                        <audio controls preload="none" class="w-full h-8">
-                            <source src="{{ voice.preview_url }}" type="audio/mpeg">
-                        </audio>
-                    </div>
-                    {% endif %}
-                </div>
-                {% empty %}
-                <div class="col-span-3 text-center py-12">
-                    <p class="text-gray-500 text-lg">No hay voces disponibles</p>
-                    <p class="text-sm text-gray-400 mt-2">Verifica tu API key de ElevenLabs</p>
-                </div>
-                {% endfor %}
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'audios/_form.html' %}
             </div>
         </div>
-    </div>
+    </main>
 </div>
-
-<script>
-// Contador de caracteres
-const textarea = document.querySelector('textarea[name="text"]');
-const charCount = document.getElementById('char-count');
-textarea.addEventListener('input', () => {
-    charCount.textContent = `${textarea.value.length} caracteres`;
-});
-
-// Modal functions
-function openVoiceModal() {
-    document.getElementById('voice-modal').classList.remove('hidden');
-}
-
-function closeVoiceModal() {
-    document.getElementById('voice-modal').classList.add('hidden');
-}
-
-function clearVoice() {
-    document.getElementById('voice_id').value = '';
-    document.getElementById('voice_name').value = '';
-    document.getElementById('voice-selected').classList.add('hidden');
-}
-
-function selectVoice(element) {
-    const voiceId = element.dataset.voiceId;
-    const voiceName = element.dataset.voiceName;
-    const voiceCategory = element.dataset.voiceCategory;
-    const voicePreview = element.dataset.voicePreview;
-    
-    // Actualizar campos hidden
-    document.getElementById('voice_id').value = voiceId;
-    document.getElementById('voice_name').value = voiceName;
-    
-    // Mostrar voz seleccionada
-    document.getElementById('selected-voice-name').textContent = voiceName;
-    document.getElementById('selected-voice-category').textContent = voiceCategory;
-    
-    if (voicePreview) {
-        const preview = document.getElementById('selected-voice-preview');
-        preview.src = voicePreview;
-        preview.classList.remove('hidden');
-    }
-    
-    document.getElementById('voice-selected').classList.remove('hidden');
-    
-    // Cerrar modal
-    closeVoiceModal();
-    
-    // Highlight visual
-    document.querySelectorAll('.voice-card').forEach(card => {
-        card.classList.remove('border-green-500', 'bg-green-50');
-        card.classList.add('border-gray-200');
-    });
-    element.classList.add('border-green-500', 'bg-green-50');
-    element.classList.remove('border-gray-200');
-}
-
-function filterVoices(query) {
-    const searchTerm = query.toLowerCase();
-    const cards = document.querySelectorAll('.voice-card');
-    let visibleCount = 0;
-    
-    cards.forEach(card => {
-        const searchText = card.dataset.searchText;
-        if (searchText.includes(searchTerm)) {
-            card.style.display = 'block';
-            visibleCount++;
-        } else {
-            card.style.display = 'none';
-        }
-    });
-    
-    // Mensaje si no hay resultados
-    const grid = document.getElementById('voices-grid');
-    let noResults = grid.querySelector('.no-results');
-    
-    if (visibleCount === 0) {
-        if (!noResults) {
-            noResults = document.createElement('div');
-            noResults.className = 'no-results col-span-3 text-center py-12';
-            noResults.innerHTML = `
-                <p class="text-gray-500 text-lg">No se encontraron voces</p>
-                <p class="text-sm text-gray-400 mt-2">Intenta con otros términos de búsqueda</p>
-            `;
-            grid.appendChild(noResults);
-        }
-    } else {
-        if (noResults) {
-            noResults.remove();
-        }
-    }
-}
-
-// Cerrar modal con ESC
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeVoiceModal();
-    }
-});
-
-// Validación antes de enviar
-document.querySelector('form').addEventListener('submit', (e) => {
-    const voiceId = document.getElementById('voice_id').value;
-    if (!voiceId) {
-        e.preventDefault();
-        alert('Por favor selecciona una voz antes de continuar');
-        openVoiceModal();
-    }
-});
-</script>
-
-<style>
-.line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-</style>
+{% endif %}
 {% endblock %}
