@@ -5360,10 +5360,19 @@ class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin,
     def post(self, request):
         """Fuerza la re-indexación de la documentación"""
         from .rag.assistant import DocumentationAssistant
+        from .rag.vector_store import VectorStoreManager
         
         try:
+            # Eliminar índice anterior
+            vector_store_manager = VectorStoreManager()
+            deleted = vector_store_manager.delete_index()
+            
+            if deleted:
+                logger.info("Índice anterior eliminado")
+            
+            # Crear nuevo índice
             assistant = DocumentationAssistant(reindex=True)
-            messages.success(request, 'Documentación re-indexada exitosamente')
+            messages.success(request, 'Documentación re-indexada exitosamente desde docs/api')
         except Exception as e:
             logger.error(f"Error al re-indexar: {e}", exc_info=True)
             messages.error(request, f'Error al re-indexar: {str(e)}')

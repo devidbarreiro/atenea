@@ -30,7 +30,11 @@ class DocumentationLoader:
             chunk_overlap: Overlap entre chunks
         """
         if docs_path is None:
-            docs_path = getattr(settings, 'RAG_DOCS_PATH', 'docs')
+            docs_path = getattr(settings, 'RAG_DOCS_PATH', 'docs/api')
+        
+        # Limpiar el path de comentarios o espacios extra
+        if isinstance(docs_path, str):
+            docs_path = docs_path.split('#')[0].strip()
         
         self.base_dir = Path(settings.BASE_DIR)
         self.docs_path = self.base_dir / docs_path

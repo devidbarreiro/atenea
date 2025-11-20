@@ -294,7 +294,7 @@ AGENT_RATE_LIMIT_PER_PROJECT = config('AGENT_RATE_LIMIT_PER_PROJECT', default=5,
 
 # RAG Assistant
 RAG_ENABLED = config('RAG_ENABLED', default=True, cast=bool)
-RAG_DOCS_PATH = config('RAG_DOCS_PATH', default='docs')  # Path relativo a BASE_DIR
+RAG_DOCS_PATH = config('RAG_DOCS_PATH', default='docs/api')  # Path relativo a BASE_DIR (solo docs/api)
 RAG_EMBEDDING_PROVIDER = config('RAG_EMBEDDING_PROVIDER', default='openai')  # 'openai' o 'google'
 RAG_EMBEDDING_MODEL = config('RAG_EMBEDDING_MODEL', default='text-embedding-3-small')
 RAG_LLM_PROVIDER = config('RAG_LLM_PROVIDER', default=None)  # None = usar DEFAULT_LLM_PROVIDER

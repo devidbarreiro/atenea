@@ -76,11 +76,20 @@ class DocumentationAssistant:
         vectorstore = self.vector_store_manager.load_index()
         
         if vectorstore is None or reindex:
-            logger.info("Cargando documentos para crear/actualizar índice...")
+            if reindex:
+                # Eliminar índice anterior si existe
+                self.vector_store_manager.delete_index()
+                logger.info("Índice anterior eliminado, creando nuevo índice...")
+            
+            docs_path = getattr(settings, 'RAG_DOCS_PATH', 'docs/api')
+            logger.info(f"Cargando documentos desde {docs_path}...")
             loader = DocumentationLoader()
             documents = loader.load_all_documents()
-            chunks = loader.split_documents(documents)
             
+            if not documents:
+                raise ValueError(f"No se encontraron documentos en {docs_path}. Verifica que la carpeta existe y contiene archivos .md")
+            
+            chunks = loader.split_documents(documents)
             vectorstore = self.vector_store_manager.create_index(chunks, force=reindex)
         
         self.vectorstore = vectorstore

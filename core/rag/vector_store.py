@@ -82,6 +82,9 @@ class VectorStoreManager:
             logger.info(f"El índice ya existe en {self.index_path}. Usa force=True para recrearlo.")
             return self.load_index()
         
+        if not documents or len(documents) == 0:
+            raise ValueError("No se pueden crear índices con 0 documentos. Verifica que hay archivos .md en la carpeta de documentación.")
+        
         logger.info(f"Creando índice FAISS con {len(documents)} documentos...")
         
         # Crear índice
@@ -136,4 +139,22 @@ class VectorStoreManager:
             vectorstore = self.create_index(documents)
         
         return vectorstore
+    
+    def delete_index(self):
+        """
+        Elimina el índice existente
+        
+        Returns:
+            True si se eliminó, False si no existía
+        """
+        if self.index_path.exists():
+            import shutil
+            try:
+                shutil.rmtree(str(self.index_path))
+                logger.info(f"Índice eliminado: {self.index_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Error al eliminar índice: {e}")
+                return False
+        return False
 
