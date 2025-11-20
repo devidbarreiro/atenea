@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentación</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@tailwindcss/typography/dist/typography.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    .sidebar-link.active {
+      color: #1e40af; /* azul más intenso */
+      font-weight: 600;
+      background-color: #e0e7ff; /* fondo destacado */
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <div id="sidebar" class="w-90 bg-white p-4 overflow-y-auto border-r border-gray-200 shadow">
+      
+      <button class="bg-gray-900 text-white p-2 rounded-xl w-full mb-5" onclick="window.location.href='/'">
+        Volver al dashboard
+      </button>
+      <!-- Barra de búsqueda -->
+      <input id="sidebar-search" type="text" placeholder="Buscar..."
+            class="w-full mb-4 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+
+      <ul id="sidebar-list" class="space-y-1 text-gray-700 text-sm"></ul>
+    </div>
+
+    <!-- Contenido -->
+    <div class="flex-1 p-6 overflow-y-auto">
+      <h1 class="text-2xl font-bold mb-4">Bienvenido a la documentación</h1>
+      <div id="doc-content" class="prose max-w-none prose-lg prose-gray">
+        <p class="text-gray-600">Selecciona un documento en el sidebar para ver su contenido.</p>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+async function loadSidebar() {
+  try {
+    const res = await fetch('/docs/structure/');
+    const data = await res.json();
+    const sidebarList = document.getElementById('sidebar-list');
+    sidebarList.innerHTML = '';
+
+    function createList(obj, parentPath = '', level = 0) {
+      const ul = document.createElement('ul');
+      ul.classList.add('space-y-1');
+
+      for (const key in obj) {
+        const li = document.createElement('li');
+
+        if (typeof obj[key] === 'string') {
+          const urlPath = (parentPath + key).replaceAll('\\', '/').replace('.md', '');
+          const a = document.createElement('a');
+          a.href = '#';
+          a.textContent = key.replace('.md', '');
+          a.classList.add('sidebar-link', 'block', 'py-1', 'rounded', 'hover:bg-gray-100');
+          a.style.paddingLeft = `${level * 1}rem`;
+          a.dataset.route = urlPath;
+
+          a.onclick = (e) => {
+            e.preventDefault();
+            setActiveLink(a);
+            history.pushState({ path: urlPath }, '', `/docs/${urlPath}`);
+            loadDoc(urlPath);
+          };
+
+          li.appendChild(a);
+        } else {
+          const folderName = document.createElement('div');
+          folderName.textContent = key;
+          folderName.classList.add('font-bold', 'px-2', 'py-1', 'text-gray-600');
+          folderName.style.paddingLeft = `${level * 1}rem`;
+          li.appendChild(folderName);
+
+          li.appendChild(createList(obj[key], parentPath + key + '/', level + 1));
+        }
+
+        ul.appendChild(li);
+      }
+
+      return ul;
+    }
+
+    sidebarList.appendChild(createList(data));
+
+    const searchInput = document.getElementById('sidebar-search');
+
+    searchInput.addEventListener('input', () => {
+    const query = searchInput.value.toLowerCase();
+
+    document.querySelectorAll('#sidebar-list a.sidebar-link').forEach(link => {
+    const li = link.closest('li');
+    if (link.textContent.toLowerCase().includes(query)) {
+    li.style.display = '';
+    } else {
+    li.style.display = 'none';
+    }
+    });
+    });
+
+    searchInput.addEventListener('input', () => {
+    const query = searchInput.value.toLowerCase();
+    document.querySelectorAll('#sidebar-list > li').forEach(li => filterLiRecursive(li, query));
+    });
+
+
+    // Cargar doc de la URL actual si existe
+    const pathFromUrl = window.location.pathname.replace(/^\/docs\//, '');
+    if (pathFromUrl) {
+      const activeLink = document.querySelector(`a[data-route="${pathFromUrl}"]`);
+      if (activeLink) setActiveLink(activeLink);
+      await loadDoc(pathFromUrl);
+    }
+
+  } catch (err) {
+    console.error('Error cargando el sidebar:', err);
+    document.getElementById('sidebar-list').innerHTML = '<li class="text-red-500">Error al cargar la documentación</li>';
+  }
+}
+
+function setActiveLink(link) {
+  document.querySelectorAll('.sidebar-link').forEach(el => el.classList.remove('active'));
+  if (link) link.classList.add('active');
+}
+
+async function loadDoc(servicePath) {
+  try {
+    const res = await fetch(`/docs/api/services/${servicePath}/`);
+    if (!res.ok) throw new Error('Documento no encontrado');
+    const data = await res.json();
+    const contentDiv = document.getElementById('doc-content');
+    contentDiv.innerHTML = marked.parse(data.content);
+
+    // Reiniciar scroll
+    const scrollContainer = document.querySelector('.flex-1.overflow-y-auto');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+
+    // Delegar click de enlaces internos
+    contentDiv.querySelectorAll('a[data-route]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const sidebarLink = document.querySelector(`a[data-route="${a.dataset.route}"]`);
+        setActiveLink(sidebarLink);
+        history.pushState({ path: a.dataset.route }, '', `/docs/${a.dataset.route}`);
+        loadDoc(a.dataset.route);
+      });
+    });
+
+  } catch (err) {
+    console.error('Error cargando doc:', err);
+    document.getElementById('doc-content').innerHTML = `<p class="text-red-500">${err.message}</p>`;
+  }
+}
+
+// Manejo de back/forward
+window.addEventListener('popstate', (event) => {
+  const path = (event.state && event.state.path) || window.location.pathname.replace(/^\/docs\//, '');
+  if (!path) return;
+  const activeLink = document.querySelector(`a[data-route="${path}"]`);
+  setActiveLink(activeLink);
+  loadDoc(path);
+});
+
+loadSidebar();
+</script>
+
+</body>
+</html>
