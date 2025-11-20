@@ -5287,3 +5287,85 @@ class MoveToProjectView(View):
             logger.error(f"Error al mover {item_type} a proyecto: {e}")
             messages.error(request, f'Error inesperado: {str(e)}')
             return redirect('core:dashboard')
+
+
+# ====================
+# RAG DOCUMENTATION ASSISTANT
+# ====================
+
+class DocumentationAssistantView(LoginRequiredMixin, View):
+    """Vista para inicializar el asistente (el template se incluye en base.html)"""
+    
+    def get(self, request):
+        """El template se carga automáticamente en base.html, esta view solo valida acceso"""
+        # El template se incluye directamente en base.html
+        # Esta view existe por si necesitamos lógica adicional en el futuro
+        return JsonResponse({'status': 'ok'})
+
+
+class DocumentationAssistantChatView(LoginRequiredMixin, View):
+    """Vista para procesar mensajes del chat (HTMX)"""
+    
+    def post(self, request):
+        """Procesa un mensaje del usuario"""
+        from .rag.assistant import DocumentationAssistant
+        import json
+        
+        question = request.POST.get('question', '').strip()
+        chat_history_json = request.POST.get('chat_history', '[]')
+        
+        if not question:
+            return JsonResponse({
+                'error': 'La pregunta no puede estar vacía'
+            }, status=400)
+        
+        try:
+            # Parsear historial si existe
+            chat_history = []
+            if chat_history_json:
+                try:
+                    chat_history = json.loads(chat_history_json)
+                except json.JSONDecodeError:
+                    chat_history = []
+            
+            # Inicializar asistente
+            assistant = DocumentationAssistant()
+            
+            # Procesar pregunta
+            result = assistant.ask(question, chat_history)
+            
+            # Preparar respuesta
+            response_data = {
+                'answer': result['answer'],
+                'sources': result.get('sources', []),
+                'question': question
+            }
+            
+            return JsonResponse(response_data)
+            
+        except Exception as e:
+            logger.error(f"Error al procesar pregunta: {e}", exc_info=True)
+            return JsonResponse({
+                'error': f'Error al procesar tu pregunta: {str(e)}'
+            }, status=500)
+
+
+class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Vista para re-indexar la documentación (solo admin)"""
+    
+    def test_func(self):
+        """Solo usuarios con permisos de staff pueden re-indexar"""
+        return self.request.user.is_staff
+    
+    def post(self, request):
+        """Fuerza la re-indexación de la documentación"""
+        from .rag.assistant import DocumentationAssistant
+        
+        try:
+            assistant = DocumentationAssistant(reindex=True)
+            messages.success(request, 'Documentación re-indexada exitosamente')
+        except Exception as e:
+            logger.error(f"Error al re-indexar: {e}", exc_info=True)
+            messages.error(request, f'Error al re-indexar: {str(e)}')
+        
+        return redirect('core:dashboard')

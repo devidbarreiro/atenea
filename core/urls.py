@@ -147,5 +147,10 @@ urlpatterns = [
     
     # Move to Project
     path('move-to-project/<str:item_type>/<int:item_id>/', views.MoveToProjectView.as_view(), name='move_to_project'),
+    
+    # Documentation Assistant (RAG)
+    path('assistant/', views.DocumentationAssistantView.as_view(), name='doc_assistant'),
+    path('assistant/chat/', views.DocumentationAssistantChatView.as_view(), name='doc_assistant_chat'),
+    path('assistant/reindex/', views.DocumentationAssistantReindexView.as_view(), name='doc_assistant_reindex'),
 ]
 

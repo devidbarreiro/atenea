@@ -40,6 +40,7 @@
                 display: none !important; 
             }
             
+            
             {% block extra_css %}{% endblock %}
         </style>
     </head>
@@ -61,6 +62,25 @@
         <!-- Modal de Creación -->
         {% include 'includes/create_modal.html' %}
         
+        <!-- Asistente de Documentación -->
+        {% include 'assistant/chat.html' %}
+        
+        <!-- Script para ocultar botón cuando chat está abierto -->
+        <script>
+            window.addEventListener('open-chat', () => {
+                const button = document.querySelector('[x-data*="chatOpen"]');
+                if (button && button._x_dataStack) {
+                    button._x_dataStack[0].chatOpen = true;
+                }
+            });
+            window.addEventListener('close-chat', () => {
+                const button = document.querySelector('[x-data*="chatOpen"]');
+                if (button && button._x_dataStack) {
+                    button._x_dataStack[0].chatOpen = false;
+                }
+            });
+        </script>
+        
         <!-- Botón hamburguesa para móvil -->
         <button x-data="{ mobileMenuOpen: false }"
                 @click="$dispatch('open-mobile-menu')"
@@ -69,6 +89,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
             </svg>
         </button>
+        
         {% endif %}
         
         <!-- Mensajes Flash -->
@@ -130,6 +151,14 @@
                         localStorage.setItem('sidebarCollapsed', this.collapsed);
                     }
                 });
+            });
+            
+            // Asegurar que Alpine inicialice todos los componentes
+            document.addEventListener('DOMContentLoaded', () => {
+                // Forzar inicialización de Alpine si aún no está lista
+                if (window.Alpine) {
+                    Alpine.start();
+                }
             });
          </script>
     </body>

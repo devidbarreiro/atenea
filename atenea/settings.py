@@ -287,5 +287,22 @@ USE_LANGCHAIN_AGENT = config('USE_LANGCHAIN_AGENT', default=False, cast=bool)
 # Rate Limiting (para implementar después)
 AGENT_RATE_LIMIT_PER_USER = config('AGENT_RATE_LIMIT_PER_USER', default=10, cast=int)  # requests/hora
 AGENT_RATE_LIMIT_PER_PROJECT = config('AGENT_RATE_LIMIT_PER_PROJECT', default=5, cast=int)  # requests/hora
+
+# ====================================
+# RAG ASSISTANT CONFIGURATION
+# ====================================
+
+# RAG Assistant
+RAG_ENABLED = config('RAG_ENABLED', default=True, cast=bool)
+RAG_DOCS_PATH = config('RAG_DOCS_PATH', default='docs')  # Path relativo a BASE_DIR
+RAG_EMBEDDING_PROVIDER = config('RAG_EMBEDDING_PROVIDER', default='openai')  # 'openai' o 'google'
+RAG_EMBEDDING_MODEL = config('RAG_EMBEDDING_MODEL', default='text-embedding-3-small')
+RAG_LLM_PROVIDER = config('RAG_LLM_PROVIDER', default=None)  # None = usar DEFAULT_LLM_PROVIDER
+RAG_LLM_MODEL = config('RAG_LLM_MODEL', default=None)  # None = usar default del provider
+RAG_TOP_K = config('RAG_TOP_K', default=5, cast=int)  # Documentos a recuperar
+RAG_CHUNK_SIZE = config('RAG_CHUNK_SIZE', default=1000, cast=int)
+RAG_CHUNK_OVERLAP = config('RAG_CHUNK_OVERLAP', default=200, cast=int)
+RAG_VECTOR_STORE_PATH = config('RAG_VECTOR_STORE_PATH', default='.rag_store')  # Carpeta para guardar índices
+RAG_PROJECT_NAME = config('RAG_PROJECT_NAME', default='atenea-doc-assistant')  # Para LangSmith
 AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=int)  # requests/hora
 
