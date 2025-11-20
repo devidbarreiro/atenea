@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from . import views
 
 app_name = 'core'
@@ -101,5 +101,10 @@ urlpatterns = [
     path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
     path('users/activate/<uidb64>/<token>/', views.activate_account, name='activate_account'),
     path('no-permissions/', views.no_permissions, name='no_permissions'),
+
+    # Documentacion
+    path('docs/structure/', views.docs_structure, name='docs_structure'),
+    path('docs/api/services/<path:path>/', views.docs_md_view, name='docs_md'),
+    re_path(r'^docs/.*$', views.docs_home, name='docs_home'),
 ]
 
