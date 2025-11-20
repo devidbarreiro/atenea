@@ -3,9 +3,16 @@
 {% block title %}Generar Video con Agente - {{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto">
-    <!-- Progress Bar -->
-    <div class="mb-8">
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
+    {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
+    {% include 'includes/project_tabs_bar.html' with active_tab='agent' project=project %}
+
+    <!-- Contenido principal - Con margen para ambas sidebars y la barra fija -->
+    <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
+        <div class="p-6 max-w-5xl mx-auto">
+            <!-- Progress Bar -->
+            <div class="mb-8">
         <div class="flex items-center justify-center space-x-4">
             <!-- Step 1: Content (Active) -->
             <div class="flex items-center">
@@ -242,7 +249,7 @@
 
             <!-- Actions -->
             <div class="flex justify-between items-center">
-                <a href="{% url 'core:project_detail' project.id %}" 
+                <a href="{% url 'core:project_agent' project.id %}" 
                    class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
                     Cancelar
                 </a>
@@ -329,6 +336,8 @@
             </div>
         </form>
     </div>
+        </div>
+    </main>
 </div>
 
 <script>

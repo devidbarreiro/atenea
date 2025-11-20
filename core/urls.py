@@ -12,31 +12,57 @@ urlpatterns = [
     # Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
     
+    # Library
+    path('library/', views.LibraryView.as_view(), name='library'),
+    
     # Projects
+    path('projects/', views.ProjectsListView.as_view(), name='projects_list'),
     path('projects/create/', views.ProjectCreateView.as_view(), name='project_create'),
     path('projects/<int:project_id>/', views.ProjectDetailView.as_view(), name='project_detail'),
+    path('projects/<int:project_id>/videos/', views.ProjectDetailView.as_view(), {'tab': 'videos'}, name='project_videos'),
+    path('projects/<int:project_id>/images/', views.ProjectDetailView.as_view(), {'tab': 'images'}, name='project_images'),
+    path('projects/<int:project_id>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
+    path('projects/<int:project_id>/music/', views.ProjectDetailView.as_view(), {'tab': 'music'}, name='project_music'),
+    path('projects/<int:project_id>/scripts/', views.ProjectDetailView.as_view(), {'tab': 'scripts'}, name='project_scripts'),
+    path('projects/<int:project_id>/agent/', views.ProjectDetailView.as_view(), {'tab': 'agent'}, name='project_agent'),
+    path('projects/<int:project_id>/update-name/', views.ProjectUpdateNameView.as_view(), name='project_update_name'),
     path('projects/<int:project_id>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
     
-    # Videos
+    # Videos (standalone - sin proyecto)
+    path('videos/create/', views.VideoCreateView.as_view(), name='video_create_standalone'),
+    
+    # Videos (con proyecto)
     path('projects/<int:project_id>/videos/create/', views.VideoCreateView.as_view(), name='video_create'),
+    path('projects/<int:project_id>/videos/create/partial/', views.VideoCreatePartialView.as_view(), name='video_create_partial'),
     path('videos/<int:video_id>/', views.VideoDetailView.as_view(), name='video_detail'),
     path('videos/<int:video_id>/delete/', views.VideoDeleteView.as_view(), name='video_delete'),
     path('videos/<int:video_id>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
     path('videos/<int:video_id>/status/', views.VideoStatusView.as_view(), name='video_status'),
     
-    # Images
+    # Images (standalone - sin proyecto)
+    path('images/create/', views.ImageCreateView.as_view(), name='image_create_standalone'),
+    
+    # Images (con proyecto)
     path('projects/<int:project_id>/images/create/', views.ImageCreateView.as_view(), name='image_create'),
+    path('projects/<int:project_id>/images/create/partial/', views.ImageCreatePartialView.as_view(), name='image_create_partial'),
     path('images/<int:image_id>/', views.ImageDetailView.as_view(), name='image_detail'),
     path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     
-    # Audios
+    # Audios (standalone - sin proyecto)
+    path('audios/create/', views.AudioCreateView.as_view(), name='audio_create_standalone'),
+    
+    # Audios (con proyecto)
     path('projects/<int:project_id>/audios/create/', views.AudioCreateView.as_view(), name='audio_create'),
+    path('projects/<int:project_id>/audios/create/partial/', views.AudioCreatePartialView.as_view(), name='audio_create_partial'),
     path('audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='audio_detail'),
     path('audios/<int:audio_id>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
     path('audios/<int:audio_id>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
     
-    # Music
+    # Music (standalone - sin proyecto)
+    path('music/create/', views.MusicCreateView.as_view(), name='music_create_standalone'),
+    
+    # Music (con proyecto)
     path('projects/<int:project_id>/music/create/', views.MusicCreateView.as_view(), name='music_create'),
     path('music/<int:music_id>/', views.MusicDetailView.as_view(), name='music_detail'),
     path('music/<int:music_id>/delete/', views.MusicDeleteView.as_view(), name='music_delete'),
@@ -44,8 +70,12 @@ urlpatterns = [
     path('music/<int:music_id>/status/', views.MusicStatusView.as_view(), name='music_status'),
     path('music/<int:music_id>/composition-plan/', views.MusicCompositionPlanView.as_view(), name='music_composition_plan'),
     
-    # Scripts
+    # Scripts (standalone - sin proyecto)
+    path('scripts/create/', views.ScriptCreateView.as_view(), name='script_create_standalone'),
+    
+    # Scripts (con proyecto)
     path('projects/<int:project_id>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
+    path('projects/<int:project_id>/scripts/create/partial/', views.ScriptCreatePartialView.as_view(), name='script_create_partial'),
     path('scripts/<int:script_id>/', views.ScriptDetailView.as_view(), name='script_detail'),
     path('scripts/<int:script_id>/delete/', views.ScriptDeleteView.as_view(), name='script_delete'),
     path('scripts/<int:script_id>/retry/', views.ScriptRetryView.as_view(), name='script_retry'),
@@ -101,5 +131,16 @@ urlpatterns = [
     path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
     path('users/activate/<uidb64>/<token>/', views.activate_account, name='activate_account'),
     path('no-permissions/', views.no_permissions, name='no_permissions'),
+    
+    # Project Invitations
+    path('projects/<int:project_id>/invite/', views.ProjectInviteView.as_view(), name='project_invite'),
+    path('projects/<int:project_id>/invite/partial/', views.ProjectInvitePartialView.as_view(), name='project_invite_partial'),
+    path('projects/<int:project_id>/invitations/', views.ProjectInvitationsListView.as_view(), name='project_invitations'),
+    path('projects/<int:project_id>/invitations/partial/', views.ProjectInvitationsPartialView.as_view(), name='project_invitations_partial'),
+    path('invitations/<str:token>/accept/', views.AcceptInvitationView.as_view(), name='accept_invitation'),
+    path('invitations/<int:invitation_id>/cancel/', views.CancelInvitationView.as_view(), name='cancel_invitation'),
+    
+    # Move to Project
+    path('move-to-project/<str:item_type>/<int:item_id>/', views.MoveToProjectView.as_view(), name='move_to_project'),
 ]
 

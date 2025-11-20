@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Biblioteca - Atenea{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-8">
+    <h1 class="text-4xl font-bold mb-2">Biblioteca</h1>
+    <p class="text-gray-600">Todos tus videos, imágenes, audios, música y guiones</p>
+</div>
+
+<!-- Buscador y Filtros -->
+<div class="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <form method="get" action="{% url 'core:library' %}" class="space-y-4">
+        <!-- Barra de búsqueda -->
+        <div class="flex gap-4">
+            <div class="flex-1">
+                <input type="text" 
+                       name="q" 
+                       value="{{ search_query }}" 
+                       placeholder="Buscar por título o contenido..." 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent">
+            </div>
+            <button type="submit" class="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
+                Buscar
+            </button>
+            {% if search_query or selected_type %}
+            <a href="{% url 'core:library' %}" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                Limpiar
+            </a>
+            {% endif %}
+        </div>
+        
+        <!-- Filtros por tipo -->
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'core:library' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if not selected_type %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Todos ({{ stats.total }})
+            </a>
+            <a href="{% url 'core:library' %}?type=video{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'video' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                📹 Videos ({{ stats.videos }})
+            </a>
+            <a href="{% url 'core:library' %}?type=image{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'image' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                🖼️ Imágenes ({{ stats.images }})
+            </a>
+            <a href="{% url 'core:library' %}?type=audio{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'audio' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                🔊 Audios ({{ stats.audios }})
+            </a>
+            <a href="{% url 'core:library' %}?type=music{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'music' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                🎵 Música ({{ stats.music }})
+            </a>
+            <a href="{% url 'core:library' %}?type=script{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
+               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'script' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                📝 Guiones ({{ stats.scripts }})
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Grid de Items -->
+{% if items_with_urls %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    {% for item in items_with_urls %}
+        {% include 'includes/item_card.html' with item=item %}
+    {% endfor %}
+</div>
+
+<!-- Paginación -->
+{% if is_paginated %}
+<div class="mt-8 flex justify-center">
+    <nav class="flex gap-2">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}" 
+           class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Anterior
+        </a>
+        {% endif %}
+        
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <span class="px-4 py-2 bg-black text-white rounded-lg">{{ num }}</span>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <a href="?page={{ num }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}" 
+               class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                {{ num }}
+            </a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}" 
+           class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Siguiente
+        </a>
+        {% endif %}
+    </nav>
+</div>
+
+<div class="mt-4 text-center text-sm text-gray-500">
+    Mostrando {{ page_obj.start_index }} - {{ page_obj.end_index }} de {{ paginator.count }} items
+</div>
+{% endif %}
+
+{% else %}
+<!-- Estado vacío -->
+<div class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+    <div class="hero-content text-center">
+        <div class="max-w-md">
+            <div class="text-6xl mb-4 opacity-30">📚</div>
+            <h1 class="text-3xl font-bold text-gray-800">
+                {% if search_query or selected_type %}
+                No se encontraron items
+                {% else %}
+                Tu biblioteca está vacía
+                {% endif %}
+            </h1>
+            <p class="py-6 text-gray-600">
+                {% if search_query or selected_type %}
+                Intenta ajustar tus filtros de búsqueda
+                {% else %}
+                Comienza a generar contenido para verlo aquí
+                {% endif %}
+            </p>
+            {% if search_query or selected_type %}
+            <a href="{% url 'core:library' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md">
+                Ver todos los items
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modales de eliminación -->
+{% for item in items_with_urls %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
+{% endblock %}
+

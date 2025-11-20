@@ -541,13 +541,21 @@ function updateServiceConfig(sceneId, service) {
     const videoOrientation = '{{ video_orientation }}';
     
     if (service === 'gemini_veo') {
+        // Obtener duración guardada o usar duration_sec del modelo
+        const sceneData = scenesInspectorData[sceneId] || {};
+        const config = sceneData.ai_config || {};
+        const durationFromModel = parseInt(sceneData.duration_sec);
+        const durationFromConfig = parseInt(config.duration);
+        const duration = (!isNaN(durationFromModel) && durationFromModel > 0) ? durationFromModel : 
+                        (!isNaN(durationFromConfig) && durationFromConfig > 0) ? durationFromConfig : 8;
+        
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
                 <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
-                    <option value="5">5s</option>
-                    <option value="8" selected>8s</option>
+                    <option value="5" ${duration === 5 ? 'selected' : ''}>5s</option>
+                    <option value="8" ${duration === 8 ? 'selected' : ''}>8s</option>
                 </select>
             </div>
             <div>
@@ -565,14 +573,22 @@ function updateServiceConfig(sceneId, service) {
         const soraSize = videoOrientation === '9:16' ? '720x1280' : '1280x720';
         const soraLabel = videoOrientation === '9:16' ? 'Vertical (9:16)' : 'Horizontal (16:9)';
         
+        // Obtener duración guardada o usar duration_sec del modelo
+        const sceneData = scenesInspectorData[sceneId] || {};
+        const config = sceneData.ai_config || {};
+        const durationFromModel = parseInt(sceneData.duration_sec);
+        const durationFromConfig = parseInt(config.duration);
+        const duration = (!isNaN(durationFromModel) && durationFromModel > 0) ? durationFromModel : 
+                        (!isNaN(durationFromConfig) && durationFromConfig > 0) ? durationFromConfig : 8;
+        
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
                 <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
-                    <option value="4">4s</option>
-                    <option value="8" selected>8s</option>
-                    <option value="12">12s</option>
+                    <option value="4" ${duration === 4 ? 'selected' : ''}>4s</option>
+                    <option value="8" ${duration === 8 ? 'selected' : ''}>8s</option>
+                    <option value="12" ${duration === 12 ? 'selected' : ''}>12s</option>
                 </select>
             </div>
             <div>
@@ -838,12 +854,19 @@ function populateAvatarSelects(avatars) {
     
     avatarSelects.forEach(select => {
         const sceneId = select.dataset.sceneId;
+        const sceneData = scenesInspectorData[sceneId] || {};
+        const config = sceneData.ai_config || {};
+        const savedAvatarId = config.avatar_id || '';
+        
         select.innerHTML = '<option value="">Selecciona un avatar</option>';
         
         avatars.forEach(avatar => {
             const option = document.createElement('option');
             option.value = avatar.avatar_id;
             option.textContent = avatar.avatar_name;
+            if (savedAvatarId && avatar.avatar_id === savedAvatarId) {
+                option.selected = true;
+            }
             select.appendChild(option);
         });
         
@@ -862,12 +885,20 @@ function populateVoiceSelects(voices) {
     
     voiceSelects.forEach(select => {
         const sceneId = select.dataset.sceneId;
+        const sceneData = scenesInspectorData[sceneId] || {};
+        const config = sceneData.ai_config || {};
+        const savedVoiceId = config.voice_id || '';
+        
+        
         select.innerHTML = '<option value="">Selecciona una voz</option>';
         
         voices.forEach(voice => {
             const option = document.createElement('option');
             option.value = voice.voice_id;
             option.textContent = `${voice.display_name} (${voice.language})`;
+            if (savedVoiceId && voice.voice_id === savedVoiceId) {
+                option.selected = true;
+            }
             select.appendChild(option);
         });
         
@@ -1716,13 +1747,20 @@ function updateInspectorConfig() {
     } else if (service === 'sora') {
         const soraSize = videoOrientation === '9:16' ? '720x1280' : '1280x720';
         
+        // Usar duration_sec del modelo como fuente de verdad, luego ai_config.duration como fallback
+        const sceneData = scenesInspectorData[currentInspectorSceneId] || {};
+        const durationFromModel = parseInt(sceneData.duration_sec);
+        const durationFromConfig = parseInt(config.duration);
+        const duration = (!isNaN(durationFromModel) && durationFromModel > 0) ? durationFromModel : 
+                        (!isNaN(durationFromConfig) && durationFromConfig > 0) ? durationFromConfig : 8;
+        
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
                 <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                    <option value="4" ${config.duration == 4 ? 'selected' : ''}>4 segundos</option>
-                    <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
-                    <option value="12" ${config.duration == 12 ? 'selected' : ''}>12 segundos</option>
+                    <option value="4" ${duration === 4 ? 'selected' : ''}>4 segundos</option>
+                    <option value="8" ${duration === 8 ? 'selected' : ''}>8 segundos</option>
+                    <option value="12" ${duration === 12 ? 'selected' : ''}>12 segundos</option>
                 </select>
             </div>
             
@@ -1787,8 +1825,10 @@ function updateInspectorConfig() {
             </div>
         `;
         
-        // Cargar avatares y voces
-        loadHeyGenAssetsForInspector(config.avatar_id, config.voice_id);
+        // Cargar avatares y voces - usar valores de config o valores vacíos
+        const avatarId = config.avatar_id || '';
+        const voiceId = config.voice_id || '';
+        loadHeyGenAssetsForInspector(avatarId, voiceId);
     } else if (service === 'vuela_ai') {
         container.innerHTML = `
             <div>
@@ -1862,7 +1902,9 @@ async function loadHeyGenAssetsForInspector(selectedAvatarId, selectedVoiceId) {
             const option = document.createElement('option');
             option.value = avatar.avatar_id;
             option.textContent = avatar.avatar_name;
-            option.selected = avatar.avatar_id === selectedAvatarId;
+            if (selectedAvatarId && avatar.avatar_id === selectedAvatarId) {
+                option.selected = true;
+            }
             avatarSelect.appendChild(option);
         });
         
@@ -1873,7 +1915,9 @@ async function loadHeyGenAssetsForInspector(selectedAvatarId, selectedVoiceId) {
             const option = document.createElement('option');
             option.value = voice.voice_id;
             option.textContent = `${voice.display_name} (${voice.language})`;
-            option.selected = voice.voice_id === selectedVoiceId;
+            if (selectedVoiceId && voice.voice_id === selectedVoiceId) {
+                option.selected = true;
+            }
             voiceSelect.appendChild(option);
         });
     } catch (error) {

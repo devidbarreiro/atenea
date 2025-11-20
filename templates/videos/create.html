@@ -1,484 +1,58 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Crear Video - {{ project.name }}{% endblock %}
+{% block title %}
+{% if project %}
+Crear Video - {{ project.name }}
+{% else %}
+Crear Video
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
-    <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-        <div class="bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200 p-6">
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Video</h2>
-            <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
+{% if project %}
+<!-- Layout CON proyecto: con sidebars y barra de navegación fija -->
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
+    {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
+    {% include 'includes/project_tabs_bar.html' with active_tab='videos' project=project %}
+
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
+        <div class="p-6 max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Video</h2>
+                <p class="text-sm text-gray-600">Proyecto: <span class="font-semibold">{{ project.name }}</span></p>
+            </div>
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'videos/_form.html' %}
+            </div>
         </div>
-        
-        <form method="post" id="videoForm" enctype="multipart/form-data" class="p-6">
-            {% csrf_token %}
-            
-            <!-- Título -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Título <span class="text-red-500">*</span>
-                </label>
-                <input 
-                    type="text" 
-                    name="title" 
-                    required 
-                    placeholder="Mi video generado con IA"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-            </div>
-            
-            <!-- Tipo de Video -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-3">
-                    Tipo de Video <span class="text-red-500">*</span>
-                </label>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <label class="type-option flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-all">
-                        <input type="radio" name="type" id="type-heygen-v2" value="heygen_avatar_v2" required class="hidden">
-                        <div class="text-3xl">👤</div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">HeyGen Avatar V2</h3>
-                            <p class="text-xs text-gray-500">Avatar con controles avanzados</p>
-                        </div>
-                    </label>
-                    
-                    <label class="type-option flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-all">
-                        <input type="radio" name="type" id="type-heygen-iv" value="heygen_avatar_iv" required class="hidden">
-                        <div class="text-3xl">🎭</div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">HeyGen Avatar IV</h3>
-                            <p class="text-xs text-gray-500">Avatar interactivo mejorado</p>
-                        </div>
-                    </label>
-                    
-                    <label class="type-option flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-all">
-                        <input type="radio" name="type" id="type-gemini" value="gemini_veo" required class="hidden">
-                        <div class="text-3xl">🎨</div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">Gemini Veo</h3>
-                            <p class="text-xs text-gray-500">Video AI de Google</p>
-                        </div>
-                    </label>
-                    
-                    <label class="type-option flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-all">
-                        <input type="radio" name="type" id="type-sora" value="sora" required class="hidden">
-                        <div class="text-3xl">🚀</div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">OpenAI Sora</h3>
-                            <p class="text-xs text-gray-500">Generación rápida y flexible</p>
-                        </div>
-                    </label>
-                </div>
-            </div>
-            
-            <!-- Guión / Prompt -->
-            <div class="mb-6">
-                <label id="scriptLabel" class="block text-sm font-medium text-gray-700 mb-2">
-                    Guión / Prompt <span class="text-red-500">*</span>
-                </label>
-                <textarea 
-                    name="script" 
-                    required 
-                    rows="5"
-                    placeholder="Escribe el guión para tu video..."
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                ></textarea>
-            </div>
-            
-            <!-- Config HeyGen V2 -->
-            <div id="heygen-v2-config" class="config-section hidden">
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <span class="text-2xl">👤</span>
-                        Configuración HeyGen Avatar V2
-                    </h3>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
-                            <select name="avatar_id" id="avatar-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                <option value="">Cargando avatares...</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Voice</label>
-                            <select name="voice_id" id="voice-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                <option value="">Cargando voces...</option>
-                            </select>
-                        </div>
-                        
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Velocidad</label>
-                                <input type="number" name="voice_speed" value="1.0" step="0.1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Tono</label>
-                                <input type="number" name="voice_pitch" value="0" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" name="test" value="true" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                                <span class="text-sm text-gray-700">Modo Test (genera video de 10s)</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Config HeyGen IV -->
-            <div id="heygen-iv-config" class="config-section hidden">
-                <div class="bg-purple-50 border border-purple-200 rounded-lg p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <span class="text-2xl">🎭</span>
-                        Configuración HeyGen Avatar IV
-                    </h3>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
-                            <select name="avatar_image_id" id="avatar-image-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                                <option value="">Cargando avatares...</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Voice</label>
-                            <select name="voice_id_iv" id="voice-iv-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                                <option value="">Cargando voces...</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Prompt del Avatar</label>
-                            <textarea name="avatar_prompt" rows="3" placeholder="Describe cómo debe verse el avatar..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"></textarea>
-                        </div>
-                        
-                        <div>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" name="test_iv" value="true" class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
-                                <span class="text-sm text-gray-700">Modo Test</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Config Gemini Veo -->
-            <div id="gemini-config" class="config-section hidden">
-                <div class="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <span class="text-2xl">🎨</span>
-                        Configuración Gemini Veo
-                    </h3>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
-                            <select name="aspect_ratio" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-                                <option value="16:9">16:9 (Horizontal)</option>
-                                <option value="9:16">9:16 (Vertical)</option>
-                                <option value="1:1">1:1 (Cuadrado)</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
-                            <select name="duration" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-                                <option value="4">4 segundos</option>
-                                <option value="8" selected>8 segundos</option>
-                                <option value="12">12 segundos</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Config Sora -->
-            <div id="sora-config" class="config-section hidden">
-                <div class="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <span class="text-2xl">🚀</span>
-                        Configuración OpenAI Sora
-                    </h3>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
-                            <select name="duration" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                                <option value="4">4 segundos</option>
-                                <option value="8" selected>8 segundos</option>
-                                <option value="12">12 segundos</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Tamaño</label>
-                            <select name="size" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                                <option value="1280x720">1280x720 (16:9)</option>
-                                <option value="720x1280">720x1280 (9:16)</option>
-                                <option value="1024x1024">1024x1024 (1:1)</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
-                            <select name="sora_model" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                                <option value="sora-2" selected>Sora 2 (Rápido)</option>
-                                <option value="sora-2-pro">Sora 2 Pro (Alta calidad)</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" name="use_input_reference" class="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500">
-                                <span class="text-sm text-gray-700">Usar imagen de referencia</span>
-                            </label>
-                        </div>
-                        
-                        <div id="sora-reference-section" class="hidden">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Referencia</label>
-                            <input type="file" name="input_reference" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                            <p class="text-xs text-gray-500 mt-1">La imagen debe tener exactamente las mismas dimensiones que el tamaño del video</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Botones -->
-            <div class="flex gap-3 justify-end pt-6 border-t border-gray-200">
-                <a href="{% url 'core:project_detail' project.id %}" 
-                   class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-6 py-3 rounded-md font-medium transition-colors">
-                    Cancelar
-                </a>
-                <button 
-                    type="submit" 
-                    class="bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
-                    Crear Video
-                </button>
-            </div>
-        </form>
-    </div>
+    </main>
 </div>
-
-<script>
-// Manejar selección de tipo
-document.querySelectorAll('.type-option').forEach(option => {
-    option.addEventListener('click', function() {
-        const radio = this.querySelector('input[type="radio"]');
-        radio.checked = true;
-        
-        // Actualizar estilos
-        document.querySelectorAll('.type-option').forEach(opt => {
-            opt.classList.remove('border-blue-500', 'bg-blue-50');
-        });
-        this.classList.add('border-blue-500', 'bg-blue-50');
-        
-        // Mostrar configuración correspondiente
-        showConfig(radio.value);
-    });
-});
-
-function showConfig(type) {
-    // Ocultar todas las configuraciones
-    document.querySelectorAll('.config-section').forEach(section => {
-        section.classList.add('hidden');
-    });
+{% else %}
+<!-- Layout SIN proyecto: solo sidebar principal -->
+<div class="flex min-h-screen bg-gray-50">
+    {% include 'includes/sidebar.html' %}
     
-    // Mostrar configuración del tipo seleccionado
-    if (type === 'heygen_avatar_v2') {
-        document.getElementById('heygen-v2-config').classList.remove('hidden');
-        document.getElementById('scriptLabel').textContent = 'Guión / Script';
-        loadAvatars();
-        loadVoices();
-    } else if (type === 'heygen_avatar_iv') {
-        document.getElementById('heygen-iv-config').classList.remove('hidden');
-        document.getElementById('scriptLabel').textContent = 'Guión / Script';
-        loadAvatarImages();
-        loadVoicesIV();
-    } else if (type === 'gemini_veo') {
-        document.getElementById('gemini-config').classList.remove('hidden');
-        document.getElementById('scriptLabel').textContent = 'Prompt del Video';
-    } else if (type === 'sora') {
-        document.getElementById('sora-config').classList.remove('hidden');
-        document.getElementById('scriptLabel').textContent = 'Prompt del Video';
-    }
-}
-
-// Cargar avatares HeyGen V2 con retry automático
-async function loadAvatars(retryCount = 0) {
-    const select = document.getElementById('avatar-select');
-    const maxRetries = 2;
-    
-    select.innerHTML = retryCount > 0 
-        ? `<option value="">Reintentando (${retryCount}/${maxRetries})...</option>`
-        : '<option value="">Cargando...</option>';
-    
-    try {
-        const response = await fetch('{% url "core:api_list_avatars" %}');
-        const data = await response.json();
-        
-        // Verificar si hay error en la respuesta
-        if (data.error && data.avatars.length === 0) {
-            throw new Error(data.error);
-        }
-        
-        select.innerHTML = '<option value="">Selecciona un avatar</option>';
-        data.avatars.forEach(avatar => {
-            const option = document.createElement('option');
-            option.value = avatar.avatar_id;
-            option.textContent = avatar.avatar_name;
-            select.appendChild(option);
-        });
-        
-        // Mostrar indicador si es data cacheada
-        if (data.cached) {
-            console.log('Avatares cargados desde caché');
-        }
-    } catch (error) {
-        console.error('Error cargando avatares:', error);
-        
-        // Reintentar automáticamente si no hemos alcanzado el máximo
-        if (retryCount < maxRetries) {
-            setTimeout(() => loadAvatars(retryCount + 1), 2000);
-        } else {
-            select.innerHTML = '<option value="">⚠️ Error al cargar. Click para reintentar</option>';
-            select.addEventListener('focus', () => {
-                if (select.value === '') {
-                    loadAvatars(0);
-                }
-            }, { once: true });
-        }
-    }
-}
-
-// Cargar voces HeyGen V2 con retry automático
-async function loadVoices(retryCount = 0) {
-    const select = document.getElementById('voice-select');
-    const maxRetries = 2;
-    
-    select.innerHTML = retryCount > 0 
-        ? `<option value="">Reintentando (${retryCount}/${maxRetries})...</option>`
-        : '<option value="">Cargando...</option>';
-    
-    try {
-        const response = await fetch('{% url "core:api_list_voices" %}');
-        const data = await response.json();
-        
-        // Verificar si hay error en la respuesta
-        if (data.error && data.voices.length === 0) {
-            throw new Error(data.error);
-        }
-        
-        select.innerHTML = '<option value="">Selecciona una voz</option>';
-        data.voices.forEach(voice => {
-            const option = document.createElement('option');
-            option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
-            select.appendChild(option);
-        });
-        
-        // Mostrar indicador si es data cacheada
-        if (data.cached) {
-            console.log('Voces cargadas desde caché');
-        }
-    } catch (error) {
-        console.error('Error cargando voces:', error);
-        
-        // Reintentar automáticamente si no hemos alcanzado el máximo
-        if (retryCount < maxRetries) {
-            setTimeout(() => loadVoices(retryCount + 1), 2000);
-        } else {
-            select.innerHTML = '<option value="">⚠️ Error al cargar. Click para reintentar</option>';
-            select.addEventListener('focus', () => {
-                if (select.value === '') {
-                    loadVoices(0);
-                }
-            }, { once: true });
-        }
-    }
-}
-
-// Cargar avatares HeyGen IV
-async function loadAvatarImages() {
-    const select = document.getElementById('avatar-image-select');
-    select.innerHTML = '<option value="">Cargando...</option>';
-    
-    try {
-        const response = await fetch('{% url "core:api_list_image_assets" %}');
-        const data = await response.json();
-        
-        select.innerHTML = '<option value="">Selecciona un avatar</option>';
-        data.image_assets.forEach(asset => {
-            const option = document.createElement('option');
-            option.value = asset.image_id;
-            option.textContent = asset.image_name;
-            select.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error cargando avatares:', error);
-        select.innerHTML = '<option value="">Error al cargar avatares</option>';
-    }
-}
-
-// Cargar voces HeyGen IV
-async function loadVoicesIV() {
-    const select = document.getElementById('voice-iv-select');
-    select.innerHTML = '<option value="">Cargando...</option>';
-    
-    try {
-        const response = await fetch('{% url "core:api_list_voices" %}');
-        const data = await response.json();
-        
-        select.innerHTML = '<option value="">Selecciona una voz</option>';
-        data.voices.forEach(voice => {
-            const option = document.createElement('option');
-            option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
-            select.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error cargando voces:', error);
-        select.innerHTML = '<option value="">Error al cargar voces</option>';
-    }
-}
-
-// Manejar checkbox de imagen de referencia para Sora
-document.addEventListener('DOMContentLoaded', function() {
-    const referenceCheckbox = document.querySelector('input[name="use_input_reference"]');
-    const referenceSection = document.getElementById('sora-reference-section');
-    
-    if (referenceCheckbox && referenceSection) {
-        referenceCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                referenceSection.classList.remove('hidden');
-            } else {
-                referenceSection.classList.add('hidden');
-            }
-        });
-    }
-});
-</script>
-
-<style>
-.config-section {
-    animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-64 p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Crear Video</h2>
+                <p class="text-sm text-gray-600">Video sin proyecto asociado</p>
+            </div>
+            
+            <!-- Form Card -->
+            <div class="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                {% include 'videos/_form.html' %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endif %}
 {% endblock %}

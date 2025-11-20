@@ -1,0 +1,117 @@
+{% load static %}
+
+<form method="post" id="scriptForm" class="p-6">
+    {% csrf_token %}
+    
+    <!-- Título -->
+    <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+            Título <span class="text-red-500">*</span>
+        </label>
+        <input 
+            type="text" 
+            name="title" 
+            id="id_title"
+            required
+            placeholder="Título del guión"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+        >
+        {% if form.title.help_text %}
+            <p class="text-xs text-gray-500 mt-1">{{ form.title.help_text }}</p>
+        {% endif %}
+    </div>
+    
+    <!-- Guión Original -->
+    <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+            Guión Original <span class="text-red-500">*</span>
+        </label>
+        <textarea 
+            name="original_script" 
+            id="id_original_script"
+            required
+            rows="10"
+            placeholder="Escribe tu guión aquí..."
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+        ></textarea>
+        {% if form.original_script.help_text %}
+            <p class="text-xs text-gray-500 mt-1">{{ form.original_script.help_text }}</p>
+        {% endif %}
+        <div class="mt-2">
+            <span class="text-xs text-gray-500">
+                <span id="char-count">0</span> caracteres
+            </span>
+        </div>
+    </div>
+    
+    <!-- Duración Deseada -->
+    <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+            Duración Deseada (minutos)
+        </label>
+        <input 
+            type="number" 
+            name="desired_duration_min" 
+            id="id_desired_duration_min"
+            min="1"
+            max="60"
+            value="5"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            placeholder="5"
+        >
+        <p class="text-xs text-gray-500 mt-1">Duración aproximada del video final (1-60 minutos)</p>
+    </div>
+    
+    <!-- Info -->
+    <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    <strong>Procesamiento automático:</strong> Tu guión será enviado automáticamente para ser procesado y estructurado en escenas.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Botones -->
+    <div class="flex gap-3 justify-end pt-6 border-t border-gray-200">
+        {% if project %}
+        <a href="{% url 'core:project_scripts' project.id %}" 
+           class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-6 py-3 rounded-md font-medium transition-colors">
+            Cancelar
+        </a>
+        {% else %}
+        <a href="{% url 'core:dashboard' %}" 
+           class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-6 py-3 rounded-md font-medium transition-colors">
+            Cancelar
+        </a>
+        {% endif %}
+        <button 
+            type="submit" 
+            class="bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md font-medium transition-colors">
+            Crear Guión
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Contador de caracteres
+    const scriptTextarea = document.getElementById('id_original_script');
+    const charCount = document.getElementById('char-count');
+    
+    if (scriptTextarea && charCount) {
+        scriptTextarea.addEventListener('input', function() {
+            charCount.textContent = this.value.length;
+        });
+        // Inicializar contador
+        charCount.textContent = scriptTextarea.value.length;
+    }
+});
+</script>
+

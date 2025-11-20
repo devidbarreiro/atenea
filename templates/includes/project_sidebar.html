@@ -1,0 +1,187 @@
+{% load static %}
+<!-- Project Sidebar -->
+<aside 
+    x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' }"
+    x-init="
+        sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        window.addEventListener('sidebar-toggled', (e) => {
+            sidebarCollapsed = e.detail.collapsed;
+        });
+    "
+    :class="{
+        'lg:left-16': sidebarCollapsed,
+        'lg:left-64': !sidebarCollapsed
+    }"
+    class="lg:w-80 flex-shrink-0 lg:fixed lg:top-0 lg:h-screen lg:overflow-y-auto lg:z-30 bg-white border-r border-gray-200 transition-all duration-300">
+    <div class="p-6">
+        <!-- Información del proyecto -->
+        <div class="mb-6">
+            {% include 'projects/partials/project_name.html' with project=project user_role=user_role %}
+            {% if project.description %}
+            <p class="text-sm text-gray-600 mt-2">{{ project.description }}</p>
+            {% endif %}
+            <div class="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>Creado {{ project.created_at|date:"d M Y" }}</span>
+            </div>
+        </div>
+
+        <!-- Estadísticas -->
+        <div class="space-y-3 mb-6">
+            <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <span class="text-white text-sm">🎬</span>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Videos</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-lg font-bold text-blue-600">{{ project.video_count }}</div>
+                    <div class="text-xs text-gray-500">{{ project.completed_videos }} completados</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+                        <span class="text-white text-sm">🖼️</span>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Imágenes</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-lg font-bold text-purple-600">{{ project.image_count }}</div>
+                    <div class="text-xs text-gray-500">{{ project.completed_images }} completadas</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+                        <span class="text-white text-sm">📝</span>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Guiones</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-lg font-bold text-orange-600">{{ project.script_count }}</div>
+                    <div class="text-xs text-gray-500">{{ project.completed_scripts }} completados</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acciones del proyecto -->
+        <div class="border-t border-gray-200 pt-6 space-y-2">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Acciones</h3>
+            
+            <!-- Botón principal: Crear -->
+            <div x-data="{ open: false }" class="relative">
+                <button @click="open = !open" 
+                        class="w-full bg-black text-white hover:bg-gray-800 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Crear Nuevo
+                </button>
+                
+                <!-- Dropdown de creación -->
+                <div x-show="open" 
+                     @click.away="open = false"
+                     x-cloak
+                     x-transition
+                     class="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2">
+                    <a href="{% url 'core:video_create' project.id %}"
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>🎬</span> Video
+                    </a>
+                    <a href="{% url 'core:image_create' project.id %}"
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>🖼️</span> Imagen
+                    </a>
+                    <a href="{% url 'core:audio_create' project.id %}"
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>🎙️</span> Audio
+                    </a>
+                    <a href="{% url 'core:music_create' project.id %}" 
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>🎵</span> Música
+                    </a>
+                    <a href="{% url 'core:script_create' project.id %}"
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>📝</span> Guión
+                    </a>
+                    <div class="border-t border-gray-200 my-2"></div>
+                    <a href="{% url 'core:agent_create' project.id %}" 
+                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <span>✨</span> Video con Agente
+                    </a>
+                </div>
+            </div>
+            
+            {% if user_role == 'owner' %}
+            <a href="{% url 'core:project_delete' project.id %}" 
+               class="w-full bg-red-50 text-red-700 hover:bg-red-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Eliminar Proyecto
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Gestión de Colaboradores -->
+        {% if user_role == 'owner' or user_role == 'editor' %}
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Colaboradores</h3>
+            <div class="space-y-2">
+                <a href="{% url 'core:project_invite' project.id %}"
+                   class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                    </svg>
+                    Invitar Usuario
+                </a>
+                <a href="{% url 'core:project_invitations' project.id %}"
+                   class="w-full bg-gray-50 text-gray-700 hover:bg-gray-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    Ver Invitaciones
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Información de miembros -->
+        {% if project_owner or project_members %}
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Miembros</h3>
+            <div class="space-y-2">
+                {% if project_owner %}
+                <div class="flex items-center gap-2 text-sm">
+                    <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-700">
+                        {{ project_owner.username|first|upper }}
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900">{{ project_owner.username }}</div>
+                        <div class="text-xs text-gray-500">Propietario</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% for member in project_members %}
+                <div class="flex items-center gap-2 text-sm">
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-700">
+                        {{ member.user.username|first|upper }}
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900">{{ member.user.username }}</div>
+                        <div class="text-xs text-gray-500">{{ member.get_role_display }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</aside>
+

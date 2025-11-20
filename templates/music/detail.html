@@ -7,9 +7,15 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold">🎵 {{ music.name }}</h1>
+        {% if music.project %}
         <a href="{% url 'core:project_detail' music.project.id %}" class="text-gray-600 hover:text-gray-900">
             ← Volver al proyecto
         </a>
+        {% else %}
+        <a href="{% url 'core:dashboard' %}" class="text-gray-600 hover:text-gray-900">
+            ← Volver al dashboard
+        </a>
+        {% endif %}
     </div>
 
     <!-- Status Badge -->

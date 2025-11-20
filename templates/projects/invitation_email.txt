@@ -1,0 +1,15 @@
+Hola,
+
+{{ invited_by.username }} te ha invitado a unirte al proyecto "{{ project.name }}" en Atenea como {{ role_display }}.
+
+Para aceptar la invitación, haz clic en el siguiente enlace:
+
+{{ accept_url }}
+
+Esta invitación expirará el {{ invitation.expires_at|date:"d/m/Y H:i" }}.
+
+Si no esperabas esta invitación, puedes ignorar este correo.
+
+Saludos,
+El equipo de Atenea
+
