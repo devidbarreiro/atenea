@@ -252,16 +252,12 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
         </div>
 
         <!-- Barra de utilidades -->
-        <div class="flex items-center justify-between">
-            <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                    onclick="window.location.href='/docs/'"
-                    :title="sidebarCollapsed ? 'Ayuda' : ''">
         <div class="flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
-            <button x-show="!sidebarCollapsed" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Ayuda">
+            <a href="/docs/" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" :title="sidebarCollapsed ? 'Ayuda' : ''">
                 <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-            </button>
+            </a>
             <button x-show="!sidebarCollapsed" class="p-2 rounded-lg hover:bg-gray-100 transition-colors relative" title="Notificaciones">
                 <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
@@ -275,20 +271,32 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
             </button>
             <div class="relative" x-data="{ userMenuOpen: false }">
                 <button @click="userMenuOpen = !userMenuOpen"
-                        class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        class="w-9 h-9 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex items-center justify-center"
                         title="Usuario">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                    </svg>
+                    <span class="text-sm font-medium text-gray-700">
+                        {% if user.first_name and user.last_name %}
+                            {{ user.first_name|first|upper }}{{ user.last_name|first|upper }}
+                        {% else %}
+                            {{ user.username|slice:":2"|upper }}
+                        {% endif %}
+                    </span>
                 </button>
                 <div x-show="userMenuOpen" 
                      @click.away="userMenuOpen = false"
                      x-cloak
                      :class="sidebarCollapsed ? 'left-full ml-2 bottom-0' : 'bottom-full right-0 mb-2'"
-                     class="absolute w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
-                    <a href="/admin/" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Admin</a>
-                    <a href="{% url 'core:user_menu' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Gestionar usuarios</a>
-                    <a href="{% url 'core:logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cerrar sesión</a>
+                     class="absolute w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <!-- User info -->
+                    <div class="px-4 py-3 border-b border-gray-200">
+                        <div class="text-sm font-medium text-gray-900 truncate">{{ user.username }}</div>
+                        <div class="text-xs text-gray-500 truncate">{{ user.email }}</div>
+                    </div>
+                    <!-- Menu items -->
+                    <div class="py-1">
+                        <a href="/admin/" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Admin</a>
+                        <a href="{% url 'core:user_menu' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Gestionar usuarios</a>
+                        <a href="{% url 'core:logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cerrar sesión</a>
+                    </div>
                 </div>
             </div>
         </div>

@@ -5,13 +5,13 @@
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 py-8">
     <!-- Barra de búsqueda superior -->
-    <div class="mb-8">
+<div class="mb-8">
         <form method="get" action="{% url 'core:dashboard' %}" class="relative max-w-2xl mx-auto">
             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-            </div>
+            </svg>
+        </div>
             <input type="text" 
                    name="q"
                    value="{{ search_query }}"
@@ -33,7 +33,7 @@
             </div>
         </form>
     </div>
-
+    
     <!-- Sección: ¿Qué te gustaría crear hoy? -->
     <div class="mb-12">
         <div class="flex justify-between items-center mb-6">
@@ -41,7 +41,7 @@
             <a href="#" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-                </svg>
+            </svg>
                 Todas las herramientas
             </a>
         </div>
@@ -57,7 +57,7 @@
                     </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
                     <p class="text-sm text-gray-600">Explora tu biblioteca</p>
-                </div>
+    </div>
             </a>
             
             <!-- Generar imágenes -->
@@ -66,11 +66,11 @@
                     <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
                         <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                    </div>
+            </svg>
+        </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
                     <p class="text-sm text-gray-600">Crea imágenes con IA</p>
-                </div>
+    </div>
             </a>
             
             <!-- Generar vídeos -->
@@ -80,12 +80,12 @@
                         <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                         </svg>
-                    </div>
+        </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
                     <p class="text-sm text-gray-600">Crea vídeos con IA</p>
-                </div>
+    </div>
             </a>
-            
+
             <!-- Generar audio -->
             <a href="{% url 'core:audio_create_standalone' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
@@ -93,10 +93,10 @@
                         <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
                         </svg>
-                    </div>
+        </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar audio</h3>
                     <p class="text-sm text-gray-600">Crea voces con IA</p>
-                </div>
+    </div>
             </a>
             
             <!-- Generar música -->
@@ -104,15 +104,15 @@
                 <div>
                     <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4">
                         <span class="text-2xl">🎵</span>
-                    </div>
+            </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar música</h3>
                     <p class="text-sm text-gray-600">Crea música con IA</p>
                 </div>
                 <div class="absolute top-2 right-2">
                     <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded">Próximamente</span>
                 </div>
-            </div>
-            
+    </div>
+
             <!-- Crear proyecto -->
             <a href="{% url 'core:project_create' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
@@ -120,14 +120,14 @@
                         <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                         </svg>
-                    </div>
+            </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-1">Nuevo proyecto</h3>
                     <p class="text-sm text-gray-600">Organiza tu trabajo</p>
-                </div>
-            </a>
+            </div>
+        </a>
         </div>
     </div>
-
+    
     <!-- Sección: Creaciones recientes -->
     <div class="mb-12">
         <div class="flex justify-between items-center mb-6">
@@ -149,7 +149,7 @@
             {% if not search_query %}
             <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-900 font-medium">
                 Ver todas →
-            </a>
+        </a>
             {% endif %}
         </div>
         
@@ -157,9 +157,9 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {% for item in recent_items %}
                 {% include 'includes/item_card.html' with item=item %}
-            {% endfor %}
-        </div>
-        
+        {% endfor %}
+    </div>
+
         <!-- Paginación -->
         {% if page_obj.has_other_pages %}
         <div class="mt-8 flex justify-center">
@@ -196,7 +196,7 @@
                     <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">Última »</span>
                 {% endif %}
             </nav>
-        </div>
+            </div>
         {% endif %}
         
         {% else %}
