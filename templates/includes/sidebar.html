@@ -157,15 +157,15 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
                     </svg>
                     <span x-show="!sidebarCollapsed">Generar Audio</span>
                 </a>
-                <a href="{% url 'core:music_create_standalone' %}"
-                   class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+                <div class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-500 opacity-75 cursor-not-allowed relative"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Generar Música' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
                     </svg>
-                    <span x-show="!sidebarCollapsed">Generar Música</span>
-                </a>
+                    <span x-show="!sidebarCollapsed" class="flex-1">Generar Música</span>
+                    <span x-show="!sidebarCollapsed" class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                </div>
                 <a href="{% url 'core:script_create_standalone' %}"
                    class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
                    :class="{ 'justify-center': sidebarCollapsed }"

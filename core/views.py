@@ -320,12 +320,17 @@ class DashboardView(ServiceMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['show_header'] = True
         
+        # Obtener query de búsqueda
+        search_query = self.request.GET.get('q', '').strip()
+        context['search_query'] = search_query
+        
         # Obtener proyectos del usuario para filtrar estadísticas
         user_projects = ProjectService.get_user_projects(self.request.user)
         user_project_ids = user_projects.values_list('id', flat=True)
         
         # Agregar estadísticas filtradas por items del usuario (con y sin proyecto)
         from django.db.models import Q
+        from core.models import Audio, Music
         context.update({
             'total_videos': Video.objects.filter(
                 Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
@@ -350,56 +355,152 @@ class DashboardView(ServiceMixin, ListView):
             ).count(),
         })
         
-        # Obtener videos recientes del usuario (con y sin proyecto)
-        videos = Video.objects.filter(
-            Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-        ).select_related('project').order_by('-created_at')[:20]
-        video_service = self.get_video_service()
-        videos_with_urls = []
+        # Construir filtro base para items del usuario
+        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
         
+        # Si hay búsqueda, agregar filtro de texto
+        if search_query:
+            # Videos: buscar en título y script
+            video_search = Q(title__icontains=search_query) | Q(script__icontains=search_query)
+            video_filter = base_filter & video_search
+            
+            # Imágenes: buscar en título y prompt
+            image_search = Q(title__icontains=search_query) | Q(prompt__icontains=search_query)
+            image_filter = base_filter & image_search
+            
+            # Audios: buscar en título y texto
+            audio_search = Q(title__icontains=search_query) | Q(text__icontains=search_query)
+            audio_filter = base_filter & audio_search
+            
+            # Música: buscar en nombre y prompt
+            music_search = Q(name__icontains=search_query) | Q(prompt__icontains=search_query)
+            music_filter = base_filter & music_search
+            
+            # Scripts: buscar en título y contenido del script
+            script_search = Q(title__icontains=search_query) | Q(script_text__icontains=search_query)
+            script_filter = base_filter & script_search
+        else:
+            video_filter = base_filter
+            image_filter = base_filter
+            audio_filter = base_filter
+            music_filter = base_filter
+            script_filter = base_filter
+        
+        # Obtener todos los items recientes mezclados (videos, imágenes, audios, música, scripts)
+        recent_items = []
+        
+        # Videos
+        videos = Video.objects.filter(video_filter).select_related('project').order_by('-created_at')
+        video_service = self.get_video_service()
         for video in videos:
+            item_data = {
+                'type': 'video',
+                'object': video,
+                'created_at': video.created_at,
+                'title': video.title,
+                'status': video.status,
+                'project': video.project,
+                'signed_url': None,
+                'detail_url': reverse('core:video_detail', args=[video.id]),
+            }
             if video.status == 'completed' and video.gcs_path:
                 try:
                     video_data = video_service.get_video_with_signed_urls(video)
-                    videos_with_urls.append(video_data)
-                except Exception as e:
-                    videos_with_urls.append({
-                        'video': video,
-                        'signed_url': None
-                    })
-            else:
-                videos_with_urls.append({
-                    'video': video,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = video_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
         
-        # Obtener imágenes recientes del usuario (con y sin proyecto)
-        images = Image.objects.filter(
-            Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-        ).select_related('project').order_by('-created_at')[:20]
+        # Imágenes
+        images = Image.objects.filter(image_filter).select_related('project').order_by('-created_at')
         image_service = self.get_image_service()
-        images_with_urls = []
-        
         for image in images:
+            item_data = {
+                'type': 'image',
+                'object': image,
+                'created_at': image.created_at,
+                'title': image.title,
+                'status': image.status,
+                'project': image.project,
+                'signed_url': None,
+                'detail_url': reverse('core:image_detail', args=[image.id]),
+            }
             if image.status == 'completed' and image.gcs_path:
                 try:
                     image_data = image_service.get_image_with_signed_url(image)
-                    images_with_urls.append(image_data)
-                except Exception as e:
-                    images_with_urls.append({
-                        'image': image,
-                        'signed_url': None
-                    })
-            else:
-                images_with_urls.append({
-                    'image': image,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = image_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
         
-        context['videos'] = videos
-        context['videos_with_urls'] = videos_with_urls
-        context['images'] = images
-        context['images_with_urls'] = images_with_urls
+        # Audios
+        audios = Audio.objects.filter(audio_filter).select_related('project').order_by('-created_at')
+        audio_service = self.get_audio_service()
+        for audio in audios:
+            item_data = {
+                'type': 'audio',
+                'object': audio,
+                'created_at': audio.created_at,
+                'title': audio.title,
+                'status': audio.status,
+                'project': audio.project,
+                'signed_url': None,
+                'detail_url': reverse('core:audio_detail', args=[audio.id]),
+            }
+            if audio.status == 'completed' and audio.gcs_path:
+                try:
+                    audio_data = audio_service.get_audio_with_signed_url(audio)
+                    item_data['signed_url'] = audio_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
+        
+        # Música
+        music_tracks = Music.objects.filter(music_filter).select_related('project').order_by('-created_at')
+        for music in music_tracks:
+            item_data = {
+                'type': 'music',
+                'object': music,
+                'created_at': music.created_at,
+                'title': music.name,
+                'status': music.status,
+                'project': music.project,
+                'signed_url': None,
+                'detail_url': reverse('core:music_detail', args=[music.id]),
+            }
+            if music.status == 'completed' and music.gcs_path:
+                try:
+                    from .storage.gcs import gcs_storage
+                    item_data['signed_url'] = gcs_storage.get_signed_url(music.gcs_path)
+                except Exception:
+                    pass
+            recent_items.append(item_data)
+        
+        # Scripts
+        scripts = Script.objects.filter(script_filter).select_related('project').order_by('-created_at')
+        for script in scripts:
+            item_data = {
+                'type': 'script',
+                'object': script,
+                'created_at': script.created_at,
+                'title': script.title,
+                'status': script.status,
+                'project': script.project,
+                'signed_url': None,
+                'detail_url': reverse('core:script_detail', args=[script.id]),
+            }
+            recent_items.append(item_data)
+        
+        # Ordenar todos los items por fecha de creación (más recientes primero)
+        recent_items.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        # Paginación
+        paginator = Paginator(recent_items, 20)  # 20 items por página
+        page_number = self.request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+        
+        context['recent_items'] = page_obj
+        context['page_obj'] = page_obj
         
         return context
 
@@ -442,92 +543,119 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Obtener videos del proyecto
+        # Obtener videos del proyecto y formatear para el partial unificado
         videos = self.object.videos.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para videos completados
         video_service = self.get_video_service()
-        videos_with_urls = []
-        
+        videos_items = []
         for video in videos:
+            item_data = {
+                'type': 'video',
+                'title': video.title,
+                'status': video.status,
+                'created_at': video.created_at,
+                'project': video.project,
+                'signed_url': None,
+                'detail_url': reverse('core:video_detail', args=[video.id]),
+            }
             if video.status == 'completed' and video.gcs_path:
                 try:
                     video_data = video_service.get_video_with_signed_urls(video)
-                    videos_with_urls.append(video_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    videos_with_urls.append({
-                        'video': video,
-                        'signed_url': None
-                    })
-            else:
-                videos_with_urls.append({
-                    'video': video,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = video_data.get('signed_url')
+                except Exception:
+                    pass
+            videos_items.append(item_data)
         
-        # Obtener imágenes del proyecto
+        # Obtener imágenes del proyecto y formatear para el partial unificado
         images = self.object.images.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para imágenes completadas
         image_service = self.get_image_service()
-        images_with_urls = []
-        
+        images_items = []
         for image in images:
+            item_data = {
+                'type': 'image',
+                'title': image.title,
+                'status': image.status,
+                'created_at': image.created_at,
+                'project': image.project,
+                'signed_url': None,
+                'detail_url': reverse('core:image_detail', args=[image.id]),
+            }
             if image.status == 'completed' and image.gcs_path:
                 try:
                     image_data = image_service.get_image_with_signed_url(image)
-                    images_with_urls.append(image_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    images_with_urls.append({
-                        'image': image,
-                        'signed_url': None
-                    })
-            else:
-                images_with_urls.append({
-                    'image': image,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = image_data.get('signed_url')
+                except Exception:
+                    pass
+            images_items.append(item_data)
         
-        # Obtener guiones del proyecto
-        scripts = self.object.scripts.select_related('project').order_by('-created_at')
-        
-        # Obtener audios del proyecto
+        # Obtener audios del proyecto y formatear para el partial unificado
         audios = self.object.audios.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para audios completados
-        audio_service = AudioService()
-        audios_with_urls = []
-        
+        audio_service = self.get_audio_service()
+        audios_items = []
         for audio in audios:
+            item_data = {
+                'type': 'audio',
+                'title': audio.title,
+                'status': audio.status,
+                'created_at': audio.created_at,
+                'project': audio.project,
+                'signed_url': None,
+                'detail_url': reverse('core:audio_detail', args=[audio.id]),
+            }
             if audio.status == 'completed' and audio.gcs_path:
                 try:
                     audio_data = audio_service.get_audio_with_signed_url(audio)
-                    audios_with_urls.append(audio_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    audios_with_urls.append({
-                        'audio': audio,
-                        'signed_url': None
-                    })
-            else:
-                audios_with_urls.append({
-                    'audio': audio,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = audio_data.get('signed_url')
+                except Exception:
+                    pass
+            audios_items.append(item_data)
         
-        # Obtener música del proyecto
+        # Obtener música del proyecto y formatear para el partial unificado
         music_tracks = self.object.music_tracks.select_related('project').order_by('-created_at')
+        music_items = []
+        for music in music_tracks:
+            item_data = {
+                'type': 'music',
+                'title': music.name,
+                'status': music.status,
+                'created_at': music.created_at,
+                'project': music.project,
+                'signed_url': None,
+                'detail_url': reverse('core:music_detail', args=[music.id]),
+            }
+            if music.status == 'completed' and music.gcs_path:
+                try:
+                    from .storage.gcs import gcs_storage
+                    item_data['signed_url'] = gcs_storage.get_signed_url(music.gcs_path)
+                except Exception:
+                    pass
+            music_items.append(item_data)
         
+        # Obtener scripts del proyecto y formatear para el partial unificado
+        scripts = self.object.scripts.select_related('project').order_by('-created_at')
+        scripts_items = []
+        for script in scripts:
+            item_data = {
+                'type': 'script',
+                'title': script.title,
+                'status': script.status,
+                'created_at': script.created_at,
+                'project': script.project,
+                'signed_url': None,
+                'detail_url': reverse('core:script_detail', args=[script.id]),
+            }
+            scripts_items.append(item_data)
+        
+        # Mantener compatibilidad con el código existente
         context['videos'] = videos
-        context['videos_with_urls'] = videos_with_urls
+        context['videos_items'] = videos_items
         context['images'] = images
-        context['images_with_urls'] = images_with_urls
+        context['images_items'] = images_items
         context['audios'] = audios
-        context['audios_with_urls'] = audios_with_urls
+        context['audios_items'] = audios_items
         context['scripts'] = scripts
+        context['scripts_items'] = scripts_items
         context['music_tracks'] = music_tracks
+        context['music_items'] = music_items
         
         # Agregar información de permisos y miembros
         context['user_role'] = self.object.get_user_role(self.request.user)
@@ -650,13 +778,28 @@ class LibraryView(ServiceMixin, ListView):
             'scripts': Script.objects.filter(created_by=user).count(),
         }
         
-        # Generar URLs firmadas para los items paginados
+        # Generar URLs firmadas y URLs de detalle para los items paginados
         from core.storage.gcs import gcs_storage
         items_with_urls = []
         for item_wrapper in context['items']:
             item = item_wrapper.item
             signed_url = None
             
+            # Generar URL de detalle según el tipo
+            if item_wrapper.type == 'video':
+                detail_url = reverse('core:video_detail', args=[item.id])
+            elif item_wrapper.type == 'image':
+                detail_url = reverse('core:image_detail', args=[item.id])
+            elif item_wrapper.type == 'audio':
+                detail_url = reverse('core:audio_detail', args=[item.id])
+            elif item_wrapper.type == 'music':
+                detail_url = reverse('core:music_detail', args=[item.id])
+            elif item_wrapper.type == 'script':
+                detail_url = reverse('core:script_detail', args=[item.id])
+            else:
+                detail_url = '#'
+            
+            # Generar URL firmada si está completado
             if item_wrapper.status == 'completed' and hasattr(item, 'gcs_path') and item.gcs_path:
                 try:
                     signed_url = gcs_storage.get_signed_url(item.gcs_path, expiration=3600)
@@ -664,12 +807,13 @@ class LibraryView(ServiceMixin, ListView):
                     logger.error(f"Error al generar URL firmada para {item_wrapper.type} {item.id}: {e}")
             
             items_with_urls.append({
-                'item': item,
                 'type': item_wrapper.type,
                 'title': item_wrapper.title,
                 'status': item_wrapper.status,
                 'created_at': item_wrapper.created_at,
+                'project': item.project if hasattr(item, 'project') else None,
                 'signed_url': signed_url,
+                'detail_url': detail_url,
             })
         
         context['items_with_urls'] = items_with_urls

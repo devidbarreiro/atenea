@@ -299,62 +299,15 @@
                         </div>
                     </div>
                     
-                    <div id="videos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {% for video_data in videos_with_urls %}
-                        {% with video=video_data.video %}
-                        <a href="{% url 'core:video_detail' video.id %}" class="group bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
-                            <div class="relative w-full aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
-                                <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
-                                    {% if video.status == 'completed' %}bg-green-500 text-white
-                                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif video.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ video.get_status_display }}
-                                </span>
-                                {% if video.status == 'completed' and video_data.signed_url %}
-                                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                                        <div class="w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">▶</div>
-                                    </div>
-                                {% else %}
-                                    <span class="text-4xl opacity-30">🎬</span>
-                                {% endif %}
-                            </div>
-                            <div class="p-3">
-                                <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ video.title }}</div>
-                                <div class="text-xs text-gray-500">{{ video.get_type_display }} • {{ video.created_at|date:"d/m/Y" }}</div>
-                            </div>
-                        </a>
-                        {% endwith %}
+                    <div id="videos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {% for item in videos_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
 
                     <div id="videos-list" class="hidden space-y-2">
-                        {% for video_data in videos_with_urls %}
-                        {% with video=video_data.video %}
-                        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
-                            <div class="w-24 h-16 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                {% if video.status == 'completed' and video_data.signed_url %}
-                                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                                {% else %}
-                                    <span class="text-2xl opacity-30">🎬</span>
-                                {% endif %}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="font-medium text-sm text-gray-900 truncate">{{ video.title }}</div>
-                                <div class="text-xs text-gray-500 mt-1">{{ video.get_type_display }} • {{ video.created_at|date:"d/m/Y H:i" }}</div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="px-2 py-1 rounded text-xs font-semibold 
-                                    {% if video.status == 'completed' %}bg-green-500 text-white
-                                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif video.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ video.get_status_display }}
-                                </span>
-                            </div>
-                        </a>
-                        {% endwith %}
+                        {% for item in videos_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
                     {% else %}
@@ -401,59 +354,15 @@
                         </div>
                     </div>
                     
-                    <div id="images-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {% for image_data in images_with_urls %}
-                        {% with image=image_data.image %}
-                        <a href="{% url 'core:image_detail' image.id %}" class="group bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
-                            <div class="relative w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
-                                <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
-                                    {% if image.status == 'completed' %}bg-green-500 text-white
-                                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif image.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ image.get_status_display }}
-                                </span>
-                                {% if image.status == 'completed' and image_data.signed_url %}
-                                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                                {% else %}
-                                    <span class="text-4xl opacity-30">🖼️</span>
-                                {% endif %}
-                            </div>
-                            <div class="p-3">
-                                <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ image.title }}</div>
-                                <div class="text-xs text-gray-500">{{ image.get_type_display }} • {{ image.created_at|date:"d/m/Y" }}</div>
-                            </div>
-                        </a>
-                        {% endwith %}
+                    <div id="images-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {% for item in images_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
 
                     <div id="images-list" class="hidden space-y-2">
-                        {% for image_data in images_with_urls %}
-                        {% with image=image_data.image %}
-                        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
-                            <div class="w-24 h-24 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                {% if image.status == 'completed' and image_data.signed_url %}
-                                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
-                                {% else %}
-                                    <span class="text-2xl opacity-30">🖼️</span>
-                                {% endif %}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="font-medium text-sm text-gray-900 truncate">{{ image.title }}</div>
-                                <div class="text-xs text-gray-500 mt-1">{{ image.get_type_display }} • {{ image.created_at|date:"d/m/Y H:i" }}</div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="px-2 py-1 rounded text-xs font-semibold 
-                                    {% if image.status == 'completed' %}bg-green-500 text-white
-                                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif image.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ image.get_status_display }}
-                                </span>
-                            </div>
-                        </a>
-                        {% endwith %}
+                        {% for item in images_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
                     {% else %}
@@ -485,33 +394,9 @@
                             + Audio
                         </button>
                     </div>
-                    <div class="space-y-2">
-                        {% for audio_data in audios_with_urls %}
-                        {% with audio=audio_data.audio %}
-                        <a href="{% url 'core:audio_detail' audio.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
-                            <div class="w-12 h-12 bg-green-100 rounded-lg flex-shrink-0 flex items-center justify-center">
-                                <span class="text-xl">🎙️</span>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="font-medium text-sm text-gray-900 truncate">{{ audio.title }}</div>
-                                <div class="text-xs text-gray-500 mt-1">{{ audio.voice_name }}{% if audio.duration %} • {{ audio.duration|floatformat:1 }}s{% endif %} • {{ audio.created_at|date:"d/m/Y H:i" }}</div>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                {% if audio.status == 'completed' and audio_data.signed_url %}
-                                <audio controls class="w-40 h-8">
-                                    <source src="{{ audio_data.signed_url }}" type="audio/mpeg">
-                                </audio>
-                                {% endif %}
-                                <span class="px-2 py-1 rounded text-xs font-semibold 
-                                    {% if audio.status == 'completed' %}bg-green-500 text-white
-                                    {% elif audio.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif audio.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ audio.get_status_display }}
-                                </span>
-                            </div>
-                        </a>
-                        {% endwith %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {% for item in audios_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
                     {% else %}
@@ -558,61 +443,15 @@
                         </div>
                     </div>
                     
-                    <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {% for script in scripts %}
-                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all">
-                            <a href="{% url 'core:script_detail' script.id %}" class="block">
-                                <div class="relative w-full aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
-                                    <span class="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold z-10
-                                        {% if script.status == 'completed' %}bg-green-500 text-white
-                                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
-                                        {% elif script.status == 'error' %}bg-red-500 text-white
-                                        {% else %}bg-gray-500 text-white{% endif %}">
-                                        {{ script.get_status_display }}
-                                    </span>
-                                    <span class="text-4xl opacity-30">📝</span>
-                                </div>
-                                <div class="p-3">
-                                    <div class="font-medium text-sm text-gray-900 truncate mb-1">{{ script.title }}</div>
-                                    <div class="text-xs text-gray-500">
-                                        {% if script.num_scenes %}{{ script.num_scenes }} escenas{% else %}Guión{% endif %} • {{ script.created_at|date:"d/m/Y" }}
-                                    </div>
-                                </div>
-                            </a>
-                            <div class="px-3 pb-3">
-                                {% include 'partials/script_actions.html' with script=script %}
-                            </div>
-                        </div>
+                    <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {% for item in scripts_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
 
                     <div id="scripts-list" class="hidden space-y-2">
-                        {% for script in scripts %}
-                        <div class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
-                            <a href="{% url 'core:script_detail' script.id %}" class="flex gap-3 flex-1">
-                                <div class="w-24 h-16 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center">
-                                    <span class="text-2xl opacity-30">📝</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-medium text-sm text-gray-900 truncate">{{ script.title }}</div>
-                                    <div class="text-xs text-gray-500 mt-1">
-                                        {% if script.num_scenes %}{{ script.num_scenes }} escenas{% else %}Guión{% endif %} • {{ script.created_at|date:"d/m/Y H:i" }}
-                                    </div>
-                                </div>
-                                <div class="flex items-center">
-                                    <span class="px-2 py-1 rounded text-xs font-semibold 
-                                        {% if script.status == 'completed' %}bg-green-500 text-white
-                                        {% elif script.status == 'processing' %}bg-yellow-500 text-white
-                                        {% elif script.status == 'error' %}bg-red-500 text-white
-                                        {% else %}bg-gray-500 text-white{% endif %}">
-                                        {{ script.get_status_display }}
-                                    </span>
-                                </div>
-                            </a>
-                            <div class="flex items-center">
-                                {% include 'partials/script_actions.html' with script=script %}
-                            </div>
-                        </div>
+                        {% for item in scripts_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
                     {% else %}
@@ -641,29 +480,9 @@
                             + Música
                         </a>
                     </div>
-                    <div class="space-y-2">
-                        {% for music in music_tracks %}
-                        <a href="{% url 'core:music_detail' music.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
-                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex-shrink-0 flex items-center justify-center">
-                                <span class="text-xl">🎵</span>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="font-medium text-sm text-gray-900 truncate">{{ music.name }}</div>
-                                <div class="text-xs text-gray-500 mt-1">
-                                    {% if music.duration_sec %}{{ music.duration_sec|floatformat:1 }}s{% endif %}
-                                    • {{ music.created_at|date:"d/m/Y H:i" }}
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="px-2 py-1 rounded text-xs font-semibold 
-                                    {% if music.status == 'completed' %}bg-green-500 text-white
-                                    {% elif music.status == 'processing' %}bg-yellow-500 text-white
-                                    {% elif music.status == 'error' %}bg-red-500 text-white
-                                    {% else %}bg-gray-500 text-white{% endif %}">
-                                    {{ music.get_status_display }}
-                                </span>
-                            </div>
-                        </a>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {% for item in music_items %}
+                            {% include 'includes/item_card.html' with item=item %}
                         {% endfor %}
                     </div>
                     {% else %}
