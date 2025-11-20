@@ -23,9 +23,14 @@ except (ImportError, RuntimeError):
     settings = None
 
 from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 logger = logging.getLogger(__name__)
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:
+    logger.warning("langchain-google-genai no está instalado. La funcionalidad de Gemini no estará disponible.")
+    ChatGoogleGenerativeAI = None
 
 
 class LLMFactory:
@@ -101,8 +106,11 @@ class LLMFactory:
             Instancia de ChatGoogleGenerativeAI
             
         Raises:
-            ValueError: Si GEMINI_API_KEY no está configurada
+            ValueError: Si GEMINI_API_KEY no está configurada o si langchain-google-genai no está instalado
         """
+        if ChatGoogleGenerativeAI is None:
+            raise ValueError('langchain-google-genai no está instalado. Instálalo con: pip install langchain-google-genai')
+        
         # Intentar obtener API key de Django settings o variables de entorno
         api_key = None
         if DJANGO_AVAILABLE and settings and settings.configured:
