@@ -1,0 +1,96 @@
+{% comment %}
+Contenido común para páginas de confirmación de eliminación (sin extends)
+
+Parámetros requeridos:
+- object: El objeto a eliminar
+- object_type: Tipo del objeto ('video', 'image', 'audio', 'music', 'script')
+- object_type_label: Etiqueta del tipo (opcional)
+- delete_url: URL para eliminar
+- cancel_url: URL para cancelar (opcional, por defecto detail_url)
+- detail_url: URL de detalle del objeto
+{% endcomment %}
+
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-5 border-b border-gray-200">
+            <div class="flex items-center gap-3">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-900">
+                    Eliminar {% if object_type_label %}{{ object_type_label }}{% else %}{{ object_type|title }}{% endif %}
+                </h2>
+            </div>
+        </div>
+        
+        <div class="p-6 space-y-6">
+            <!-- Item name and warning -->
+            <div>
+                <p class="text-lg font-semibold text-gray-900 mb-2">
+                    "{{ object.title|default:object.name }}"
+                </p>
+                <p class="text-xs text-gray-500">
+                    Esta acción no se puede deshacer. El {% if object_type_label %}{{ object_type_label|lower }}{% else %}{{ object_type }}{% endif %} y sus archivos asociados se eliminarán permanentemente.
+                </p>
+            </div>
+            
+            <!-- Item info -->
+            <div class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm border border-gray-200">
+                {% if object.project %}
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Proyecto:</span>
+                    <span class="font-medium text-gray-900">{{ object.project.name }}</span>
+                </div>
+                {% endif %}
+                {% if object.get_type_display %}
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Tipo:</span>
+                    <span class="font-medium text-gray-900">{{ object.get_type_display }}</span>
+                </div>
+                {% endif %}
+                {% if object.status %}
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Estado:</span>
+                    <span class="px-2 py-1 rounded text-xs font-medium bg-gray-200 text-gray-700">
+                        {{ object.get_status_display }}
+                    </span>
+                </div>
+                {% endif %}
+                {% if object.aspect_ratio %}
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Aspect Ratio:</span>
+                    <span class="font-medium text-gray-900">{{ object.aspect_ratio }}</span>
+                </div>
+                {% endif %}
+                {% if object.voice_name %}
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Voz:</span>
+                    <span class="font-medium text-gray-900">{{ object.voice_name }}</span>
+                </div>
+                {% endif %}
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Creado:</span>
+                    <span class="font-medium text-gray-900">{{ object.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex gap-3 justify-end pt-4 border-t border-gray-200">
+                <a href="{% if cancel_url %}{{ cancel_url }}{% else %}{{ detail_url }}{% endif %}" 
+                   class="px-6 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </a>
+                <form method="post" class="inline-block">
+                    {% csrf_token %}
+                    <button type="submit" 
+                            class="px-6 py-2.5 rounded-lg font-medium text-white bg-gray-900 hover:bg-gray-800 transition-colors">
+                        Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

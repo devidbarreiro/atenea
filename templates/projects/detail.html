@@ -516,4 +516,20 @@
     </main>
 </div>
 
+<!-- Modales de eliminación -->
+{% for item in videos_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
+{% for item in images_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
+{% for item in audios_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
+{% for item in music_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
+{% for item in scripts_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
 {% endblock %}

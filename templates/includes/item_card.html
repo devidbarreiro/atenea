@@ -4,100 +4,144 @@ Partial reutilizable para mostrar cards de items (videos, imágenes, audios, mú
 Parámetros requeridos:
 - item: Objeto con la siguiente estructura:
   - type: 'video', 'image', 'audio', 'music', 'script'
+  - id: ID del item
   - title: Título del item
   - status: Estado del item ('completed', 'processing', 'error', etc.)
   - created_at: Fecha de creación
   - project: Proyecto asociado (opcional)
   - signed_url: URL firmada del archivo (opcional)
   - detail_url: URL de detalle del item
+  - delete_url: URL para eliminar el item
 
 Ejemplo de uso:
 {% include 'includes/item_card.html' with item=item_data %}
 {% endcomment %}
 
-<a href="{{ item.detail_url }}" class="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300">
+<div class="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 relative">
     <!-- Preview del item -->
     <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-        <!-- Badge de tipo -->
-        <span class="absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-semibold z-10
-            {% if item.type == 'video' %}bg-red-500 text-white
-            {% elif item.type == 'image' %}bg-purple-500 text-white
-            {% elif item.type == 'audio' %}bg-green-500 text-white
-            {% elif item.type == 'music' %}bg-pink-500 text-white
-            {% elif item.type == 'script' %}bg-blue-500 text-white
-            {% else %}bg-gray-500 text-white{% endif %}">
-            {% if item.type == 'video' %}🎬 Video
-            {% elif item.type == 'image' %}🖼️ Imagen
-            {% elif item.type == 'audio' %}🎙️ Audio
-            {% elif item.type == 'music' %}🎵 Música
-            {% elif item.type == 'script' %}📝 Guión
+        <!-- Badge de tipo (sin emojis, colores neutros) -->
+        <span class="absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-semibold z-10 bg-gray-800 text-white">
+            {% if item.type == 'video' %}Video
+            {% elif item.type == 'image' %}Imagen
+            {% elif item.type == 'audio' %}Audio
+            {% elif item.type == 'music' %}Música
+            {% elif item.type == 'script' %}Guión
             {% endif %}
         </span>
         
-        <!-- Badge de estado -->
-        <span class="absolute top-2 right-2 px-2 py-1 rounded-md text-xs font-semibold z-10
-            {% if item.status == 'completed' %}bg-green-500 text-white
-            {% elif item.status == 'processing' or item.status == 'generating' %}bg-yellow-500 text-white
-            {% elif item.status == 'error' %}bg-red-500 text-white
-            {% else %}bg-gray-500 text-white{% endif %}">
-            {% if item.status == 'completed' %}✓
-            {% elif item.status == 'processing' or item.status == 'generating' %}⏳
-            {% elif item.status == 'error' %}✗
-            {% else %}○
-            {% endif %}
-        </span>
+        <!-- Menú de tres puntos -->
+        <div class="absolute top-2 right-2 z-20" x-data="{ menuOpen: false }" @click.stop>
+            <button @click="menuOpen = !menuOpen" 
+                    class="p-1.5 bg-white bg-opacity-90 rounded-md hover:bg-opacity-100 transition-all opacity-0 group-hover:opacity-100"
+                    :class="{ 'opacity-100': menuOpen }"
+                    :aria-expanded="menuOpen"
+                    aria-label="Opciones">
+                <svg class="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+                </svg>
+            </button>
+            <div x-show="menuOpen" 
+                 @click.away="menuOpen = false"
+                 x-cloak
+                 x-transition
+                 class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+                <button class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                    </svg>
+                    Mover
+                </button>
+                <button type="button"
+                        @click="window.dispatchEvent(new CustomEvent('open-delete-modal', { detail: { itemId: '{{ item.id }}', itemType: '{{ item.type }}' } }))"
+                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    Eliminar
+                </button>
+            </div>
+        </div>
         
         <!-- Contenido del preview -->
         {% if item.type == 'video' and item.signed_url %}
-            <video src="{{ item.signed_url }}" preload="metadata" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></video>
-            <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all">
-                <div class="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z"></path>
-                    </svg>
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <video src="{{ item.signed_url }}" preload="metadata" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></video>
+                <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all pointer-events-none">
+                    <div class="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"></path>
+                        </svg>
+                    </div>
                 </div>
-            </div>
+            </a>
         {% elif item.type == 'image' and item.signed_url %}
-            <img src="{{ item.signed_url }}" alt="{{ item.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <img src="{{ item.signed_url }}" alt="{{ item.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+            </a>
         {% elif item.type == 'audio' and item.signed_url %}
-            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
-                <svg class="w-16 h-16 text-green-600 mb-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                </svg>
-                <span class="text-xs text-green-700 font-medium">Audio</span>
-            </div>
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                    <svg class="w-16 h-16 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                    </svg>
+                    <span class="text-xs text-gray-600 font-medium">Audio</span>
+                </div>
+            </a>
         {% elif item.type == 'music' and item.signed_url %}
-            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-pink-50 to-pink-100">
-                <span class="text-6xl mb-2">🎵</span>
-                <span class="text-xs text-pink-700 font-medium">Música</span>
-            </div>
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                    <svg class="w-16 h-16 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                    </svg>
+                    <span class="text-xs text-gray-600 font-medium">Música</span>
+                </div>
+            </a>
         {% elif item.type == 'script' %}
-            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-                <svg class="w-16 h-16 text-blue-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-                <span class="text-xs text-blue-700 font-medium">Guión</span>
-            </div>
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                    <svg class="w-16 h-16 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <span class="text-xs text-gray-600 font-medium">Guión</span>
+                </div>
+            </a>
         {% else %}
-            <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
-                {% if item.type == 'video' %}
-                    <span class="text-5xl opacity-30">🎬</span>
-                {% elif item.type == 'image' %}
-                    <span class="text-5xl opacity-30">🖼️</span>
-                {% elif item.type == 'audio' %}
-                    <span class="text-5xl opacity-30">🎙️</span>
-                {% elif item.type == 'music' %}
-                    <span class="text-5xl opacity-30">🎵</span>
-                {% elif item.type == 'script' %}
-                    <span class="text-5xl opacity-30">📝</span>
-                {% endif %}
-            </div>
+            <a href="{{ item.detail_url }}" class="block w-full h-full">
+                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                    {% if item.type == 'video' %}
+                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                    {% elif item.type == 'image' %}
+                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    {% elif item.type == 'audio' %}
+                        <svg class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                        </svg>
+                    {% elif item.type == 'music' %}
+                        <svg class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                        </svg>
+                    {% elif item.type == 'script' %}
+                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    {% endif %}
+                </div>
+            </a>
         {% endif %}
     </div>
     
     <!-- Información del item -->
     <div class="p-4">
-        <h3 class="font-semibold text-gray-900 mb-1 truncate group-hover:text-blue-600 transition-colors">{{ item.title }}</h3>
+        <div class="flex items-start justify-between mb-2">
+            <a href="{{ item.detail_url }}" class="flex-1 min-w-0">
+                <h3 class="font-semibold text-gray-900 mb-1 truncate group-hover:text-blue-600 transition-colors">{{ item.title }}</h3>
+            </a>
+        </div>
         <div class="flex items-center gap-2 text-sm text-gray-500 mb-2">
             {% if item.project %}
                 <span class="flex items-center gap-1">
@@ -115,9 +159,17 @@ Ejemplo de uso:
                 </span>
             {% endif %}
         </div>
-        <div class="text-xs text-gray-400">
-            {{ item.created_at|date:"d/m/Y H:i" }}
+        <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-400">
+                {{ item.created_at|date:"d/m/Y H:i" }}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                {% if item.status == 'completed' %}Completado
+                {% elif item.status == 'processing' or item.status == 'generating' %}Procesando
+                {% elif item.status == 'error' %}Error
+                {% else %}Pendiente
+                {% endif %}
+            </span>
         </div>
     </div>
-</a>
-
+</div>

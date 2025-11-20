@@ -377,7 +377,7 @@ class DashboardView(ServiceMixin, ListView):
             music_filter = base_filter & music_search
             
             # Scripts: buscar en título y contenido del script
-            script_search = Q(title__icontains=search_query) | Q(script_text__icontains=search_query)
+            script_search = Q(title__icontains=search_query) | Q(original_script__icontains=search_query)
             script_filter = base_filter & script_search
         else:
             video_filter = base_filter
@@ -396,12 +396,14 @@ class DashboardView(ServiceMixin, ListView):
             item_data = {
                 'type': 'video',
                 'object': video,
+                'id': video.id,
                 'created_at': video.created_at,
                 'title': video.title,
                 'status': video.status,
                 'project': video.project,
                 'signed_url': None,
                 'detail_url': reverse('core:video_detail', args=[video.id]),
+                'delete_url': reverse('core:video_delete', args=[video.id]),
             }
             if video.status == 'completed' and video.gcs_path:
                 try:
@@ -418,12 +420,14 @@ class DashboardView(ServiceMixin, ListView):
             item_data = {
                 'type': 'image',
                 'object': image,
+                'id': image.id,
                 'created_at': image.created_at,
                 'title': image.title,
                 'status': image.status,
                 'project': image.project,
                 'signed_url': None,
                 'detail_url': reverse('core:image_detail', args=[image.id]),
+                'delete_url': reverse('core:image_delete', args=[image.id]),
             }
             if image.status == 'completed' and image.gcs_path:
                 try:
@@ -440,12 +444,14 @@ class DashboardView(ServiceMixin, ListView):
             item_data = {
                 'type': 'audio',
                 'object': audio,
+                'id': audio.id,
                 'created_at': audio.created_at,
                 'title': audio.title,
                 'status': audio.status,
                 'project': audio.project,
                 'signed_url': None,
                 'detail_url': reverse('core:audio_detail', args=[audio.id]),
+                'delete_url': reverse('core:audio_delete', args=[audio.id]),
             }
             if audio.status == 'completed' and audio.gcs_path:
                 try:
@@ -461,12 +467,14 @@ class DashboardView(ServiceMixin, ListView):
             item_data = {
                 'type': 'music',
                 'object': music,
+                'id': music.id,
                 'created_at': music.created_at,
                 'title': music.name,
                 'status': music.status,
                 'project': music.project,
                 'signed_url': None,
                 'detail_url': reverse('core:music_detail', args=[music.id]),
+                'delete_url': reverse('core:music_delete', args=[music.id]),
             }
             if music.status == 'completed' and music.gcs_path:
                 try:
@@ -482,12 +490,14 @@ class DashboardView(ServiceMixin, ListView):
             item_data = {
                 'type': 'script',
                 'object': script,
+                'id': script.id,
                 'created_at': script.created_at,
                 'title': script.title,
                 'status': script.status,
                 'project': script.project,
                 'signed_url': None,
                 'detail_url': reverse('core:script_detail', args=[script.id]),
+                'delete_url': reverse('core:script_delete', args=[script.id]),
             }
             recent_items.append(item_data)
         
@@ -550,12 +560,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         for video in videos:
             item_data = {
                 'type': 'video',
+                'id': video.id,
                 'title': video.title,
                 'status': video.status,
                 'created_at': video.created_at,
                 'project': video.project,
                 'signed_url': None,
                 'detail_url': reverse('core:video_detail', args=[video.id]),
+                'delete_url': reverse('core:video_delete', args=[video.id]),
             }
             if video.status == 'completed' and video.gcs_path:
                 try:
@@ -572,12 +584,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         for image in images:
             item_data = {
                 'type': 'image',
+                'id': image.id,
                 'title': image.title,
                 'status': image.status,
                 'created_at': image.created_at,
                 'project': image.project,
                 'signed_url': None,
                 'detail_url': reverse('core:image_detail', args=[image.id]),
+                'delete_url': reverse('core:image_delete', args=[image.id]),
             }
             if image.status == 'completed' and image.gcs_path:
                 try:
@@ -594,12 +608,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         for audio in audios:
             item_data = {
                 'type': 'audio',
+                'id': audio.id,
                 'title': audio.title,
                 'status': audio.status,
                 'created_at': audio.created_at,
                 'project': audio.project,
                 'signed_url': None,
                 'detail_url': reverse('core:audio_detail', args=[audio.id]),
+                'delete_url': reverse('core:audio_delete', args=[audio.id]),
             }
             if audio.status == 'completed' and audio.gcs_path:
                 try:
@@ -615,12 +631,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         for music in music_tracks:
             item_data = {
                 'type': 'music',
+                'id': music.id,
                 'title': music.name,
                 'status': music.status,
                 'created_at': music.created_at,
                 'project': music.project,
                 'signed_url': None,
                 'detail_url': reverse('core:music_detail', args=[music.id]),
+                'delete_url': reverse('core:music_delete', args=[music.id]),
             }
             if music.status == 'completed' and music.gcs_path:
                 try:
@@ -636,12 +654,14 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         for script in scripts:
             item_data = {
                 'type': 'script',
+                'id': script.id,
                 'title': script.title,
                 'status': script.status,
                 'created_at': script.created_at,
                 'project': script.project,
                 'signed_url': None,
                 'detail_url': reverse('core:script_detail', args=[script.id]),
+                'delete_url': reverse('core:script_delete', args=[script.id]),
             }
             scripts_items.append(item_data)
         
@@ -738,7 +758,7 @@ class LibraryView(ServiceMixin, ListView):
                 elif item_type_name == 'music':
                     queryset = queryset.filter(Q(name__icontains=search_query) | Q(prompt__icontains=search_query))
                 elif item_type_name == 'script':
-                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(script_text__icontains=search_query))
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(original_script__icontains=search_query))
             
             # Convertir a lista y agregar tipo
             for item in queryset:
@@ -788,16 +808,22 @@ class LibraryView(ServiceMixin, ListView):
             # Generar URL de detalle según el tipo
             if item_wrapper.type == 'video':
                 detail_url = reverse('core:video_detail', args=[item.id])
+                delete_url = reverse('core:video_delete', args=[item.id])
             elif item_wrapper.type == 'image':
                 detail_url = reverse('core:image_detail', args=[item.id])
+                delete_url = reverse('core:image_delete', args=[item.id])
             elif item_wrapper.type == 'audio':
                 detail_url = reverse('core:audio_detail', args=[item.id])
+                delete_url = reverse('core:audio_delete', args=[item.id])
             elif item_wrapper.type == 'music':
                 detail_url = reverse('core:music_detail', args=[item.id])
+                delete_url = reverse('core:music_delete', args=[item.id])
             elif item_wrapper.type == 'script':
                 detail_url = reverse('core:script_detail', args=[item.id])
+                delete_url = reverse('core:script_delete', args=[item.id])
             else:
                 detail_url = '#'
+                delete_url = '#'
             
             # Generar URL firmada si está completado
             if item_wrapper.status == 'completed' and hasattr(item, 'gcs_path') and item.gcs_path:
@@ -808,12 +834,14 @@ class LibraryView(ServiceMixin, ListView):
             
             items_with_urls.append({
                 'type': item_wrapper.type,
+                'id': item.id,
                 'title': item_wrapper.title,
                 'status': item_wrapper.status,
                 'created_at': item_wrapper.created_at,
                 'project': item.project if hasattr(item, 'project') else None,
                 'signed_url': signed_url,
                 'detail_url': detail_url,
+                'delete_url': delete_url,
             })
         
         context['items_with_urls'] = items_with_urls
@@ -881,7 +909,38 @@ class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
     template_name = 'projects/delete.html'
     context_object_name = 'project'
     pk_url_kwarg = 'project_id'
-    success_url = reverse_lazy('core:dashboard')
+    
+    def get_success_url(self):
+        # Intentar usar la página de referencia si está disponible
+        referer = self.request.META.get('HTTP_REFERER')
+        if referer:
+            try:
+                # Extraer la ruta de la URL de referencia
+                from urllib.parse import urlparse
+                parsed_referer = urlparse(referer)
+                parsed_request = urlparse(self.request.build_absolute_uri())
+                
+                # Solo usar referer si es del mismo dominio
+                if parsed_referer.netloc == parsed_request.netloc:
+                    referer_path = parsed_referer.path
+                    delete_url = self.request.path
+                    
+                    # Verificar que no sea la misma página de delete
+                    if delete_url not in referer_path and '/delete/' not in referer_path:
+                        # Si viene del dashboard, quedarse en el dashboard
+                        if referer_path == '/' or referer_path.endswith('/'):
+                            return reverse('core:dashboard')
+                        return referer
+            except Exception:
+                pass  # Si hay error, usar fallback
+        
+        # Verificar si la URL actual es el dashboard
+        current_path = self.request.path
+        if current_path == '/' or (current_path.startswith('/') and current_path.count('/') == 1):
+            return reverse('core:dashboard')
+        
+        # Fallback al dashboard
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
         return [
@@ -1317,21 +1376,65 @@ class VideoDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'video'
     pk_url_kwarg = 'video_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:video_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:video_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        # Intentar usar la página de referencia si está disponible
+        referer = self.request.META.get('HTTP_REFERER')
+        if referer:
+            try:
+                # Extraer la ruta de la URL de referencia
+                from urllib.parse import urlparse, parse_qs
+                parsed_referer = urlparse(referer)
+                parsed_request = urlparse(self.request.build_absolute_uri())
+                
+                # Solo usar referer si es del mismo dominio
+                if parsed_referer.netloc == parsed_request.netloc:
+                    referer_path = parsed_referer.path
+                    delete_url = self.request.path
+                    
+                    # Verificar que no sea la misma página de delete
+                    if delete_url not in referer_path and '/delete/' not in referer_path:
+                        # Si viene del dashboard (ruta exacta "/" o con parámetros de query del dashboard)
+                        if referer_path == '/' or referer_path == '':
+                            # Preservar parámetros de query si existen (búsqueda, paginación)
+                            query_params = parsed_referer.query
+                            if query_params:
+                                return reverse('core:dashboard') + '?' + query_params
+                            return reverse('core:dashboard')
+                        return referer
+            except Exception:
+                pass  # Si hay error, usar fallback
+        
+        # Verificar si la URL actual es el dashboard (cuando se elimina desde modal)
+        current_path = self.request.path
+        if current_path == '/' or current_path == '':
+            return reverse('core:dashboard')
+        
+        # Fallback a la lógica original
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:video_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -1743,21 +1846,32 @@ class ImageDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'image'
     pk_url_kwarg = 'image_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:image_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:image_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:image_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -2001,21 +2115,32 @@ class AudioDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'audio'
     pk_url_kwarg = 'audio_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:audio_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:audio_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:audio_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -2339,26 +2464,38 @@ class ScriptDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'script'
     pk_url_kwarg = 'script_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:script_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:script_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:script_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Manejar eliminación con soporte HTMX"""
         self.object = self.get_object()
-        project_id = self.object.project.pk
+        success_url = self.get_success_url()
+        script_title = self.object.title
         self.object.delete()
         
         # Si es petición HTMX, devolver respuesta vacía (el elemento se eliminará)
@@ -2366,8 +2503,8 @@ class ScriptDeleteView(BreadcrumbMixin, DeleteView):
             from django.http import HttpResponse
             return HttpResponse(status=200)
         
-        # Si no es HTMX, redirigir normalmente
-        return redirect('core:project_detail', project_id=project_id)
+        messages.success(request, f'Guion "{script_title}" eliminado')
+        return redirect(success_url)
 
 
 class ScriptRetryView(ServiceMixin, View):
@@ -4623,6 +4760,12 @@ class MusicDeleteView(BreadcrumbMixin, DeleteView):
     template_name = 'music/delete.html'
     context_object_name = 'music'
     pk_url_kwarg = 'music_id'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:music_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:music_detail', args=[self.object.pk])
+        return context
     
     def get_success_url(self):
         if self.object.project:

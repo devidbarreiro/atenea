@@ -1,0 +1,80 @@
+{% comment %}
+Modal reutilizable para confirmar eliminación
+
+Parámetros requeridos:
+- item_id: ID del item a eliminar
+- item_type: Tipo del item ('video', 'image', 'audio', 'music', 'script', 'project')
+- item_title: Título/nombre del item
+- delete_url: URL para eliminar el item
+- item_type_label: Etiqueta del tipo (opcional, por defecto usa item_type)
+{% endcomment %}
+
+<div x-data="{ open: false }" 
+     @open-delete-modal.window="if ($event.detail.itemId == '{{ item_id }}' && $event.detail.itemType == '{{ item_type }}') open = true"
+     x-show="open"
+     x-cloak
+     class="fixed inset-0 z-50 overflow-y-auto"
+     aria-labelledby="modal-title"
+     role="dialog"
+     aria-modal="true">
+    <!-- Overlay -->
+    <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+         @click="open = false"
+         x-transition:enter="ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"></div>
+
+    <!-- Modal -->
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl transition-all"
+             @click.stop
+             x-transition:enter="ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+            
+            <!-- Header -->
+            <div class="px-6 py-5 border-b border-gray-200">
+                <div class="flex items-start gap-4">
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
+                            Eliminar {% if item_type_label %}{{ item_type_label }}{% else %}{{ item_type|title }}{% endif %}
+                        </h3>
+                        <p class="mt-2 text-base font-medium text-gray-900">
+                            "{{ item_title }}"
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Esta acción no se puede deshacer. El {% if item_type_label %}{{ item_type_label|lower }}{% else %}{{ item_type }}{% endif %} y sus archivos asociados se eliminarán permanentemente.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="px-6 py-4 bg-white flex gap-3 justify-end">
+                <button type="button"
+                        @click="open = false"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </button>
+                <form method="post" action="{{ delete_url }}" class="inline-block">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 transition-colors">
+                        Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
