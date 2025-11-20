@@ -1116,6 +1116,13 @@ class Music(models.Model):
     def __str__(self):
         return f"{self.name} - {self.project.name}"
     
+    @property
+    def duration_sec(self):
+        """Retorna la duración en segundos"""
+        if self.duration_ms:
+            return self.duration_ms / 1000.0
+        return None
+    
     def mark_as_generating(self):
         """Marca la música como en proceso de generación"""
         self.status = 'generating'

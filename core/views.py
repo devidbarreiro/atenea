@@ -18,7 +18,7 @@ from django.contrib.auth.decorators import permission_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.contrib.auth import authenticate, login, logout
 import os
 from django.contrib.auth.models import User, Group
@@ -517,6 +517,9 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
                     'signed_url': None
                 })
         
+        # Obtener música del proyecto
+        music_tracks = self.object.music_tracks.select_related('project').order_by('-created_at')
+        
         context['videos'] = videos
         context['videos_with_urls'] = videos_with_urls
         context['images'] = images
@@ -524,6 +527,7 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         context['audios'] = audios
         context['audios_with_urls'] = audios_with_urls
         context['scripts'] = scripts
+        context['music_tracks'] = music_tracks
         
         # Agregar información de permisos y miembros
         context['user_role'] = self.object.get_user_role(self.request.user)
@@ -554,6 +558,121 @@ class ProjectsListView(ServiceMixin, ListView):
         # Agregar estadísticas de proyectos
         user_projects = ProjectService.get_user_projects(self.request.user)
         context['total_projects'] = user_projects.count()
+        
+        return context
+
+
+class LibraryView(ServiceMixin, ListView):
+    """Vista de biblioteca que muestra todos los items (videos, imágenes, audios, música, scripts)"""
+    template_name = 'library/list.html'
+    context_object_name = 'items'
+    paginate_by = 24
+    
+    def get_queryset(self):
+        """Obtener todos los items del usuario con búsqueda y filtros"""
+        user = self.request.user
+        search_query = self.request.GET.get('q', '').strip()
+        item_type = self.request.GET.get('type', '').strip()
+        
+        # Lista para almacenar todos los items con su tipo
+        all_items = []
+        
+        # Filtrar por tipo si se especifica
+        if item_type == 'video':
+            querysets = [('video', Video.objects.filter(created_by=user))]
+        elif item_type == 'image':
+            querysets = [('image', Image.objects.filter(created_by=user))]
+        elif item_type == 'audio':
+            querysets = [('audio', Audio.objects.filter(created_by=user))]
+        elif item_type == 'music':
+            querysets = [('music', Music.objects.filter(created_by=user))]
+        elif item_type == 'script':
+            querysets = [('script', Script.objects.filter(created_by=user))]
+        else:
+            # Todos los tipos mezclados
+            querysets = [
+                ('video', Video.objects.filter(created_by=user)),
+                ('image', Image.objects.filter(created_by=user)),
+                ('audio', Audio.objects.filter(created_by=user)),
+                ('music', Music.objects.filter(created_by=user)),
+                ('script', Script.objects.filter(created_by=user)),
+            ]
+        
+        # Aplicar búsqueda y agregar items a la lista
+        for item_type_name, queryset in querysets:
+            if search_query:
+                if item_type_name == 'video':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(script__icontains=search_query))
+                elif item_type_name == 'image':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(prompt__icontains=search_query))
+                elif item_type_name == 'audio':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(text__icontains=search_query))
+                elif item_type_name == 'music':
+                    queryset = queryset.filter(Q(name__icontains=search_query) | Q(prompt__icontains=search_query))
+                elif item_type_name == 'script':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(script_text__icontains=search_query))
+            
+            # Convertir a lista y agregar tipo
+            for item in queryset:
+                # Crear un objeto wrapper con el tipo
+                item_wrapper = type('ItemWrapper', (), {
+                    'item': item,
+                    'type': item_type_name,
+                    'created_at': item.created_at,
+                    'title': item.title if hasattr(item, 'title') else (item.name if hasattr(item, 'name') else 'Sin título'),
+                    'status': item.status if hasattr(item, 'status') else None,
+                })()
+                all_items.append(item_wrapper)
+        
+        # Ordenar por fecha de creación descendente
+        all_items.sort(key=lambda x: x.created_at, reverse=True)
+        
+        return all_items
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['show_header'] = True
+        context['search_query'] = self.request.GET.get('q', '')
+        context['selected_type'] = self.request.GET.get('type', '')
+        
+        # Estadísticas por tipo
+        user = self.request.user
+        context['stats'] = {
+            'total': Video.objects.filter(created_by=user).count() + 
+                    Image.objects.filter(created_by=user).count() + 
+                    Audio.objects.filter(created_by=user).count() + 
+                    Music.objects.filter(created_by=user).count() + 
+                    Script.objects.filter(created_by=user).count(),
+            'videos': Video.objects.filter(created_by=user).count(),
+            'images': Image.objects.filter(created_by=user).count(),
+            'audios': Audio.objects.filter(created_by=user).count(),
+            'music': Music.objects.filter(created_by=user).count(),
+            'scripts': Script.objects.filter(created_by=user).count(),
+        }
+        
+        # Generar URLs firmadas para los items paginados
+        from core.storage.gcs import gcs_storage
+        items_with_urls = []
+        for item_wrapper in context['items']:
+            item = item_wrapper.item
+            signed_url = None
+            
+            if item_wrapper.status == 'completed' and hasattr(item, 'gcs_path') and item.gcs_path:
+                try:
+                    signed_url = gcs_storage.get_signed_url(item.gcs_path, expiration=3600)
+                except Exception as e:
+                    logger.error(f"Error al generar URL firmada para {item_wrapper.type} {item.id}: {e}")
+            
+            items_with_urls.append({
+                'item': item,
+                'type': item_wrapper.type,
+                'title': item_wrapper.title,
+                'status': item_wrapper.status,
+                'created_at': item_wrapper.created_at,
+                'signed_url': signed_url,
+            })
+        
+        context['items_with_urls'] = items_with_urls
         
         return context
 
@@ -756,7 +875,15 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 config=config
             )
             
-            messages.success(request, f'Video "{title}" creado. Ahora puedes generarlo.')
+            # Generar video automáticamente después de crear
+            try:
+                video_service.generate_video(video)
+                messages.success(request, f'Video "{title}" creado y enviado para generación. El proceso puede tardar varios minutos.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error al iniciar la generación: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error inesperado al iniciar la generación: {str(e)}')
+            
             return redirect('core:video_detail', video_id=video.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -959,7 +1086,16 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 script=script,
                 config=config
             )
-            messages.success(request, f'Video "{title}" creado. Ahora puedes generarlo.')
+            
+            # Generar video automáticamente después de crear
+            try:
+                video_service.generate_video(video)
+                messages.success(request, f'Video "{title}" creado y enviado para generación. El proceso puede tardar varios minutos.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error al iniciar la generación: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error inesperado al iniciar la generación: {str(e)}')
+            
             return redirect('core:video_detail', video_id=video.pk)
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
@@ -1313,7 +1449,15 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 project=project
             )
             
-            messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
+            # Generar imagen automáticamente después de crear
+            try:
+                image_service.generate_image(image)
+                messages.success(request, f'Imagen "{title}" creada y generada exitosamente.')
+            except (ValidationException, ImageGenerationException) as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
             return redirect('core:image_detail', image_id=image.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -1406,7 +1550,16 @@ class ImageCreatePartialView(ServiceMixin, FormView):
                 prompt=prompt,
                 config=config
             )
-            messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
+            
+            # Generar imagen automáticamente después de crear
+            try:
+                image_service.generate_image(image)
+                messages.success(request, f'Imagen "{title}" creada y generada exitosamente.')
+            except (ValidationException, ImageGenerationException) as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
             return redirect('core:image_detail', image_id=image.pk)
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
@@ -1612,7 +1765,15 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 project=project
             )
             
-            messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
+            # Generar audio automáticamente después de crear
+            try:
+                audio_service.generate_audio(audio)
+                messages.success(request, f'Audio "{title}" creado y generado exitosamente.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error al generarlo: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error inesperado al generarlo: {str(e)}')
+            
             return redirect('core:audio_detail', audio_id=audio.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -1670,7 +1831,16 @@ class AudioCreatePartialView(ServiceMixin, FormView):
                 voice_id=voice_id,
                 voice_name=voice_name
             )
-            messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
+            
+            # Generar audio automáticamente después de crear
+            try:
+                audio_service.generate_audio(audio)
+                messages.success(request, f'Audio "{title}" creado y generado exitosamente.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error al generarlo: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error inesperado al generarlo: {str(e)}')
+            
             return redirect('core:audio_detail', audio_id=audio.pk)
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
@@ -4246,7 +4416,18 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
                 created_by=request.user
             )
             
-            messages.success(request, f'Música "{name}" creada. Ahora puedes generarla.')
+            # Generar música automáticamente después de crear
+            try:
+                from .services import ElevenLabsMusicService
+                music_service = ElevenLabsMusicService()
+                music_service.generate_music(music)
+                messages.success(request, f'Música "{name}" creada y generada exitosamente!')
+            except ServiceException as e:
+                messages.warning(request, f'Música "{name}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                logger.error(f"Error al generar música: {e}")
+                messages.warning(request, f'Música "{name}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
             return redirect('core:music_detail', music_id=music.pk)
             
         except (ValidationException, ServiceException) as e:

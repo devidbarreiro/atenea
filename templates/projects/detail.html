@@ -276,16 +276,25 @@
                     {% if videos %}
                     <div class="mb-4 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-gray-900">Videos del Proyecto</h2>
-                        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-                            <button @click="view = 'grid'; document.getElementById('videos-grid').classList.remove('hidden'); document.getElementById('videos-list').classList.add('hidden')"
-                                    :class="view === 'grid' ? 'bg-gray-100' : ''"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                                ⊞
-                            </button>
-                            <button @click="view = 'list'; document.getElementById('videos-grid').classList.add('hidden'); document.getElementById('videos-list').classList.remove('hidden')"
-                                    :class="view === 'list' ? 'bg-gray-100' : ''"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                                ☰
+                        <div class="flex gap-2">
+                            <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                                <button @click="view = 'grid'; document.getElementById('videos-grid').classList.remove('hidden'); document.getElementById('videos-list').classList.add('hidden')"
+                                        :class="view === 'grid' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                                    ⊞
+                                </button>
+                                <button @click="view = 'list'; document.getElementById('videos-grid').classList.add('hidden'); document.getElementById('videos-list').classList.remove('hidden')"
+                                        :class="view === 'list' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                                    ☰
+                                </button>
+                            </div>
+                            <button hx-get="{% url 'core:video_create_partial' project.id %}"
+                                    hx-target="#project-dynamic-content"
+                                    hx-swap="innerHTML"
+                                    hx-push-url="{% url 'core:video_create' project.id %}"
+                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                                + Video
                             </button>
                         </div>
                     </div>
@@ -369,16 +378,25 @@
                     {% if images %}
                     <div class="mb-4 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-gray-900">Imágenes del Proyecto</h2>
-                        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-                            <button @click="view = 'grid'; document.getElementById('images-grid').classList.remove('hidden'); document.getElementById('images-list').classList.add('hidden')"
-                                    :class="view === 'grid' ? 'bg-gray-100' : ''"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                                ⊞
-                            </button>
-                            <button @click="view = 'list'; document.getElementById('images-grid').classList.add('hidden'); document.getElementById('images-list').classList.remove('hidden')"
-                                    :class="view === 'list' ? 'bg-gray-100' : ''"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                                ☰
+                        <div class="flex gap-2">
+                            <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
+                                <button @click="view = 'grid'; document.getElementById('images-grid').classList.remove('hidden'); document.getElementById('images-list').classList.add('hidden')"
+                                        :class="view === 'grid' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors hover:bg-gray-50">
+                                    ⊞
+                                </button>
+                                <button @click="view = 'list'; document.getElementById('images-grid').classList.add('hidden'); document.getElementById('images-list').classList.remove('hidden')"
+                                        :class="view === 'list' ? 'bg-gray-100' : ''"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
+                                    ☰
+                                </button>
+                            </div>
+                            <button hx-get="{% url 'core:image_create_partial' project.id %}"
+                                    hx-target="#project-dynamic-content"
+                                    hx-swap="innerHTML"
+                                    hx-push-url="{% url 'core:image_create' project.id %}"
+                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                                + Imagen
                             </button>
                         </div>
                     </div>
@@ -457,8 +475,15 @@
                 <!-- Audios Tab -->
                 <div x-show="activeTab === 'audios'" x-cloak>
                     {% if audios %}
-                    <div class="mb-4">
+                    <div class="mb-4 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-gray-900">Audios del Proyecto</h2>
+                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
+                                hx-target="#project-dynamic-content"
+                                hx-swap="innerHTML"
+                                hx-push-url="{% url 'core:audio_create' project.id %}"
+                                class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                            + Audio
+                        </button>
                     </div>
                     <div class="space-y-2">
                         {% for audio_data in audios_with_urls %}
@@ -523,10 +548,13 @@
                                     ☰
                                 </button>
                             </div>
-                            <a href="{% url 'core:script_create' project.id %}" 
-                               class="bg-orange-500 text-white hover:bg-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                            <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                                    hx-target="#project-dynamic-content"
+                                    hx-swap="innerHTML"
+                                    hx-push-url="{% url 'core:script_create' project.id %}"
+                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Guión
-                            </a>
+                            </button>
                         </div>
                     </div>
                     
@@ -605,15 +633,50 @@
 
                 <!-- Music Tab -->
                 <div x-show="activeTab === 'music'" x-cloak>
+                    {% if music_tracks %}
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900">Música del Proyecto</h2>
+                        <a href="{% url 'core:music_create' project.id %}"
+                           class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                            + Música
+                        </a>
+                    </div>
+                    <div class="space-y-2">
+                        {% for music in music_tracks %}
+                        <a href="{% url 'core:music_detail' music.id %}" class="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all">
+                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex-shrink-0 flex items-center justify-center">
+                                <span class="text-xl">🎵</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-sm text-gray-900 truncate">{{ music.name }}</div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    {% if music.duration_sec %}{{ music.duration_sec|floatformat:1 }}s{% endif %}
+                                    • {{ music.created_at|date:"d/m/Y H:i" }}
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="px-2 py-1 rounded text-xs font-semibold 
+                                    {% if music.status == 'completed' %}bg-green-500 text-white
+                                    {% elif music.status == 'processing' %}bg-yellow-500 text-white
+                                    {% elif music.status == 'error' %}bg-red-500 text-white
+                                    {% else %}bg-gray-500 text-white{% endif %}">
+                                    {{ music.get_status_display }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
                     <div class="text-center py-12">
                         <div class="text-5xl mb-4 opacity-30">🎵</div>
-                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Próximamente: Música</h3>
-                        <p class="text-sm text-gray-600 mb-4">Genera música con IA para tus proyectos</p>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay música</h3>
+                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primera pista musical</p>
                         <a href="{% url 'core:music_create' project.id %}"
                            class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Música
                         </a>
                     </div>
+                    {% endif %}
                 </div>
 
                 <!-- Agent Tab -->

@@ -12,6 +12,9 @@ urlpatterns = [
     # Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
     
+    # Library
+    path('library/', views.LibraryView.as_view(), name='library'),
+    
     # Projects
     path('projects/', views.ProjectsListView.as_view(), name='projects_list'),
     path('projects/create/', views.ProjectCreateView.as_view(), name='project_create'),
