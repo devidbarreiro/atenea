@@ -206,8 +206,10 @@ ELEVENLABS_DEFAULT_STYLE = config('ELEVENLABS_DEFAULT_STYLE', default=0.0, cast=
 ELEVENLABS_DEFAULT_SPEED = config('ELEVENLABS_DEFAULT_SPEED', default=1.0, cast=float)
 
 # HeyGen Defaults
-HEYGEN_DEFAULT_AVATAR_ID = config('HEYGEN_DEFAULT_AVATAR_ID', default='Kayla-incasualsuit-20220818')
-HEYGEN_DEFAULT_VOICE_ID = config('HEYGEN_DEFAULT_VOICE_ID', default='es-ES-ElviraNeural')
+# Avatar por defecto: Abigail (Upper Body)
+HEYGEN_DEFAULT_AVATAR_ID = config('HEYGEN_DEFAULT_AVATAR_ID', default='Abigail_expressive_2024112501')
+# Voz por defecto: Mujer, español de España
+HEYGEN_DEFAULT_VOICE_ID = config('HEYGEN_DEFAULT_VOICE_ID', default='42a4920ccdba473c8df2b2c9b0a192d5')
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://redis-13128.c12.us-east-1-4.ec2.redns.redis-cloud.com:13128')

@@ -3,312 +3,244 @@
 {% block title %}Dashboard - Atenea{% endblock %}
 
 {% block content %}
-<!-- Header con estadísticas -->
-<div class="mb-8">
-    <h1 class="text-4xl font-bold mb-2">Dashboard</h1>
-    <p class="text-gray-600">Gestiona tus proyectos de generación de contenido IA</p>
-</div>
-
-<!-- Estadísticas -->
-<div class="stats shadow w-full mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-primary">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Proyectos</div>
-        <div class="stat-value text-3xl font-bold text-primary">{{ projects.count }}</div>
-        <div class="stat-desc text-xs text-gray-500">Total de proyectos</div>
-    </div>
-    
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-secondary">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Videos</div>
-        <div class="stat-value text-3xl font-bold text-blue-600">{{ total_videos }}</div>
-        <div class="stat-desc text-xs text-gray-500">{{ completed_videos }} completados</div>
-    </div>
-    
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-accent">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Imágenes</div>
-        <div class="stat-value text-3xl font-bold text-purple-600">{{ total_images }}</div>
-        <div class="stat-desc text-xs text-gray-500">Generadas con IA</div>
-    </div>
-    
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-success">
-            <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Completados</div>
-        <div class="stat-value text-3xl font-bold text-green-600">{{ completed_videos }}</div>
-        <div class="stat-desc text-xs text-gray-500">Listos para usar</div>
-    </div>
-    
-    <div class="stat bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div class="stat-figure text-warning">
-            <div class="loading loading-spinner loading-lg text-yellow-600"></div>
-        </div>
-        <div class="stat-title text-sm text-gray-600">Procesando</div>
-        <div class="stat-value text-3xl font-bold text-yellow-600">{{ processing_videos }}</div>
-        <div class="stat-desc text-xs text-gray-500">En cola</div>
-    </div>
-</div>
-
-<!-- Proyectos -->
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">Proyectos</h2>
-        <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-md">
-            Nuevo Proyecto
-        </a>
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Barra de búsqueda superior -->
+    <div class="mb-8">
+        <form method="get" action="{% url 'core:dashboard' %}" class="relative max-w-2xl mx-auto">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+            <input type="text" 
+                   name="q"
+                   value="{{ search_query }}"
+                   placeholder="Busca contenido o empieza a crear" 
+                   class="w-full pl-12 pr-12 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg">
+            <div class="absolute inset-y-0 right-0 pr-4 flex items-center">
+                {% if search_query %}
+                <a href="{% url 'core:dashboard' %}" class="p-2 text-gray-400 hover:text-gray-600" title="Limpiar búsqueda">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </a>
+                {% endif %}
+                <button type="submit" class="p-2 text-gray-400 hover:text-gray-600" title="Buscar">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </form>
     </div>
 
-    {% if projects %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for project in projects %}
-        <div class="card bg-white shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-200 rounded-lg overflow-hidden">
-            <div class="card-body p-6">
-                <h2 class="card-title text-xl font-bold mb-2">
-                    {{ project.name }}
-                    {% if project.video_count > 0 %}
-                    <div class="badge badge-secondary bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ project.video_count }}</div>
+    <!-- Sección: ¿Qué te gustaría crear hoy? -->
+    <div class="mb-12">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold text-gray-900">¿Qué te gustaría crear hoy?</h2>
+            <a href="#" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                </svg>
+                Todas las herramientas
+            </a>
+        </div>
+        
+        <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            <!-- Buscar contenido -->
+            <a href="{% url 'core:library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+                <div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
+                    <p class="text-sm text-gray-600">Explora tu biblioteca</p>
+                </div>
+            </a>
+            
+            <!-- Generar imágenes -->
+            <a href="{% url 'core:image_create_standalone' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+                <div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
+                    <p class="text-sm text-gray-600">Crea imágenes con IA</p>
+                </div>
+            </a>
+            
+            <!-- Generar vídeos -->
+            <a href="#" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-red-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+                <div>
+                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
+                    <p class="text-sm text-gray-600">Crea vídeos con IA</p>
+                </div>
+            </a>
+            
+            <!-- Generar audio -->
+            <a href="{% url 'core:audio_create_standalone' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+                <div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar audio</h3>
+                    <p class="text-sm text-gray-600">Crea voces con IA</p>
+                </div>
+            </a>
+            
+            <!-- Generar música -->
+            <div class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 opacity-75 cursor-not-allowed flex flex-col justify-between relative">
+                <div>
+                    <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4">
+                        <span class="text-2xl">🎵</span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar música</h3>
+                    <p class="text-sm text-gray-600">Crea música con IA</p>
+                </div>
+                <div class="absolute top-2 right-2">
+                    <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded">Próximamente</span>
+                </div>
+            </div>
+            
+            <!-- Crear proyecto -->
+            <a href="{% url 'core:project_create' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+                <div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Nuevo proyecto</h3>
+                    <p class="text-sm text-gray-600">Organiza tu trabajo</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Sección: Creaciones recientes -->
+    <div class="mb-12">
+        <div class="flex justify-between items-center mb-6">
+            <div class="flex items-center gap-4">
+                <h2 class="text-2xl font-bold text-gray-900">
+                    {% if search_query %}
+                        Resultados de búsqueda{% if page_obj.paginator.count %} ({{ page_obj.paginator.count }}){% endif %}
+                    {% else %}
+                        Creaciones recientes
                     {% endif %}
                 </h2>
-                
-                <div class="text-sm text-gray-600 space-y-1 mb-4">
-                    <p>📹 {{ project.video_count }} video{{ project.video_count|pluralize }}</p>
-                    <p>🖼️ {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</p>
-                    <p>✅ {{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</p>
-                    <p class="text-xs text-gray-400">📅 {{ project.created_at|date:"d/m/Y" }}</p>
-                </div>
-                
-                <div class="card-actions justify-end mt-4 flex gap-2">
-                    <a href="{% url 'core:project_detail' project.id %}" 
-                       class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
-                        Ver Proyecto
-                    </a>
-                    <a href="{% url 'core:video_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Video
-                    </a>
-                    <a href="{% url 'core:image_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Imagen
-                    </a>
-                </div>
+                {% if not search_query %}
+                <select class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option>Personal</option>
+                    <option>Compartido</option>
+                </select>
+                {% endif %}
             </div>
+            {% if not search_query %}
+            <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-900 font-medium">
+                Ver todas →
+            </a>
+            {% endif %}
         </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <!-- Estado vacío -->
-    <div class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">📁</div>
-                <h1 class="text-3xl font-bold text-gray-800">No hay proyectos</h1>
-                <p class="py-6 text-gray-600">
-                    Crea tu primer proyecto para comenzar a generar videos e imágenes con IA
-                </p>
-                <a href="{% url 'core:project_create' %}" class="btn btn-primary bg-black text-white hover:bg-gray-800 px-6 py-3 rounded-md">
-                    Crear Primer Proyecto
+        
+        {% if recent_items %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {% for item in recent_items %}
+                {% include 'includes/item_card.html' with item=item %}
+            {% endfor %}
+        </div>
+        
+        <!-- Paginación -->
+        {% if page_obj.has_other_pages %}
+        <div class="mt-8 flex justify-center">
+            <nav class="flex items-center gap-2">
+                {% if page_obj.has_previous %}
+                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page=1" 
+                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        « Primera
+                    </a>
+                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.previous_page_number }}" 
+                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        ‹ Anterior
+                    </a>
+                {% else %}
+                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">« Primera</span>
+                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">‹ Anterior</span>
+                {% endif %}
+                
+                <span class="px-4 py-2 text-sm font-medium text-gray-700">
+                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                </span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.next_page_number }}" 
+                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Siguiente ›
+                    </a>
+                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.paginator.num_pages }}" 
+                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Última »
+                    </a>
+                {% else %}
+                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">Siguiente ›</span>
+                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">Última »</span>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <!-- Estado vacío -->
+        <div class="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+            {% if search_query %}
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">No se encontraron resultados</h3>
+                <p class="text-gray-600 mb-6">No hay contenido que coincida con "{{ search_query }}"</p>
+                <a href="{% url 'core:dashboard' %}" class="inline-flex items-center px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors">
+                    Limpiar búsqueda
                 </a>
-            </div>
+            {% else %}
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">No se han encontrado creaciones</h3>
+                <p class="text-gray-600 mb-6">Comienza creando tu primer contenido con IA</p>
+                <a href="{% url 'core:image_create_standalone' %}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Crear
+                </a>
+            {% endif %}
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
-<!-- Videos Recientes -->
-{% if videos %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">Videos Recientes</h2>
-        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-            <button 
-                @click="view = 'grid'; 
-                        document.getElementById('videos-grid-view').classList.remove('hidden'); 
-                        document.getElementById('videos-list-view').classList.add('hidden')"
-                :class="view === 'grid' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                ⊞ Cuadrícula
-            </button>
-            <button 
-                @click="view = 'list'; 
-                        document.getElementById('videos-grid-view').classList.add('hidden'); 
-                        document.getElementById('videos-list-view').classList.remove('hidden')"
-                :class="view === 'list' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                ☰ Lista
-            </button>
-        </div>
-    </div>
-    
-    <!-- Vista Cuadrícula Videos -->
-    <div id="videos-grid-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {% for video_data in videos_with_urls %}
-        {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
-            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if video.status == 'completed' %}bg-green-500 text-white
-                    {% elif video.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif video.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ video.get_status_display }}
-                </span>
-                {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                    <div class="absolute w-12 h-12 bg-black bg-opacity-70 rounded-full flex items-center justify-center text-white text-xl">▶</div>
-                {% else %}
-                    <span class="text-5xl opacity-30">🎬</span>
-                {% endif %}
-            </div>
-            <div class="p-4">
-                <div class="font-semibold mb-1 truncate">{{ video.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">📁 {{ video.project.name }}</div>
-                <div class="flex justify-between text-xs text-gray-400">
-                    <span>{{ video.get_type_display }}</span>
-                    <span>{{ video.created_at|date:"d/m/Y" }}</span>
-                </div>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
+<style>
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+</style>
 
-    <!-- Vista Lista Videos -->
-    <div id="videos-list-view" class="hidden space-y-3">
-        {% for video_data in videos_with_urls %}
-        {% with video=video_data.video %}
-        <a href="{% url 'core:video_detail' video.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {% if video.status == 'completed' and video_data.signed_url %}
-                    <video src="{{ video_data.signed_url }}" preload="metadata" class="w-full h-full object-cover"></video>
-                {% else %}
-                    <span class="text-3xl opacity-30">🎬</span>
-                {% endif %}
-            </div>
-            <div class="flex-1 flex flex-col justify-center">
-                <div class="font-semibold">{{ video.title }}</div>
-                <div class="text-sm text-gray-500">
-                    <span>📁 {{ video.project.name }}</span>
-                    <span class="ml-4">{{ video.get_type_display }}</span>
-                    <span class="ml-4">{{ video.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <!-- Estado con polling automático -->
-                {% include 'partials/video_status.html' with video=video %}
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<!-- Imágenes Recientes -->
-{% if images %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">Imágenes Recientes</h2>
-        <div x-data="{ view: 'grid' }" class="inline-flex rounded-lg border border-gray-300 bg-white">
-            <button 
-                @click="view = 'grid'; 
-                        document.getElementById('images-grid-view').classList.remove('hidden'); 
-                        document.getElementById('images-list-view').classList.add('hidden')"
-                :class="view === 'grid' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-l-lg transition-colors hover:bg-gray-50">
-                ⊞ Cuadrícula
-            </button>
-            <button 
-                @click="view = 'list'; 
-                        document.getElementById('images-grid-view').classList.add('hidden'); 
-                        document.getElementById('images-list-view').classList.remove('hidden')"
-                :class="view === 'list' ? 'bg-gray-100' : ''"
-                class="px-4 py-2 text-sm font-medium rounded-r-lg border-l border-gray-300 transition-colors hover:bg-gray-50">
-                ☰ Lista
-            </button>
-        </div>
-    </div>
-    
-    <!-- Vista Cuadrícula Imágenes -->
-    <div id="images-grid-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {% for image_data in images_with_urls %}
-        {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="card bg-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden border border-gray-200 block">
-            <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                <span class="absolute top-2 left-2 px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if image.status == 'completed' %}bg-green-500 text-white
-                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif image.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ image.get_status_display }}
-                </span>
-                {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
-                {% else %}
-                    <span class="text-5xl opacity-30">🖼️</span>
-                {% endif %}
-            </div>
-            <div class="p-4">
-                <div class="font-semibold mb-1 truncate">{{ image.title }}</div>
-                <div class="text-sm text-gray-500 mb-2">📁 {{ image.project.name }}</div>
-                <div class="flex justify-between text-xs text-gray-400">
-                    <span>{{ image.get_type_display }}</span>
-                    <span>{{ image.created_at|date:"d/m/Y" }}</span>
-                </div>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-
-    <!-- Vista Lista Imágenes -->
-    <div id="images-list-view" class="hidden space-y-3">
-        {% for image_data in images_with_urls %}
-        {% with image=image_data.image %}
-        <a href="{% url 'core:image_detail' image.id %}" class="flex gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 transition-all shadow-sm hover:shadow-md">
-            <div class="w-32 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {% if image.status == 'completed' and image_data.signed_url %}
-                    <img src="{{ image_data.signed_url }}" alt="{{ image.title }}" class="w-full h-full object-cover">
-                {% else %}
-                    <span class="text-3xl opacity-30">🖼️</span>
-                {% endif %}
-            </div>
-            <div class="flex-1 flex flex-col justify-center">
-                <div class="font-semibold">{{ image.title }}</div>
-                <div class="text-sm text-gray-500">
-                    <span>📁 {{ image.project.name }}</span>
-                    <span class="ml-4">{{ image.get_type_display }}</span>
-                    <span class="ml-4">{{ image.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <span class="px-3 py-1 rounded-md text-xs font-semibold 
-                    {% if image.status == 'completed' %}bg-green-500 text-white
-                    {% elif image.status == 'processing' %}bg-yellow-500 text-white
-                    {% elif image.status == 'error' %}bg-red-500 text-white
-                    {% else %}bg-gray-500 text-white{% endif %}">
-                    {{ image.get_status_display }}
-                </span>
-            </div>
-        </a>
-        {% endwith %}
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
+<!-- Modales de eliminación -->
+{% for item in recent_items %}
+    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
+{% endfor %}
 {% endblock %}

@@ -12,6 +12,7 @@ from django.core.files.uploadedfile import UploadedFile
 from datetime import datetime
 
 from .models import Project, Video, Image, Audio, Script
+from django.contrib.auth.models import User
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
@@ -58,33 +59,167 @@ class ProjectService:
     """Servicio para manejar lógica de proyectos"""
     
     @staticmethod
-    def create_project(name: str, owner=None) -> Project:
+    def create_project(name: str, owner) -> Project:
         """
         Crea un nuevo proyecto
         
         Args:
             name: Nombre del proyecto
-            owner: Usuario propietario (opcional)
+            owner: Usuario propietario (requerido)
         
         Returns:
             Project creado
         
         Raises:
-            ValidationException: Si el nombre no es válido
+            ValidationException: Si el nombre no es válido o el owner no es válido
         """
         if len(name.strip()) < 3:
             raise ValidationException('El nombre debe tener al menos 3 caracteres')
         
-        project = Project.objects.create(name=name.strip())
-        logger.info(f"Proyecto creado: {project.id} - {project.name}")
+        if not owner or not owner.is_authenticated:
+            raise ValidationException('Se requiere un usuario propietario válido')
+        
+        project = Project.objects.create(name=name.strip(), owner=owner)
+        logger.info(f"Proyecto creado: {project.id} - {project.name} por {owner.username}")
         
         return project
     
     @staticmethod
-    def get_user_projects(user=None) -> List[Project]:
-        """Obtiene proyectos del usuario (preparado para multi-tenant)"""
-        # TODO: Filtrar por usuario cuando se implemente autenticación
-        return Project.objects.all().order_by('-created_at')
+    def get_user_projects(user) -> List[Project]:
+        """
+        Obtiene proyectos del usuario (propios y compartidos)
+        
+        Args:
+            user: Usuario autenticado
+        
+        Returns:
+            Lista de proyectos a los que el usuario tiene acceso
+        """
+        if not user or not user.is_authenticated:
+            return Project.objects.none()
+        
+        # Proyectos propios
+        owned = Project.objects.filter(owner=user)
+        
+        # Proyectos compartidos (a través de ProjectMember)
+        from .models import ProjectMember
+        shared_project_ids = ProjectMember.objects.filter(user=user).values_list('project_id', flat=True)
+        shared = Project.objects.filter(id__in=shared_project_ids)
+        
+        # Combinar y ordenar
+        return (owned | shared).distinct().order_by('-created_at')
+    
+    @staticmethod
+    def user_has_access(project: Project, user) -> bool:
+        """
+        Verifica si un usuario tiene acceso a un proyecto
+        
+        Args:
+            project: Proyecto a verificar
+            user: Usuario a verificar
+        
+        Returns:
+            True si el usuario tiene acceso, False en caso contrario
+        """
+        if not user or not user.is_authenticated:
+            return False
+        
+        return project.has_access(user)
+    
+    @staticmethod
+    def user_can_edit(project: Project, user) -> bool:
+        """
+        Verifica si un usuario puede editar un proyecto
+        
+        Args:
+            project: Proyecto a verificar
+            user: Usuario a verificar
+        
+        Returns:
+            True si el usuario puede editar (owner o editor), False en caso contrario
+        """
+        if not user or not user.is_authenticated:
+            return False
+        
+        role = project.get_user_role(user)
+        return role in ['owner', 'editor']
+    
+    @staticmethod
+    def add_member(project: Project, user, role: str = 'editor') -> 'ProjectMember':
+        """
+        Agrega un miembro a un proyecto
+        
+        Args:
+            project: Proyecto al que agregar el miembro
+            user: Usuario a agregar
+            role: Rol del usuario ('owner' o 'editor')
+        
+        Returns:
+            ProjectMember creado
+        
+        Raises:
+            ValidationException: Si el usuario ya es miembro o el rol no es válido
+        """
+        from .models import ProjectMember
+        
+        if project.owner == user:
+            raise ValidationException('El propietario ya tiene acceso al proyecto')
+        
+        if ProjectMember.objects.filter(project=project, user=user).exists():
+            raise ValidationException('El usuario ya es miembro del proyecto')
+        
+        if role not in ['owner', 'editor']:
+            raise ValidationException('Rol inválido. Debe ser "owner" o "editor"')
+        
+        member = ProjectMember.objects.create(project=project, user=user, role=role)
+        logger.info(f"Miembro agregado: {user.username} a proyecto {project.id} como {role}")
+        
+        return member
+    
+    @staticmethod
+    def remove_member(project: Project, user) -> None:
+        """
+        Elimina un miembro de un proyecto
+        
+        Args:
+            project: Proyecto del que eliminar el miembro
+            user: Usuario a eliminar
+        """
+        from .models import ProjectMember
+        
+        if project.owner == user:
+            raise ValidationException('No se puede eliminar al propietario del proyecto')
+        
+        ProjectMember.objects.filter(project=project, user=user).delete()
+        logger.info(f"Miembro eliminado: {user.username} del proyecto {project.id}")
+    
+    @staticmethod
+    def update_project_name(project: Project, new_name: str, user) -> Project:
+        """
+        Actualiza el nombre de un proyecto
+        
+        Args:
+            project: Proyecto a actualizar
+            new_name: Nuevo nombre del proyecto
+            user: Usuario que realiza la actualización
+        
+        Returns:
+            Project actualizado
+        
+        Raises:
+            ValidationException: Si el nombre no es válido o el usuario no tiene permisos
+        """
+        if not ProjectService.user_can_edit(project, user):
+            raise ValidationException('No tienes permisos para editar este proyecto')
+        
+        if len(new_name.strip()) < 3:
+            raise ValidationException('El nombre debe tener al menos 3 caracteres')
+        
+        project.name = new_name.strip()
+        project.save()
+        logger.info(f"Nombre del proyecto {project.id} actualizado a '{project.name}' por {user.username}")
+        
+        return project
     
     @staticmethod
     def get_project_with_videos(project_id: int) -> Project:
@@ -120,6 +255,187 @@ class ProjectService:
         project.delete()
         
         logger.info(f"Proyecto eliminado: {project_name} ({video_count} videos)")
+
+
+# ====================
+# INVITATION SERVICE
+# ====================
+
+class InvitationService:
+    """Servicio para manejar invitaciones a proyectos"""
+    
+    @staticmethod
+    def create_invitation(
+        project: Project,
+        email: str,
+        invited_by,
+        role: str = 'editor',
+        expires_in_days: int = 7
+    ) -> 'ProjectInvitation':
+        """
+        Crea una invitación para unirse a un proyecto
+        
+        Args:
+            project: Proyecto al que se invita
+            email: Email del usuario invitado
+            invited_by: Usuario que envía la invitación
+            role: Rol que se asignará ('owner' o 'editor')
+            expires_in_days: Días hasta que expire la invitación (default: 7)
+        
+        Returns:
+            ProjectInvitation creada
+        
+        Raises:
+            ValidationException: Si hay un error en la validación
+        """
+        from .models import ProjectInvitation, ProjectMember
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Validaciones
+        if not email or '@' not in email:
+            raise ValidationException('Email inválido')
+        
+        if role not in ['owner', 'editor']:
+            raise ValidationException('Rol inválido. Debe ser "owner" o "editor"')
+        
+        # Verificar que el usuario que invita tenga permisos
+        if not ProjectService.user_can_edit(project, invited_by):
+            raise ValidationException('No tienes permisos para invitar usuarios a este proyecto')
+        
+        # Verificar si ya existe una invitación pendiente para este email
+        existing = ProjectInvitation.objects.filter(
+            project=project,
+            email=email,
+            status='pending'
+        ).first()
+        
+        if existing and not existing.is_expired():
+            raise ValidationException('Ya existe una invitación pendiente para este email')
+        
+        # Si existe pero está expirada, cancelarla
+        if existing and existing.is_expired():
+            existing.status = 'expired'
+            existing.save()
+        
+        # Verificar si el usuario ya es miembro
+        try:
+            user = User.objects.get(email=email)
+            if project.owner == user or ProjectMember.objects.filter(project=project, user=user).exists():
+                raise ValidationException('El usuario ya tiene acceso al proyecto')
+        except User.DoesNotExist:
+            pass  # Usuario no existe aún, está bien
+        
+        # Crear invitación
+        expires_at = timezone.now() + timedelta(days=expires_in_days)
+        invitation = ProjectInvitation.objects.create(
+            project=project,
+            email=email,
+            invited_by=invited_by,
+            role=role,
+            expires_at=expires_at
+        )
+        
+        logger.info(f"Invitación creada: {email} para proyecto {project.id} por {invited_by.username}")
+        
+        return invitation
+    
+    @staticmethod
+    def accept_invitation(token: str, user) -> 'ProjectMember':
+        """
+        Acepta una invitación y agrega al usuario al proyecto
+        
+        Args:
+            token: Token de la invitación
+            user: Usuario que acepta la invitación
+        
+        Returns:
+            ProjectMember creado
+        
+        Raises:
+            ValidationException: Si la invitación no es válida o no puede ser aceptada
+        """
+        from .models import ProjectInvitation
+        
+        try:
+            invitation = ProjectInvitation.objects.get(token=token)
+        except ProjectInvitation.DoesNotExist:
+            raise ValidationException('Invitación no encontrada')
+        
+        # Validar que el email coincida
+        if invitation.email.lower() != user.email.lower():
+            raise ValidationException('Esta invitación es para otro usuario')
+        
+        # Validar que pueda ser aceptada
+        if not invitation.can_be_accepted():
+            if invitation.is_expired():
+                invitation.status = 'expired'
+                invitation.save()
+                raise ValidationException('La invitación ha expirado')
+            raise ValidationException('La invitación no puede ser aceptada')
+        
+        # Agregar usuario al proyecto
+        member = ProjectService.add_member(invitation.project, user, invitation.role)
+        
+        # Marcar invitación como aceptada
+        from django.utils import timezone
+        invitation.status = 'accepted'
+        invitation.accepted_at = timezone.now()
+        invitation.save()
+        
+        logger.info(f"Invitación aceptada: {user.username} se unió al proyecto {invitation.project.id}")
+        
+        return member
+    
+    @staticmethod
+    def cancel_invitation(invitation_id: int, user) -> None:
+        """
+        Cancela una invitación
+        
+        Args:
+            invitation_id: ID de la invitación
+            user: Usuario que cancela (debe ser el que la creó o owner del proyecto)
+        
+        Raises:
+            ValidationException: Si no tiene permisos o la invitación no existe
+        """
+        from .models import ProjectInvitation
+        
+        try:
+            invitation = ProjectInvitation.objects.get(id=invitation_id)
+        except ProjectInvitation.DoesNotExist:
+            raise ValidationException('Invitación no encontrada')
+        
+        # Verificar permisos
+        if invitation.invited_by != user and invitation.project.owner != user:
+            raise ValidationException('No tienes permisos para cancelar esta invitación')
+        
+        if invitation.status != 'pending':
+            raise ValidationException('Solo se pueden cancelar invitaciones pendientes')
+        
+        invitation.status = 'cancelled'
+        invitation.save()
+        
+        logger.info(f"Invitación cancelada: {invitation_id} por {user.username}")
+    
+    @staticmethod
+    def get_project_invitations(project: Project, user) -> List['ProjectInvitation']:
+        """
+        Obtiene las invitaciones de un proyecto
+        
+        Args:
+            project: Proyecto
+            user: Usuario que solicita (debe tener permisos)
+        
+        Returns:
+            Lista de invitaciones
+        """
+        from .models import ProjectInvitation
+        
+        if not ProjectService.user_can_edit(project, user):
+            raise ValidationException('No tienes permisos para ver las invitaciones')
+        
+        return ProjectInvitation.objects.filter(project=project).order_by('-created_at')
 
 
 # ====================
@@ -162,17 +478,19 @@ class VideoService:
     
     def create_video(
         self,
-        project: Project,
-        title: str,
-        video_type: str,
-        script: str,
-        config: Dict
+        created_by: User,
+        project: Project = None,
+        title: str = None,
+        video_type: str = None,
+        script: str = None,
+        config: Dict = None
     ) -> Video:
         """
         Crea un nuevo video (sin generarlo)
         
         Args:
-            project: Proyecto al que pertenece
+            created_by: Usuario que crea el video
+            project: Proyecto al que pertenece (opcional)
             title: Título del video
             video_type: Tipo de video
             script: Guión
@@ -182,6 +500,7 @@ class VideoService:
             Video creado
         """
         video = Video.objects.create(
+            created_by=created_by,
             project=project,
             title=title,
             type=video_type,
@@ -189,7 +508,7 @@ class VideoService:
             config=config
         )
         
-        logger.info(f"Video creado: {video.id} - {video.title} ({video.type})")
+        logger.info(f"Video creado: {video.id} - {video.title} ({video.type}) por {created_by.username}")
         return video
     
     # ----------------
@@ -1043,21 +1362,23 @@ class ImageService:
     
     def create_image(
         self,
-        project: Project,
         title: str,
         image_type: str,
         prompt: str,
-        config: Dict
+        config: Dict,
+        created_by: User,
+        project: Project = None
     ) -> Image:
         """
         Crea una nueva imagen (sin generarla)
         
         Args:
-            project: Proyecto al que pertenece
             title: Título de la imagen
             image_type: Tipo de imagen (text_to_image, image_to_image, multi_image)
             prompt: Prompt descriptivo
             config: Configuración específica del tipo
+            created_by: Usuario que crea la imagen
+            project: Proyecto al que pertenece (opcional)
         
         Returns:
             Image creada
@@ -1067,7 +1388,8 @@ class ImageService:
             title=title,
             type=image_type,
             prompt=prompt,
-            config=config
+            config=config,
+            created_by=created_by
         )
         
         logger.info(f"Imagen creada: {image.id} - {image.title} ({image.type})")
@@ -1385,18 +1707,19 @@ class AudioService:
         }
     
     @staticmethod
-    def create_audio(project, title: str, text: str, voice_id: str, voice_name: str = None, 
-                     voice_settings: Dict = None):
+    def create_audio(title: str, text: str, voice_id: str, created_by, voice_name: str = None, 
+                     voice_settings: Dict = None, project = None):
         """
         Crea un nuevo audio (sin generarlo aún)
         
         Args:
-            project: Proyecto al que pertenece
             title: Título del audio
             text: Texto a convertir a voz
             voice_id: ID de la voz en ElevenLabs
+            created_by: Usuario que crea el audio
             voice_name: Nombre de la voz (opcional)
             voice_settings: Configuración de voz (opcional, usa defaults si no se proporciona)
+            project: Proyecto al que pertenece (opcional)
             
         Returns:
             Objeto Audio creado
@@ -1419,7 +1742,8 @@ class AudioService:
             model_id=config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5'),
             language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
             voice_settings=voice_settings,
-            status='pending'
+            status='pending',
+            created_by=created_by
         )
         
         logger.info(f"Audio creado: {audio.id} - {audio.title}")
@@ -1574,6 +1898,9 @@ class AudioService:
                 logger.warning(f"No se pudo obtener duración del audio: {result.stderr}")
                 return 0.0
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. No se puede obtener la duración del audio.")
+            return 0.0
         except Exception as e:
             logger.warning(f"Error al obtener duración del audio: {e}")
             return 0.0
@@ -1690,10 +2017,11 @@ class SceneService:
                 # Preparar config básica según el servicio CON ORIENTACIÓN HEREDADA
                 ai_config = {}
                 if ai_service in ['heygen_v2', 'heygen_avatar_iv'] and scene_data.get('avatar') == 'si':
-                    # Config por defecto para HeyGen V2 o Avatar IV (se puede editar después)
+                    # Config por defecto para HeyGen V2 o Avatar IV usando valores de settings
+                    from django.conf import settings
                     ai_config = {
-                        'avatar_id': '',  # El usuario lo configurará
-                        'voice_id': '',   # El usuario lo configurará
+                        'avatar_id': getattr(settings, 'HEYGEN_DEFAULT_AVATAR_ID', ''),
+                        'voice_id': getattr(settings, 'HEYGEN_DEFAULT_VOICE_ID', ''),
                         'video_orientation': video_orientation,  # Heredado del script
                         'voice_speed': 1.0,
                         'voice_pitch': 50,
@@ -2645,10 +2973,16 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 video_path
             ]
-            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-            has_original_audio = probe_result.stdout.strip() == 'audio'
-            
-            logger.info(f"Video original tiene audio: {has_original_audio}")
+            try:
+                probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+                has_original_audio = probe_result.stdout.strip() == 'audio'
+                logger.info(f"Video original tiene audio: {has_original_audio}")
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. Asumiendo que el video no tiene audio.")
+                has_original_audio = False
+            except Exception as e:
+                logger.warning(f"Error al verificar audio del video: {e}")
+                has_original_audio = False
             
             # Obtener duraciones para decidir la estrategia
             video_duration_cmd = [
@@ -2666,11 +3000,25 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 audio_path
             ]
             
-            video_duration_result = subprocess.run(video_duration_cmd, capture_output=True, text=True)
-            audio_duration_result = subprocess.run(audio_duration_cmd, capture_output=True, text=True)
+            try:
+                video_duration_result = subprocess.run(video_duration_cmd, capture_output=True, text=True)
+                video_duration = float(video_duration_result.stdout.strip()) if video_duration_result.returncode == 0 else None
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. No se puede obtener duración del video.")
+                video_duration = None
+            except Exception as e:
+                logger.warning(f"Error al obtener duración del video: {e}")
+                video_duration = None
             
-            video_duration = float(video_duration_result.stdout.strip()) if video_duration_result.returncode == 0 else None
-            audio_duration = float(audio_duration_result.stdout.strip()) if audio_duration_result.returncode == 0 else None
+            try:
+                audio_duration_result = subprocess.run(audio_duration_cmd, capture_output=True, text=True)
+                audio_duration = float(audio_duration_result.stdout.strip()) if audio_duration_result.returncode == 0 else None
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. No se puede obtener duración del audio.")
+                audio_duration = None
+            except Exception as e:
+                logger.warning(f"Error al obtener duración del audio: {e}")
+                audio_duration = None
             
             logger.info(f"Duración video: {video_duration}s, Duración audio: {audio_duration}s")
             
@@ -3076,6 +3424,9 @@ class VideoCompositionService:
                 logger.warning(f"No se pudo obtener duración del video: {result.stderr}")
                 return 0.0
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. No se puede obtener la duración del video.")
+            return 0.0
         except Exception as e:
             logger.warning(f"Error al obtener duración: {e}")
             return 0.0
@@ -3117,6 +3468,9 @@ class VideoCompositionService:
             
             return has_audio
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. Asumiendo que el video tiene audio.")
+            return True
         except Exception as e:
             logger.warning(f"Error al verificar audio stream: {e}")
             # Por defecto, asumir que tiene audio si no se puede verificar
@@ -3157,6 +3511,9 @@ class VideoCompositionService:
                 logger.warning(f"No se pudo obtener resolución del video: {result.stderr}")
                 return (1280, 720)  # Default
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. Usando resolución por defecto (1280x720).")
+            return (1280, 720)  # Default
         except Exception as e:
             logger.warning(f"Error al obtener resolución: {e}")
             return (1280, 720)  # Default

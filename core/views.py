@@ -10,7 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin, 
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -18,7 +18,7 @@ from django.contrib.auth.decorators import permission_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.contrib.auth import authenticate, login, logout
 import os
 from django.contrib.auth.models import User, Group
@@ -28,7 +28,7 @@ import json
 
 from .models import Project, Video, Image, Audio, Script, Scene, Music
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
-from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException
+from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 # N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
@@ -97,6 +97,53 @@ def get_script_service():
         # Usar N8nService cuando USE_LANGCHAIN_AGENT=False (comportamiento legacy)
         from core.services import N8nService
         return N8nService()
+
+
+def send_invitation_email(request, invitation):
+    """
+    Envía un email de invitación a un proyecto
+    
+    Args:
+        request: HttpRequest para construir URLs absolutas
+        invitation: ProjectInvitation a enviar
+    """
+    from .models import ProjectInvitation
+    from django.core.mail import send_mail
+    
+    try:
+        # Construir URL de aceptación
+        accept_url = request.build_absolute_uri(
+            reverse('core:accept_invitation', args=[invitation.token])
+        )
+        
+        # Contexto para el template
+        context = {
+            'invitation': invitation,
+            'project': invitation.project,
+            'invited_by': invitation.invited_by,
+            'accept_url': accept_url,
+            'role_display': invitation.get_role_display(),
+        }
+        
+        # Renderizar mensaje
+        subject = f'Invitación para unirte al proyecto "{invitation.project.name}"'
+        message = render_to_string('projects/invitation_email.txt', context)
+        
+        # Enviar email
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+        send_mail(
+            subject,
+            message,
+            from_email,
+            [invitation.email],
+            fail_silently=False
+        )
+        
+        logger.info(f"Email de invitación enviado a {invitation.email} para proyecto {invitation.project.id}")
+        
+    except Exception as e:
+        logger.error(f"Error enviando email de invitación a {invitation.email}: {e}")
+        # No lanzar excepción para no interrumpir el flujo
 
 
 from django.shortcuts import render
@@ -304,68 +351,203 @@ class DashboardView(ServiceMixin, ListView):
     
     def get_queryset(self):
         """Obtener proyectos optimizado"""
-        return ProjectService.get_user_projects()
+        return ProjectService.get_user_projects(self.request.user)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['show_header'] = True
         
-        # Agregar estadísticas
+        # Obtener query de búsqueda
+        search_query = self.request.GET.get('q', '').strip()
+        context['search_query'] = search_query
+        
+        # Obtener proyectos del usuario para filtrar estadísticas
+        user_projects = ProjectService.get_user_projects(self.request.user)
+        user_project_ids = user_projects.values_list('id', flat=True)
+        
+        # Agregar estadísticas filtradas por items del usuario (con y sin proyecto)
+        from django.db.models import Q
+        from core.models import Audio, Music
         context.update({
-            'total_videos': Video.objects.count(),
-            'total_images': Image.objects.count(),
-            'total_scripts': Script.objects.count(),
-            'completed_videos': Video.objects.filter(status='completed').count(),
-            'processing_videos': Video.objects.filter(status='processing').count(),
-            'completed_scripts': Script.objects.filter(status='completed').count(),
+            'total_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'total_images': Image.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'total_scripts': Script.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
+            ).count(),
+            'completed_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='completed'
+            ).count(),
+            'processing_videos': Video.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='processing'
+            ).count(),
+            'completed_scripts': Script.objects.filter(
+                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
+                status='completed'
+            ).count(),
         })
         
-        # Obtener todos los videos recientes
-        videos = Video.objects.select_related('project').order_by('-created_at')[:20]
-        video_service = self.get_video_service()
-        videos_with_urls = []
+        # Construir filtro base para items del usuario
+        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
         
+        # Si hay búsqueda, agregar filtro de texto
+        if search_query:
+            # Videos: buscar en título y script
+            video_search = Q(title__icontains=search_query) | Q(script__icontains=search_query)
+            video_filter = base_filter & video_search
+            
+            # Imágenes: buscar en título y prompt
+            image_search = Q(title__icontains=search_query) | Q(prompt__icontains=search_query)
+            image_filter = base_filter & image_search
+            
+            # Audios: buscar en título y texto
+            audio_search = Q(title__icontains=search_query) | Q(text__icontains=search_query)
+            audio_filter = base_filter & audio_search
+            
+            # Música: buscar en nombre y prompt
+            music_search = Q(name__icontains=search_query) | Q(prompt__icontains=search_query)
+            music_filter = base_filter & music_search
+            
+            # Scripts: buscar en título y contenido del script
+            script_search = Q(title__icontains=search_query) | Q(original_script__icontains=search_query)
+            script_filter = base_filter & script_search
+        else:
+            video_filter = base_filter
+            image_filter = base_filter
+            audio_filter = base_filter
+            music_filter = base_filter
+            script_filter = base_filter
+        
+        # Obtener todos los items recientes mezclados (videos, imágenes, audios, música, scripts)
+        recent_items = []
+        
+        # Videos
+        videos = Video.objects.filter(video_filter).select_related('project').order_by('-created_at')
+        video_service = self.get_video_service()
         for video in videos:
+            item_data = {
+                'type': 'video',
+                'object': video,
+                'id': video.id,
+                'created_at': video.created_at,
+                'title': video.title,
+                'status': video.status,
+                'project': video.project,
+                'signed_url': None,
+                'detail_url': reverse('core:video_detail', args=[video.id]),
+                'delete_url': reverse('core:video_delete', args=[video.id]),
+            }
             if video.status == 'completed' and video.gcs_path:
                 try:
                     video_data = video_service.get_video_with_signed_urls(video)
-                    videos_with_urls.append(video_data)
-                except Exception as e:
-                    videos_with_urls.append({
-                        'video': video,
-                        'signed_url': None
-                    })
-            else:
-                videos_with_urls.append({
-                    'video': video,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = video_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
         
-        # Obtener todas las imágenes recientes
-        images = Image.objects.select_related('project').order_by('-created_at')[:20]
+        # Imágenes
+        images = Image.objects.filter(image_filter).select_related('project').order_by('-created_at')
         image_service = self.get_image_service()
-        images_with_urls = []
-        
         for image in images:
+            item_data = {
+                'type': 'image',
+                'object': image,
+                'id': image.id,
+                'created_at': image.created_at,
+                'title': image.title,
+                'status': image.status,
+                'project': image.project,
+                'signed_url': None,
+                'detail_url': reverse('core:image_detail', args=[image.id]),
+                'delete_url': reverse('core:image_delete', args=[image.id]),
+            }
             if image.status == 'completed' and image.gcs_path:
                 try:
                     image_data = image_service.get_image_with_signed_url(image)
-                    images_with_urls.append(image_data)
-                except Exception as e:
-                    images_with_urls.append({
-                        'image': image,
-                        'signed_url': None
-                    })
-            else:
-                images_with_urls.append({
-                    'image': image,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = image_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
         
-        context['videos'] = videos
-        context['videos_with_urls'] = videos_with_urls
-        context['images'] = images
-        context['images_with_urls'] = images_with_urls
+        # Audios
+        audios = Audio.objects.filter(audio_filter).select_related('project').order_by('-created_at')
+        audio_service = self.get_audio_service()
+        for audio in audios:
+            item_data = {
+                'type': 'audio',
+                'object': audio,
+                'id': audio.id,
+                'created_at': audio.created_at,
+                'title': audio.title,
+                'status': audio.status,
+                'project': audio.project,
+                'signed_url': None,
+                'detail_url': reverse('core:audio_detail', args=[audio.id]),
+                'delete_url': reverse('core:audio_delete', args=[audio.id]),
+            }
+            if audio.status == 'completed' and audio.gcs_path:
+                try:
+                    audio_data = audio_service.get_audio_with_signed_url(audio)
+                    item_data['signed_url'] = audio_data.get('signed_url')
+                except Exception:
+                    pass
+            recent_items.append(item_data)
+        
+        # Música
+        music_tracks = Music.objects.filter(music_filter).select_related('project').order_by('-created_at')
+        for music in music_tracks:
+            item_data = {
+                'type': 'music',
+                'object': music,
+                'id': music.id,
+                'created_at': music.created_at,
+                'title': music.name,
+                'status': music.status,
+                'project': music.project,
+                'signed_url': None,
+                'detail_url': reverse('core:music_detail', args=[music.id]),
+                'delete_url': reverse('core:music_delete', args=[music.id]),
+            }
+            if music.status == 'completed' and music.gcs_path:
+                try:
+                    from .storage.gcs import gcs_storage
+                    item_data['signed_url'] = gcs_storage.get_signed_url(music.gcs_path)
+                except Exception:
+                    pass
+            recent_items.append(item_data)
+        
+        # Scripts
+        scripts = Script.objects.filter(script_filter).select_related('project').order_by('-created_at')
+        for script in scripts:
+            item_data = {
+                'type': 'script',
+                'object': script,
+                'id': script.id,
+                'created_at': script.created_at,
+                'title': script.title,
+                'status': script.status,
+                'project': script.project,
+                'signed_url': None,
+                'detail_url': reverse('core:script_detail', args=[script.id]),
+                'delete_url': reverse('core:script_delete', args=[script.id]),
+            }
+            recent_items.append(item_data)
+        
+        # Ordenar todos los items por fecha de creación (más recientes primero)
+        recent_items.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        # Paginación
+        paginator = Paginator(recent_items, 20)  # 20 items por página
+        page_number = self.request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+        
+        context['recent_items'] = page_obj
+        context['page_obj'] = page_obj
         
         return context
 
@@ -381,10 +563,24 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     context_object_name = 'project'
     pk_url_kwarg = 'project_id'
     
+    def get(self, request, *args, **kwargs):
+        """Si no hay tab especificado, redirigir a /videos/"""
+        if 'tab' not in kwargs:
+            project_id = kwargs.get('project_id')
+            return redirect('core:project_videos', project_id=project_id)
+        return super().get(request, *args, **kwargs)
+    
     def get_object(self, queryset=None):
-        """Obtener proyecto con videos optimizado"""
+        """Obtener proyecto con videos optimizado y verificar permisos"""
         project_id = self.kwargs.get('project_id')
-        return ProjectService.get_project_with_videos(project_id)
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        # Verificar que el usuario tenga acceso
+        if not ProjectService.user_has_access(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes acceso a este proyecto')
+        
+        return project
     
     def get_breadcrumbs(self):
         return [
@@ -394,88 +590,298 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Obtener videos del proyecto
+        # Obtener videos del proyecto y formatear para el partial unificado
         videos = self.object.videos.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para videos completados
         video_service = self.get_video_service()
-        videos_with_urls = []
-        
+        videos_items = []
         for video in videos:
+            item_data = {
+                'type': 'video',
+                'id': video.id,
+                'title': video.title,
+                'status': video.status,
+                'created_at': video.created_at,
+                'project': video.project,
+                'signed_url': None,
+                'detail_url': reverse('core:video_detail', args=[video.id]),
+                'delete_url': reverse('core:video_delete', args=[video.id]),
+            }
             if video.status == 'completed' and video.gcs_path:
                 try:
                     video_data = video_service.get_video_with_signed_urls(video)
-                    videos_with_urls.append(video_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    videos_with_urls.append({
-                        'video': video,
-                        'signed_url': None
-                    })
-            else:
-                videos_with_urls.append({
-                    'video': video,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = video_data.get('signed_url')
+                except Exception:
+                    pass
+            videos_items.append(item_data)
         
-        # Obtener imágenes del proyecto
+        # Obtener imágenes del proyecto y formatear para el partial unificado
         images = self.object.images.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para imágenes completadas
         image_service = self.get_image_service()
-        images_with_urls = []
-        
+        images_items = []
         for image in images:
+            item_data = {
+                'type': 'image',
+                'id': image.id,
+                'title': image.title,
+                'status': image.status,
+                'created_at': image.created_at,
+                'project': image.project,
+                'signed_url': None,
+                'detail_url': reverse('core:image_detail', args=[image.id]),
+                'delete_url': reverse('core:image_delete', args=[image.id]),
+            }
             if image.status == 'completed' and image.gcs_path:
                 try:
                     image_data = image_service.get_image_with_signed_url(image)
-                    images_with_urls.append(image_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    images_with_urls.append({
-                        'image': image,
-                        'signed_url': None
-                    })
-            else:
-                images_with_urls.append({
-                    'image': image,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = image_data.get('signed_url')
+                except Exception:
+                    pass
+            images_items.append(item_data)
         
-        # Obtener guiones del proyecto
-        scripts = self.object.scripts.select_related('project').order_by('-created_at')
-        
-        # Obtener audios del proyecto
+        # Obtener audios del proyecto y formatear para el partial unificado
         audios = self.object.audios.select_related('project').order_by('-created_at')
-        
-        # Generar URLs firmadas para audios completados
-        audio_service = AudioService()
-        audios_with_urls = []
-        
+        audio_service = self.get_audio_service()
+        audios_items = []
         for audio in audios:
+            item_data = {
+                'type': 'audio',
+                'id': audio.id,
+                'title': audio.title,
+                'status': audio.status,
+                'created_at': audio.created_at,
+                'project': audio.project,
+                'signed_url': None,
+                'detail_url': reverse('core:audio_detail', args=[audio.id]),
+                'delete_url': reverse('core:audio_delete', args=[audio.id]),
+            }
             if audio.status == 'completed' and audio.gcs_path:
                 try:
                     audio_data = audio_service.get_audio_with_signed_url(audio)
-                    audios_with_urls.append(audio_data)
-                except Exception as e:
-                    # Si falla, agregar sin URL firmada
-                    audios_with_urls.append({
-                        'audio': audio,
-                        'signed_url': None
-                    })
-            else:
-                audios_with_urls.append({
-                    'audio': audio,
-                    'signed_url': None
-                })
+                    item_data['signed_url'] = audio_data.get('signed_url')
+                except Exception:
+                    pass
+            audios_items.append(item_data)
         
+        # Obtener música del proyecto y formatear para el partial unificado
+        music_tracks = self.object.music_tracks.select_related('project').order_by('-created_at')
+        music_items = []
+        for music in music_tracks:
+            item_data = {
+                'type': 'music',
+                'id': music.id,
+                'title': music.name,
+                'status': music.status,
+                'created_at': music.created_at,
+                'project': music.project,
+                'signed_url': None,
+                'detail_url': reverse('core:music_detail', args=[music.id]),
+                'delete_url': reverse('core:music_delete', args=[music.id]),
+            }
+            if music.status == 'completed' and music.gcs_path:
+                try:
+                    from .storage.gcs import gcs_storage
+                    item_data['signed_url'] = gcs_storage.get_signed_url(music.gcs_path)
+                except Exception:
+                    pass
+            music_items.append(item_data)
+        
+        # Obtener scripts del proyecto y formatear para el partial unificado
+        scripts = self.object.scripts.select_related('project').order_by('-created_at')
+        scripts_items = []
+        for script in scripts:
+            item_data = {
+                'type': 'script',
+                'id': script.id,
+                'title': script.title,
+                'status': script.status,
+                'created_at': script.created_at,
+                'project': script.project,
+                'signed_url': None,
+                'detail_url': reverse('core:script_detail', args=[script.id]),
+                'delete_url': reverse('core:script_delete', args=[script.id]),
+            }
+            scripts_items.append(item_data)
+        
+        # Mantener compatibilidad con el código existente
         context['videos'] = videos
-        context['videos_with_urls'] = videos_with_urls
+        context['videos_items'] = videos_items
         context['images'] = images
-        context['images_with_urls'] = images_with_urls
+        context['images_items'] = images_items
         context['audios'] = audios
-        context['audios_with_urls'] = audios_with_urls
+        context['audios_items'] = audios_items
         context['scripts'] = scripts
+        context['scripts_items'] = scripts_items
+        context['music_tracks'] = music_tracks
+        context['music_items'] = music_items
+        
+        # Agregar información de permisos y miembros
+        context['user_role'] = self.object.get_user_role(self.request.user)
+        context['project_owner'] = self.object.owner
+        context['project_members'] = self.object.members.select_related('user').all()
+        
+        # Agregar tab activo desde kwargs (por defecto 'videos')
+        context['active_tab'] = self.kwargs.get('tab', 'videos')
+        
+        return context
+
+
+class ProjectsListView(ServiceMixin, ListView):
+    """Vista de lista de proyectos del usuario"""
+    model = Project
+    template_name = 'projects/list.html'
+    context_object_name = 'projects'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        """Obtener proyectos del usuario"""
+        return ProjectService.get_user_projects(self.request.user)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['show_header'] = True
+        
+        # Agregar estadísticas de proyectos
+        user_projects = ProjectService.get_user_projects(self.request.user)
+        context['total_projects'] = user_projects.count()
+        
+        return context
+
+
+class LibraryView(ServiceMixin, ListView):
+    """Vista de biblioteca que muestra todos los items (videos, imágenes, audios, música, scripts)"""
+    template_name = 'library/list.html'
+    context_object_name = 'items'
+    paginate_by = 24
+    
+    def get_queryset(self):
+        """Obtener todos los items del usuario con búsqueda y filtros"""
+        user = self.request.user
+        search_query = self.request.GET.get('q', '').strip()
+        item_type = self.request.GET.get('type', '').strip()
+        
+        # Lista para almacenar todos los items con su tipo
+        all_items = []
+        
+        # Filtrar por tipo si se especifica
+        if item_type == 'video':
+            querysets = [('video', Video.objects.filter(created_by=user))]
+        elif item_type == 'image':
+            querysets = [('image', Image.objects.filter(created_by=user))]
+        elif item_type == 'audio':
+            querysets = [('audio', Audio.objects.filter(created_by=user))]
+        elif item_type == 'music':
+            querysets = [('music', Music.objects.filter(created_by=user))]
+        elif item_type == 'script':
+            querysets = [('script', Script.objects.filter(created_by=user))]
+        else:
+            # Todos los tipos mezclados
+            querysets = [
+                ('video', Video.objects.filter(created_by=user)),
+                ('image', Image.objects.filter(created_by=user)),
+                ('audio', Audio.objects.filter(created_by=user)),
+                ('music', Music.objects.filter(created_by=user)),
+                ('script', Script.objects.filter(created_by=user)),
+            ]
+        
+        # Aplicar búsqueda y agregar items a la lista
+        for item_type_name, queryset in querysets:
+            if search_query:
+                if item_type_name == 'video':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(script__icontains=search_query))
+                elif item_type_name == 'image':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(prompt__icontains=search_query))
+                elif item_type_name == 'audio':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(text__icontains=search_query))
+                elif item_type_name == 'music':
+                    queryset = queryset.filter(Q(name__icontains=search_query) | Q(prompt__icontains=search_query))
+                elif item_type_name == 'script':
+                    queryset = queryset.filter(Q(title__icontains=search_query) | Q(original_script__icontains=search_query))
+            
+            # Convertir a lista y agregar tipo
+            for item in queryset:
+                # Crear un objeto wrapper con el tipo
+                item_wrapper = type('ItemWrapper', (), {
+                    'item': item,
+                    'type': item_type_name,
+                    'created_at': item.created_at,
+                    'title': item.title if hasattr(item, 'title') else (item.name if hasattr(item, 'name') else 'Sin título'),
+                    'status': item.status if hasattr(item, 'status') else None,
+                })()
+                all_items.append(item_wrapper)
+        
+        # Ordenar por fecha de creación descendente
+        all_items.sort(key=lambda x: x.created_at, reverse=True)
+        
+        return all_items
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['show_header'] = True
+        context['search_query'] = self.request.GET.get('q', '')
+        context['selected_type'] = self.request.GET.get('type', '')
+        
+        # Estadísticas por tipo
+        user = self.request.user
+        context['stats'] = {
+            'total': Video.objects.filter(created_by=user).count() + 
+                    Image.objects.filter(created_by=user).count() + 
+                    Audio.objects.filter(created_by=user).count() + 
+                    Music.objects.filter(created_by=user).count() + 
+                    Script.objects.filter(created_by=user).count(),
+            'videos': Video.objects.filter(created_by=user).count(),
+            'images': Image.objects.filter(created_by=user).count(),
+            'audios': Audio.objects.filter(created_by=user).count(),
+            'music': Music.objects.filter(created_by=user).count(),
+            'scripts': Script.objects.filter(created_by=user).count(),
+        }
+        
+        # Generar URLs firmadas y URLs de detalle para los items paginados
+        from core.storage.gcs import gcs_storage
+        items_with_urls = []
+        for item_wrapper in context['items']:
+            item = item_wrapper.item
+            signed_url = None
+            
+            # Generar URL de detalle según el tipo
+            if item_wrapper.type == 'video':
+                detail_url = reverse('core:video_detail', args=[item.id])
+                delete_url = reverse('core:video_delete', args=[item.id])
+            elif item_wrapper.type == 'image':
+                detail_url = reverse('core:image_detail', args=[item.id])
+                delete_url = reverse('core:image_delete', args=[item.id])
+            elif item_wrapper.type == 'audio':
+                detail_url = reverse('core:audio_detail', args=[item.id])
+                delete_url = reverse('core:audio_delete', args=[item.id])
+            elif item_wrapper.type == 'music':
+                detail_url = reverse('core:music_detail', args=[item.id])
+                delete_url = reverse('core:music_delete', args=[item.id])
+            elif item_wrapper.type == 'script':
+                detail_url = reverse('core:script_detail', args=[item.id])
+                delete_url = reverse('core:script_delete', args=[item.id])
+            else:
+                detail_url = '#'
+                delete_url = '#'
+            
+            # Generar URL firmada si está completado
+            if item_wrapper.status == 'completed' and hasattr(item, 'gcs_path') and item.gcs_path:
+                try:
+                    signed_url = gcs_storage.get_signed_url(item.gcs_path, expiration=3600)
+                except Exception as e:
+                    logger.error(f"Error al generar URL firmada para {item_wrapper.type} {item.id}: {e}")
+            
+            items_with_urls.append({
+                'type': item_wrapper.type,
+                'id': item.id,
+                'title': item_wrapper.title,
+                'status': item_wrapper.status,
+                'created_at': item_wrapper.created_at,
+                'project': item.project if hasattr(item, 'project') else None,
+                'signed_url': signed_url,
+                'detail_url': detail_url,
+                'delete_url': delete_url,
+            })
+        
+        context['items_with_urls'] = items_with_urls
         
         return context
 
@@ -499,13 +905,39 @@ class ProjectCreateView(SuccessMessageMixin, BreadcrumbMixin, ServiceMixin, Crea
         """Usar servicio para crear proyecto"""
         try:
             name = form.cleaned_data['name']
-            # TODO: Pasar request.user cuando se implemente autenticación
-            self.object = ProjectService.create_project(name)
+            self.object = ProjectService.create_project(name, owner=self.request.user)
             messages.success(self.request, self.success_message)
             return redirect(self.get_success_url())
         except ValidationException as e:
             form.add_error('name', str(e))
             return self.form_invalid(form)
+
+
+class ProjectUpdateNameView(ServiceMixin, View):
+    """Actualizar nombre del proyecto via HTMX"""
+    
+    def post(self, request, project_id):
+        """Actualizar nombre del proyecto"""
+        project = get_object_or_404(Project, id=project_id)
+        
+        # Verificar permisos
+        if not ProjectService.user_can_edit(project, request.user):
+            return HttpResponse('No tienes permisos para editar este proyecto', status=403)
+        
+        new_name = request.POST.get('name', '').strip()
+        
+        if not new_name:
+            return HttpResponse('El nombre no puede estar vacío', status=400)
+        
+        try:
+            ProjectService.update_project_name(project, new_name, request.user)
+            # Retornar el HTML actualizado del nombre
+            return render(request, 'projects/partials/project_name.html', {
+                'project': project,
+                'user_role': project.get_user_role(request.user)
+            })
+        except ValidationException as e:
+            return HttpResponse(str(e), status=400)
 
 
 class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
@@ -514,7 +946,38 @@ class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
     template_name = 'projects/delete.html'
     context_object_name = 'project'
     pk_url_kwarg = 'project_id'
-    success_url = reverse_lazy('core:dashboard')
+    
+    def get_success_url(self):
+        # Intentar usar la página de referencia si está disponible
+        referer = self.request.META.get('HTTP_REFERER')
+        if referer:
+            try:
+                # Extraer la ruta de la URL de referencia
+                from urllib.parse import urlparse
+                parsed_referer = urlparse(referer)
+                parsed_request = urlparse(self.request.build_absolute_uri())
+                
+                # Solo usar referer si es del mismo dominio
+                if parsed_referer.netloc == parsed_request.netloc:
+                    referer_path = parsed_referer.path
+                    delete_url = self.request.path
+                    
+                    # Verificar que no sea la misma página de delete
+                    if delete_url not in referer_path and '/delete/' not in referer_path:
+                        # Si viene del dashboard, quedarse en el dashboard
+                        if referer_path == '/' or referer_path.endswith('/'):
+                            return reverse('core:dashboard')
+                        return referer
+            except Exception:
+                pass  # Si hay error, usar fallback
+        
+        # Verificar si la URL actual es el dashboard
+        current_path = self.request.path
+        if current_path == '/' or (current_path.startswith('/') and current_path.count('/') == 1):
+            return reverse('core:dashboard')
+        
+        # Fallback al dashboard
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
         return [
@@ -593,23 +1056,33 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             return VideoBaseForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Video', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Video', 'url': None}
         ]
     
@@ -634,6 +1107,7 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             
             # Crear video usando servicio
             video = video_service.create_video(
+                created_by=request.user,
                 project=project,
                 title=title,
                 video_type=video_type,
@@ -641,7 +1115,15 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 config=config
             )
             
-            messages.success(request, f'Video "{title}" creado. Ahora puedes generarlo.')
+            # Generar video automáticamente después de crear
+            try:
+                video_service.generate_video(video)
+                messages.success(request, f'Video "{title}" creado y enviado para generación. El proceso puede tardar varios minutos.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error al iniciar la generación: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error inesperado al iniciar la generación: {str(e)}')
+            
             return redirect('core:video_detail', video_id=video.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -791,6 +1273,139 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         
         return config
 
+
+class VideoCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear video (sin layout completo)"""
+    template_name = 'videos/create_partial.html'
+    
+    def get_form_class(self):
+        """Determinar formulario según el tipo de video"""
+        if self.request.method == 'GET':
+            return VideoBaseForm
+        video_type = self.request.POST.get('type')
+        if video_type == 'heygen_avatar_v2':
+            return HeyGenAvatarV2Form
+        elif video_type == 'heygen_avatar_iv':
+            return HeyGenAvatarIVForm
+        elif video_type == 'gemini_veo':
+            return GeminiVeoVideoForm
+        elif video_type == 'sora':
+            return SoraVideoForm
+        else:
+            return VideoBaseForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de video según tipo"""
+        project = self.get_project()
+        video_service = self.get_video_service()
+        
+        title = request.POST.get('title')
+        video_type = request.POST.get('type')
+        script = request.POST.get('script')
+        
+        if not all([title, video_type, script]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            config = self._build_video_config(request, video_type, project, video_service)
+            video = video_service.create_video(
+                project=project,
+                title=title,
+                video_type=video_type,
+                script=script,
+                config=config
+            )
+            
+            # Generar video automáticamente después de crear
+            try:
+                video_service.generate_video(video)
+                messages.success(request, f'Video "{title}" creado y enviado para generación. El proceso puede tardar varios minutos.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error al iniciar la generación: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Video "{title}" creado, pero hubo un error inesperado al iniciar la generación: {str(e)}')
+            
+            return redirect('core:video_detail', video_id=video.pk)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+    
+    def _build_video_config(self, request, video_type, project, video_service):
+        """Construir configuración según el tipo de video"""
+        config = {}
+        if video_type == 'heygen_avatar_v2':
+            config = self._build_heygen_v2_config(request)
+        elif video_type == 'heygen_avatar_iv':
+            config = self._build_heygen_iv_config(request, project, video_service)
+        elif video_type == 'gemini_veo':
+            config = self._build_veo_config(request, project, video_service)
+        elif video_type == 'sora':
+            config = self._build_sora_config(request, project, video_service)
+        return config
+    
+    def _build_heygen_v2_config(self, request):
+        """Configuración para HeyGen Avatar V2"""
+        return {
+            'avatar_id': request.POST.get('avatar_id'),
+            'voice_id': request.POST.get('voice_id'),
+            'voice_speed': float(request.POST.get('voice_speed', 1.0)),
+            'voice_pitch': int(request.POST.get('voice_pitch', 0)),
+            'test': request.POST.get('test') == 'true'
+        }
+    
+    def _build_heygen_iv_config(self, request, project, video_service):
+        """Configuración para HeyGen Avatar IV"""
+        config = {
+            'voice_id': request.POST.get('voice_id_iv'),
+            'avatar_prompt': request.POST.get('avatar_prompt', ''),
+            'test': request.POST.get('test_iv') == 'true'
+        }
+        
+        avatar_image_id = request.POST.get('avatar_image_id')
+        if avatar_image_id:
+            config['avatar_image_id'] = avatar_image_id
+        
+        return config
+    
+    def _build_veo_config(self, request, project, video_service):
+        """Configuración para Gemini Veo"""
+        return {
+            'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
+            'duration': int(request.POST.get('duration', 8))
+        }
+    
+    def _build_sora_config(self, request, project, video_service):
+        """Configuración para OpenAI Sora"""
+        config = {
+            'duration': int(request.POST.get('duration', 8)),
+            'size': request.POST.get('size', '1280x720'),
+            'sora_model': request.POST.get('sora_model', 'sora-2')
+        }
+        
+        if request.POST.get('use_input_reference') == 'on':
+            input_reference = request.FILES.get('input_reference')
+            if input_reference:
+                upload_result = video_service.upload_sora_input_reference(input_reference, project)
+                config['input_reference_gcs_path'] = upload_result['gcs_path']
+                config['input_reference_mime_type'] = upload_result['mime_type']
+        
+        return config
+
+
 class VideoDeleteView(BreadcrumbMixin, DeleteView):
     """Eliminar video"""
     model = Video
@@ -798,21 +1413,65 @@ class VideoDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'video'
     pk_url_kwarg = 'video_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:video_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:video_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        # Intentar usar la página de referencia si está disponible
+        referer = self.request.META.get('HTTP_REFERER')
+        if referer:
+            try:
+                # Extraer la ruta de la URL de referencia
+                from urllib.parse import urlparse, parse_qs
+                parsed_referer = urlparse(referer)
+                parsed_request = urlparse(self.request.build_absolute_uri())
+                
+                # Solo usar referer si es del mismo dominio
+                if parsed_referer.netloc == parsed_request.netloc:
+                    referer_path = parsed_referer.path
+                    delete_url = self.request.path
+                    
+                    # Verificar que no sea la misma página de delete
+                    if delete_url not in referer_path and '/delete/' not in referer_path:
+                        # Si viene del dashboard (ruta exacta "/" o con parámetros de query del dashboard)
+                        if referer_path == '/' or referer_path == '':
+                            # Preservar parámetros de query si existen (búsqueda, paginación)
+                            query_params = parsed_referer.query
+                            if query_params:
+                                return reverse('core:dashboard') + '?' + query_params
+                            return reverse('core:dashboard')
+                        return referer
+            except Exception:
+                pass  # Si hay error, usar fallback
+        
+        # Verificar si la URL actual es el dashboard (cuando se elimina desde modal)
+        current_path = self.request.path
+        if current_path == '/' or current_path == '':
+            return reverse('core:dashboard')
+        
+        # Fallback a la lógica original
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:video_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -1015,23 +1674,33 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     form_class = GeminiImageForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nueva Imagen', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nueva Imagen', 'url': None}
         ]
     
@@ -1056,14 +1725,23 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             
             # Crear imagen usando servicio
             image = image_service.create_image(
-                project=project,
                 title=title,
                 image_type=image_type,
                 prompt=prompt,
-                config=config
+                config=config,
+                created_by=request.user,
+                project=project
             )
             
-            messages.success(request, f'Imagen "{title}" creada. Ahora puedes generarla.')
+            # Generar imagen automáticamente después de crear
+            try:
+                image_service.generate_image(image)
+                messages.success(request, f'Imagen "{title}" creada y generada exitosamente.')
+            except (ValidationException, ImageGenerationException) as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
             return redirect('core:image_detail', image_id=image.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -1119,6 +1797,85 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         return config
 
 
+class ImageCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear imagen (sin layout completo)"""
+    template_name = 'images/create_partial.html'
+    form_class = GeminiImageForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de imagen"""
+        project = self.get_project()
+        image_service = self.get_image_service()
+        
+        title = request.POST.get('title')
+        image_type = request.POST.get('type')
+        prompt = request.POST.get('prompt')
+        
+        if not all([title, image_type, prompt]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            config = self._build_image_config(request, image_type, project, image_service)
+            image = image_service.create_image(
+                project=project,
+                title=title,
+                image_type=image_type,
+                prompt=prompt,
+                config=config
+            )
+            
+            # Generar imagen automáticamente después de crear
+            try:
+                image_service.generate_image(image)
+                messages.success(request, f'Imagen "{title}" creada y generada exitosamente.')
+            except (ValidationException, ImageGenerationException) as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Imagen "{title}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
+            return redirect('core:image_detail', image_id=image.pk)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+    
+    def _build_image_config(self, request, image_type, project, image_service):
+        """Construir configuración según el tipo de imagen"""
+        config = {
+            'aspect_ratio': request.POST.get('aspect_ratio', '1:1'),
+            'response_modalities': request.POST.get('response_modalities', 'image_only')
+        }
+        
+        if image_type == 'image_to_image':
+            input_image = request.FILES.get('input_image')
+            if input_image:
+                upload_result = image_service.upload_input_image(input_image, project)
+                config['input_image_gcs_path'] = upload_result['gcs_path']
+        elif image_type == 'multi_image':
+            input_images = []
+            for i in range(1, 4):
+                img = request.FILES.get(f'input_image_{i}')
+                if img:
+                    upload_result = image_service.upload_input_image(img, project)
+                    input_images.append(upload_result['gcs_path'])
+            config['input_images'] = input_images
+        
+        return config
+
+
 class ImageDeleteView(BreadcrumbMixin, DeleteView):
     """Eliminar imagen"""
     model = Image
@@ -1126,21 +1883,32 @@ class ImageDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'image'
     pk_url_kwarg = 'image_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:image_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:image_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:image_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -1224,14 +1992,20 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     form_class = AudioForm
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         
         # Listar voces disponibles
         try:
@@ -1247,11 +2021,15 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Audio', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Audio', 'url': None}
         ]
     
@@ -1274,6 +2052,74 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         try:
             # Crear audio usando servicio
             audio = audio_service.create_audio(
+                title=title,
+                text=text,
+                voice_id=voice_id,
+                created_by=request.user,
+                voice_name=voice_name,
+                project=project
+            )
+            
+            # Generar audio automáticamente después de crear
+            try:
+                audio_service.generate_audio(audio)
+                messages.success(request, f'Audio "{title}" creado y generado exitosamente.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error al generarlo: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error inesperado al generarlo: {str(e)}')
+            
+            return redirect('core:audio_detail', audio_id=audio.pk)
+            
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class AudioCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear audio (sin layout completo)"""
+    template_name = 'audios/create_partial.html'
+    form_class = AudioForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        
+        try:
+            audio_service = self.get_audio_service()
+            voices = audio_service.list_voices()
+            context['voices'] = voices
+        except Exception as e:
+            logger.error(f"Error al listar voces: {e}")
+            context['voices'] = []
+            messages.warning(self.request, 'No se pudieron cargar las voces disponibles')
+        
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de audio"""
+        project = self.get_project()
+        audio_service = self.get_audio_service()
+        
+        title = request.POST.get('title')
+        text = request.POST.get('text')
+        voice_id = request.POST.get('voice_id')
+        voice_name = request.POST.get('voice_name')
+        
+        if not all([title, text, voice_id]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            audio = audio_service.create_audio(
                 project=project,
                 title=title,
                 text=text,
@@ -1281,9 +2127,16 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 voice_name=voice_name
             )
             
-            messages.success(request, f'Audio "{title}" creado. Ahora puedes generarlo.')
-            return redirect('core:audio_detail', audio_id=audio.pk)
+            # Generar audio automáticamente después de crear
+            try:
+                audio_service.generate_audio(audio)
+                messages.success(request, f'Audio "{title}" creado y generado exitosamente.')
+            except (ValidationException, ServiceException) as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error al generarlo: {str(e)}')
+            except Exception as e:
+                messages.warning(request, f'Audio "{title}" creado, pero hubo un error inesperado al generarlo: {str(e)}')
             
+            return redirect('core:audio_detail', audio_id=audio.pk)
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
             return self.get(request, *args, **kwargs)
@@ -1299,21 +2152,32 @@ class AudioDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'audio'
     pk_url_kwarg = 'audio_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:audio_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:audio_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:audio_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -1485,23 +2349,33 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
         return ['scripts/create.html']
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.get_project()
-        context['project'] = project
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': 'Nuevo Guión', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': 'Nuevo Guión', 'url': None}
         ]
     
@@ -1526,7 +2400,8 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
                 title=title,
                 original_script=original_script,
                 desired_duration_min=int(desired_duration_min),
-                status='pending'
+                status='pending',
+                created_by=request.user
             )
             
             # Procesar guión con el servicio configurado (n8n o LangChain)
@@ -1559,6 +2434,66 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             return self.get(request, *args, **kwargs)
 
 
+class ScriptCreatePartialView(ServiceMixin, FormView):
+    """Vista parcial para crear guión (sin layout completo)"""
+    template_name = 'scripts/create_partial.html'
+    form_class = ScriptForm
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        return get_object_or_404(Project, pk=project_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.get_project()
+        context['project'] = project
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Manejar creación de guión"""
+        project = self.get_project()
+        
+        title = request.POST.get('title')
+        original_script = request.POST.get('original_script')
+        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        
+        if not all([title, original_script]):
+            messages.error(request, 'Todos los campos son requeridos')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            script = Script.objects.create(
+                project=project,
+                title=title,
+                original_script=original_script,
+                desired_duration_min=int(desired_duration_min),
+                status='pending'
+            )
+            
+            service = get_script_service()
+            
+            if hasattr(service, 'process_script'):
+                try:
+                    script = service.process_script(script)
+                    messages.success(request, f'Guión "{title}" procesado exitosamente.')
+                    return redirect('core:script_detail', script_id=script.pk)
+                except Exception as e:
+                    logger.error(f"Error al procesar guión con LangChain: {e}")
+                    messages.error(request, f'Error al procesar guión: {str(e)}')
+                    return redirect('core:script_detail', script_id=script.pk)
+            else:
+                try:
+                    service.send_script_for_processing(script)
+                    messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
+                except Exception as e:
+                    messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
+                
+                return redirect('core:script_detail', script_id=script.pk)
+        except Exception as e:
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
 class ScriptDeleteView(BreadcrumbMixin, DeleteView):
     """Eliminar guión"""
     model = Script
@@ -1566,26 +2501,38 @@ class ScriptDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'script'
     pk_url_kwarg = 'script_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:script_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:script_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.title, 
                 'url': reverse('core:script_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Manejar eliminación con soporte HTMX"""
         self.object = self.get_object()
-        project_id = self.object.project.pk
+        success_url = self.get_success_url()
+        script_title = self.object.title
         self.object.delete()
         
         # Si es petición HTMX, devolver respuesta vacía (el elemento se eliminará)
@@ -1593,8 +2540,8 @@ class ScriptDeleteView(BreadcrumbMixin, DeleteView):
             from django.http import HttpResponse
             return HttpResponse(status=200)
         
-        # Si no es HTMX, redirigir normalmente
-        return redirect('core:project_detail', project_id=project_id)
+        messages.success(request, f'Guion "{script_title}" eliminado')
+        return redirect(success_url)
 
 
 class ScriptRetryView(ServiceMixin, View):
@@ -1665,7 +2612,10 @@ class AgentCreateView(BreadcrumbMixin, View):
         
         context = {
             'project': project,
-            'breadcrumbs': self.get_breadcrumbs()
+            'breadcrumbs': self.get_breadcrumbs(),
+            'user_role': project.get_user_role(request.user),
+            'project_owner': project.owner,
+            'project_members': project.members.select_related('user').all()
         }
         
         return render(request, self.template_name, context)
@@ -3714,31 +4664,44 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
     template_name = 'music/create.html'
     
     def get_project(self):
-        """Obtener proyecto del contexto"""
-        project_id = self.kwargs['project_id']
-        return get_object_or_404(Project, pk=project_id)
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
     
     def get_context_data(self):
         """Preparar contexto para el template"""
         project = self.get_project()
         context = {
-            'project': project,
             'breadcrumbs': self.get_breadcrumbs()
         }
+        if project:
+            context.update({
+                'project': project,
+                'user_role': project.get_user_role(self.request.user) if hasattr(self, 'request') else None,
+                'project_owner': project.owner,
+                'project_members': project.members.select_related('user').all()
+            })
         return context
     
     def get_breadcrumbs(self):
         project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_detail', args=[project.pk])
+                },
+                {'label': '🎵 Nueva Música', 'url': None}
+            ]
         return [
-            {
-                'label': project.name, 
-                'url': reverse('core:project_detail', args=[project.pk])
-            },
             {'label': '🎵 Nueva Música', 'url': None}
         ]
     
     def get(self, request, *args, **kwargs):
         """Mostrar formulario de creación"""
+        self.request = request  # Guardar request para get_context_data
         context = self.get_context_data()
         return render(request, self.template_name, context)
     
@@ -3767,10 +4730,22 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
                 name=name,
                 prompt=prompt,
                 duration_ms=duration_ms,
-                status='pending'
+                status='pending',
+                created_by=request.user
             )
             
-            messages.success(request, f'Música "{name}" creada. Ahora puedes generarla.')
+            # Generar música automáticamente después de crear
+            try:
+                from .services import ElevenLabsMusicService
+                music_service = ElevenLabsMusicService()
+                music_service.generate_music(music)
+                messages.success(request, f'Música "{name}" creada y generada exitosamente!')
+            except ServiceException as e:
+                messages.warning(request, f'Música "{name}" creada, pero hubo un error al generarla: {str(e)}')
+            except Exception as e:
+                logger.error(f"Error al generar música: {e}")
+                messages.warning(request, f'Música "{name}" creada, pero hubo un error inesperado al generarla: {str(e)}')
+            
             return redirect('core:music_detail', music_id=music.pk)
             
         except (ValidationException, ServiceException) as e:
@@ -3803,11 +4778,15 @@ class MusicDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return context
     
     def get_breadcrumbs(self):
+        if self.object.project:
+            return [
+                {
+                    'label': self.object.project.name, 
+                    'url': reverse('core:project_detail', args=[self.object.project.pk])
+                },
+                {'label': f'🎵 {self.object.name}', 'url': None}
+            ]
         return [
-            {
-                'label': self.object.project.name, 
-                'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
             {'label': f'🎵 {self.object.name}', 'url': None}
         ]
 
@@ -3819,21 +4798,32 @@ class MusicDeleteView(BreadcrumbMixin, DeleteView):
     context_object_name = 'music'
     pk_url_kwarg = 'music_id'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['delete_url'] = reverse('core:music_delete', args=[self.object.pk])
+        context['detail_url'] = reverse('core:music_detail', args=[self.object.pk])
+        return context
+    
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.name, 
                 'url': reverse('core:music_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""
@@ -3942,3 +4932,358 @@ class MusicCompositionPlanView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=500)
+
+
+# ====================
+# PROJECT INVITATIONS
+# ====================
+
+class ProjectInviteView(BreadcrumbMixin, ServiceMixin, View):
+    """Vista para invitar usuarios a un proyecto"""
+    template_name = 'projects/invite.html'
+    
+    def get_project(self):
+        """Obtener proyecto y verificar permisos"""
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes permisos para invitar usuarios a este proyecto')
+        
+        return project
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Invitar Usuario', 'url': None}
+        ]
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        context = {
+            'project': project,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        return render(request, self.template_name, context)
+    
+    def post(self, request, *args, **kwargs):
+        project = self.get_project()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', 'editor')
+        
+        if not email:
+            messages.error(request, 'El email es requerido')
+            return self.get(request, *args, **kwargs)
+        
+        try:
+            invitation = InvitationService.create_invitation(
+                project=project,
+                email=email,
+                invited_by=request.user,
+                role=role
+            )
+            
+            # Enviar email de invitación
+            send_invitation_email(request, invitation)
+            
+            messages.success(request, f'Invitación enviada a {email}')
+            # Si es petición HTMX o desde el tab, redirigir al tab de invitaciones
+            if request.headers.get('HX-Request') or request.GET.get('from_tab'):
+                return redirect('core:project_invitations_partial', project_id=project.pk)
+            return redirect('core:project_invitations', project_id=project.pk)
+            
+        except ValidationException as e:
+            messages.error(request, str(e))
+            return self.get(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error al crear invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return self.get(request, *args, **kwargs)
+
+
+class ProjectInvitePartialView(ServiceMixin, View):
+    """Vista parcial para el formulario de invitar usuario (sin layout completo)"""
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            return HttpResponse('No tienes permisos', status=403)
+        
+        return project
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        return render(request, 'projects/partials/invite_form.html', {
+            'project': project
+        })
+    
+    def post(self, request, *args, **kwargs):
+        project = self.get_project()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', 'editor')
+        
+        if not email:
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': 'El email es requerido'
+            })
+        
+        try:
+            invitation = InvitationService.create_invitation(
+                project=project,
+                email=email,
+                invited_by=request.user,
+                role=role
+            )
+            
+            # Enviar email de invitación
+            send_invitation_email(request, invitation)
+            
+            # Redirigir al tab de invitaciones para mostrar la lista actualizada
+            return redirect('core:project_invitations_partial', project_id=project.pk)
+            
+        except ValidationException as e:
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': str(e)
+            })
+        except Exception as e:
+            logger.error(f"Error al crear invitación: {e}")
+            return render(request, 'projects/partials/invite_form.html', {
+                'project': project,
+                'error': f'Error inesperado: {str(e)}'
+            })
+
+
+class ProjectInvitationsListView(BreadcrumbMixin, ServiceMixin, View):
+    """Lista de invitaciones de un proyecto"""
+    template_name = 'projects/invitations.html'
+    
+    def get_project(self):
+        """Obtener proyecto y verificar permisos"""
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes permisos para ver las invitaciones de este proyecto')
+        
+        return project
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        return [
+            {'label': project.name, 'url': reverse('core:project_detail', args=[project.pk])},
+            {'label': 'Invitaciones', 'url': None}
+        ]
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        
+        try:
+            invitations = InvitationService.get_project_invitations(project, request.user)
+        except ValidationException as e:
+            messages.error(request, str(e))
+            invitations = []
+        
+        context = {
+            'project': project,
+            'invitations': invitations,
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        return render(request, self.template_name, context)
+
+
+class ProjectInvitationsPartialView(ServiceMixin, View):
+    """Vista parcial para la lista de invitaciones (sin layout completo)"""
+    
+    def get_project(self):
+        project_id = self.kwargs['project_id']
+        project = ProjectService.get_project_with_videos(project_id)
+        
+        if not ProjectService.user_can_edit(project, self.request.user):
+            return HttpResponse('No tienes permisos', status=403)
+        
+        return project
+    
+    def get(self, request, *args, **kwargs):
+        project = self.get_project()
+        
+        try:
+            invitations = InvitationService.get_project_invitations(project, request.user)
+        except ValidationException as e:
+            invitations = []
+        
+        return render(request, 'projects/partials/invitations_list.html', {
+            'project': project,
+            'invitations': invitations
+        })
+
+
+class AcceptInvitationView(View):
+    """Vista para aceptar una invitación"""
+    
+    def get(self, request, token):
+        from .models import ProjectInvitation
+        
+        try:
+            invitation = ProjectInvitation.objects.get(token=token)
+        except ProjectInvitation.DoesNotExist:
+            messages.error(request, 'Invitación no encontrada')
+            return redirect('core:dashboard')
+        
+        # Verificar que el usuario esté autenticado
+        if not request.user.is_authenticated:
+            messages.info(request, 'Debes iniciar sesión para aceptar la invitación')
+            return redirect('core:login')
+        
+        # Verificar que el email coincida
+        if invitation.email.lower() != request.user.email.lower():
+            messages.error(request, 'Esta invitación es para otro usuario')
+            return redirect('core:dashboard')
+        
+        # Verificar que pueda ser aceptada
+        if not invitation.can_be_accepted():
+            if invitation.is_expired():
+                messages.error(request, 'La invitación ha expirado')
+            else:
+                messages.error(request, 'La invitación no puede ser aceptada')
+            return redirect('core:dashboard')
+        
+        try:
+            InvitationService.accept_invitation(token, request.user)
+            messages.success(request, f'Te has unido al proyecto "{invitation.project.name}"')
+            return redirect('core:project_detail', project_id=invitation.project.pk)
+        except ValidationException as e:
+            messages.error(request, str(e))
+            return redirect('core:dashboard')
+        except Exception as e:
+            logger.error(f"Error al aceptar invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:dashboard')
+
+
+class CancelInvitationView(View):
+    """Vista para cancelar una invitación"""
+    
+    def post(self, request, invitation_id):
+        try:
+            InvitationService.cancel_invitation(int(invitation_id), request.user)
+            messages.success(request, 'Invitación cancelada')
+        except ValidationException as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            logger.error(f"Error al cancelar invitación: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+        
+        # Redirigir a la lista de invitaciones del proyecto
+        from .models import ProjectInvitation
+        try:
+            invitation = ProjectInvitation.objects.get(id=invitation_id)
+            return redirect('core:project_invitations', project_id=invitation.project.pk)
+        except ProjectInvitation.DoesNotExist:
+            return redirect('core:dashboard')
+
+
+# ====================
+# MOVE TO PROJECT VIEWS
+# ====================
+
+class MoveToProjectView(View):
+    """Vista para mover items sin proyecto a un proyecto"""
+    
+    def get(self, request, item_type, item_id):
+        """Mostrar modal con lista de proyectos"""
+        # Mapeo de tipos a modelos
+        model_map = {
+            'video': Video,
+            'image': Image,
+            'audio': Audio,
+            'music': Music,
+            'script': Script
+        }
+        
+        if item_type not in model_map:
+            messages.error(request, 'Tipo de item no válido')
+            return redirect('core:dashboard')
+        
+        # Obtener el item
+        try:
+            item = model_map[item_type].objects.get(id=item_id, created_by=request.user)
+        except model_map[item_type].DoesNotExist:
+            messages.error(request, f'{item_type.capitalize()} no encontrado')
+            return redirect('core:dashboard')
+        
+        # Obtener proyectos del usuario
+        user_projects = ProjectService.get_user_projects(request.user)
+        
+        context = {
+            'item': item,
+            'item_type': item_type,
+            'projects': user_projects
+        }
+        
+        return render(request, 'partials/move_to_project_modal.html', context)
+    
+    def post(self, request, item_type, item_id):
+        """Mover el item al proyecto seleccionado"""
+        # Mapeo de tipos a modelos
+        model_map = {
+            'video': Video,
+            'image': Image,
+            'audio': Audio,
+            'music': Music,
+            'script': Script
+        }
+        
+        if item_type not in model_map:
+            messages.error(request, 'Tipo de item no válido')
+            return redirect('core:dashboard')
+        
+        # Obtener datos
+        project_id = request.POST.get('project_id')
+        if not project_id:
+            messages.error(request, 'Debes seleccionar un proyecto')
+            return redirect('core:dashboard')
+        
+        try:
+            # Obtener el item y verificar permisos
+            item = model_map[item_type].objects.get(id=item_id, created_by=request.user)
+            
+            # Obtener el proyecto y verificar permisos
+            project = Project.objects.get(id=project_id)
+            if not project.has_member(request.user) and project.owner != request.user:
+                messages.error(request, 'No tienes permisos para este proyecto')
+                return redirect('core:dashboard')
+            
+            # Mover el item al proyecto
+            item.project = project
+            item.save()
+            
+            messages.success(request, f'{item_type.capitalize()} movido a "{project.name}"')
+            
+            # Redirigir al detalle del item
+            redirect_map = {
+                'video': 'core:video_detail',
+                'image': 'core:image_detail',
+                'audio': 'core:audio_detail',
+                'music': 'core:music_detail',
+                'script': 'core:script_detail'
+            }
+            
+            return redirect(redirect_map[item_type], **{f'{item_type}_id': item.id})
+            
+        except model_map[item_type].DoesNotExist:
+            messages.error(request, f'{item_type.capitalize()} no encontrado')
+            return redirect('core:dashboard')
+        except Project.DoesNotExist:
+            messages.error(request, 'Proyecto no encontrado')
+            return redirect('core:dashboard')
+        except Exception as e:
+            logger.error(f"Error al mover {item_type} a proyecto: {e}")
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:dashboard')

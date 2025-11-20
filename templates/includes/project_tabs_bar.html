@@ -1,0 +1,33 @@
+<!-- Barra de navegación fija -->
+<div x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' }"
+     x-init="window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; })"
+     :style="'left: ' + (window.innerWidth >= 1024 ? ((sidebarCollapsed ? 64 : 256) + 320) + 'px' : '0')"
+     class="fixed top-0 right-0 bg-white border-b border-gray-200 z-20 shadow-sm transition-all duration-300">
+    <nav class="flex -mb-px px-6 overflow-x-auto" aria-label="Tabs">
+        <a href="{% url 'core:project_videos' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'videos' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Videos
+        </a>
+        <a href="{% url 'core:project_images' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'images' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Imágenes
+        </a>
+        <a href="{% url 'core:project_audios' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'audios' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Audios
+        </a>
+        <a href="{% url 'core:project_music' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'music' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Música
+        </a>
+        <a href="{% url 'core:project_scripts' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'scripts' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Guiones
+        </a>
+        <a href="{% url 'core:project_agent' project.id %}"
+           class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'agent' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
+            Video con Agente
+        </a>
+    </nav>
+</div>
+
