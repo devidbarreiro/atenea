@@ -4460,11 +4460,15 @@ class MusicDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return context
     
     def get_breadcrumbs(self):
+        if self.object.project:
+            return [
+                {
+                    'label': self.object.project.name, 
+                    'url': reverse('core:project_detail', args=[self.object.project.pk])
+                },
+                {'label': f'🎵 {self.object.name}', 'url': None}
+            ]
         return [
-            {
-                'label': self.object.project.name, 
-                'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
             {'label': f'🎵 {self.object.name}', 'url': None}
         ]
 
@@ -4477,20 +4481,25 @@ class MusicDeleteView(BreadcrumbMixin, DeleteView):
     pk_url_kwarg = 'music_id'
     
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        if self.object.project:
+            return reverse('core:project_detail', kwargs={'project_id': self.object.project.pk})
+        return reverse('core:dashboard')
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
+            })
+        breadcrumbs.extend([
             {
                 'label': self.object.name, 
                 'url': reverse('core:music_detail', args=[self.object.pk])
             },
             {'label': 'Eliminar', 'url': None}
-        ]
+        ])
+        return breadcrumbs
     
     def delete(self, request, *args, **kwargs):
         """Override para eliminar archivo de GCS"""

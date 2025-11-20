@@ -1898,6 +1898,9 @@ class AudioService:
                 logger.warning(f"No se pudo obtener duración del audio: {result.stderr}")
                 return 0.0
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. No se puede obtener la duración del audio.")
+            return 0.0
         except Exception as e:
             logger.warning(f"Error al obtener duración del audio: {e}")
             return 0.0
@@ -2014,10 +2017,11 @@ class SceneService:
                 # Preparar config básica según el servicio CON ORIENTACIÓN HEREDADA
                 ai_config = {}
                 if ai_service in ['heygen_v2', 'heygen_avatar_iv'] and scene_data.get('avatar') == 'si':
-                    # Config por defecto para HeyGen V2 o Avatar IV (se puede editar después)
+                    # Config por defecto para HeyGen V2 o Avatar IV usando valores de settings
+                    from django.conf import settings
                     ai_config = {
-                        'avatar_id': '',  # El usuario lo configurará
-                        'voice_id': '',   # El usuario lo configurará
+                        'avatar_id': getattr(settings, 'HEYGEN_DEFAULT_AVATAR_ID', ''),
+                        'voice_id': getattr(settings, 'HEYGEN_DEFAULT_VOICE_ID', ''),
                         'video_orientation': video_orientation,  # Heredado del script
                         'voice_speed': 1.0,
                         'voice_pitch': 50,
@@ -2969,10 +2973,16 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 video_path
             ]
-            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-            has_original_audio = probe_result.stdout.strip() == 'audio'
-            
-            logger.info(f"Video original tiene audio: {has_original_audio}")
+            try:
+                probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+                has_original_audio = probe_result.stdout.strip() == 'audio'
+                logger.info(f"Video original tiene audio: {has_original_audio}")
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. Asumiendo que el video no tiene audio.")
+                has_original_audio = False
+            except Exception as e:
+                logger.warning(f"Error al verificar audio del video: {e}")
+                has_original_audio = False
             
             # Obtener duraciones para decidir la estrategia
             video_duration_cmd = [
@@ -2990,11 +3000,25 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 audio_path
             ]
             
-            video_duration_result = subprocess.run(video_duration_cmd, capture_output=True, text=True)
-            audio_duration_result = subprocess.run(audio_duration_cmd, capture_output=True, text=True)
+            try:
+                video_duration_result = subprocess.run(video_duration_cmd, capture_output=True, text=True)
+                video_duration = float(video_duration_result.stdout.strip()) if video_duration_result.returncode == 0 else None
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. No se puede obtener duración del video.")
+                video_duration = None
+            except Exception as e:
+                logger.warning(f"Error al obtener duración del video: {e}")
+                video_duration = None
             
-            video_duration = float(video_duration_result.stdout.strip()) if video_duration_result.returncode == 0 else None
-            audio_duration = float(audio_duration_result.stdout.strip()) if audio_duration_result.returncode == 0 else None
+            try:
+                audio_duration_result = subprocess.run(audio_duration_cmd, capture_output=True, text=True)
+                audio_duration = float(audio_duration_result.stdout.strip()) if audio_duration_result.returncode == 0 else None
+            except FileNotFoundError:
+                logger.warning("ffprobe no está instalado. No se puede obtener duración del audio.")
+                audio_duration = None
+            except Exception as e:
+                logger.warning(f"Error al obtener duración del audio: {e}")
+                audio_duration = None
             
             logger.info(f"Duración video: {video_duration}s, Duración audio: {audio_duration}s")
             
@@ -3400,6 +3424,9 @@ class VideoCompositionService:
                 logger.warning(f"No se pudo obtener duración del video: {result.stderr}")
                 return 0.0
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. No se puede obtener la duración del video.")
+            return 0.0
         except Exception as e:
             logger.warning(f"Error al obtener duración: {e}")
             return 0.0
@@ -3441,6 +3468,9 @@ class VideoCompositionService:
             
             return has_audio
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. Asumiendo que el video tiene audio.")
+            return True
         except Exception as e:
             logger.warning(f"Error al verificar audio stream: {e}")
             # Por defecto, asumir que tiene audio si no se puede verificar
@@ -3481,6 +3511,9 @@ class VideoCompositionService:
                 logger.warning(f"No se pudo obtener resolución del video: {result.stderr}")
                 return (1280, 720)  # Default
                 
+        except FileNotFoundError:
+            logger.warning("ffprobe no está instalado. Usando resolución por defecto (1280x720).")
+            return (1280, 720)  # Default
         except Exception as e:
             logger.warning(f"Error al obtener resolución: {e}")
             return (1280, 720)  # Default

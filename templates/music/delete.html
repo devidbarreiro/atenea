@@ -16,7 +16,7 @@
             <dl class="space-y-2 text-sm">
                 <div class="flex justify-between">
                     <dt class="text-gray-600">Proyecto:</dt>
-                    <dd class="font-medium">{{ music.project.name }}</dd>
+                    <dd class="font-medium">{% if music.project %}{{ music.project.name }}{% else %}Sin proyecto{% endif %}</dd>
                 </div>
                 <div class="flex justify-between">
                     <dt class="text-gray-600">Estado:</dt>
