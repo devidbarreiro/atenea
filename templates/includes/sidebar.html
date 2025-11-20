@@ -252,6 +252,10 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
         </div>
 
         <!-- Barra de utilidades -->
+        <div class="flex items-center justify-between">
+            <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    onclick="window.location.href='/docs/'"
+                    :title="sidebarCollapsed ? 'Ayuda' : ''">
         <div class="flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
             <button x-show="!sidebarCollapsed" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Ayuda">
                 <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

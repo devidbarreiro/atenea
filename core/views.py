@@ -44,6 +44,43 @@ logger = logging.getLogger(__name__)
 
 
 # ====================
+# DOCUMENTACION USER
+# ====================
+
+# Vista principal de la documentación
+def docs_home(request):
+    return render(request, 'docs/docs_template.html')
+
+# Vista para devolver la estructura de la documentación
+def docs_structure(request):
+    base_dir = os.path.join(settings.BASE_DIR, 'docs', 'api', 'services')
+
+    def build_tree(path):
+        tree = {}
+        for item in os.listdir(path):
+            item_path = os.path.join(path, item)
+            if os.path.isdir(item_path):
+                tree[item] = build_tree(item_path)
+            elif item.endswith('.md'):
+                tree[item] = item_path  # Guardamos ruta completa temporalmente
+        return tree
+
+    structure = build_tree(base_dir)
+    return JsonResponse(structure)
+
+# Vista para devolver el contenido de un archivo markdown
+def docs_md_view(request, path):
+    md_file_path = os.path.join(settings.BASE_DIR, 'docs', 'api', 'services', path + '.md')
+    
+    if not os.path.exists(md_file_path):
+        raise Http404("Documento no encontrado")
+    
+    with open(md_file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    return JsonResponse({'content': content})
+
+# ====================
 # HELPER FUNCTIONS
 # ====================
 
