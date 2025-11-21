@@ -30,7 +30,7 @@ Parámetros requeridos:
             <!-- Item name and warning -->
             <div>
                 <p class="text-lg font-semibold text-gray-900 mb-2">
-                    "{{ object.title|default:object.name }}"
+                    "{{ object.title}}"
                 </p>
                 <p class="text-xs text-gray-500">
                     Esta acción no se puede deshacer. El {% if object_type_label %}{{ object_type_label|lower }}{% else %}{{ object_type }}{% endif %} y sus archivos asociados se eliminarán permanentemente.
