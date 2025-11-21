@@ -54,3 +54,9 @@ docker-compose.override.yml
 
 .cursor
 .cursorrules
+
+# RAG Vector Store (índices generados localmente)
+.rag_store/
+
+# LangGraph API (archivos generados localmente)
+.langgraph_api/
