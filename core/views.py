@@ -1384,6 +1384,7 @@ class VideoCreatePartialView(ServiceMixin, FormView):
     def _build_veo_config(self, request, project, video_service):
         """Configuración para Gemini Veo"""
         return {
+            'veo_model': request.POST.get('veo_model', 'veo-2.0-generate-001'),
             'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
             'duration': int(request.POST.get('duration', 8))
         }

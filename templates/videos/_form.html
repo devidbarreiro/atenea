@@ -166,7 +166,29 @@
                 Configuración Gemini Veo
             </h3>
             
-            <div class="space-y-4">
+            <div class="space-y-4" x-data="veoConfig()">
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
+                    <select name="veo_model" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent" x-model="selectedModel" @change="updateOptions()">
+                        <!-- Veo 2.0 -->
+                        <option value="veo-2.0-generate-001">Veo 2.0 – Modelo base estable</option>
+                        <option value="veo-2.0-generate-exp">Veo 2.0 Experimental – Soporta imágenes de referencia</option>
+                        <option value="veo-2.0-generate-preview">Veo 2.0 Preview – Soporta máscaras</option>
+
+                        <!-- Veo 3.0 -->
+                        <option value="veo-3.0-generate-001">Veo 3.0 – Con audio y alta resolución</option>
+                        <option value="veo-3.0-fast-generate-001">Veo 3.0 Fast – Rápido con audio</option>
+                        <option value="veo-3.0-generate-preview">Veo 3.0 Preview – Extensión de video</option>
+                        <option value="veo-3.0-fast-generate-preview">Veo 3.0 Fast Preview – Rápido</option>
+
+                        <!-- Veo 3.1 -->
+                        <option value="veo-3.1-generate-preview">Veo 3.1 Preview – Última versión con imágenes de referencia</option>
+                        <option value="veo-3.1-fast-generate-preview">Veo 3.1 Fast Preview – Rápido con todo</option>
+                    </select>
+                </div>
+
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
                     <select name="aspect_ratio" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
@@ -184,6 +206,25 @@
                         <option value="12">12 segundos</option>
                     </select>
                 </div>
+
+                <!-- Opciones Dinamicas -->
+
+                <div class="mt-4">
+                    <label class="text-sm text-gray-700">
+                        <input 
+                            type="checkbox" 
+                            x-model="referenceImages" 
+                            :disabled="!currentOptions.supports_reference_images" 
+                            class="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        /> Usar imágenes de referencia
+                    </label>
+                </div>
+                
+                <div id="veo-reference-section" x-show="referenceImages" class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Referencia</label>
+                    <input type="file" name="input_image" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+                    <p class="text-xs text-gray-500 mt-1">La imagen debe tener exactamente las mismas dimensiones que el tamaño del video</p>
+                </div>
             </div>
         </div>
     </div>
@@ -197,6 +238,15 @@
             </h3>
             
             <div class="space-y-4">
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
+                    <select name="sora_model" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                        <option value="sora-2" selected>Sora 2 (Rápido)</option>
+                        <option value="sora-2-pro">Sora 2 Pro (Alta calidad)</option>
+                    </select>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Duración</label>
                     <select name="duration" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
@@ -214,15 +264,7 @@
                         <option value="1024x1024">1024x1024 (1:1)</option>
                     </select>
                 </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Modelo</label>
-                    <select name="sora_model" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                        <option value="sora-2" selected>Sora 2 (Rápido)</option>
-                        <option value="sora-2-pro">Sora 2 Pro (Alta calidad)</option>
-                    </select>
-                </div>
-                
+
                 <div>
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" name="use_input_reference" class="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500">
@@ -232,7 +274,7 @@
                 
                 <div id="sora-reference-section" class="hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Referencia</label>
-                    <input type="file" name="input_reference" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                    <input type="file" name="input_reference" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
                     <p class="text-xs text-gray-500 mt-1">La imagen debe tener exactamente las mismas dimensiones que el tamaño del video</p>
                 </div>
             </div>
@@ -457,6 +499,37 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// veo config
+function veoConfig() {
+    return {
+        selectedModel: 'veo-2.0-generate-001',
+        duration: 4,
+        audio: false,
+        referenceImages: false,
+        models: {
+            'veo-2.0-generate-001': {supports_reference_images: false },
+            'veo-2.0-generate-exp': {supports_reference_images: true },
+            'veo-2.0-generate-preview': {supports_reference_images: false },
+            'veo-3.0-generate-001': {supports_reference_images: false },
+            'veo-3.0-fast-generate-001': {supports_reference_images: false },
+            'veo-3.0-generate-preview': {supports_reference_images: false },
+            'veo-3.0-fast-generate-preview': {supports_reference_images: false },
+            'veo-3.1-generate-preview': {supports_reference_images: true },
+            'veo-3.1-fast-generate-preview': {supports_reference_images: true },
+        },
+        get currentOptions() {
+            return this.models[this.selectedModel];
+        },
+        updateOptions() {
+            // Si el modelo no soporta imágenes de referencia, desmarcamos checkbox
+            if (!this.currentOptions.supports_reference_images) {
+                this.referenceImages = false;
+            }
+        }
+    }
+}
+
 </script>
 
 <style>
