@@ -373,7 +373,7 @@ async function loadVoices(retryCount = 0) {
         data.voices.forEach(voice => {
             const option = document.createElement('option');
             option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
+            option.textContent = `${voice.name} (${voice.language})`;
             select.appendChild(option);
         });
         
@@ -410,8 +410,8 @@ async function loadAvatarImages() {
         select.innerHTML = '<option value="">Selecciona un avatar</option>';
         data.image_assets.forEach(asset => {
             const option = document.createElement('option');
-            option.value = asset.image_id;
-            option.textContent = asset.image_name;
+            option.value = asset.id;
+            option.textContent = asset.name;
             select.appendChild(option);
         });
     } catch (error) {
@@ -432,8 +432,8 @@ async function loadVoicesIV() {
         select.innerHTML = '<option value="">Selecciona una voz</option>';
         data.voices.forEach(voice => {
             const option = document.createElement('option');
-            option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
+            option.value = voice.id;
+            option.textContent = `${voice.name} (${voice.language})`;
             select.appendChild(option);
         });
     } catch (error) {
