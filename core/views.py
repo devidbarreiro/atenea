@@ -775,8 +775,17 @@ class ProjectsListView(ServiceMixin, ListView):
     paginate_by = 20
     
     def get_queryset(self):
-        """Obtener proyectos del usuario"""
-        return ProjectService.get_user_projects(self.request.user)
+        """Obtener proyectos del usuario con optimizaciones"""
+        queryset = ProjectService.get_user_projects(self.request.user)
+        # Optimizar consultas para evitar N+1 al acceder a owner, members y conteos
+        return queryset.select_related('owner').prefetch_related(
+            'members__user',
+            'videos',
+            'images',
+            'audios',
+            'music_tracks',
+            'scripts'
+        )
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

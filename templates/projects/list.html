@@ -23,32 +23,102 @@
         {% for project in projects %}
         <div class="card bg-white shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-200 rounded-lg overflow-hidden">
             <div class="card-body p-6">
-                <h2 class="card-title text-xl font-bold mb-2">
+                <h2 class="card-title text-xl font-bold mb-3">
                     {{ project.name }}
-                    {% if project.video_count > 0 %}
-                    <div class="badge badge-secondary bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ project.video_count }}</div>
-                    {% endif %}
                 </h2>
                 
-                <div class="text-sm text-gray-600 space-y-1 mb-4">
-                    <p>📹 {{ project.video_count }} video{{ project.video_count|pluralize }}</p>
-                    <p>🖼️ {{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</p>
-                    <p>✅ {{ project.completed_videos }} completado{{ project.completed_videos|pluralize }}</p>
-                    <p class="text-xs text-gray-400">📅 {{ project.created_at|date:"d/m/Y" }}</p>
+                {% comment %} Estadísticas del proyecto {% endcomment %}
+                <div class="mb-4">
+                    {% comment %} Badges de contenido {% endcomment %}
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        {% if project.video_count > 0 %}
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                            <span>🎬</span>
+                            <span>{{ project.video_count }} video{{ project.video_count|pluralize }}</span>
+                            {% if project.completed_videos > 0 %}
+                            <span class="text-blue-500">•</span>
+                            <span class="text-blue-600 font-semibold">{{ project.completed_videos }} listo{{ project.completed_videos|pluralize:"s" }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if project.image_count > 0 %}
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">
+                            <span>🖼️</span>
+                            <span>{{ project.image_count }} imagen{{ project.image_count|pluralize:"es" }}</span>
+                            {% if project.completed_images > 0 %}
+                            <span class="text-purple-500">•</span>
+                            <span class="text-purple-600 font-semibold">{{ project.completed_images }} listo{{ project.completed_images|pluralize:"s" }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if project.audios.count > 0 %}
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                            <span>🎙️</span>
+                            <span>{{ project.audios.count }} audio{{ project.audios.count|pluralize }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if project.music_tracks.count > 0 %}
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 rounded-full text-xs font-medium">
+                            <span>🎵</span>
+                            <span>{{ project.music_tracks.count }} música</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if project.script_count > 0 %}
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 rounded-full text-xs font-medium">
+                            <span>📝</span>
+                            <span>{{ project.script_count }} guión{{ project.script_count|pluralize:"es" }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% comment %} Fecha de creación {% endcomment %}
+                    <div class="flex items-center gap-1 text-xs text-gray-400">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <span>Creado {{ project.created_at|date:"d M Y" }}</span>
+                    </div>
                 </div>
                 
-                <div class="card-actions justify-end mt-4 flex gap-2">
+                {% comment %} Colaboradores del proyecto {% endcomment %}
+                {% if project.owner or project.members.exists %}
+                <div class="mb-4 pt-4 border-t border-gray-200">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Colaboradores</span>
+                        <div class="flex -space-x-2">
+                            {% if project.owner %}
+                            <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-semibold border-2 border-white" 
+                                 title="{{ project.owner.get_full_name|default:project.owner.username }} (Propietario)">
+                                {{ project.owner.first_name|first|default:project.owner.username|first|upper }}
+                            </div>
+                            {% endif %}
+                            {% for member in project.members.all %}
+                                {% if forloop.counter <= 4 %}
+                                <div class="w-8 h-8 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-semibold border-2 border-white" 
+                                     title="{{ member.user.get_full_name|default:member.user.username }} ({{ member.get_role_display }})">
+                                    {{ member.user.first_name|first|default:member.user.username|first|upper }}
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                            {% if project.members.count > 4 %}
+                            <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-semibold border-2 border-white" 
+                                 title="Y {{ project.members.count|add:"-4" }} más">
+                                +{{ project.members.count|add:"-4" }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="card-actions justify-end mt-4">
                     <a href="{% url 'core:project_detail' project.id %}" 
                        class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
                         Ver Proyecto
-                    </a>
-                    <a href="{% url 'core:video_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Video
-                    </a>
-                    <a href="{% url 'core:image_create' project.id %}" 
-                       class="btn btn-outline btn-sm border-gray-300 hover:bg-gray-100 px-3 py-1 rounded-md text-sm">
-                        + Imagen
                     </a>
                 </div>
             </div>
