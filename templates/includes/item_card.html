@@ -17,10 +17,15 @@ Ejemplo de uso:
 {% include 'includes/item_card.html' with item=item_data %}
 {% endcomment %}
 
-<div class="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 relative">
-    <!-- Preview del item -->
+<div class="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 relative" 
+     x-data="{ 
+         menuOpen: false, 
+         modalOpen: false, 
+         selectedItemId: '{{ item.id }}' 
+     }">
+    
     <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-        <!-- Badge de tipo (sin emojis, colores neutros) -->
+        
         <span class="absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-semibold z-10 bg-gray-800 text-white">
             {% if item.type == 'video' %}Video
             {% elif item.type == 'image' %}Imagen
@@ -30,8 +35,7 @@ Ejemplo de uso:
             {% endif %}
         </span>
         
-        <!-- Menú de tres puntos -->
-        <div class="absolute top-2 right-2 z-20" x-data="{ menuOpen: false }" @click.stop>
+        <div class="absolute top-2 right-2 z-20">
             <button @click="menuOpen = !menuOpen" 
                     class="p-1.5 bg-white bg-opacity-90 rounded-md hover:bg-opacity-100 transition-all opacity-0 group-hover:opacity-100"
                     :class="{ 'opacity-100': menuOpen }"
@@ -41,19 +45,20 @@ Ejemplo de uso:
                     <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
                 </svg>
             </button>
-            <div x-show="menuOpen" 
-                 @click.away="menuOpen = false"
-                 x-cloak
-                 x-transition
-                 class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
-                <button class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+            
+            <div x-show="menuOpen" @click.away="menuOpen = false" x-cloak
+                class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+                
+                <button @click="modalOpen = true; menuOpen = false" 
+                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
                     </svg>
                     Mover
                 </button>
+                
                 <button type="button"
-                        @click="window.dispatchEvent(new CustomEvent('open-delete-modal', { detail: { itemId: '{{ item.id }}', itemType: '{{ item.type }}' } }))"
+                        @click="window.dispatchEvent(new CustomEvent('open-delete-modal', { detail: { itemId: '{{ item.id }}', itemType: '{{ item.type }}' } })); menuOpen = false"
                         class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -63,17 +68,9 @@ Ejemplo de uso:
             </div>
         </div>
         
-        <!-- Contenido del preview -->
         {% if item.type == 'video' and item.signed_url %}
             <a href="{{ item.detail_url }}" class="block w-full h-full">
                 <video src="{{ item.signed_url }}" preload="metadata" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></video>
-                <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all pointer-events-none">
-                    <div class="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z"></path>
-                        </svg>
-                    </div>
-                </div>
             </a>
         {% elif item.type == 'image' and item.signed_url %}
             <a href="{{ item.detail_url }}" class="block w-full h-full">
@@ -97,7 +94,7 @@ Ejemplo de uso:
                     <span class="text-xs text-gray-600 font-medium">Música</span>
                 </div>
             </a>
-        {% elif item.type == 'script' %}
+        {% elif item.type == 'script' and item.signed_url %}
             <a href="{{ item.detail_url }}" class="block w-full h-full">
                 <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
                     <svg class="w-16 h-16 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,36 +103,9 @@ Ejemplo de uso:
                     <span class="text-xs text-gray-600 font-medium">Guión</span>
                 </div>
             </a>
-        {% else %}
-            <a href="{{ item.detail_url }}" class="block w-full h-full">
-                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
-                    {% if item.type == 'video' %}
-                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                        </svg>
-                    {% elif item.type == 'image' %}
-                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                    {% elif item.type == 'audio' %}
-                        <svg class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                        </svg>
-                    {% elif item.type == 'music' %}
-                        <svg class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                        </svg>
-                    {% elif item.type == 'script' %}
-                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                    {% endif %}
-                </div>
-            </a>
         {% endif %}
     </div>
     
-    <!-- Información del item -->
     <div class="p-4">
         <div class="flex items-start justify-between mb-2">
             <a href="{{ item.detail_url }}" class="flex-1 min-w-0">
@@ -144,17 +114,11 @@ Ejemplo de uso:
         </div>
         <div class="flex items-center gap-2 text-sm text-gray-500 mb-2">
             {% if item.project %}
-                <span class="flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                    </svg>
+                <span id="item-project-{{ item.id }}" class="flex items-center gap-1">
                     {{ item.project.name }}
                 </span>
             {% else %}
-                <span class="flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                    </svg>
+                <span id="item-project-{{ item.id }}" class="flex items-center gap-1">
                     Sin proyecto
                 </span>
             {% endif %}
@@ -172,4 +136,63 @@ Ejemplo de uso:
             </span>
         </div>
     </div>
+
+    <div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div @click.away="modalOpen = false" class="bg-white rounded-lg shadow-lg w-96 max-w-full p-6">
+            <h3 class="text-lg font-semibold mb-4">Mover item a otro proyecto</h3>
+            {% for project in projects %}
+            <button 
+                @click="moveItem(selectedItemId, '{{ project.id }}').then(() => { modalOpen = false; })" 
+                class="w-full text-left px-4 py-2 mb-2 border rounded hover:bg-gray-50 flex items-center justify-between"
+            >
+                <span>{{ project.name }}</span>
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </button>
+            {% endfor %}
+            <div class="mt-4 text-right">
+                <button @click="modalOpen = false" class="w-full px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancelar</button>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+window.csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// Función global que maneja el movimiento (retorna una promesa para encadenar acciones)
+window.moveItem = function(itemId, newProjectId) {
+    // CORRECCIÓN CLAVE: Uso de backticks (`) para las template literals
+    return fetch(`/items/${itemId}/move/`, { 
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.csrftoken},
+        body: JSON.stringify({project_id: newProjectId})
+    })
+    .then(res => {
+        if(!res.ok) {
+            // Arroja el error para que sea capturado en el catch
+            return res.json().then(err => { throw new Error(err.error || 'Error en la petición'); });
+        }
+        return res.json();
+    })
+    .then(data => {
+        if(data.success){
+            // Actualiza el nombre del proyecto en la tarjeta
+            // CORRECCIÓN CLAVE: Uso de template literal y querySelector
+            const projectSpan = document.querySelector(`#item-project-${itemId}`); 
+            if (projectSpan) {
+                projectSpan.innerText = data.new_project_name;
+            }
+            return data; // Retorna data para que el .then() de Alpine pueda cerrar el modal
+        } else {
+            throw new Error(data.error || 'Error al mover el item');
+        }
+    })
+    .catch(err => {
+        alert(err.message);
+        // Retorna una promesa rechazada para evitar que Alpine cierre el modal si hay error
+        return Promise.reject(err); 
+    });
+}
+</script>
