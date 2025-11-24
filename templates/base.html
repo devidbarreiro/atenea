@@ -160,13 +160,12 @@
         
         <!-- Contenido Principal -->
         <main class="transition-all duration-300 px-4 sm:px-6 lg:px-8 py-8"
-              x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' }"
-              :style="'margin-left: ' + (window.innerWidth >= 1024 ? (sidebarCollapsed ? '64px' : '256px') : '0') + ';'"
-              x-init="
-                  sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-                  window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; });
-                  window.addEventListener('resize', () => { $dispatch('resize'); });
-              ">
+            x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true', windowWidth: window.innerWidth }"
+            :style="'margin-left: ' + (windowWidth >= 1024 ? (sidebarCollapsed ? '64px' : '256px') : '0') + ';'"
+            x-init="
+                window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; });
+                window.addEventListener('resize', () => { windowWidth = window.innerWidth });
+            ">
             {% block content %}{% endblock %}
         </main>
         
