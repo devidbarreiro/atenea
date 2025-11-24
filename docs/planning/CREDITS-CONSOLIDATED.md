@@ -15,18 +15,7 @@ El sistema de créditos y rate limiting está completamente implementado y funci
 
 ### Archivos de Planificación (Históricos)
 
-Los siguientes archivos en `docs/planning/` contienen información histórica del proceso de planificación:
-
-- `credit-charging-comparison.md` - Comparación de estrategias
-- `credit-charging-points.md` - Puntos de cobro identificados
-- `credit-charging-strategy.md` - Estrategia elegida
-- `credit-implementation-plan.md` - Plan de implementación
-- `credits-command-example.md` - Ejemplos de comandos
-- `feature-final-status.md` - Estado final del feature
-- `feature-status.md` - Estado durante desarrollo
-- `implementation-summary.md` - Resumen de implementación
-- `pricing-investigation.md` - Investigación de precios
-- `rate-limiting-credits-plan.md` - Plan inicial
+> **Nota**: Los archivos de planificación históricos han sido eliminados ya que toda la información relevante ha sido consolidada en la documentación oficial.
 
 ### Documentación Oficial
 
