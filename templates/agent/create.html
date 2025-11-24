@@ -225,6 +225,7 @@
                     placeholder="Escribe tu guión de video aquí..."
                     class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
+                    oninput="calculateEstimatedDuration()"
                 ></textarea>
                 <p class="mt-2 text-sm text-gray-500">
                     La IA analizará este contenido y lo dividirá en escenas para tu video
@@ -236,15 +237,24 @@
                 <label for="desired_duration_min_manual" class="block text-sm font-medium text-gray-700 mb-2">
                     Duración Deseada (minutos)
                 </label>
-                <input 
-                    type="number" 
-                    id="desired_duration_min_manual" 
-                    name="desired_duration_min" 
-                    value="5" 
-                    min="1" 
-                    max="60"
-                    class="w-full max-w-xs px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
+                <div class="flex items-center gap-4">
+                    <input 
+                        type="number" 
+                        id="desired_duration_min_manual" 
+                        name="desired_duration_min" 
+                        value="5" 
+                        min="1" 
+                        max="60"
+                        class="w-full max-w-xs px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                    <div id="estimated_duration_manual" class="text-sm text-gray-600 hidden">
+                        <span class="font-medium text-blue-600">Duración estimada:</span>
+                        <span id="estimated_duration_value_manual" class="ml-1">-</span>
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">
+                    La duración estimada se calcula automáticamente según el contenido del guión
+                </p>
             </div>
 
             <!-- Actions -->
@@ -556,6 +566,67 @@ function filterVoicesManual(searchTerm) {
         }
     });
 }
+
+// ==================
+// ESTIMATED DURATION CALCULATION
+// ==================
+
+/**
+ * Calcula la duración estimada del video basada en el número de palabras del script
+ * Fórmula: palabras / palabras_por_segundo / 60 = minutos
+ * Velocidad promedio de lectura/narración: ~2.5 palabras por segundo
+ */
+function calculateEstimatedDuration() {
+    const scriptTextarea = document.getElementById('script_content_manual');
+    const estimatedDurationDiv = document.getElementById('estimated_duration_manual');
+    const estimatedDurationValue = document.getElementById('estimated_duration_value_manual');
+    
+    if (!scriptTextarea || !estimatedDurationDiv || !estimatedDurationValue) {
+        return;
+    }
+    
+    const scriptText = scriptTextarea.value.trim();
+    
+    if (!scriptText) {
+        estimatedDurationDiv.classList.add('hidden');
+        return;
+    }
+    
+    // Contar palabras (separadas por espacios, saltos de línea, etc.)
+    const words = scriptText.split(/\s+/).filter(word => word.length > 0);
+    const wordCount = words.length;
+    
+    if (wordCount === 0) {
+        estimatedDurationDiv.classList.add('hidden');
+        return;
+    }
+    
+    // Calcular duración estimada
+    // Velocidad promedio de narración: 2.5 palabras por segundo
+    const WORDS_PER_SECOND = 2.5;
+    const estimatedTotalSeconds = wordCount / WORDS_PER_SECOND;
+    const estimatedMinutes = Math.floor(estimatedTotalSeconds / 60);
+    const estimatedSeconds = Math.floor(estimatedTotalSeconds % 60);
+    
+    // Formatear como "X min Y seg"
+    let durationText = '';
+    if (estimatedMinutes > 0) {
+        durationText = `${estimatedMinutes} min`;
+        if (estimatedSeconds > 0) {
+            durationText += ` ${estimatedSeconds} seg`;
+        }
+    } else {
+        durationText = `${estimatedSeconds} seg`;
+    }
+    
+    estimatedDurationValue.textContent = durationText;
+    estimatedDurationDiv.classList.remove('hidden');
+}
+
+// Calcular duración estimada cuando se carga la página (por si hay contenido inicial)
+document.addEventListener('DOMContentLoaded', function() {
+    calculateEstimatedDuration();
+});
 </script>
 {% endblock %}
 
