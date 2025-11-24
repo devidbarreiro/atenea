@@ -7,7 +7,7 @@
     mobileMenuOpen: false,
     toggleSidebar() {
         this.sidebarCollapsed = !this.sidebarCollapsed;
-        localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed);
+        localStorage.setItem('sidebarCollapsed', String(this.sidebarCollapsed));
         // Disparar evento para sincronizar con otros componentes
         window.dispatchEvent(new CustomEvent('sidebar-toggled', { detail: { collapsed: this.sidebarCollapsed } }));
     },
@@ -24,7 +24,13 @@
     'translate-x-0': mobileMenuOpen
 }"
 class="fixed left-0 top-0 h-screen bg-white border-r border-gray-200 z-40 transition-all duration-300 flex flex-col lg:translate-x-0"
-x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; })">
+x-init="
+    sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    window.addEventListener('sidebar-toggled', (e) => { 
+        sidebarCollapsed = e.detail.collapsed;
+        localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
+    });
+">
 
     <!-- Logo y botón colapsar -->
     <div class="flex items-center justify-between p-4 border-b border-gray-200 h-16">
@@ -89,6 +95,18 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
                 </svg>
                 <span x-show="!sidebarCollapsed">Inicio</span>
+            </a>
+
+            <!-- Chat de Creación -->
+            <a href="{% url 'core:creation_agent' %}"
+               class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors {% if request.path == '/chat/' %}bg-gray-100 text-gray-900{% else %}text-gray-700 hover:bg-gray-50{% endif %}"
+               :class="{ 'justify-center': sidebarCollapsed }"
+               :title="sidebarCollapsed ? 'Chat' : ''">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                </svg>
+                <span x-show="!sidebarCollapsed" class="flex-1">Chat de Creación</span>
+                <span x-show="!sidebarCollapsed" class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Beta</span>
             </a>
 
             <!-- Proyectos -->
@@ -245,11 +263,44 @@ x-init="sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'; 
 
     <!-- Sección Inferior -->
     <div class="border-t border-gray-200 p-4 space-y-2">
-        <!-- Banner Upgrade (opcional) -->
-        <div x-show="!sidebarCollapsed" class="bg-gray-100 rounded-lg p-3 text-center">
-            <div class="text-sm font-semibold text-gray-900 mb-1">Upgrade</div>
-            <div class="text-xs text-gray-600">Desbloquea más funciones</div>
-        </div>
+        <!-- Barra de Créditos -->
+        {% load static %}
+        {% url 'core:credits_dashboard' as credits_url %}
+        {% if user.is_authenticated %}
+            {% if user.credits %}
+                {% with credits=user.credits %}
+                    <a href="{{ credits_url }}" 
+                       class="block bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 hover:from-blue-100 hover:to-indigo-100 transition-all cursor-pointer"
+                       :class="sidebarCollapsed ? 'p-2' : ''"
+                       title="Ver créditos">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-gray-700" x-show="!sidebarCollapsed">Créditos</span>
+                            <span class="text-sm font-bold text-gray-900" x-show="!sidebarCollapsed">{{ credits.credits|floatformat:0 }}</span>
+                            <span class="text-lg font-bold text-gray-900" x-show="sidebarCollapsed">{{ credits.credits|floatformat:0 }}</span>
+                        </div>
+                        <!-- Barra de progreso -->
+                        <div x-show="!sidebarCollapsed" class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-300 {% if credits.usage_percentage >= 90 %}bg-red-500{% elif credits.usage_percentage >= 75 %}bg-yellow-500{% else %}bg-blue-500{% endif %}" 
+                                 style="width: {{ credits.usage_percentage }}%"></div>
+                        </div>
+                        <div x-show="!sidebarCollapsed" class="text-xs text-gray-600 mt-1">
+                            {{ credits.credits_remaining|floatformat:0 }} / {{ credits.monthly_limit }} restantes este mes
+                        </div>
+                    </a>
+                {% endwith %}
+            {% else %}
+                <a href="{{ credits_url }}" 
+                   class="block bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 hover:from-blue-100 hover:to-indigo-100 transition-all cursor-pointer"
+                   :class="sidebarCollapsed ? 'p-2' : ''"
+                   title="Ver créditos">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-700" x-show="!sidebarCollapsed">Créditos</span>
+                        <span class="text-sm font-bold text-gray-900" x-show="!sidebarCollapsed">0</span>
+                        <span class="text-lg font-bold text-gray-900" x-show="sidebarCollapsed">0</span>
+                    </div>
+                </a>
+            {% endif %}
+        {% endif %}
 
         <!-- Barra de utilidades -->
         <div class="flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">

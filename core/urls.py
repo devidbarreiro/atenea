@@ -152,5 +152,12 @@ urlpatterns = [
     path('assistant/', views.DocumentationAssistantView.as_view(), name='doc_assistant'),
     path('assistant/chat/', views.DocumentationAssistantChatView.as_view(), name='doc_assistant_chat'),
     path('assistant/reindex/', views.DocumentationAssistantReindexView.as_view(), name='doc_assistant_reindex'),
+    
+    # Creation Agent (Chat de Creación)
+    path('chat/', views.CreationAgentView.as_view(), name='creation_agent'),
+    path('chat/message/', views.CreationAgentChatView.as_view(), name='creation_agent_chat'),
+    
+    # Credits Dashboard
+    path('credits/', views.CreditsDashboardView.as_view(), name='credits_dashboard'),
 ]
 

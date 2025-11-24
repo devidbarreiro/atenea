@@ -209,4 +209,3 @@ La función `renderContent()` en `templates/chat/creation_agent.html`:
 4. ⏳ Implementar `create_audio_tool` y probar renderizado
 5. ⏳ Agregar previews de guiones (texto formateado)
 
-

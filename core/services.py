@@ -51,6 +51,20 @@ class ValidationException(ServiceException):
     pass
 
 
+# Importar excepciones de créditos para uso en servicios
+try:
+    from .services.credits import InsufficientCreditsException, RateLimitExceededException
+except ImportError:
+    # Si el módulo no existe aún, definir excepciones básicas
+    class InsufficientCreditsException(ServiceException):
+        """Excepción cuando no hay suficientes créditos"""
+        pass
+    
+    class RateLimitExceededException(ServiceException):
+        """Excepción cuando se excede el límite mensual"""
+        pass
+
+
 # ====================
 # PROJECT SERVICE
 # ====================
@@ -669,10 +683,34 @@ class VideoService:
         
         Raises:
             VideoGenerationException: Si falla la generación
+            InsufficientCreditsException: Si no hay suficientes créditos
+            RateLimitExceededException: Si se excede el límite mensual
         """
         # Validar estado
         if video.status in ['processing', 'completed']:
             raise ValidationException(f'El video ya está en estado: {video.get_status_display()}')
+        
+        # Validar créditos ANTES de generar
+        if video.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            estimated_cost = CreditService.estimate_video_cost(
+                video_type=video.type,
+                duration=video.config.get('duration', 8),
+                config=video.config
+            )
+            
+            if estimated_cost > 0:
+                if not CreditService.has_enough_credits(video.created_by, estimated_cost):
+                    raise InsufficientCreditsException(
+                        f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
+                        f"Créditos disponibles: {CreditService.get_or_create_user_credits(video.created_by).credits}"
+                    )
+                
+                try:
+                    CreditService.check_rate_limit(video.created_by, estimated_cost)
+                except RateLimitExceededException as e:
+                    raise ValidationException(str(e))
         
         # Marcar como procesando
         video.mark_as_processing()
@@ -1485,10 +1523,29 @@ class ImageService:
         
         Raises:
             ImageGenerationException: Si falla la generación
+            InsufficientCreditsException: Si no hay suficientes créditos
+            RateLimitExceededException: Si se excede el límite mensual
         """
         # Validar estado
         if image.status in ['processing', 'completed']:
             raise ValidationException(f'La imagen ya está en estado: {image.get_status_display()}')
+        
+        # Validar créditos ANTES de generar
+        if image.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            estimated_cost = CreditService.estimate_image_cost()
+            
+            if not CreditService.has_enough_credits(image.created_by, estimated_cost):
+                raise InsufficientCreditsException(
+                    f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
+                    f"Créditos disponibles: {CreditService.get_or_create_user_credits(image.created_by).credits}"
+                )
+            
+            try:
+                CreditService.check_rate_limit(image.created_by, estimated_cost)
+            except RateLimitExceededException as e:
+                raise ValidationException(str(e))
         
         # Marcar como procesando
         image.mark_as_processing()
@@ -1594,13 +1651,18 @@ class ImageService:
     def _save_generated_image(
         self,
         image_data: bytes,
-        project: Project,
-        image_id: int
+        project: Project = None,
+        image_id: int = None
     ) -> str:
         """Guarda imagen generada en GCS"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+            
+            # Construir path según si hay proyecto o no
+            if project:
+                gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+            else:
+                gcs_destination = f"images/no_project/image_{image_id}/{timestamp}_generated.png"
             
             logger.info(f"Guardando imagen generada en GCS: {gcs_destination}")
             gcs_path = gcs_storage.upload_from_bytes(
@@ -2174,8 +2236,27 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             
         Raises:
             ImageGenerationException: Si falla la generación
+            InsufficientCreditsException: Si no hay suficientes créditos
+            RateLimitExceededException: Si se excede el límite mensual
         """
         from .models import Scene
+        
+        # Validar créditos ANTES de generar
+        if scene.script.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            estimated_cost = CreditService.estimate_image_cost()
+            
+            if not CreditService.has_enough_credits(scene.script.created_by, estimated_cost):
+                raise InsufficientCreditsException(
+                    f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
+                    f"Créditos disponibles: {CreditService.get_or_create_user_credits(scene.script.created_by).credits}"
+                )
+            
+            try:
+                CreditService.check_rate_limit(scene.script.created_by, estimated_cost)
+            except RateLimitExceededException as e:
+                raise ValidationException(str(e))
         
         try:
             # Marcar como generando
@@ -2225,7 +2306,28 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             
         Raises:
             VideoGenerationException: Si falla la generación
+            InsufficientCreditsException: Si no hay suficientes créditos
+            RateLimitExceededException: Si se excede el límite mensual
         """
+        # Validar créditos ANTES de generar
+        if scene.script.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            estimated_cost = CreditService.calculate_scene_video_cost(scene)
+            
+            if estimated_cost > 0:
+                if not CreditService.has_enough_credits(scene.script.created_by, estimated_cost):
+                    raise InsufficientCreditsException(
+                        f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos "
+                        f"({scene.duration_sec}s de {scene.ai_service}). "
+                        f"Créditos disponibles: {CreditService.get_or_create_user_credits(scene.script.created_by).credits}"
+                    )
+                
+                try:
+                    CreditService.check_rate_limit(scene.script.created_by, estimated_cost)
+                except RateLimitExceededException as e:
+                    raise ValidationException(str(e))
+        
         try:
             # Validar que la configuración esté completa
             if not scene.ai_service:
