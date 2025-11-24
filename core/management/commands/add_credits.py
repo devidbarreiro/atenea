@@ -34,6 +34,11 @@ class Command(BaseCommand):
             raise CommandError('La cantidad debe ser mayor a 0')
 
         try:
+            # Obtener créditos antes de agregar para mostrar saldo anterior
+            from core.services.credits import CreditService
+            credits_before = CreditService.get_or_create_user_credits(user)
+            balance_before = credits_before.credits
+            
             credits = CreditService.add_credits(
                 user=user,
                 amount=amount,
@@ -44,7 +49,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(
                     f'✓ {amount} créditos asignados a {username}\n'
-                    f'  Saldo anterior: {credits.total_purchased - amount}\n'
+                    f'  Saldo anterior: {balance_before} créditos\n'
                     f'  Saldo actual: {credits.credits} créditos'
                 )
             )
