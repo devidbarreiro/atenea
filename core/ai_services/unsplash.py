@@ -157,7 +157,21 @@ class UnsplashClient:
         
         parsed = []
         for photo in results['results']:
-            urls = photo.get('urls', {})
+            # Validar estructuras anidadas para evitar AttributeError
+            urls = photo.get('urls') or {}
+            user = photo.get('user') or {}
+            user_links = user.get('links') or {}
+            photo_links = photo.get('links') or {}
+            
+            # Mapear orientación de Unsplash al formato interno
+            unsplash_orientation = photo.get('orientation', 'unknown')
+            orientation_map = {
+                'landscape': 'horizontal',
+                'portrait': 'vertical',
+                'squarish': 'square'
+            }
+            mapped_orientation = orientation_map.get(unsplash_orientation, 'unknown')
+            
             parsed_item = {
                 'id': str(photo.get('id', '')),
                 'title': photo.get('description') or photo.get('alt_description', 'Sin título'),
@@ -168,10 +182,10 @@ class UnsplashClient:
                 'download_url': urls.get('full', ''),
                 'width': photo.get('width', 0),
                 'height': photo.get('height', 0),
-                'orientation': photo.get('orientation', 'unknown'),
-                'photographer': photo.get('user', {}).get('name', ''),
-                'photographer_url': photo.get('user', {}).get('links', {}).get('html', ''),
-                'url': photo.get('links', {}).get('html', ''),
+                'orientation': mapped_orientation,
+                'photographer': user.get('name', ''),
+                'photographer_url': user_links.get('html', ''),
+                'url': photo_links.get('html', ''),
                 'is_premium': False  # Unsplash es siempre gratuito
             }
             

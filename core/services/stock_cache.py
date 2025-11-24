@@ -47,10 +47,13 @@ class StockCache:
         normalized_query = query.lower().strip()
         
         # Crear hash del contenido
+        # Normalizar sources: None y [] son equivalentes para evitar colisiones
+        normalized_sources = sorted(sources) if sources else []
+        
         cache_data = {
             'query': normalized_query,
             'type': content_type,
-            'sources': sorted(sources) if sources else None,
+            'sources': normalized_sources,
             'orientation': orientation,
             'license': license_filter,
             'audio_type': audio_type,

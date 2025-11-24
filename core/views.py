@@ -5913,7 +5913,14 @@ class StockDownloadView(LoginRequiredMixin, View):
             project = None
             if project_id:
                 try:
-                    project = Project.objects.get(id=project_id, owner=request.user)
+                    project = Project.objects.get(id=project_id)
+                    # Verificar acceso usando ProjectService (incluye owner y colaboradores)
+                    from core.services import ProjectService
+                    if not ProjectService.user_has_access(project, request.user):
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'No tienes acceso a este proyecto'
+                        }, status=403)
                 except Project.DoesNotExist:
                     return JsonResponse({
                         'success': False,
@@ -5928,47 +5935,114 @@ class StockDownloadView(LoginRequiredMixin, View):
                 }
                 response = requests.get(download_url, timeout=30, stream=True, headers=headers)
                 response.raise_for_status()
-                file_content = BytesIO(response.content)
                 
-                # Obtener content-type HTTP y extensión
+                # Leer contenido en chunks para manejar archivos grandes
+                file_bytes = b''
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file_bytes += chunk
+                        # Limitar tamaño máximo (100MB)
+                        if len(file_bytes) > 100 * 1024 * 1024:
+                            raise ValueError('Archivo demasiado grande (máximo 100MB)')
+                
+                file_content = BytesIO(file_bytes)
+                
+                # Obtener content-type HTTP
                 http_content_type = response.headers.get('Content-Type', '')
-                # Determinar extensión desde content-type HTTP o URL
+                
+                # Detectar tipo de archivo usando magic bytes (más confiable que Content-Type)
+                file_content.seek(0)
+                first_bytes = file_content.read(16)
+                file_content.seek(0)
+                
                 file_extension = None
-                if http_content_type:
+                detected_mime = None
+                
+                # Detección por magic bytes
+                if first_bytes.startswith(b'\xFF\xD8\xFF'):
+                    file_extension = 'jpg'
+                    detected_mime = 'image/jpeg'
+                elif first_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                    file_extension = 'png'
+                    detected_mime = 'image/png'
+                elif first_bytes.startswith(b'GIF87a') or first_bytes.startswith(b'GIF89a'):
+                    file_extension = 'gif'
+                    detected_mime = 'image/gif'
+                elif first_bytes.startswith(b'RIFF') and len(first_bytes) > 8 and first_bytes[8:12] == b'WEBP':
+                    file_extension = 'webp'
+                    detected_mime = 'image/webp'
+                elif first_bytes.startswith(b'\x00\x00\x00\x18ftypmp4') or first_bytes.startswith(b'\x00\x00\x00\x20ftypmp4'):
+                    file_extension = 'mp4'
+                    detected_mime = 'video/mp4'
+                elif first_bytes.startswith(b'\x1a\x45\xdf\xa3'):
+                    file_extension = 'webm'
+                    detected_mime = 'video/webm'
+                elif first_bytes.startswith(b'ID3') or first_bytes.startswith(b'\xFF\xFB') or first_bytes.startswith(b'\xFF\xF3'):
+                    file_extension = 'mp3'
+                    detected_mime = 'audio/mpeg'
+                elif first_bytes.startswith(b'RIFF') and len(first_bytes) > 8 and first_bytes[8:12] == b'WAVE':
+                    file_extension = 'wav'
+                    detected_mime = 'audio/wav'
+                elif first_bytes.startswith(b'OggS'):
+                    file_extension = 'ogg'
+                    detected_mime = 'audio/ogg'
+                
+                # Si no se detectó por magic bytes, usar Content-Type HTTP
+                if not file_extension and http_content_type:
                     if 'image/jpeg' in http_content_type or 'image/jpg' in http_content_type:
                         file_extension = 'jpg'
+                        detected_mime = 'image/jpeg'
                     elif 'image/png' in http_content_type:
                         file_extension = 'png'
+                        detected_mime = 'image/png'
                     elif 'image/gif' in http_content_type:
                         file_extension = 'gif'
+                        detected_mime = 'image/gif'
                     elif 'image/webp' in http_content_type:
                         file_extension = 'webp'
+                        detected_mime = 'image/webp'
                     elif 'video/mp4' in http_content_type:
                         file_extension = 'mp4'
+                        detected_mime = 'video/mp4'
                     elif 'video/webm' in http_content_type:
                         file_extension = 'webm'
+                        detected_mime = 'video/webm'
                     elif 'audio/mpeg' in http_content_type or 'audio/mp3' in http_content_type:
                         file_extension = 'mp3'
+                        detected_mime = 'audio/mpeg'
                     elif 'audio/wav' in http_content_type:
                         file_extension = 'wav'
+                        detected_mime = 'audio/wav'
                     elif 'audio/ogg' in http_content_type:
                         file_extension = 'ogg'
+                        detected_mime = 'audio/ogg'
                 
-                # Si no se pudo determinar desde content-type HTTP, intentar desde URL
+                # Si no se pudo determinar desde magic bytes ni Content-Type, intentar desde URL
                 if not file_extension:
                     url_path = download_url.split('?')[0]  # Remover query params
-                    file_extension = url_path.split('.')[-1].lower() if '.' in url_path else None
+                    url_ext = url_path.split('.')[-1].lower() if '.' in url_path else None
+                    # Validar extensión común
+                    valid_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mp3', 'wav', 'ogg']
+                    if url_ext in valid_extensions:
+                        file_extension = url_ext
                 
+                # Fallback según tipo de contenido
                 if not file_extension:
-                    # Fallback según tipo de contenido
                     if content_type == 'image':
                         file_extension = 'jpg'
+                        detected_mime = 'image/jpeg'
                     elif content_type == 'video':
                         file_extension = 'mp4'
+                        detected_mime = 'video/mp4'
                     elif content_type == 'audio':
                         file_extension = 'mp3'
+                        detected_mime = 'audio/mpeg'
                     else:
                         file_extension = 'bin'
+                        detected_mime = 'application/octet-stream'
+                
+                # Usar MIME detectado por magic bytes si está disponible, sino usar HTTP Content-Type
+                final_content_type = detected_mime or http_content_type
                 
             except Exception as e:
                 logger.error(f"Error descargando archivo de stock desde {download_url}: {e}", exc_info=True)
@@ -6006,7 +6080,7 @@ class StockDownloadView(LoginRequiredMixin, View):
                     gcs_full_path = gcs_storage.upload_from_bytes(
                         file_content.read(),
                         gcs_path,
-                        content_type=http_content_type or 'audio/mpeg'
+                        content_type=final_content_type or 'audio/mpeg'
                     )
                     
                     # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
@@ -6047,7 +6121,7 @@ class StockDownloadView(LoginRequiredMixin, View):
                     gcs_full_path = gcs_storage.upload_from_bytes(
                         file_content.read(),
                         gcs_path,
-                        content_type=http_content_type or 'audio/mpeg'
+                        content_type=final_content_type or 'audio/mpeg'
                     )
                     
                     # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
@@ -6087,7 +6161,7 @@ class StockDownloadView(LoginRequiredMixin, View):
                 gcs_full_path = gcs_storage.upload_from_bytes(
                     file_content.read(),
                     gcs_path,
-                    content_type=http_content_type or 'image/jpeg'
+                    content_type=final_content_type or 'image/jpeg'
                 )
                 
                 # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
@@ -6127,7 +6201,7 @@ class StockDownloadView(LoginRequiredMixin, View):
                 gcs_full_path = gcs_storage.upload_from_bytes(
                     file_content.read(),
                     gcs_path,
-                    content_type=http_content_type or 'video/mp4'
+                    content_type=final_content_type or 'video/mp4'
                 )
                 
                 # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)

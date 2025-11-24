@@ -113,6 +113,18 @@ class StockService:
         if sources is None:
             sources = list(self.clients.keys())
         
+        # Validar que haya fuentes disponibles
+        if not sources:
+            return {
+                'query': query,
+                'total': 0,
+                'sources_searched': [],
+                'results_by_source': {},
+                'results': [],
+                'page': page,
+                'per_page': per_page
+            }
+        
         if max_results_per_source is None:
             # Distribuir resultados equitativamente entre fuentes
             max_results_per_source = (per_page // len(sources)) + 5  # Buffer extra
@@ -272,6 +284,18 @@ class StockService:
         """
         if sources is None:
             sources = list(self.clients.keys())
+        
+        # Validar que haya fuentes disponibles
+        if not sources:
+            return {
+                'query': query,
+                'total': 0,
+                'sources_searched': [],
+                'results_by_source': {},
+                'results': [],
+                'page': page,
+                'per_page': per_page
+            }
         
         if max_results_per_source is None:
             max_results_per_source = (per_page // len(sources)) + 5

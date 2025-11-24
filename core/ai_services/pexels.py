@@ -214,14 +214,17 @@ class PexelsClient:
         
         parsed = []
         for photo in results['photos']:
+            # Validar src para evitar AttributeError
+            src = photo.get('src') or {}
+            
             parsed_item = {
                 'id': str(photo.get('id', '')),
                 'title': photo.get('alt', 'Sin título'),
                 'type': 'photo',
                 'source': 'pexels',
-                'thumbnail': photo.get('src', {}).get('medium', ''),
-                'preview': photo.get('src', {}).get('large', ''),
-                'download_url': photo.get('src', {}).get('original', ''),
+                'thumbnail': src.get('medium', ''),
+                'preview': src.get('large', ''),
+                'download_url': src.get('original', ''),
                 'width': photo.get('width', 0),
                 'height': photo.get('height', 0),
                 'orientation': self._determine_orientation(
@@ -257,12 +260,17 @@ class PexelsClient:
         parsed = []
         for video in results['videos']:
             # Obtener la mejor calidad disponible
-            video_files = video.get('video_files', [])
-            best_quality = max(
-                video_files,
-                key=lambda x: x.get('width', 0) * x.get('height', 0),
-                default={}
-            )
+            video_files = video.get('video_files', []) or []
+            best_quality = {}
+            if video_files:
+                best_quality = max(
+                    video_files,
+                    key=lambda x: x.get('width', 0) * x.get('height', 0),
+                    default={}
+                )
+            
+            # Validar user para evitar AttributeError
+            user = video.get('user') or {}
             
             parsed_item = {
                 'id': str(video.get('id', '')),
@@ -270,17 +278,17 @@ class PexelsClient:
                 'type': 'video',
                 'source': 'pexels',
                 'thumbnail': video.get('image', ''),
-                'preview': best_quality.get('link', ''),
-                'download_url': best_quality.get('link', ''),
-                'width': best_quality.get('width', 0),
-                'height': best_quality.get('height', 0),
+                'preview': best_quality.get('link', '') if best_quality else '',
+                'download_url': best_quality.get('link', '') if best_quality else '',
+                'width': best_quality.get('width', 0) if best_quality else 0,
+                'height': best_quality.get('height', 0) if best_quality else 0,
                 'duration': video.get('duration', 0),
                 'orientation': self._determine_orientation(
-                    best_quality.get('width', 0),
-                    best_quality.get('height', 0)
+                    best_quality.get('width', 0) if best_quality else 0,
+                    best_quality.get('height', 0) if best_quality else 0
                 ),
-                'photographer': video.get('user', {}).get('name', ''),
-                'photographer_url': video.get('user', {}).get('url', ''),
+                'photographer': user.get('name', ''),
+                'photographer_url': user.get('url', ''),
                 'url': video.get('url', ''),
                 'is_premium': False  # Pexels es siempre gratuito
             }

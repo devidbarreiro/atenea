@@ -281,6 +281,13 @@ class PixabayClient:
         
         parsed = []
         for image in results['hits']:
+            # Validar user_id antes de construir URL
+            user = image.get('user', '')
+            user_id = image.get('user_id')
+            photographer_url = ''
+            if user and user_id:
+                photographer_url = f"https://pixabay.com/users/{user}-{user_id}/"
+            
             parsed_item = {
                 'id': str(image.get('id', '')),
                 'title': image.get('tags', 'Sin título'),
@@ -295,8 +302,8 @@ class PixabayClient:
                     image.get('imageWidth', 0),
                     image.get('imageHeight', 0)
                 ),
-                'photographer': image.get('user', ''),
-                'photographer_url': f"https://pixabay.com/users/{image.get('user', '')}-{image.get('user_id', '')}/",
+                'photographer': user,
+                'photographer_url': photographer_url,
                 'url': image.get('pageURL', ''),
                 'is_premium': False  # Pixabay es siempre gratuito
             }
@@ -324,8 +331,15 @@ class PixabayClient:
         parsed = []
         for video in results['hits']:
             # Obtener la mejor calidad disponible
-            videos = video.get('videos', {})
-            best_quality = videos.get('large', {}) or videos.get('medium', {}) or videos.get('small', {})
+            videos = video.get('videos', {}) or {}
+            best_quality = videos.get('large') or videos.get('medium') or videos.get('small') or {}
+            
+            # Validar user_id antes de construir URL
+            user = video.get('user', '')
+            user_id = video.get('user_id')
+            photographer_url = ''
+            if user and user_id:
+                photographer_url = f"https://pixabay.com/users/{user}-{user_id}/"
             
             parsed_item = {
                 'id': str(video.get('id', '')),
@@ -342,13 +356,14 @@ class PixabayClient:
                     best_quality.get('width', 0) if best_quality else 0,
                     best_quality.get('height', 0) if best_quality else 0
                 ),
-                'photographer': video.get('user', ''),
-                'photographer_url': f"https://pixabay.com/users/{video.get('user', '')}-{video.get('user_id', '')}/",
+                'photographer': user,
+                'photographer_url': photographer_url,
                 'url': video.get('pageURL', ''),
                 'is_premium': False  # Pixabay es siempre gratuito
             }
             
-            if parsed_item['thumbnail'] or parsed_item['preview']:
+            # Solo agregar si tiene URL de descarga o preview válida
+            if parsed_item['preview'] or parsed_item['download_url']:
                 parsed.append(parsed_item)
         
         logger.info(f"Parseados {len(parsed)} resultados de videos de Pixabay")
@@ -370,6 +385,13 @@ class PixabayClient:
         
         parsed = []
         for audio in results['hits']:
+            # Validar user_id antes de construir URL
+            user = audio.get('user', '')
+            user_id = audio.get('user_id')
+            author_url = ''
+            if user and user_id:
+                author_url = f"https://pixabay.com/users/{user}-{user_id}/"
+            
             parsed_item = {
                 'id': str(audio.get('id', '')),
                 'title': audio.get('title', 'Sin título'),
@@ -382,8 +404,8 @@ class PixabayClient:
                 'duration': audio.get('duration', 0),
                 'bitrate': audio.get('bitrate', 0),
                 'sample_rate': audio.get('sample_rate', 0),
-                'author': audio.get('user', ''),
-                'author_url': f"https://pixabay.com/users/{audio.get('user', '')}-{audio.get('user_id', '')}/",
+                'author': user,
+                'author_url': author_url,
                 'url': audio.get('pageURL', ''),
                 'is_premium': False  # Pixabay es siempre gratuito
             }

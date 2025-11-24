@@ -657,6 +657,33 @@ function stockSearch() {
             if (this.viewMode === 'single') {
                 this.setupKeyboardNavigation();
             }
+            
+            // Configurar listener para navegación del navegador (back/forward)
+            this.setupPopstateListener();
+        },
+        
+        setupPopstateListener() {
+            // Remover listener anterior si existe
+            if (this._popstateHandler) {
+                window.removeEventListener('popstate', this._popstateHandler);
+                this._popstateHandler = null;
+            }
+            
+            // Crear nuevo handler
+            this._popstateHandler = () => {
+                this.readUrlParams();
+                if (this.query) {
+                    this.search();
+                } else {
+                    this.loadFeaturedContent();
+                }
+                // Reconfigurar navegación de teclado si cambió el modo de vista
+                if (this.viewMode === 'single') {
+                    this.setupKeyboardNavigation();
+                }
+            };
+            
+            window.addEventListener('popstate', this._popstateHandler);
         },
 
         readUrlParams() {
@@ -687,6 +714,30 @@ function stockSearch() {
         getUrlParam(name) {
             const params = new URLSearchParams(window.location.search);
             return params.get(name);
+        },
+        
+        getCSRFToken() {
+            // Intentar obtener CSRF token de múltiples formas
+            // 1. Desde input hidden con name=csrfmiddlewaretoken
+            let token = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+            if (token) return token;
+            
+            // 2. Desde cookie csrftoken
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    token = value;
+                    break;
+                }
+            }
+            if (token) return token;
+            
+            // 3. Desde meta tag
+            const metaToken = document.querySelector('meta[name=csrf-token]')?.content;
+            if (metaToken) return metaToken;
+            
+            return null;
         },
 
         updateUrl(updateParams = {}) {
@@ -1071,12 +1122,19 @@ function stockSearch() {
         async downloadItem(item) {
             this.downloadLoading = true;
             try {
+                // Obtener CSRF token de forma segura
+                const csrfToken = this.getCSRFToken();
+                if (!csrfToken) {
+                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    return;
+                }
+                
                 // Descargar y guardar en BD usando la API
                 const response = await fetch('/api/stock/download/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        'X-CSRFToken': csrfToken
                     },
                     body: JSON.stringify({
                         item: item,
@@ -1122,12 +1180,19 @@ function stockSearch() {
 
             this.downloadLoading = true;
             try {
+                // Obtener CSRF token de forma segura
+                const csrfToken = this.getCSRFToken();
+                if (!csrfToken) {
+                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    return;
+                }
+                
                 // Descargar y guardar en BD con proyecto asignado
                 const response = await fetch('/api/stock/download/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        'X-CSRFToken': csrfToken
                     },
                     body: JSON.stringify({
                         item: this.selectedItem,
