@@ -9,6 +9,7 @@ from django.views.generic.edit import FormView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin, PermissionRequiredMixin
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.http import Http404
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
@@ -5556,3 +5557,598 @@ class CreditsDashboardView(ServiceMixin, View):
         }
         
         return render(request, self.template_name, context)
+
+
+# ====================
+# STOCK SEARCH API
+# ====================
+
+class StockSearchView(View):
+    """Búsqueda unificada de contenido stock en múltiples APIs"""
+    
+    def get(self, request):
+        """
+        Busca imágenes, videos o audios en múltiples fuentes de stock
+        
+        Query params:
+            - query: Término de búsqueda (requerido)
+            - type: Tipo de contenido ('image', 'video' o 'audio', default: 'image')
+            - sources: Fuentes separadas por coma (freepik,pexels,unsplash,pixabay,freesound)
+            - orientation: horizontal, vertical, square (opcional, solo para images/videos)
+            - license: all, free, premium (solo para Freepik, default: 'all')
+            - audio_type: music, sound_effects, all (solo para audio, default: 'all')
+            - page: Número de página (default: 1)
+            - per_page: Resultados por página (default: 20)
+            - use_cache: Usar caché (default: true)
+        """
+        from core.services.stock_service import StockService
+        from core.services.stock_cache import StockCache
+        
+        query = request.GET.get('query')
+        if not query:
+            return JsonResponse({
+                'success': False,
+                'error': {
+                    'code': 'MISSING_QUERY',
+                    'message': 'El parámetro "query" es requerido'
+                }
+            }, status=400)
+        
+        # Validar tipo de contenido
+        content_type = request.GET.get('type', 'image').lower()
+        if content_type not in ['image', 'video', 'audio']:
+            return JsonResponse({
+                'success': False,
+                'error': {
+                    'code': 'INVALID_TYPE',
+                    'message': 'El parámetro "type" debe ser "image", "video" o "audio"'
+                }
+            }, status=400)
+        
+        # Parsear fuentes
+        sources_str = request.GET.get('sources', '')
+        sources = None
+        if sources_str:
+            sources = [s.strip() for s in sources_str.split(',') if s.strip()]
+        
+        # Parsear orientación
+        orientation = request.GET.get('orientation', '').lower()
+        if orientation and orientation not in ['horizontal', 'vertical', 'square']:
+            orientation = None
+        
+        # Parsear otros parámetros con validación
+        license_filter = request.GET.get('license', 'all')
+        if license_filter not in ['all', 'free', 'premium']:
+            license_filter = 'all'
+        
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+        
+        try:
+            per_page = max(1, min(100, int(request.GET.get('per_page', 20))))
+        except (ValueError, TypeError):
+            per_page = 20
+        
+        use_cache = request.GET.get('use_cache', 'true').lower() == 'true'
+        
+        try:
+            stock_service = StockService()
+            
+            # Verificar si hay fuentes disponibles
+            available_sources = stock_service.get_available_sources()
+            if not available_sources:
+                logger.warning("StockSearchView: No hay APIs de stock configuradas")
+                return JsonResponse({
+                    'success': False,
+                    'error': {
+                        'code': 'NO_SOURCES_CONFIGURED',
+                        'message': 'No hay APIs de stock configuradas. Verifica las API keys en settings.'
+                    }
+                }, status=500)
+            
+            # Filtrar fuentes solicitadas con las disponibles
+            if sources:
+                sources = [s for s in sources if s in available_sources]
+                if not sources:
+                    return JsonResponse({
+                        'success': False,
+                        'error': {
+                            'code': 'NO_AVAILABLE_SOURCES',
+                            'message': f'Las fuentes solicitadas no están disponibles. Fuentes disponibles: {", ".join(available_sources)}'
+                        }
+                    }, status=400)
+            else:
+                sources = available_sources
+            
+            # Intentar obtener del caché
+            cached_results = None
+            if use_cache:
+                try:
+                    cache_kwargs = {
+                        'query': query,
+                        'content_type': content_type,
+                        'sources': sources,
+                        'orientation': orientation,
+                        'license_filter': license_filter,
+                        'page': page,
+                        'per_page': per_page
+                    }
+                    if content_type == 'audio':
+                        audio_type = request.GET.get('audio_type', 'all')
+                        cache_kwargs['audio_type'] = audio_type if audio_type in ['music', 'sound_effects', 'all'] else 'all'
+                    cached_results = StockCache.get(**cache_kwargs)
+                except Exception as e:
+                    logger.warning(f"Error al obtener del caché: {e}", exc_info=True)
+            
+            if cached_results:
+                logger.info(f"Stock search cache HIT para '{query}'")
+                return JsonResponse({
+                    'success': True,
+                    'cached': True,
+                    'data': cached_results
+                })
+            
+            # Buscar en las APIs
+            if content_type == 'image':
+                results = stock_service.search_images(
+                    query=query,
+                    sources=sources,
+                    orientation=orientation,
+                    license_filter=license_filter,
+                    page=page,
+                    per_page=per_page
+                )
+            elif content_type == 'video':
+                results = stock_service.search_videos(
+                    query=query,
+                    sources=sources,
+                    orientation=orientation,
+                    page=page,
+                    per_page=per_page
+                )
+            else:  # audio
+                audio_type = request.GET.get('audio_type', 'all')  # 'music', 'sound_effects', 'all'
+                audio_type = audio_type if audio_type in ['music', 'sound_effects', 'all'] else 'all'
+                results = stock_service.search_audio(
+                    query=query,
+                    sources=sources,
+                    audio_type=audio_type,
+                    page=page,
+                    per_page=per_page
+                )
+            
+            # Guardar en caché
+            if use_cache:
+                try:
+                    cache_kwargs = {
+                        'query': query,
+                        'content_type': content_type,
+                        'results': results,
+                        'sources': sources,
+                        'orientation': orientation,
+                        'license_filter': license_filter,
+                        'page': page,
+                        'per_page': per_page
+                    }
+                    if content_type == 'audio':
+                        cache_kwargs['audio_type'] = audio_type
+                    StockCache.set(**cache_kwargs)
+                except Exception as e:
+                    logger.warning(f"Error al guardar en caché: {e}", exc_info=True)
+            
+            logger.info(f"Stock search para '{query}': {results.get('total', 0)} resultados de {len(sources)} fuentes")
+            
+            return JsonResponse({
+                'success': True,
+                'cached': False,
+                'data': results
+            })
+            
+        except Exception as e:
+            logger.error(f"Error en búsqueda de stock: {e}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': {
+                    'code': 'SEARCH_ERROR',
+                    'message': str(e)
+                }
+            }, status=500)
+
+
+class StockSourcesView(View):
+    """Lista las fuentes de stock disponibles"""
+    
+    def get(self, request):
+        """Retorna las fuentes de stock configuradas y disponibles"""
+        from core.services.stock_service import StockService
+        
+        try:
+            stock_service = StockService()
+            available_sources = stock_service.get_available_sources()
+            
+            return JsonResponse({
+                'success': True,
+                'sources': available_sources,
+                'total': len(available_sources)
+            })
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo fuentes de stock: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': {
+                    'code': 'SOURCES_ERROR',
+                    'message': str(e)
+                }
+            }, status=500)
+
+
+class StockListView(LoginRequiredMixin, View):
+    """Vista principal para búsqueda de contenido stock"""
+    template_name = 'stock/list.html'
+    
+    def get(self, request, **kwargs):
+        """Muestra la página de búsqueda de stock"""
+        from core.services.stock_service import StockService
+        
+        # Obtener parámetros de búsqueda
+        query = request.GET.get('q', '').strip()
+        # Obtener type desde kwargs (URL) o desde GET params
+        content_type = kwargs.get('type') or request.GET.get('type', 'image')
+        content_type = content_type.lower() if content_type else 'image'  # image, video, audio
+        sources_str = request.GET.get('sources', '')
+        orientation = request.GET.get('orientation', '')
+        license_filter = request.GET.get('license', 'all')
+        audio_type = request.GET.get('audio_type', 'all')  # Para audio: music, sound_effects, all
+        page = int(request.GET.get('page', 1))
+        
+        # Parsear fuentes
+        sources = None
+        if sources_str:
+            sources = [s.strip() for s in sources_str.split(',') if s.strip()]
+        
+        # Obtener fuentes disponibles y eliminar duplicados (case-insensitive)
+        stock_service = StockService()
+        available_sources_raw = stock_service.get_available_sources()
+        
+        # Eliminar duplicados case-insensitive manteniendo el formato original
+        seen_lower = set()
+        unique_sources = []
+        for source in available_sources_raw:
+            if source and isinstance(source, str):
+                source_clean = source.strip()
+                source_lower = source_clean.lower()
+                if source_lower and source_lower not in seen_lower:
+                    seen_lower.add(source_lower)
+                    unique_sources.append(source_clean)
+        
+        available_sources = unique_sources
+        logger.debug(f"Fuentes disponibles (sin duplicados): {available_sources}")
+        
+        # Obtener proyectos del usuario para el modal de mover a proyecto
+        user_projects = ProjectService.get_user_projects(request.user)
+        
+        # Eliminar duplicados por ID usando values() para evitar duplicados en la consulta
+        # y luego convertir a lista de diccionarios únicos
+        projects_dict = {}
+        for p in user_projects.only('id', 'name'):
+            if p.id not in projects_dict:
+                projects_dict[p.id] = {'id': p.id, 'name': p.name}
+        
+        # Convertir a lista y luego a JSON
+        unique_projects_list = list(projects_dict.values())
+        projects_json = json.dumps(unique_projects_list)
+        
+        context = {
+            'query': query,
+            'content_type': content_type,
+            'sources': sources or [],
+            'orientation': orientation,
+            'license_filter': license_filter,
+            'audio_type': audio_type,
+            'page': page,
+            'available_sources': json.dumps(available_sources),
+            'projects': projects_json
+        }
+        
+        return render(request, self.template_name, context)
+
+
+class StockDownloadView(LoginRequiredMixin, View):
+    """Vista para descargar contenido stock y guardarlo en BD"""
+    
+    def post(self, request):
+        """
+        Descarga contenido stock y lo guarda en BD como Audio/Music/Image/Video
+        
+        Body JSON:
+            - item: Objeto con datos del item de stock
+            - content_type: 'image', 'video', 'audio'
+            - project_id: ID del proyecto (opcional)
+        """
+        from django.core.files.base import ContentFile
+        import requests
+        from io import BytesIO
+        
+        try:
+            data = json.loads(request.body)
+            item = data.get('item')
+            content_type = data.get('content_type', 'image')
+            project_id = data.get('project_id')
+            
+            logger.info(f"StockDownloadView recibido: content_type={content_type}, project_id={project_id}, item_keys={list(item.keys()) if item else 'None'}")
+            
+            if not item:
+                logger.error(f"StockDownloadView: Item no proporcionado. Data recibida: {data}")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Item no proporcionado'
+                }, status=400)
+            
+            # Obtener la URL directa del archivo (priorizar download_url sobre url)
+            # download_url es la URL directa del archivo, url puede ser la página web
+            download_url = item.get('download_url') or item.get('url') or item.get('original_url')
+            
+            logger.info(f"StockDownloadView: download_url={download_url}, item.url={item.get('url')}, item.download_url={item.get('download_url')}")
+            
+            if not download_url:
+                logger.error(f"StockDownloadView: URL de descarga no disponible. Item recibido: {json.dumps(item, default=str)}")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'URL de descarga no disponible en el item'
+                }, status=400)
+            
+            # Obtener proyecto si se especificó
+            project = None
+            if project_id:
+                try:
+                    project = Project.objects.get(id=project_id, owner=request.user)
+                except Project.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Proyecto no encontrado'
+                    }, status=404)
+            
+            # Descargar el archivo desde la URL directa
+            try:
+                logger.info(f"Descargando archivo de stock desde: {download_url}")
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+                response = requests.get(download_url, timeout=30, stream=True, headers=headers)
+                response.raise_for_status()
+                file_content = BytesIO(response.content)
+                
+                # Obtener content-type HTTP y extensión
+                http_content_type = response.headers.get('Content-Type', '')
+                # Determinar extensión desde content-type HTTP o URL
+                file_extension = None
+                if http_content_type:
+                    if 'image/jpeg' in http_content_type or 'image/jpg' in http_content_type:
+                        file_extension = 'jpg'
+                    elif 'image/png' in http_content_type:
+                        file_extension = 'png'
+                    elif 'image/gif' in http_content_type:
+                        file_extension = 'gif'
+                    elif 'image/webp' in http_content_type:
+                        file_extension = 'webp'
+                    elif 'video/mp4' in http_content_type:
+                        file_extension = 'mp4'
+                    elif 'video/webm' in http_content_type:
+                        file_extension = 'webm'
+                    elif 'audio/mpeg' in http_content_type or 'audio/mp3' in http_content_type:
+                        file_extension = 'mp3'
+                    elif 'audio/wav' in http_content_type:
+                        file_extension = 'wav'
+                    elif 'audio/ogg' in http_content_type:
+                        file_extension = 'ogg'
+                
+                # Si no se pudo determinar desde content-type HTTP, intentar desde URL
+                if not file_extension:
+                    url_path = download_url.split('?')[0]  # Remover query params
+                    file_extension = url_path.split('.')[-1].lower() if '.' in url_path else None
+                
+                if not file_extension:
+                    # Fallback según tipo de contenido
+                    if content_type == 'image':
+                        file_extension = 'jpg'
+                    elif content_type == 'video':
+                        file_extension = 'mp4'
+                    elif content_type == 'audio':
+                        file_extension = 'mp3'
+                    else:
+                        file_extension = 'bin'
+                
+            except Exception as e:
+                logger.error(f"Error descargando archivo de stock desde {download_url}: {e}", exc_info=True)
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Error al descargar el archivo: {str(e)}'
+                }, status=500)
+            
+            # Guardar según el tipo de contenido
+            if content_type == 'audio':
+                # Determinar si es música o efecto de sonido
+                audio_type = item.get('audio_type', 'music')
+                
+                if audio_type == 'music':
+                    # Crear Music
+                    from core.storage.gcs import gcs_storage
+                    
+                    music = Music.objects.create(
+                        name=item.get('title', 'Música de stock'),
+                        prompt=item.get('description', ''),
+                        created_by=request.user,
+                        project=project,
+                        status='completed',
+                        duration_ms=item.get('duration', 0) * 1000 if item.get('duration') else 0
+                    )
+                    
+                    # Subir a GCS
+                    # Usar path con proyecto si está disponible, sino sin proyecto
+                    if project:
+                        gcs_path = f"projects/{project.id}/music/{music.id}/music.{file_extension}"
+                    else:
+                        gcs_path = f"music/{music.id}/music.{file_extension}"
+                    
+                    file_content.seek(0)
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content.read(),
+                        gcs_path,
+                        content_type=http_content_type or 'audio/mpeg'
+                    )
+                    
+                    # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
+                    music.gcs_path = gcs_full_path
+                    music.save()
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Música guardada correctamente',
+                        'item': {
+                            'id': music.id,
+                            'type': 'music',
+                            'name': music.name
+                        }
+                    })
+                else:
+                    # Crear Audio
+                    from core.storage.gcs import gcs_storage
+                    
+                    audio = Audio.objects.create(
+                        title=item.get('title', 'Audio de stock'),
+                        text=item.get('description', ''),
+                        voice_id='stock',
+                        voice_name='Stock Audio',
+                        created_by=request.user,
+                        project=project,
+                        status='completed'
+                    )
+                    
+                    # Subir a GCS
+                    # Usar path con proyecto si está disponible, sino sin proyecto
+                    if project:
+                        gcs_path = f"projects/{project.id}/audios/{audio.id}/audio.{file_extension}"
+                    else:
+                        gcs_path = f"audios/{audio.id}/audio.{file_extension}"
+                    
+                    file_content.seek(0)
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content.read(),
+                        gcs_path,
+                        content_type=http_content_type or 'audio/mpeg'
+                    )
+                    
+                    # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
+                    audio.gcs_path = gcs_full_path
+                    audio.save()
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Audio guardado correctamente',
+                        'item': {
+                            'id': audio.id,
+                            'type': 'audio',
+                            'title': audio.title
+                        }
+                    })
+            
+            elif content_type == 'image':
+                from core.storage.gcs import gcs_storage
+                
+                image = Image.objects.create(
+                    title=item.get('title', 'Imagen de stock'),
+                    prompt=item.get('description', ''),
+                    created_by=request.user,
+                    project=project,
+                    status='completed',
+                    type='text_to_image'
+                )
+                
+                # Subir a GCS
+                # Usar path con proyecto si está disponible, sino sin proyecto
+                if project:
+                    gcs_path = f"projects/{project.id}/images/{image.id}/image.{file_extension}"
+                else:
+                    gcs_path = f"images/{image.id}/image.{file_extension}"
+                
+                file_content.seek(0)
+                gcs_full_path = gcs_storage.upload_from_bytes(
+                    file_content.read(),
+                    gcs_path,
+                    content_type=http_content_type or 'image/jpeg'
+                )
+                
+                # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
+                image.gcs_path = gcs_full_path
+                image.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Imagen guardada correctamente',
+                    'item': {
+                        'id': image.id,
+                        'type': 'image',
+                        'title': image.title
+                    }
+                })
+            
+            elif content_type == 'video':
+                from core.storage.gcs import gcs_storage
+                
+                video = Video.objects.create(
+                    title=item.get('title', 'Video de stock'),
+                    script=item.get('description', ''),
+                    created_by=request.user,
+                    project=project,
+                    status='completed',
+                    type='general'
+                )
+                
+                # Subir a GCS
+                # Usar path con proyecto si está disponible, sino sin proyecto
+                if project:
+                    gcs_path = f"projects/{project.id}/videos/{video.id}/video.{file_extension}"
+                else:
+                    gcs_path = f"videos/{video.id}/video.{file_extension}"
+                
+                file_content.seek(0)
+                gcs_full_path = gcs_storage.upload_from_bytes(
+                    file_content.read(),
+                    gcs_path,
+                    content_type=http_content_type or 'video/mp4'
+                )
+                
+                # Guardar el path completo retornado por upload_from_bytes (formato: gs://bucket/path)
+                video.gcs_path = gcs_full_path
+                video.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Video guardado correctamente',
+                    'item': {
+                        'id': video.id,
+                        'type': 'video',
+                        'title': video.title
+                    }
+                })
+            
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Tipo de contenido no soportado: {content_type}'
+                }, status=400)
+                
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'JSON inválido'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"Error en StockDownloadView: {e}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)

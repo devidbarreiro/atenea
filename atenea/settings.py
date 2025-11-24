@@ -195,6 +195,12 @@ FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
 VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
 ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
 
+# Stock Content APIs
+PEXELS_API_KEY = config('PEXELS_API_KEY', default='')
+UNSPLASH_ACCESS_KEY = config('UNSPLASH_ACCESS_KEY', default='')  # Access Key (Client-ID) de Unsplash
+PIXABAY_API_KEY = config('PIXABAY_API_KEY', default='')
+FREESOUND_API_KEY = config('FREESOUND_API_KEY', default='')  # Token de acceso de FreeSound
+
 # ElevenLabs Defaults
 ELEVENLABS_DEFAULT_MODEL = config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5')
 ELEVENLABS_DEFAULT_VOICE_ID = config('ELEVENLABS_DEFAULT_VOICE_ID', default='pFZP5JQG7iQjIQuC4Bku')
@@ -280,6 +286,9 @@ LLM_MAX_RETRIES = config('LLM_MAX_RETRIES', default=2, cast=int)
 # Agent Cache Configuration
 AGENT_CACHE_TTL = config('AGENT_CACHE_TTL', default=86400, cast=int)  # 24 horas en segundos
 AGENT_CACHE_ENABLED = config('AGENT_CACHE_ENABLED', default=True, cast=bool)
+
+# Stock Search Cache Configuration
+STOCK_CACHE_TTL = config('STOCK_CACHE_TTL', default=3600, cast=int)  # 1 hora en segundos
 
 # Feature Flag: Usar LangChain en lugar de n8n
 USE_LANGCHAIN_AGENT = config('USE_LANGCHAIN_AGENT', default=False, cast=bool)

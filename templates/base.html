@@ -195,9 +195,10 @@
             
             // Asegurar que Alpine inicialice todos los componentes
             document.addEventListener('DOMContentLoaded', () => {
-                // Forzar inicialización de Alpine si aún no está lista
-                if (window.Alpine) {
-                    Alpine.start();
+                // No llamar Alpine.start() manualmente - Alpine se auto-inicializa con defer
+                // Solo verificar que Alpine esté disponible
+                if (window.Alpine && !window.Alpine._initialized) {
+                    console.warn('Alpine ya debería estar inicializado automáticamente');
                 }
             });
          </script>
