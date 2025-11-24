@@ -10,8 +10,10 @@
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ image.title }}</h1>
                 <div class="flex items-center gap-4 text-sm text-gray-600">
+                    {% if image.project %}
                     <span>📁 {{ image.project.name }}</span>
                     <span>•</span>
+                    {% endif %}
                     <span>{{ image.get_type_display }}</span>
                     <span>•</span>
                     <span>{{ image.created_at|date:"d/m/Y H:i" }}</span>
@@ -29,9 +31,15 @@
                 <a href="{% url 'core:image_delete' image.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Eliminar
                 </a>
+                {% if image.project %}
                 <a href="{% url 'core:project_detail' image.project.id %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Volver
                 </a>
+                {% else %}
+                <a href="{% url 'core:images_list' %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Volver
+                </a>
+                {% endif %}
             </div>
         </div>
 

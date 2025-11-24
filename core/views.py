@@ -1650,13 +1650,14 @@ class ImageDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     pk_url_kwarg = 'image_id'
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
-            {'label': self.object.title, 'url': None}
-        ]
+            })
+        breadcrumbs.append({'label': self.object.title, 'url': None})
+        return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -5379,3 +5380,61 @@ class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin,
             messages.error(request, f'Error al re-indexar: {str(e)}')
         
         return redirect('core:dashboard')
+
+
+# ====================
+# CREATION AGENT (Chat de Creación)
+# ====================
+
+class CreationAgentView(LoginRequiredMixin, View):
+    """Vista principal del chat de creación"""
+    template_name = 'chat/creation_agent.html'
+    
+    def get(self, request):
+        return render(request, self.template_name)
+
+
+class CreationAgentChatView(LoginRequiredMixin, View):
+    """Vista para procesar mensajes del chat de creación"""
+    
+    def post(self, request):
+        """Procesa un mensaje del usuario"""
+        from core.agents.creation_agent import CreationAgent
+        import json
+        
+        message = request.POST.get('message', '').strip()
+        chat_history_json = request.POST.get('chat_history', '[]')
+        
+        if not message:
+            return JsonResponse({
+                'error': 'El mensaje no puede estar vacío'
+            }, status=400)
+        
+        try:
+            # Parsear historial si existe
+            chat_history = []
+            if chat_history_json:
+                try:
+                    chat_history = json.loads(chat_history_json)
+                except json.JSONDecodeError:
+                    chat_history = []
+            
+            # Crear agente con user_id del usuario actual
+            agent = CreationAgent(user_id=request.user.id)
+            
+            # Procesar mensaje
+            result = agent.chat(message, chat_history)
+            
+            # Preparar respuesta
+            response_data = {
+                'answer': result.get('answer', ''),
+                'tool_results': result.get('tool_results', [])
+            }
+            
+            return JsonResponse(response_data)
+            
+        except Exception as e:
+            logger.error(f"Error en CreationAgentChatView: {e}", exc_info=True)
+            return JsonResponse({
+                'error': f'Error al procesar tu mensaje: {str(e)}'
+            }, status=500)

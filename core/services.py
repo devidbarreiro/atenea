@@ -1594,13 +1594,18 @@ class ImageService:
     def _save_generated_image(
         self,
         image_data: bytes,
-        project: Project,
-        image_id: int
+        project: Project = None,
+        image_id: int = None
     ) -> str:
         """Guarda imagen generada en GCS"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+            
+            # Construir path según si hay proyecto o no
+            if project:
+                gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+            else:
+                gcs_destination = f"images/no_project/image_{image_id}/{timestamp}_generated.png"
             
             logger.info(f"Guardando imagen generada en GCS: {gcs_destination}")
             gcs_path = gcs_storage.upload_from_bytes(

@@ -1,0 +1,324 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat de Creación - Atenea{% endblock %}
+
+{% block extra_css %}
+<style>
+    [x-cloak] { 
+        display: none !important; 
+    }
+    
+    .chat-container {
+        height: calc(100vh - 180px);
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 180px);
+    }
+    
+    .messages-area {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+        scroll-behavior: smooth;
+    }
+    
+    .message-bubble {
+        max-width: 85%;
+    }
+    
+    @media (max-width: 640px) {
+        .message-bubble {
+            max-width: 90%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="Object.assign(chatApp(), { sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' })" 
+     x-init="
+        window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; });
+        init();
+     "
+     class="max-w-5xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="mb-6 pb-4 border-b border-gray-200">
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Chat de Creación</h1>
+        <p class="text-gray-600 text-sm">Crea contenido audiovisual con IA</p>
+    </div>
+    
+    <!-- Chat Container -->
+    <div class="chat-container bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col">
+        <!-- Messages Area -->
+        <div class="messages-area p-6 space-y-4" x-ref="messagesContainer">
+            <template x-for="(message, index) in messages" :key="message.id">
+                <div class="flex items-start gap-3"
+                     :class="message.role === 'user' ? 'flex-row-reverse' : ''">
+                    <!-- Avatar -->
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                         :class="message.role === 'user' ? 'bg-blue-600' : 'bg-gray-200'">
+                        <template x-if="message.role === 'user'">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </template>
+                        <template x-if="message.role === 'assistant'">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </template>
+                    </div>
+                    
+                    <!-- Message Content -->
+                    <div class="flex-1 min-w-0 message-bubble"
+                         :class="message.role === 'user' ? 'ml-auto' : ''">
+                        <div class="rounded-lg p-4 shadow-sm"
+                             :class="message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200'">
+                            <template x-if="message.role === 'user'">
+                                <p x-text="message.content" class="whitespace-pre-wrap text-sm"></p>
+                            </template>
+                            <template x-if="message.role === 'assistant'">
+                                <div>
+                                    <div x-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none text-sm"></div>
+                                    
+                                    <!-- Tool Results -->
+                                    <template x-if="message.tool_results && message.tool_results.length > 0">
+                                        <div class="mt-4 space-y-3">
+                                            <template x-for="(result, idx) in message.tool_results" :key="idx">
+                                                <div>
+                                                    <!-- Image -->
+                                                    <template x-if="result[1] && result[1].image_id">
+                                                        <div class="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                                            <template x-if="result[1].preview_url && result[1].status_current === 'completed'">
+                                                                <img :src="result[1].preview_url" 
+                                                                     :alt="result[1].title || 'Imagen'" 
+                                                                     class="w-full rounded-lg mb-2">
+                                                            </template>
+                                                            <a :href="result[1].detail_url" 
+                                                               class="text-sm text-green-700 hover:text-green-900 underline">
+                                                                Ver imagen →
+                                                            </a>
+                                                        </div>
+                                                    </template>
+                                                    
+                                                    <!-- Video -->
+                                                    <template x-if="result[1] && result[1].video_id">
+                                                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                                            <template x-if="result[1].preview_url && result[1].status_current === 'completed'">
+                                                                <video :src="result[1].preview_url" controls class="w-full rounded-lg mb-2"></video>
+                                                            </template>
+                                                            <a :href="result[1].detail_url" 
+                                                               class="text-sm text-blue-700 hover:text-blue-900 underline">
+                                                                Ver video →
+                                                            </a>
+                                                        </div>
+                                                    </template>
+                                                    
+                                                    <!-- Audio -->
+                                                    <template x-if="result[1] && result[1].audio_id">
+                                                        <div class="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                                                            <template x-if="result[1].preview_url && result[1].status_current === 'completed'">
+                                                                <audio controls class="w-full mb-2">
+                                                                    <source :src="result[1].preview_url" type="audio/mpeg">
+                                                                </audio>
+                                                            </template>
+                                                            <a :href="result[1].detail_url" 
+                                                               class="text-sm text-purple-700 hover:text-purple-900 underline">
+                                                                Ver audio →
+                                                            </a>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            
+            <!-- Loading Indicator -->
+            <div x-show="loading" 
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 class="flex items-start gap-3">
+                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg class="w-5 h-5 text-gray-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <div class="flex-1 message-bubble">
+                    <div class="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-600 shadow-sm">
+                        <span class="inline-flex items-center gap-2">
+                            <span class="animate-pulse">●</span>
+                            <span>Creando contenido...</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Input Area -->
+        <div class="border-t border-gray-200 p-4 bg-gray-50 flex-shrink-0">
+            <form @submit.prevent="sendMessage()" class="flex gap-3 items-end">
+                <div class="flex-1 relative">
+                    <textarea x-model="inputMessage"
+                              @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage(); }"
+                              placeholder="Ej: Crea una imagen de un perro haciendo surf"
+                              rows="2"
+                              class="w-full px-4 py-3 pr-20 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white"
+                              :disabled="loading"
+                              style="min-height: 3rem; max-height: 8rem;"></textarea>
+                    <div class="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none flex items-center gap-1">
+                        <kbd class="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Enter</kbd>
+                        <span class="text-gray-300">•</span>
+                        <kbd class="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Shift+Enter</kbd>
+                    </div>
+                </div>
+                <button type="submit"
+                        :disabled="loading || !inputMessage.trim()"
+                        class="bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 flex items-center justify-center flex-shrink-0 transition-colors shadow-sm hover:shadow-md"
+                        style="min-height: 3rem;">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function chatApp() {
+    return {
+        messages: [],
+        inputMessage: '',
+        loading: false,
+        
+        init() {
+            // Usar sessionStorage para prevenir duplicación
+            const storageKey = 'chat_initialized_' + window.location.pathname;
+            const wasInitialized = sessionStorage.getItem(storageKey);
+            
+            if (!wasInitialized) {
+                // Agregar mensaje de bienvenida solo una vez
+                this.messages = [{
+                    id: 'welcome-' + Date.now(),
+                    role: 'assistant',
+                    content: '¡Hola! 👋 Soy tu asistente de creación con IA.\n\nPuedo ayudarte a crear:\n- 🖼️ **Imágenes** con Gemini Image\n- 🎥 Videos (próximamente)\n- 🎙️ Audios (próximamente)\n- 📝 Guiones (próximamente)\n\n¿Qué te gustaría crear hoy?',
+                    tool_results: []
+                }];
+                
+                sessionStorage.setItem(storageKey, 'true');
+                this.scrollToBottom();
+            }
+            
+            // Detectar si hay un mensaje en la URL (viene del dashboard)
+            const urlParams = new URLSearchParams(window.location.search);
+            const messageFromUrl = urlParams.get('message');
+            
+            if (messageFromUrl && messageFromUrl.trim()) {
+                // Limpiar la URL para que no se vea el parámetro
+                window.history.replaceState({}, document.title, window.location.pathname);
+                
+                // Establecer el mensaje en el input y enviarlo automáticamente
+                this.inputMessage = decodeURIComponent(messageFromUrl.trim());
+                
+                // Esperar un momento para que Alpine renderice y luego enviar
+                this.$nextTick(() => {
+                    setTimeout(() => {
+                        this.sendMessage();
+                    }, 300);
+                });
+            }
+        },
+        
+        async sendMessage() {
+            if (!this.inputMessage.trim() || this.loading) return;
+            
+            const message = this.inputMessage.trim();
+            this.inputMessage = '';
+            
+            // Agregar mensaje del usuario
+            this.messages.push({
+                id: 'user-' + Date.now(),
+                role: 'user',
+                content: message,
+                tool_results: []
+            });
+            
+            this.loading = true;
+            this.scrollToBottom();
+            
+            try {
+                // Preparar historial (solo mensajes sin tool_results)
+                const chatHistory = this.messages
+                    .filter(m => !m.tool_results || m.tool_results.length === 0)
+                    .map(m => ({ role: m.role, content: m.content }));
+                
+                const response = await fetch('{% url "core:creation_agent_chat" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: new URLSearchParams({
+                        message: message,
+                        chat_history: JSON.stringify(chatHistory)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Agregar respuesta del asistente
+                this.messages.push({
+                    id: 'assistant-' + Date.now(),
+                    role: 'assistant',
+                    content: data.answer,
+                    tool_results: data.tool_results || []
+                });
+                
+            } catch (error) {
+                console.error('Error:', error);
+                this.messages.push({
+                    id: 'error-' + Date.now(),
+                    role: 'assistant',
+                    content: `❌ Lo siento, ocurrió un error: ${error.message}`,
+                    tool_results: []
+                });
+            } finally {
+                this.loading = false;
+                this.scrollToBottom();
+            }
+        },
+        
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const container = this.$refs.messagesContainer;
+                if (container) {
+                    container.scrollTo({
+                        top: container.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        },
+        
+        renderMarkdown(text) {
+            if (typeof marked !== 'undefined') {
+                return marked.parse(text);
+            }
+            return text.replace(/\n/g, '<br>');
+        }
+    };
+}
+</script>
+{% endblock %}
