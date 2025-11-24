@@ -97,15 +97,15 @@ x-init="
                 <span x-show="!sidebarCollapsed">Inicio</span>
             </a>
 
-            <!-- Chat de Creación -->
+            <!-- Asistente -->
             <a href="{% url 'core:creation_agent' %}"
                class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors {% if request.path == '/chat/' %}bg-gray-100 text-gray-900{% else %}text-gray-700 hover:bg-gray-50{% endif %}"
                :class="{ 'justify-center': sidebarCollapsed }"
-               :title="sidebarCollapsed ? 'Chat' : ''">
+               :title="sidebarCollapsed ? 'Asistente' : ''">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
                 </svg>
-                <span x-show="!sidebarCollapsed" class="flex-1">Chat de Creación</span>
+                <span x-show="!sidebarCollapsed" class="flex-1">Asistente</span>
                 <span x-show="!sidebarCollapsed" class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Beta</span>
             </a>
 
@@ -196,16 +196,16 @@ x-init="
             </div>
         </div>
 
-        <!-- Sección Assets -->
+        <!-- Sección Stock -->
         <div class="px-4 py-2 mt-4" x-data="{ assetsOpen: false }">
             <button @click="assetsOpen = !assetsOpen"
                     class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50 w-full"
                     :class="{ 'justify-center': sidebarCollapsed }"
-                    :title="sidebarCollapsed ? 'Assets' : ''">
+                    :title="sidebarCollapsed ? 'Stock' : ''">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                 </svg>
-                <span x-show="!sidebarCollapsed" class="flex-1 text-left">Assets</span>
+                <span x-show="!sidebarCollapsed" class="flex-1 text-left">Stock</span>
                 <svg x-show="!sidebarCollapsed && !assetsOpen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                 </svg>

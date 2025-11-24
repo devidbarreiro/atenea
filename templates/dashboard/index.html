@@ -54,16 +54,189 @@
     </div>
     
     <!-- Sección: ¿Qué te gustaría crear hoy? -->
-    <div class="mb-12">
+    <div class="mb-12" x-data="{ toolsModalOpen: false }">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-bold text-gray-900">¿Qué te gustaría crear hoy?</h2>
-            <a href="#" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2">
+            <button type="button" @click="toolsModalOpen = true" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-            </svg>
+                </svg>
                 Todas las herramientas
-            </a>
+            </button>
         </div>
+        
+        <!-- Modal de Todas las herramientas -->
+        <div x-show="toolsModalOpen" 
+             x-cloak
+             @click.away="toolsModalOpen = false"
+             @keydown.escape.window="toolsModalOpen = false"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+             style="display: none;">
+            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+                 @click.stop>
+                <!-- Header del Modal -->
+                <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+                    <h2 class="text-2xl font-bold text-gray-900">Todas las herramientas</h2>
+                    <button type="button" @click="toolsModalOpen = false" 
+                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Contenido del Modal -->
+                <div class="p-6 space-y-8">
+                    <!-- Categoría: IMAGEN -->
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900">IMAGEN</h3>
+                        </div>
+                        <div class="space-y-2 ml-14">
+                            <a href="{% url 'core:image_create_standalone' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <span class="text-gray-700 group-hover:text-gray-900">Generar imágenes</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                                </svg>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Editar imágenes</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Mejorar imagen</span>
+                            </a>
+                            <a href="{% url 'core:creation_agent' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-gray-700 group-hover:text-gray-900">Asistente</span>
+                                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Nuevo</span>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Categoría: VÍDEO -->
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900">VÍDEO</h3>
+                        </div>
+                        <div class="space-y-2 ml-14">
+                            <a href="{% url 'core:video_create_standalone' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <span class="text-gray-700 group-hover:text-gray-900">Generar vídeos</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                                </svg>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Editor de proyectos de vídeo</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Editor de clips</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Sincronización labial</span>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Categoría: AUDIO -->
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900">AUDIO</h3>
+                        </div>
+                        <div class="space-y-2 ml-14">
+                            <a href="{% url 'core:audio_create_standalone' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <span class="text-gray-700 group-hover:text-gray-900">Texto a voz</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Generar efectos de sonido</span>
+                            </a>
+                            <a href="{% url 'core:music_create_standalone' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <span class="text-gray-700 group-hover:text-gray-900">Generar música</span>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Categoría: OTROS -->
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900">OTROS</h3>
+                        </div>
+                        <div class="space-y-2 ml-14">
+                            <a href="{% url 'core:script_create_standalone' %}" 
+                               @click="toolsModalOpen = false"
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                                <span class="text-gray-700 group-hover:text-gray-900">Generar guiones</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Editor de diseños</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Generar mockups</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Generar iconos</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Quitar fondos</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Expandir imágenes</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Generar variaciones</span>
+                            </a>
+                            <a href="#" 
+                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                                <span class="text-gray-700">Dibujar y transformar</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
         
         <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
             <!-- Buscar contenido -->
