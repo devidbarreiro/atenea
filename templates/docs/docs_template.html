@@ -1,47 +1,443 @@
+{% load static %}
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Documentación</title>
+  <title>Documentación API - Atenea</title>
+  {% csrf_token %}
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@tailwindcss/typography/dist/typography.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1e40af;
+      --primary-light: #dbeafe;
+      --sidebar-width: 280px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    }
+
+    /* Sidebar */
+    .sidebar-link {
+      transition: all 0.2s ease;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-link:hover {
+      background-color: #f3f4f6;
+      border-left-color: var(--primary-light);
+    }
+
     .sidebar-link.active {
-      color: #1e40af; /* azul más intenso */
+      color: var(--primary-dark);
       font-weight: 600;
-      background-color: #e0e7ff; /* fondo destacado */
+      background-color: var(--primary-light);
+      border-left-color: var(--primary);
+    }
+
+    .sidebar-folder {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+    }
+
+    /* Content */
+    .doc-content h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .doc-content h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1f2937;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .doc-content h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #374151;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .doc-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .doc-content table th {
+      background-color: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+      padding: 0.75rem 1rem;
+      border-bottom: 2px solid #e5e7eb;
+      color: #374151;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .doc-content table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      color: #4b5563;
+    }
+
+    .doc-content table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .doc-content table tr:hover {
+      background-color: #f9fafb;
+    }
+
+    .doc-content code {
+      background-color: #f3f4f6;
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      font-size: 0.875em;
+      color: #dc2626;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    }
+
+    .doc-content pre {
+      background-color: #1f2937;
+      color: #f9fafb;
+      padding: 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .doc-content pre code {
+      background-color: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    .doc-content blockquote {
+      border-left: 4px solid var(--primary);
+      background-color: #eff6ff;
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .doc-content blockquote p {
+      margin: 0;
+      color: #1e40af;
+    }
+
+    .doc-content ul, .doc-content ol {
+      margin: 1rem 0;
+      padding-left: 1.5rem;
+    }
+
+    .doc-content li {
+      margin: 0.5rem 0;
+      color: #4b5563;
+    }
+
+    .doc-content hr {
+      border: none;
+      border-top: 2px solid #e5e7eb;
+      margin: 2rem 0;
+    }
+
+    .endpoint-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .endpoint-badge.post {
+      background-color: #dbeafe;
+      color: #1e40af;
+    }
+
+    .endpoint-badge.get {
+      background-color: #dcfce7;
+      color: #166534;
+    }
+
+    .endpoint-badge.put {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+
+    .endpoint-badge.delete {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+
+    /* Breadcrumbs */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-bottom: 1.5rem;
+    }
+
+    .breadcrumb a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .breadcrumb a:hover {
+      color: var(--primary-dark);
+      text-decoration: underline;
+    }
+
+    .breadcrumb-separator {
+      color: #9ca3af;
+    }
+
+    /* Search */
+    .search-container {
+      position: relative;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+    }
+
+    .search-input {
+      padding-left: 2.5rem;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: -100%;
+        transition: left 0.3s ease;
+        z-index: 50;
+        height: 100vh;
+      }
+
+      .sidebar.open {
+        left: 0;
+      }
+
+      .content-wrapper {
+        width: 100%;
+      }
+    }
+
+    /* Chat styles */
+    [x-cloak] { 
+      display: none !important; 
+    }
+
+    .prose {
+      color: inherit;
+    }
+    .prose p {
+      margin-top: 0.5em;
+      margin-bottom: 0.5em;
+    }
+    .prose ul, .prose ol {
+      margin-top: 0.5em;
+      margin-bottom: 0.5em;
+    }
+    .prose code {
+      background-color: rgba(0, 0, 0, 0.1);
+      padding: 0.125em 0.25em;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .prose pre {
+      background-color: rgba(0, 0, 0, 0.05);
+      padding: 0.75em;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+    }
+    .prose pre code {
+      background-color: transparent;
+      padding: 0;
     }
   </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-50 text-gray-900">
   <div class="flex h-screen">
     <!-- Sidebar -->
-    <div id="sidebar" class="w-90 bg-white p-4 overflow-y-auto border-r border-gray-200 shadow">
-      
-      <button class="bg-gray-900 text-white p-2 rounded-xl w-full mb-5" onclick="window.location.href='/'">
-        Volver al dashboard
-      </button>
-      <!-- Barra de búsqueda -->
-      <input id="sidebar-search" type="text" placeholder="Buscar..."
-            class="w-full mb-4 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+    <div id="sidebar" class="sidebar w-70 bg-white border-r border-gray-200 flex flex-col shadow-sm">
+      <!-- Header -->
+      <div class="p-4 border-b border-gray-200">
+        <button 
+          onclick="window.location.href='/'" 
+          class="flex items-center gap-2 w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+        >
+          <i class="fas fa-arrow-left"></i>
+          <span>Volver al dashboard</span>
+        </button>
+      </div>
 
-      <ul id="sidebar-list" class="space-y-1 text-gray-700 text-sm"></ul>
-    </div>
+      <!-- Search -->
+      <div class="p-4 border-b border-gray-200">
+        <div class="search-container">
+          <i class="fas fa-search search-icon"></i>
+          <input 
+            id="sidebar-search" 
+            type="text" 
+            placeholder="Buscar en documentación..."
+            class="search-input w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          />
+        </div>
+      </div>
 
-    <!-- Contenido -->
-    <div class="flex-1 p-6 overflow-y-auto">
-      <h1 class="text-2xl font-bold mb-4">Bienvenido a la documentación</h1>
-      <div id="doc-content" class="prose max-w-none prose-lg prose-gray">
-        <p class="text-gray-600">Selecciona un documento en el sidebar para ver su contenido.</p>
+      <!-- Navigation -->
+      <div class="flex-1 overflow-y-auto p-4">
+        <div class="mb-4">
+          <h2 class="sidebar-folder mb-2">API Reference</h2>
+        </div>
+        <ul id="sidebar-list" class="space-y-1"></ul>
       </div>
     </div>
 
+    <!-- Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top Bar -->
+      <div class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <button id="mobile-menu-btn" class="md:hidden text-gray-600 hover:text-gray-900">
+            <i class="fas fa-bars text-xl"></i>
+          </button>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">Documentación API</h1>
+            <p class="text-sm text-gray-500 mt-1">Referencia técnica completa</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="flex-1 overflow-y-auto">
+        <div class="max-w-4xl mx-auto px-6 py-8">
+          <!-- Breadcrumbs -->
+          <div id="breadcrumbs" class="breadcrumb"></div>
+
+          <!-- Content -->
+          <div id="doc-content" class="doc-content">
+            <div class="text-center py-12">
+              <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
+              <h2 class="text-2xl font-semibold text-gray-700 mb-2">Bienvenido a la documentación</h2>
+              <p class="text-gray-500">Selecciona un documento en el sidebar para ver su contenido.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
+// Configurar marked para mejor renderizado
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  headerIds: true,
+  mangle: false
+});
+
+// Utilidades
+function formatEndpointBadge(method) {
+  const colors = {
+    'POST': 'post',
+    'GET': 'get',
+    'PUT': 'put',
+    'DELETE': 'delete',
+    'PATCH': 'put'
+  };
+  return `<span class="endpoint-badge ${colors[method] || 'post'}">${method}</span>`;
+}
+
+function formatPath(path) {
+  return path.split('/').filter(Boolean).map(part => {
+    return part.split('-').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  });
+}
+
+function updateBreadcrumbs(path) {
+  const breadcrumbs = document.getElementById('breadcrumbs');
+  if (!path) {
+    breadcrumbs.innerHTML = '';
+    return;
+  }
+
+  const parts = path.split('/').filter(Boolean);
+  let html = '<a href="/docs">Documentación</a>';
+  
+  let currentPath = '';
+  parts.forEach((part, index) => {
+    currentPath += '/' + part;
+    const formatted = part.split('-').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+    
+    if (index < parts.length - 1) {
+      html += `<span class="breadcrumb-separator">/</span><a href="/docs${currentPath}">${formatted}</a>`;
+    } else {
+      html += `<span class="breadcrumb-separator">/</span><span class="text-gray-900">${formatted}</span>`;
+    }
+  });
+
+  breadcrumbs.innerHTML = html;
+}
+
+// Sidebar
 async function loadSidebar() {
   try {
     const res = await fetch('/docs/structure/');
@@ -51,7 +447,11 @@ async function loadSidebar() {
 
     function createList(obj, parentPath = '', level = 0) {
       const ul = document.createElement('ul');
-      ul.classList.add('space-y-1');
+      if (level === 0) {
+        ul.classList.add('space-y-2');
+      } else {
+        ul.classList.add('ml-4', 'mt-1', 'space-y-1');
+      }
 
       for (const key in obj) {
         const li = document.createElement('li');
@@ -60,9 +460,8 @@ async function loadSidebar() {
           const urlPath = (parentPath + key).replaceAll('\\', '/').replace('.md', '');
           const a = document.createElement('a');
           a.href = '#';
-          a.textContent = key.replace('.md', '');
-          a.classList.add('sidebar-link', 'block', 'py-1', 'rounded', 'hover:bg-gray-100');
-          a.style.paddingLeft = `${level * 1}rem`;
+          a.textContent = key.replace('.md', '').replace(/_/g, ' ');
+          a.classList.add('sidebar-link', 'block', 'px-3', 'py-2', 'rounded-md', 'text-sm');
           a.dataset.route = urlPath;
 
           a.onclick = (e) => {
@@ -70,16 +469,19 @@ async function loadSidebar() {
             setActiveLink(a);
             history.pushState({ path: urlPath }, '', `/docs/${urlPath}`);
             loadDoc(urlPath);
+            // Cerrar sidebar en móvil
+            document.getElementById('sidebar').classList.remove('open');
           };
 
           li.appendChild(a);
         } else {
-          const folderName = document.createElement('div');
-          folderName.textContent = key;
-          folderName.classList.add('font-bold', 'px-2', 'py-1', 'text-gray-600');
-          folderName.style.paddingLeft = `${level * 1}rem`;
-          li.appendChild(folderName);
-
+          const folderDiv = document.createElement('div');
+          folderDiv.textContent = key.replace(/_/g, ' ');
+          folderDiv.classList.add('sidebar-folder', 'px-3', 'py-2', 'mt-4', 'mb-2');
+          if (level > 0) {
+            folderDiv.classList.add('ml-4');
+          }
+          li.appendChild(folderDiv);
           li.appendChild(createList(obj[key], parentPath + key + '/', level + 1));
         }
 
@@ -91,38 +493,60 @@ async function loadSidebar() {
 
     sidebarList.appendChild(createList(data));
 
+    // Búsqueda mejorada
     const searchInput = document.getElementById('sidebar-search');
-
-    searchInput.addEventListener('input', () => {
-    const query = searchInput.value.toLowerCase();
-
-    document.querySelectorAll('#sidebar-list a.sidebar-link').forEach(link => {
-    const li = link.closest('li');
-    if (link.textContent.toLowerCase().includes(query)) {
-    li.style.display = '';
-    } else {
-    li.style.display = 'none';
-    }
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('#sidebar-list li').forEach(li => {
+        const link = li.querySelector('.sidebar-link');
+        const folder = li.querySelector('.sidebar-folder');
+        
+        if (link) {
+          const text = link.textContent.toLowerCase();
+          if (text.includes(query)) {
+            li.style.display = '';
+            // Mostrar padres
+            let parent = li.parentElement;
+            while (parent && parent !== sidebarList) {
+              if (parent.tagName === 'UL') {
+                parent.style.display = '';
+              }
+              parent = parent.parentElement;
+            }
+          } else {
+            li.style.display = 'none';
+          }
+        } else if (folder) {
+          // Verificar si algún hijo coincide
+          const hasMatch = Array.from(li.querySelectorAll('.sidebar-link')).some(
+            link => link.textContent.toLowerCase().includes(query)
+          );
+          if (hasMatch || folder.textContent.toLowerCase().includes(query)) {
+            li.style.display = '';
+          } else if (query) {
+            li.style.display = 'none';
+          } else {
+            li.style.display = '';
+          }
+        }
+      });
     });
-    });
-
-    searchInput.addEventListener('input', () => {
-    const query = searchInput.value.toLowerCase();
-    document.querySelectorAll('#sidebar-list > li').forEach(li => filterLiRecursive(li, query));
-    });
-
 
     // Cargar doc de la URL actual si existe
     const pathFromUrl = window.location.pathname.replace(/^\/docs\//, '');
     if (pathFromUrl) {
       const activeLink = document.querySelector(`a[data-route="${pathFromUrl}"]`);
-      if (activeLink) setActiveLink(activeLink);
+      if (activeLink) {
+        setActiveLink(activeLink);
+        // Scroll al link activo
+        activeLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       await loadDoc(pathFromUrl);
     }
 
   } catch (err) {
     console.error('Error cargando el sidebar:', err);
-    document.getElementById('sidebar-list').innerHTML = '<li class="text-red-500">Error al cargar la documentación</li>';
+    document.getElementById('sidebar-list').innerHTML = '<li class="text-red-500 px-3 py-2">Error al cargar la documentación</li>';
   }
 }
 
@@ -137,7 +561,30 @@ async function loadDoc(servicePath) {
     if (!res.ok) throw new Error('Documento no encontrado');
     const data = await res.json();
     const contentDiv = document.getElementById('doc-content');
-    contentDiv.innerHTML = marked.parse(data.content);
+    
+    // Parsear markdown
+    let html = marked.parse(data.content);
+    
+    // Mejorar formato de endpoints
+    html = html.replace(/\*\*Endpoint:\*\*\s*`([A-Z]+)\s+([^`]+)`/g, (match, method, url) => {
+      return `<div class="flex items-center gap-3 mb-4">
+        ${formatEndpointBadge(method)}
+        <code class="text-base font-mono">${url}</code>
+      </div>`;
+    });
+
+    // Mejorar formato de funciones
+    html = html.replace(/\*\*Funci[óo]n:\*\*\s*`([^`]+)`/g, (match, func) => {
+      return `<div class="mb-4">
+        <span class="text-sm text-gray-500">Función:</span>
+        <code class="ml-2 text-base">${func}</code>
+      </div>`;
+    });
+
+    contentDiv.innerHTML = html;
+
+    // Actualizar breadcrumbs
+    updateBreadcrumbs(servicePath);
 
     // Reiniciar scroll
     const scrollContainer = document.querySelector('.flex-1.overflow-y-auto');
@@ -186,23 +633,346 @@ async function loadDoc(servicePath) {
       });
     });
 
+    // Scroll suave para anclas
+    contentDiv.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const targetId = a.getAttribute('href').substring(1);
+        const target = document.getElementById(targetId);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
   } catch (err) {
     console.error('Error cargando doc:', err);
-    document.getElementById('doc-content').innerHTML = `<p class="text-red-500">${err.message}</p>`;
+    document.getElementById('doc-content').innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div class="flex items-center gap-2 text-red-800">
+          <i class="fas fa-exclamation-circle"></i>
+          <span class="font-semibold">Error</span>
+        </div>
+        <p class="text-red-600 mt-2">${err.message}</p>
+      </div>
+    `;
   }
 }
 
 // Manejo de back/forward
 window.addEventListener('popstate', (event) => {
   const path = (event.state && event.state.path) || window.location.pathname.replace(/^\/docs\//, '');
-  if (!path) return;
+  if (!path) {
+    updateBreadcrumbs('');
+    document.getElementById('doc-content').innerHTML = `
+      <div class="text-center py-12">
+        <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
+        <h2 class="text-2xl font-semibold text-gray-700 mb-2">Bienvenido a la documentación</h2>
+        <p class="text-gray-500">Selecciona un documento en el sidebar para ver su contenido.</p>
+      </div>
+    `;
+    return;
+  }
   const activeLink = document.querySelector(`a[data-route="${path}"]`);
   setActiveLink(activeLink);
   loadDoc(path);
 });
 
+// Menú móvil
+document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+// Cerrar sidebar al hacer click fuera en móvil
+document.addEventListener('click', (e) => {
+  const sidebar = document.getElementById('sidebar');
+  const menuBtn = document.getElementById('mobile-menu-btn');
+  if (window.innerWidth <= 768 && 
+      sidebar.classList.contains('open') && 
+      !sidebar.contains(e.target) && 
+      !menuBtn?.contains(e.target)) {
+    sidebar.classList.remove('open');
+  }
+});
+
+// Inicializar
 loadSidebar();
 </script>
+
+<!-- Asistente de Chat -->
+{% if user.is_authenticated %}
+<!-- Botón flotante -->
+<button x-data="{ chatOpen: false }"
+        @click="chatOpen = true; window.dispatchEvent(new CustomEvent('open-chat'))"
+        x-show="!chatOpen"
+        class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all hover:scale-110 flex items-center justify-center"
+        style="z-index: 9999;"
+        title="Asistente de Documentación">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+    </svg>
+</button>
+
+<!-- Chat Modal -->
+<div x-data="{
+    open: false,
+    messages: [],
+    inputMessage: '',
+    loading: false,
+    init() {
+        // Escuchar eventos de apertura del chat
+        window.addEventListener('open-chat', () => {
+            this.open = true;
+            sessionStorage.setItem('docs_chat_open', 'true');
+            this.$nextTick(() => {
+                const container = this.$refs.messagesContainer;
+                if (container) container.scrollTop = container.scrollHeight;
+            });
+        });
+        
+        // Escuchar eventos de cierre del chat
+        window.addEventListener('close-chat', () => {
+            this.open = false;
+        });
+        
+        // Mantener el estado del chat al navegar (opcional: persistir en sessionStorage)
+        const savedState = sessionStorage.getItem('docs_chat_open');
+        if (savedState === 'true') {
+            this.open = true;
+        }
+    },
+    close() {
+        this.open = false;
+        sessionStorage.setItem('docs_chat_open', 'false');
+        window.dispatchEvent(new CustomEvent('close-chat'));
+    },
+    async sendMessage() {
+        if (!this.inputMessage.trim() || this.loading) return;
+        
+        const question = this.inputMessage.trim();
+        this.inputMessage = '';
+        
+        this.messages.push({
+            role: 'user',
+            content: question,
+            sources: []
+        });
+        
+        this.loading = true;
+        this.scrollToBottom();
+        
+        try {
+            const chatHistory = this.messages
+                .filter(m => m.role !== 'assistant' || !m.sources)
+                .map(m => ({ role: m.role, content: m.content }));
+            
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                             document.querySelector('meta[name=csrf-token]')?.content;
+            
+            const response = await fetch('{% url "core:doc_assistant_chat" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfToken
+                },
+                body: new URLSearchParams({
+                    question: question,
+                    chat_history: JSON.stringify(chatHistory)
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            this.messages.push({
+                role: 'assistant',
+                content: data.answer,
+                sources: data.sources || []
+            });
+            
+        } catch (error) {
+            console.error('Error:', error);
+            this.messages.push({
+                role: 'assistant',
+                content: `Lo siento, ocurrió un error: ${error.message}`,
+                sources: []
+            });
+        } finally {
+            this.loading = false;
+            this.scrollToBottom();
+        }
+    },
+    scrollToBottom() {
+        this.$nextTick(() => {
+            const container = this.$refs.messagesContainer;
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        });
+    },
+    
+    renderMarkdown(text) {
+        if (typeof marked !== 'undefined') {
+            return marked.parse(text);
+        }
+        // Fallback si marked no está disponible
+        return text.replace(/\n/g, '<br>');
+    }
+}"
+x-show="open"
+x-cloak
+class="fixed bottom-6 right-6"
+style="display: none; z-index: 10000;"
+    <div class="bg-white rounded-lg shadow-2xl flex flex-col border border-gray-200"
+         style="width: 420px; height: 600px; max-height: calc(100vh - 120px);">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 bg-gradient-to-r from-blue-50 to-white">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900">Asistente de Documentación</h2>
+                    <p class="text-xs text-gray-500">Chatea con la documentación de Atenea</p>
+                </div>
+            </div>
+            <button @click="close()"
+                    class="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Chat Messages -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3"
+             x-ref="messagesContainer">
+            <!-- Mensaje de bienvenida -->
+            <template x-if="messages.length === 0">
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                        </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="bg-gradient-to-br from-blue-50 to-gray-50 rounded-lg p-4 text-sm text-gray-800 border border-blue-100 shadow-sm">
+                            <p class="font-semibold mb-2 text-gray-900">¡Hola! 👋 Soy tu asistente de documentación de Atenea.</p>
+                            <p class="mb-2 text-gray-700">Puedo ayudarte a:</p>
+                            <ul class="list-disc list-inside space-y-1 ml-2 text-gray-700">
+                                <li>Entender qué puede hacer la aplicación</li>
+                                <li>Navegar por la documentación</li>
+                                <li>Encontrar información sobre funcionalidades específicas</li>
+                                <li>Responder preguntas sobre cómo usar Atenea</li>
+                            </ul>
+                            <p class="mt-3 text-gray-900 font-medium">¿En qué puedo ayudarte hoy?</p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            
+            <!-- Mensajes del chat -->
+            <template x-for="(message, index) in messages" :key="index">
+                <div class="flex items-start space-x-3"
+                     :class="message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                         :class="message.role === 'user' ? 'bg-blue-600' : 'bg-gray-200'">
+                        <template x-if="message.role === 'user'">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </template>
+                        <template x-if="message.role === 'assistant'">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </template>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="rounded-lg p-3 text-sm shadow-sm"
+                             :class="message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-800 border border-gray-100'">
+                            <template x-if="message.role === 'user'">
+                                <p x-text="message.content" class="whitespace-pre-wrap"></p>
+                            </template>
+                            <template x-if="message.role === 'assistant'">
+                                <div x-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none"></div>
+                            </template>
+                            <!-- Fuentes -->
+                            <template x-if="message.role === 'assistant' && message.sources && message.sources.length > 0">
+                                <div class="mt-3 pt-2 border-t border-gray-200">
+                                    <p class="text-xs font-semibold mb-1.5 text-gray-500 uppercase tracking-wide">Fuentes:</p>
+                                    <ul class="text-xs space-y-1 text-gray-600">
+                                        <template x-for="source in message.sources" :key="source">
+                                            <li class="flex items-center space-x-1.5 hover:text-gray-900 transition-colors">
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span class="truncate" x-text="source"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            
+            <!-- Indicador de carga -->
+            <div x-show="loading" class="flex items-start space-x-3">
+                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg class="w-5 h-5 text-gray-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="bg-gray-50 rounded-lg p-3 text-sm text-gray-600 border border-gray-100 shadow-sm">
+                        <span class="inline-flex items-center">
+                            <span class="animate-pulse">●</span>
+                            <span class="ml-2">Pensando...</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Input Area -->
+        <div class="p-3 border-t border-gray-200 flex-shrink-0 bg-gray-50">
+            <form @submit.prevent="sendMessage()"
+                  class="space-y-1">
+                <div class="flex gap-2">
+                    <div class="flex-1 relative">
+                        <textarea x-model="inputMessage"
+                                  @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage(); }"
+                                  placeholder="¿Qué quieres saber sobre Atenea?"
+                                  rows="2"
+                                  class="w-full px-3 py-2 pr-20 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white placeholder-gray-400"
+                                  :disabled="loading"
+                                  style="line-height: 1.5;"></textarea>
+                        <div class="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none">
+                            <span>Enter</span><span class="text-gray-300"> • </span><span>Shift+Enter</span>
+                        </div>
+                    </div>
+                    <button type="submit"
+                            :disabled="loading || !inputMessage.trim()"
+                            class="bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+                            style="width: 2.5rem; height: 3.5rem; align-self: flex-end; margin-bottom: 0.5rem;">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 </body>
 </html>
