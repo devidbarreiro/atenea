@@ -5898,9 +5898,21 @@ class StockDownloadView(LoginRequiredMixin, View):
             
             # Obtener la URL directa del archivo (priorizar download_url sobre url)
             # download_url es la URL directa del archivo, url puede ser la página web
-            download_url = item.get('download_url') or item.get('url') or item.get('original_url')
+            # Para Freepik: 'url' es HTML, 'preview' es la URL directa
+            download_url = item.get('download_url') or item.get('preview') or item.get('original_url')
             
-            logger.info(f"StockDownloadView: download_url={download_url}, item.url={item.get('url')}, item.download_url={item.get('download_url')}")
+            # Si download_url es una página HTML (especialmente Freepik), usar preview
+            if download_url and isinstance(download_url, str) and download_url.endswith(('.htm', '.html')):
+                logger.warning(f"StockDownloadView: download_url es HTML, usando preview en su lugar")
+                download_url = item.get('preview') or item.get('thumbnail')
+            
+            # Fallback: intentar 'url' solo si no es HTML
+            if not download_url:
+                url_candidate = item.get('url')
+                if url_candidate and isinstance(url_candidate, str) and not url_candidate.endswith(('.htm', '.html')):
+                    download_url = url_candidate
+            
+            logger.info(f"StockDownloadView: download_url={download_url}, item.url={item.get('url')}, item.download_url={item.get('download_url')}, item.preview={item.get('preview')}")
             
             if not download_url:
                 logger.error(f"StockDownloadView: URL de descarga no disponible. Item recibido: {json.dumps(item, default=str)}")
