@@ -29,7 +29,7 @@ import json
 from .models import Project, Video, Image, Audio, Script, Scene, Music, UserCredits, CreditTransaction, ServiceUsage
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
-from .services.credits import CreditService
+from .services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
 # N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
@@ -1512,6 +1512,12 @@ class VideoGenerateView(ServiceMixin, View):
                 request, 
                 'Video enviado para generación. El proceso puede tardar varios minutos.'
             )
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            # Opcional: redirigir al dashboard de créditos
+            # return redirect('core:credits_dashboard')
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
         except Exception as e:
@@ -1950,6 +1956,10 @@ class ImageGenerateView(ServiceMixin, View):
                 request, 
                 'Imagen generada exitosamente.'
             )
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
         except (ValidationException, ImageGenerationException) as e:
             messages.error(request, str(e))
         except Exception as e:
@@ -2219,6 +2229,10 @@ class AudioGenerateView(ServiceMixin, View):
                 request, 
                 'Audio generado exitosamente.'
             )
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
         except (ValidationException, ServiceException) as e:
             messages.error(request, str(e))
         except Exception as e:
@@ -3120,6 +3134,16 @@ class SceneGenerateView(ServiceMixin, View):
                 'external_id': external_id,
                 'scene_id': scene.id
             })
+        except InsufficientCreditsException as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except RateLimitExceededException as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
             
         except ValidationException as e:
             return JsonResponse({
@@ -3327,7 +3351,18 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 'message': 'Imagen generada exitosamente',
                 'gcs_path': gcs_path
             })
-            
+        except InsufficientCreditsException as e:
+            logger.error(f"Créditos insuficientes para escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except RateLimitExceededException as e:
+            logger.error(f"Límite mensual excedido para escena {scene_id}: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
         except Exception as e:
             logger.error(f"Error al generar imagen con IA para escena {scene_id}: {e}")
             import traceback

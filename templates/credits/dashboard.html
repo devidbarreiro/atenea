@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard de Créditos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+    }
+    
+    .progress-fill.low {
+        background: #ef4444;
+    }
+    
+    .progress-fill.medium {
+        background: #f59e0b;
+    }
+    
+    .progress-fill.high {
+        background: #10b981;
+    }
+    
+    .transaction-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .transaction-item:last-child {
+        border-bottom: none;
+    }
+    
+    .transaction-amount.positive {
+        color: #10b981;
+        font-weight: 600;
+    }
+    
+    .transaction-amount.negative {
+        color: #ef4444;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Dashboard de Créditos</h1>
+        <p class="mt-2 text-gray-600">Gestiona y monitorea tu uso de créditos</p>
+    </div>
+
+    <!-- Estadísticas Principales -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Saldo Actual -->
+        <div class="stat-card">
+            <div class="text-sm text-gray-600 mb-1">Saldo Actual</div>
+            <div class="text-3xl font-bold text-gray-900">{{ credits.credits|floatformat:0 }}</div>
+            <div class="text-xs text-gray-500 mt-1">créditos</div>
+        </div>
+
+        <!-- Uso del Mes -->
+        <div class="stat-card">
+            <div class="text-sm text-gray-600 mb-1">Usado este Mes</div>
+            <div class="text-3xl font-bold text-gray-900">{{ credits.current_month_usage|floatformat:0 }}</div>
+            <div class="text-xs text-gray-500 mt-1">de {{ credits.monthly_limit }} créditos</div>
+            <div class="progress-bar">
+                <div class="progress-fill {% if credits.usage_percentage >= 90 %}low{% elif credits.usage_percentage >= 75 %}medium{% else %}high{% endif %}" 
+                     style="width: {{ credits.usage_percentage }}%"></div>
+            </div>
+        </div>
+
+        <!-- Total Gastado -->
+        <div class="stat-card">
+            <div class="text-sm text-gray-600 mb-1">Total Gastado</div>
+            <div class="text-3xl font-bold text-gray-900">{{ credits.total_spent|floatformat:0 }}</div>
+            <div class="text-xs text-gray-500 mt-1">históricamente</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Uso por Servicio -->
+        <div class="stat-card">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Uso por Servicio (últimos 30 días)</h2>
+            {% if usage_by_service %}
+                <div class="space-y-3">
+                    {% for item in usage_by_service %}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-gray-900">{{ item.service_name|title }}</div>
+                                <div class="text-sm text-gray-500">{{ item.count }} operaciones</div>
+                            </div>
+                            <div class="text-lg font-semibold text-gray-900">{{ item.total_credits|floatformat:0 }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-center py-8">No hay uso registrado en los últimos 30 días</p>
+            {% endif %}
+        </div>
+
+        <!-- Transacciones Recientes -->
+        <div class="stat-card">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Transacciones Recientes</h2>
+            {% if recent_transactions %}
+                <div class="max-h-96 overflow-y-auto">
+                    {% for transaction in recent_transactions %}
+                        <div class="transaction-item">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1">
+                                    <div class="font-medium text-gray-900">
+                                        {{ transaction.get_transaction_type_display }}
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        {{ transaction.created_at|date:"d/m/Y H:i" }}
+                                    </div>
+                                    {% if transaction.service_name %}
+                                        <div class="text-xs text-gray-400 mt-1">
+                                            {{ transaction.service_name }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="transaction-amount {% if transaction.amount > 0 %}positive{% else %}negative{% endif %}">
+                                    {% if transaction.amount > 0 %}+{% endif %}{{ transaction.amount|floatformat:0 }}
+                                </div>
+                            </div>
+                            {% if transaction.description %}
+                                <div class="text-xs text-gray-500 mt-1">{{ transaction.description }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-center py-8">No hay transacciones registradas</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
