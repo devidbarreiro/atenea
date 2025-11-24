@@ -27,6 +27,7 @@ urlpatterns = [
     path('projects/<int:project_id>/agent/', views.ProjectDetailView.as_view(), {'tab': 'agent'}, name='project_agent'),
     path('projects/<int:project_id>/update-name/', views.ProjectUpdateNameView.as_view(), name='project_update_name'),
     path('projects/<int:project_id>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
+    path('items/<int:item_id>/move/', views.ProjectItemsManagementView.move_item, name='move_item'),
     
     # Videos (standalone - sin proyecto)
     path('videos/create/', views.VideoCreateView.as_view(), name='video_create_standalone'),

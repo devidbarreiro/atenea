@@ -556,6 +556,44 @@ class DashboardView(ServiceMixin, ListView):
 # ====================
 # PROJECT VIEWS
 # ====================
+class ProjectItemsManagementView:
+    """Clase para gestionar operaciones de items dentro de proyectos"""
+    
+    ITEM_MODELS = (Video, Image, Audio, Music, Script)
+    
+    @classmethod
+    def get_item(cls, item_id):
+        """Buscar un item en todos los modelos"""
+        for model in cls.ITEM_MODELS:
+            try:
+                return model.objects.get(id=item_id)
+            except model.DoesNotExist:
+                continue
+        return None
+    
+    @classmethod
+    def move_item(cls, request, item_id):
+        if request.method != "POST":
+            return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+        
+        import json
+        data = json.loads(request.body)
+        project_id = data.get('project_id')
+        
+        item = cls.get_item(item_id)
+        if not item:
+            return JsonResponse({'success': False, 'error': 'Item no encontrado'}, status=404)
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Proyecto no encontrado'}, status=404)
+        
+        # Mover item
+        item.project = project
+        item.save()
+        
+        return JsonResponse({'success': True, 'new_project_name': project.name})
 
 class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     """Detalle de un proyecto con sus videos"""
@@ -722,6 +760,8 @@ class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         
         # Agregar tab activo desde kwargs (por defecto 'videos')
         context['active_tab'] = self.kwargs.get('tab', 'videos')
+
+        context['projects'] = ProjectService.get_user_projects(self.request.user)
         
         return context
 
@@ -883,6 +923,8 @@ class LibraryView(ServiceMixin, ListView):
             })
         
         context['items_with_urls'] = items_with_urls
+
+        context['projects'] = ProjectService.get_user_projects(self.request.user)
         
         return context
 
