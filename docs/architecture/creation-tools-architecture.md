@@ -188,4 +188,3 @@ Siguiendo el mismo patrón:
 
 Todos siguen el mismo patrón ligero.
 
-

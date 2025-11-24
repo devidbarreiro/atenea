@@ -2,6 +2,12 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.utils.crypto import get_random_string
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Constantes para choices
 VIDEO_TYPES = [
@@ -246,8 +252,8 @@ class Video(models.Model):
         self.status = 'processing'
         self.save(update_fields=['status', 'updated_at'])
 
-    def mark_as_completed(self, gcs_path=None, metadata=None):
-        """Marca el video como completado"""
+    def mark_as_completed(self, gcs_path=None, metadata=None, charge_credits=True):
+        """Marca el video como completado y cobra créditos si es necesario"""
         self.status = 'completed'
         self.completed_at = timezone.now()
         if gcs_path:
@@ -255,6 +261,15 @@ class Video(models.Model):
         if metadata:
             self.metadata = metadata
         self.save(update_fields=['status', 'completed_at', 'gcs_path', 'metadata', 'updated_at'])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.created_by:
+            try:
+                from core.services.credits import CreditService
+                CreditService.deduct_credits_for_video(self.created_by, self)
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para video {self.id}: {e}")
+                # No fallar la operación si falla el cobro
 
     def mark_as_error(self, error_message):
         """Marca el video con error"""
@@ -356,8 +371,8 @@ class Image(models.Model):
         self.status = 'processing'
         self.save(update_fields=['status', 'updated_at'])
 
-    def mark_as_completed(self, gcs_path=None, metadata=None):
-        """Marca la imagen como completada"""
+    def mark_as_completed(self, gcs_path=None, metadata=None, charge_credits=True):
+        """Marca la imagen como completada y cobra créditos si es necesario"""
         self.status = 'completed'
         self.completed_at = timezone.now()
         if gcs_path:
@@ -365,6 +380,15 @@ class Image(models.Model):
         if metadata:
             self.metadata = metadata
         self.save(update_fields=['status', 'completed_at', 'gcs_path', 'metadata', 'updated_at'])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.created_by:
+            try:
+                from core.services.credits import CreditService
+                CreditService.deduct_credits_for_image(self.created_by, self)
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para imagen {self.id}: {e}")
+                # No fallar la operación si falla el cobro
 
     def mark_as_error(self, error_message):
         """Marca la imagen con error"""
@@ -500,8 +524,8 @@ class Audio(models.Model):
         self.status = 'processing'
         self.save(update_fields=['status', 'updated_at'])
 
-    def mark_as_completed(self, gcs_path=None, duration=None, metadata=None, alignment=None):
-        """Marca el audio como completado"""
+    def mark_as_completed(self, gcs_path=None, duration=None, metadata=None, alignment=None, charge_credits=True):
+        """Marca el audio como completado y cobra créditos si es necesario"""
         self.status = 'completed'
         self.completed_at = timezone.now()
         if gcs_path:
@@ -516,6 +540,15 @@ class Audio(models.Model):
             'status', 'completed_at', 'gcs_path', 'duration', 
             'metadata', 'alignment', 'updated_at'
         ])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.created_by:
+            try:
+                from core.services.credits import CreditService
+                CreditService.deduct_credits_for_audio(self.created_by, self)
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para audio {self.id}: {e}")
+                # No fallar la operación si falla el cobro
 
     def mark_as_error(self, error_message):
         """Marca el audio con error"""
@@ -932,11 +965,20 @@ class Scene(models.Model):
         self.preview_image_status = 'generating'
         self.save(update_fields=['preview_image_status', 'updated_at'])
     
-    def mark_preview_as_completed(self, gcs_path):
-        """Marca el preview como completado"""
+    def mark_preview_as_completed(self, gcs_path, charge_credits=True):
+        """Marca el preview como completado y cobra créditos si es necesario"""
         self.preview_image_status = 'completed'
         self.preview_image_gcs_path = gcs_path
         self.save(update_fields=['preview_image_status', 'preview_image_gcs_path', 'updated_at'])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.script.created_by:
+            try:
+                from core.services.credits import CreditService
+                CreditService.deduct_credits_for_scene_preview(self.script.created_by, self)
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para preview de escena {self.id}: {e}")
+                # No fallar la operación si falla el cobro
     
     def mark_preview_as_error(self, error_message):
         """Marca el preview con error"""
@@ -949,8 +991,8 @@ class Scene(models.Model):
         self.video_status = 'processing'
         self.save(update_fields=['video_status', 'updated_at'])
 
-    def mark_video_as_completed(self, gcs_path=None, metadata=None):
-        """Marca el video como completado"""
+    def mark_video_as_completed(self, gcs_path=None, metadata=None, charge_credits=True):
+        """Marca el video como completado y cobra créditos si es necesario"""
         self.video_status = 'completed'
         self.completed_at = timezone.now()
         if gcs_path:
@@ -958,6 +1000,15 @@ class Scene(models.Model):
         if metadata:
             self.metadata = metadata
         self.save(update_fields=['video_status', 'completed_at', 'video_gcs_path', 'metadata', 'updated_at'])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.script.created_by:
+            try:
+                from core.services.credits import CreditService
+                CreditService.deduct_credits_for_scene_video(self.script.created_by, self)
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para video de escena {self.id}: {e}")
+                # No fallar la operación si falla el cobro
 
     def mark_video_as_error(self, error_message):
         """Marca el video con error"""
@@ -970,8 +1021,8 @@ class Scene(models.Model):
         self.audio_status = 'processing'
         self.save(update_fields=['audio_status', 'updated_at'])
     
-    def mark_audio_as_completed(self, gcs_path: str, duration: float = None, voice_id: str = None, voice_name: str = None):
-        """Marca el audio como completado"""
+    def mark_audio_as_completed(self, gcs_path: str, duration: float = None, voice_id: str = None, voice_name: str = None, charge_credits=True):
+        """Marca el audio como completado y cobra créditos si es necesario"""
         self.audio_status = 'completed'
         self.audio_gcs_path = gcs_path
         if duration:
@@ -981,6 +1032,29 @@ class Scene(models.Model):
         if voice_name:
             self.audio_voice_name = voice_name
         self.save(update_fields=['audio_status', 'audio_gcs_path', 'audio_duration', 'audio_voice_id', 'audio_voice_name', 'updated_at'])
+        
+        # Cobrar créditos automáticamente
+        if charge_credits and self.script.created_by:
+            try:
+                from core.services.credits import CreditService
+                # Calcular costo basado en script_text de la escena
+                cost = CreditService.estimate_audio_cost(self.script_text)
+                if cost > 0:
+                    CreditService.deduct_credits(
+                        user=self.script.created_by,
+                        amount=cost,
+                        service_name='elevenlabs',
+                        operation_type='audio_generation',
+                        resource=self,
+                        metadata={
+                            'character_count': len(self.script_text),
+                            'duration': duration,
+                            'voice_id': voice_id,
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error al cobrar créditos para audio de escena {self.id}: {e}")
+                # No fallar la operación si falla el cobro
     
     def mark_audio_as_error(self, error_message: str):
         """Marca el audio como error"""
@@ -1276,3 +1350,241 @@ class ProjectInvitation(models.Model):
             self.status == 'pending' and
             not self.is_expired()
         )
+
+
+# ====================
+# CREDITOS Y RATE LIMITING
+# ====================
+
+class UserCredits(models.Model):
+    """Saldo de créditos por usuario"""
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='credits'
+    )
+    credits = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Saldo actual de créditos'
+    )
+    total_purchased = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Total de créditos comprados históricamente'
+    )
+    total_spent = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Total de créditos gastados históricamente'
+    )
+    monthly_limit = models.IntegerField(
+        default=1000,
+        help_text='Límite mensual de créditos'
+    )
+    current_month_usage = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Créditos usados en el mes actual'
+    )
+    last_reset_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Última fecha de reset mensual'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Créditos de Usuario'
+        verbose_name_plural = 'Créditos de Usuarios'
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.credits} créditos"
+    
+    def reset_monthly_usage(self):
+        """Resetea el uso mensual"""
+        self.current_month_usage = Decimal('0')
+        self.last_reset_date = timezone.now().date()
+        self.save(update_fields=['current_month_usage', 'last_reset_date'])
+        logger.info(f"Uso mensual reseteado para usuario {self.user.username}")
+    
+    @property
+    def credits_remaining(self):
+        """Créditos restantes del mes"""
+        return max(Decimal('0'), self.monthly_limit - self.current_month_usage)
+    
+    @property
+    def usage_percentage(self):
+        """Porcentaje de uso mensual"""
+        if self.monthly_limit == 0:
+            return 0
+        return min(100, (self.current_month_usage / self.monthly_limit) * 100)
+
+
+class CreditTransaction(models.Model):
+    """Historial de transacciones de créditos"""
+    TRANSACTION_TYPES = [
+        ('purchase', 'Compra'),
+        ('spend', 'Gasto'),
+        ('refund', 'Reembolso'),
+        ('adjustment', 'Ajuste'),
+        ('monthly_reset', 'Reset Mensual'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='credit_transactions'
+    )
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TRANSACTION_TYPES
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Cantidad de créditos (positivo para compras, negativo para gastos)'
+    )
+    balance_before = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Saldo antes de la transacción'
+    )
+    balance_after = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Saldo después de la transacción'
+    )
+    description = models.TextField(
+        blank=True,
+        help_text='Descripción de la transacción'
+    )
+    
+    # Relación genérica al recurso relacionado
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    related_object = GenericForeignKey('content_type', 'object_id')
+    
+    # Metadata
+    service_name = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='Nombre del servicio usado (gemini_veo, sora, etc.)'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        help_text='Información adicional (duración, tokens, etc.)'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'transaction_type']),
+            models.Index(fields=['service_name', '-created_at']),
+        ]
+        verbose_name = 'Transacción de Créditos'
+        verbose_name_plural = 'Transacciones de Créditos'
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.transaction_type} {self.amount} créditos"
+
+
+class ServiceUsage(models.Model):
+    """Tracking detallado de uso por servicio"""
+    SERVICE_CHOICES = [
+        ('gemini_veo', 'Gemini Veo'),
+        ('sora', 'OpenAI Sora'),
+        ('heygen_avatar_v2', 'HeyGen Avatar V2'),
+        ('heygen_avatar_iv', 'HeyGen Avatar IV'),
+        ('vuela_ai', 'Vuela.ai'),
+        ('gemini_image', 'Gemini Image'),
+        ('elevenlabs', 'ElevenLabs TTS'),
+        ('elevenlabs_music', 'ElevenLabs Music'),
+    ]
+    
+    OPERATION_TYPES = [
+        ('video_generation', 'Generación de Video'),
+        ('image_generation', 'Generación de Imagen'),
+        ('audio_generation', 'Generación de Audio'),
+        ('music_generation', 'Generación de Música'),
+        ('preview_generation', 'Generación de Preview'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='service_usage'
+    )
+    service_name = models.CharField(
+        max_length=50,
+        choices=SERVICE_CHOICES
+    )
+    operation_type = models.CharField(
+        max_length=50,
+        choices=OPERATION_TYPES
+    )
+    
+    # Consumo
+    tokens_used = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Tokens consumidos (si aplica)'
+    )
+    credits_spent = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Créditos gastados'
+    )
+    cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text='Costo real en USD'
+    )
+    
+    # Recurso generado
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    resource = GenericForeignKey('content_type', 'object_id')
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        help_text='Info adicional (duración, resolución, caracteres, etc.)'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'service_name']),
+            models.Index(fields=['service_name', '-created_at']),
+            models.Index(fields=['created_at']),  # Para reportes por fecha
+        ]
+        verbose_name = 'Uso de Servicio'
+        verbose_name_plural = 'Usos de Servicios'
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.service_name} - {self.credits_spent} créditos"
