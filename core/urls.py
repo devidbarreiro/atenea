@@ -156,5 +156,8 @@ urlpatterns = [
     # Creation Agent (Chat de Creación)
     path('chat/', views.CreationAgentView.as_view(), name='creation_agent'),
     path('chat/message/', views.CreationAgentChatView.as_view(), name='creation_agent_chat'),
+    
+    # Credits Dashboard
+    path('credits/', views.CreditsDashboardView.as_view(), name='credits_dashboard'),
 ]
 

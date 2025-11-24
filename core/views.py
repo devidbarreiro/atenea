@@ -18,7 +18,7 @@ from django.contrib.auth.decorators import permission_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
-from django.db.models import Max, Q
+from django.db.models import Max, Q, Sum, Count
 from django.contrib.auth import authenticate, login, logout
 import os
 from django.contrib.auth.models import User, Group
@@ -26,9 +26,10 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
-from .models import Project, Video, Image, Audio, Script, Scene, Music
+from .models import Project, Video, Image, Audio, Script, Scene, Music, UserCredits, CreditTransaction, ServiceUsage
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
+from .services.credits import CreditService
 # N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
@@ -5438,3 +5439,43 @@ class CreationAgentChatView(LoginRequiredMixin, View):
             return JsonResponse({
                 'error': f'Error al procesar tu mensaje: {str(e)}'
             }, status=500)
+
+
+# ====================
+# CREDITS DASHBOARD
+# ====================
+
+class CreditsDashboardView(ServiceMixin, View):
+    """Dashboard de créditos del usuario"""
+    template_name = 'credits/dashboard.html'
+    
+    def get(self, request):
+        """Mostrar dashboard de créditos"""
+        user = request.user
+        
+        # Obtener créditos del usuario
+        credits = CreditService.get_or_create_user_credits(user)
+        
+        # Obtener transacciones recientes (últimas 50)
+        recent_transactions = CreditTransaction.objects.filter(user=user).order_by('-created_at')[:50]
+        
+        # Obtener uso por servicio (últimos 30 días)
+        from datetime import timedelta
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        
+        usage_by_service = ServiceUsage.objects.filter(
+            user=user,
+            created_at__gte=thirty_days_ago
+        ).values('service_name').annotate(
+            total_credits=Sum('credits_spent'),
+            count=Count('id')
+        ).order_by('-total_credits')
+        
+        context = {
+            'credits': credits,
+            'recent_transactions': recent_transactions,
+            'usage_by_service': usage_by_service,
+            'show_header': True,
+        }
+        
+        return render(request, self.template_name, context)

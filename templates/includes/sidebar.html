@@ -263,11 +263,44 @@ x-init="
 
     <!-- Sección Inferior -->
     <div class="border-t border-gray-200 p-4 space-y-2">
-        <!-- Banner Upgrade (opcional) -->
-        <div x-show="!sidebarCollapsed" class="bg-gray-100 rounded-lg p-3 text-center">
-            <div class="text-sm font-semibold text-gray-900 mb-1">Upgrade</div>
-            <div class="text-xs text-gray-600">Desbloquea más funciones</div>
-        </div>
+        <!-- Barra de Créditos -->
+        {% load static %}
+        {% url 'core:credits_dashboard' as credits_url %}
+        {% if user.is_authenticated %}
+            {% if user.credits %}
+                {% with credits=user.credits %}
+                    <a href="{{ credits_url }}" 
+                       class="block bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 hover:from-blue-100 hover:to-indigo-100 transition-all cursor-pointer"
+                       :class="sidebarCollapsed ? 'p-2' : ''"
+                       title="Ver créditos">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-gray-700" x-show="!sidebarCollapsed">Créditos</span>
+                            <span class="text-sm font-bold text-gray-900" x-show="!sidebarCollapsed">{{ credits.credits|floatformat:0 }}</span>
+                            <span class="text-lg font-bold text-gray-900" x-show="sidebarCollapsed">{{ credits.credits|floatformat:0 }}</span>
+                        </div>
+                        <!-- Barra de progreso -->
+                        <div x-show="!sidebarCollapsed" class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-300 {% if credits.usage_percentage >= 90 %}bg-red-500{% elif credits.usage_percentage >= 75 %}bg-yellow-500{% else %}bg-blue-500{% endif %}" 
+                                 style="width: {{ credits.usage_percentage }}%"></div>
+                        </div>
+                        <div x-show="!sidebarCollapsed" class="text-xs text-gray-600 mt-1">
+                            {{ credits.credits_remaining|floatformat:0 }} / {{ credits.monthly_limit }} restantes este mes
+                        </div>
+                    </a>
+                {% endwith %}
+            {% else %}
+                <a href="{{ credits_url }}" 
+                   class="block bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 hover:from-blue-100 hover:to-indigo-100 transition-all cursor-pointer"
+                   :class="sidebarCollapsed ? 'p-2' : ''"
+                   title="Ver créditos">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-700" x-show="!sidebarCollapsed">Créditos</span>
+                        <span class="text-sm font-bold text-gray-900" x-show="!sidebarCollapsed">0</span>
+                        <span class="text-lg font-bold text-gray-900" x-show="sidebarCollapsed">0</span>
+                    </div>
+                </a>
+            {% endif %}
+        {% endif %}
 
         <!-- Barra de utilidades -->
         <div class="flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
