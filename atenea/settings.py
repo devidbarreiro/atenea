@@ -35,10 +35,6 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Para Render, agregar el dominio automáticamente
-if not DEBUG:
-    ALLOWED_HOSTS.extend(['atenea-vao9.onrender.com', '*.onrender.com'])
-
 
 # Application definition
 
@@ -114,7 +110,7 @@ if config('USE_SQLITE', default=True, cast=bool):
         }
     }
 else:
-    # Para Render, usar DATABASE_URL si está disponible
+    # Usar DATABASE_URL si está disponible
     import dj_database_url
     DATABASES = {
         'default': dj_database_url.parse(
@@ -168,7 +164,6 @@ STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
-# Configuración para Render
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
