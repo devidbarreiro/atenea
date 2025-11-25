@@ -95,15 +95,15 @@ jobs:
         REPO: ${{ github.repository }}
       run: |
         # Ejecutar despliegue directamente en el servidor
-        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash -s << 'EOF'
+        # Pasar variables explícitamente al comando SSH
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+          ENV="$ENV" BRANCH="$BRANCH" REPO="$REPO" bash << 'DEPLOY_SCRIPT'
         set -e
         
-        ENV="$ENV"
-        BRANCH="$BRANCH"
-        REPO="$REPO"
         ENV_DIR="$HOME/$ENV"
         
         echo "📁 Preparando directorio $ENV_DIR"
+        echo "🔧 Variables: ENV=$ENV, BRANCH=$BRANCH, REPO=$REPO"
         mkdir -p $ENV_DIR
         cd $ENV_DIR
         
@@ -121,13 +121,14 @@ jobs:
         else
           echo "📥 Clonando repositorio branch $BRANCH"
           rm -rf html
-          git clone -b $BRANCH https://github.com/$REPO.git html
+          git clone -b "$BRANCH" "https://github.com/$REPO.git" html
         fi
         
         # Copiar docker-compose
         echo "📋 Copiando docker-compose.yml"
         if [ ! -f "html/docker/docker-compose.$ENV.yml" ]; then
           echo "❌ Error: No se encontró docker-compose.$ENV.yml en el repositorio"
+          ls -la html/docker/ || echo "Directorio docker no existe"
           exit 1
         fi
         cp html/docker/docker-compose.$ENV.yml docker-compose.yml
@@ -153,4 +154,4 @@ jobs:
         else
           echo "🌐 URL: https://$ENV.atenea.nxhumans.com"
         fi
-        EOF
+DEPLOY_SCRIPT
