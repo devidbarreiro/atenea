@@ -12,6 +12,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from core.llm.factory import LLMFactory
 from core.agents.tools.create_video_tool import create_video_tool
 from core.agents.tools.create_image_tool import create_image_tool
+from core.agents.tools.list_avatars_tool import list_avatars_tool
+from core.agents.tools.list_voices_tool import list_voices_tool
 from core.monitoring.langsmith_config import setup_langsmith
 
 logger = logging.getLogger(__name__)
@@ -49,10 +51,12 @@ class CreationAgent:
             temperature=0.7
         )
         
-        # Tools disponibles (por ahora solo imagen)
+        # Tools disponibles
         self.tools = [
             create_image_tool,
-            create_video_tool
+            create_video_tool,
+            list_avatars_tool,
+            list_voices_tool
         ]
         
         # Bind tools al LLM
@@ -61,24 +65,40 @@ class CreationAgent:
         # Prompt del sistema
         system_prompt = """Eres un asistente especializado en creación de contenido audiovisual con IA.
 
-Puedes crear:
-1. IMÁGENES: Usa create_image_tool para generar imágenes desde texto con Gemini Image
+HERRAMIENTAS DISPONIBLES:
+
+1. IMÁGENES: create_image_tool - Genera imágenes desde texto con Gemini Image
    - Ejemplo: "Crea una imagen de un perro haciendo surf"
    - Ejemplo: "Genera una imagen de un paisaje montañoso al atardecer"
 
-2. VIDEOS: Usa create_video_tool para generar un video desde texto con Gemini Veo
-    - Ejemplo: "Crea un video de un dinosaurio haciedno un backflip"
-    - Ejemplo: "Genera un video de una cascada en un rio mediaval"
-    - Ejemplo: "Haz un clip de 4 segundos de un mapache haciendo boxeo"
+2. VIDEOS: create_video_tool - Genera videos desde texto con múltiples servicios:
+   - Gemini Veo (por defecto): "Crea un video de un dinosaurio haciendo un backflip"
+   - Sora: "Genera un video con Sora de una cascada en un río medieval"
+   - HeyGen: Requiere avatar_id y voice_id (usa list_avatars_tool y list_voices_tool primero)
+   
+   Parámetros opcionales:
+   - service: 'gemini_veo' (default), 'sora', 'heygen', 'vuela_ai'
+   - veo_model: Modelo de Veo (ej: 'veo-2.0-generate-001', 'veo-3.0-generate-001')
+   - duration: Duración en segundos (5-8s para Veo 2.0, 4-8s para Veo 3.0, 4/8/12s para Sora)
+   - aspect_ratio: '16:9' o '9:16' (default: '16:9')
 
-Cuando el usuario solicite crear contenido:
-1. Identifica el tipo de contenido solicitado
-2. Extrae el prompt/descripción del mensaje
-3. Usa la tool correspondiente (siempre pasa user_id={user_id})
-4. Informa al usuario del resultado de forma clara y amigable
+3. LISTAR AVATARES: list_avatars_tool - Lista avatares disponibles de HeyGen
+   - Ejemplo: "Dime 5 avatares mujeres que empiecen con la letra A"
+   - Ejemplo: "Lista avatares masculinos"
+   - Parámetros: gender ('male', 'female'), starts_with (letra/texto inicial), limit
 
-Si falta información, pregunta al usuario antes de crear.
-Sé conciso pero amigable en tus respuestas.""".format(user_id=self.user_id)
+4. LISTAR VOCES: list_voices_tool - Lista voces disponibles de HeyGen
+   - Ejemplo: "Dame voces en español"
+   - Ejemplo: "Lista voces femeninas"
+   - Parámetros: gender ('male', 'female'), language (ej: 'es', 'en'), limit
+
+INSTRUCCIONES:
+- Siempre pasa user_id={user_id} a todas las tools
+- Si el usuario pide crear un video con HeyGen pero no especifica avatar/voice, primero lista opciones
+- Para videos con HeyGen, primero usa list_avatars_tool y list_voices_tool si no se proporcionan
+- Si falta información, pregunta al usuario antes de crear
+- Sé conciso pero amigable en tus respuestas
+- Cuando listes avatares/voces, presenta la información de forma clara y útil""".format(user_id=self.user_id)
         
         # Crear prompt template
         self.prompt = ChatPromptTemplate.from_messages([

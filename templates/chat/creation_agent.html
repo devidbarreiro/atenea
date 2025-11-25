@@ -106,14 +106,50 @@
                                                     
                                                     <!-- Video -->
                                                     <template x-if="result[1] && result[1].video_id">
-                                                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                                            <template x-if="result[1].preview_url && result[1].status_current === 'completed'">
-                                                                <video :src="result[1].preview_url" controls class="w-full rounded-lg mb-2"></video>
+                                                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg" 
+                                                             x-data="videoLoader(result[1].video_id, result[1].status_current)"
+                                                             x-init="init()">
+                                                            <!-- Loading State -->
+                                                            <template x-if="status === 'pending' || status === 'processing'">
+                                                                <div class="space-y-3">
+                                                                    <div class="flex items-center gap-3 p-4 bg-white rounded-lg border border-blue-200">
+                                                                        <svg class="w-6 h-6 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        <div class="flex-1">
+                                                                            <p class="text-sm font-medium text-blue-900" x-text="message"></p>
+                                                                            <p class="text-xs text-blue-600 mt-1">El video se cargará automáticamente cuando esté listo</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <a :href="detailUrl" 
+                                                                       class="inline-flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 underline">
+                                                                        <span>Ver video →</span>
+                                                                    </a>
+                                                                </div>
                                                             </template>
-                                                            <a :href="result[1].detail_url" 
-                                                               class="text-sm text-blue-700 hover:text-blue-900 underline">
-                                                                Ver video →
-                                                            </a>
+                                                            
+                                                            <!-- Completed State -->
+                                                            <template x-if="status === 'completed' && previewUrl">
+                                                                <div class="space-y-2">
+                                                                    <video :src="previewUrl" controls class="w-full rounded-lg"></video>
+                                                                    <a :href="detailUrl" 
+                                                                       class="inline-flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 underline">
+                                                                        <span>Ver video completo →</span>
+                                                                    </a>
+                                                                </div>
+                                                            </template>
+                                                            
+                                                            <!-- Error State -->
+                                                            <template x-if="status === 'error'">
+                                                                <div class="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                                                    <p class="text-sm text-red-800">❌ Error al generar el video</p>
+                                                                    <a :href="detailUrl" 
+                                                                       class="text-sm text-red-700 hover:text-red-900 underline mt-2 inline-block">
+                                                                        Ver detalles →
+                                                                    </a>
+                                                                </div>
+                                                            </template>
                                                         </div>
                                                     </template>
                                                     
@@ -320,6 +356,97 @@ function chatApp() {
                 return marked.parse(text);
             }
             return text.replace(/\n/g, '<br>');
+        }
+    };
+}
+
+// Video Loader Component
+function videoLoader(videoId, initialStatus) {
+    return {
+        videoId: videoId,
+        status: initialStatus || 'pending',
+        previewUrl: null,
+        detailUrl: `/videos/${videoId}/`,
+        message: 'El video está en proceso de creación. Una vez finalizado, podrás verlo aquí. ¡Espero que te guste!',
+        pollInterval: null,
+        maxPollAttempts: 120, // 10 minutos máximo (120 * 5s = 600s)
+        pollAttempts: 0,
+        
+        init() {
+            if (this.status === 'pending' || this.status === 'processing') {
+                this.startPolling();
+            }
+        },
+        
+        startPolling() {
+            this.pollInterval = setInterval(() => {
+                this.checkStatus();
+            }, 5000); // Poll cada 5 segundos
+        },
+        
+        stopPolling() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        },
+        
+        async checkStatus() {
+            if (this.pollAttempts >= this.maxPollAttempts) {
+                this.stopPolling();
+                this.message = '⏱️ El video está tardando más de lo esperado. Puedes verificar el estado más tarde.';
+                return;
+            }
+            
+            this.pollAttempts++;
+            
+            try {
+                const response = await fetch(`/videos/${this.videoId}/status/`);
+                const data = await response.json();
+                
+                if (data.status === 'completed') {
+                    this.status = 'completed';
+                    this.stopPolling();
+                    
+                    // Si la URL viene en la respuesta, usarla
+                    if (data.video_url) {
+                        this.previewUrl = data.video_url;
+                        this.message = '✅ ¡Video generado exitosamente!';
+                    } else {
+                        // Si no viene, intentar obtenerla
+                        await this.fetchVideoUrl();
+                    }
+                } else if (data.status === 'error') {
+                    this.status = 'error';
+                    this.message = 'Error al generar el video';
+                    this.stopPolling();
+                } else {
+                    // Actualizar mensaje según el estado
+                    if (data.status === 'processing') {
+                        this.message = '🎬 Generando el video... Esto puede tardar unos minutos.';
+                    } else {
+                        this.message = '⏳ El video está en cola de procesamiento...';
+                    }
+                }
+            } catch (error) {
+                console.error('Error al verificar estado del video:', error);
+                // Continuar intentando
+            }
+        },
+        
+        async fetchVideoUrl() {
+            try {
+                // Intentar obtener la URL desde el endpoint de status (ya debería venir)
+                // Si no, hacer una petición adicional al detalle del video
+                const response = await fetch(`/videos/${this.videoId}/status/`);
+                const data = await response.json();
+                
+                if (data.video_url) {
+                    this.previewUrl = data.video_url;
+                }
+            } catch (error) {
+                console.error('Error al obtener URL del video:', error);
+            }
         }
     };
 }

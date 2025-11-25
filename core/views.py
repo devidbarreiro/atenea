@@ -1618,11 +1618,26 @@ class VideoStatusView(ServiceMixin, View):
                 except Exception as e:
                     logger.error(f"Error al verificar/cobrar créditos para video {video_id}: {e}")
             
-            return JsonResponse({
+            response_data = {
                 'status': video.status,
                 'message': 'Video ya procesado',
                 'updated_at': video.updated_at.isoformat()
-            })
+            }
+            
+            # Si está completado, incluir URL del video
+            if video.status == 'completed':
+                try:
+                    video_service = self.get_video_service()
+                    video_data = video_service.get_video_with_signed_urls(video)
+                    if video_data.get('signed_url'):
+                        response_data['video_url'] = video_data['signed_url']
+                    elif video_data.get('all_videos') and len(video_data['all_videos']) > 0:
+                        # Si hay múltiples videos, usar el primero
+                        response_data['video_url'] = video_data['all_videos'][0].get('signed_url')
+                except Exception as e:
+                    logger.error(f"Error al obtener URL del video {video_id}: {e}")
+            
+            return JsonResponse(response_data)
         
         if not video.external_id:
             return JsonResponse({
@@ -1648,11 +1663,26 @@ class VideoStatusView(ServiceMixin, View):
                 except Exception as e:
                     logger.error(f"Error al cobrar créditos para video {video_id}: {e}")
             
-            return JsonResponse({
+            response_data = {
                 'status': video.status,
                 'external_status': status_data,
                 'updated_at': video.updated_at.isoformat()
-            })
+            }
+            
+            # Si está completado, incluir URL del video
+            if video.status == 'completed':
+                try:
+                    video_service = self.get_video_service()
+                    video_data = video_service.get_video_with_signed_urls(video)
+                    if video_data.get('signed_url'):
+                        response_data['video_url'] = video_data['signed_url']
+                    elif video_data.get('all_videos') and len(video_data['all_videos']) > 0:
+                        # Si hay múltiples videos, usar el primero
+                        response_data['video_url'] = video_data['all_videos'][0].get('signed_url')
+                except Exception as e:
+                    logger.error(f"Error al obtener URL del video {video_id}: {e}")
+            
+            return JsonResponse(response_data)
         except ServiceException as e:
             return JsonResponse({
                 'error': str(e),

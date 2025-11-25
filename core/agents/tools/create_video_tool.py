@@ -1,10 +1,10 @@
 """
 Tool para crear videos usando VideoService
-Es equivalente a create_image_tool, pero para video.
+Soporta múltiples servicios: Gemini Veo, Sora, Vuela AI, HeyGen
 """
 
 from langchain.tools import tool
-from typing import Dict, Optional
+from typing import Dict, Optional, Literal
 from django.contrib.auth.models import User
 
 from core.services import VideoService, ValidationException, ServiceException, ProjectService
@@ -14,30 +14,53 @@ from core.models import Project
 @tool
 def create_video_tool(
     prompt: str,
+    service: Literal['gemini_veo', 'sora', 'heygen'] = 'gemini_veo',
     title: Optional[str] = None,
     project_id: Optional[int] = None,
-    user_id: int = None
+    user_id: int = None,
+    # Parámetros específicos por servicio
+    veo_model: Optional[str] = None,  # Modelo de Veo (ej: 'veo-2.0-generate-001', 'veo-3.0-generate-001')
+    duration: Optional[int] = None,  # Duración en segundos
+    aspect_ratio: Optional[str] = None,  # '16:9' o '9:16'
+    # Parámetros para HeyGen
+    avatar_id: Optional[str] = None,
+    voice_id: Optional[str] = None,
+        # Parámetros para Sora
+        sora_model: Optional[str] = None,  # 'sora-2' por defecto
+        sora_size: Optional[str] = None,  # '1280x720' por defecto
 ) -> Dict:
     """
-    Crea un video usando Gemini Video desde un prompt de texto.
+    Crea un video usando diferentes servicios de IA (Gemini Veo, Sora, HeyGen).
     
     Args:
-        prompt: Descripción del video a generar
-        title: Título opcional para el video (si no se proporciona, se genera automáticamente)
-        project_id: ID del proyecto donde crear el video (opcional, se crea proyecto automático si no se especifica)
+        prompt: Descripción del video a generar (o guión para HeyGen)
+        service: Servicio a usar ('gemini_veo', 'sora', 'heygen')
+        title: Título opcional para el video
+        project_id: ID del proyecto donde crear el video (opcional)
         user_id: ID del usuario que crea el video (requerido)
+        
+        # Parámetros para Gemini Veo
+        veo_model: Modelo de Veo a usar (default: 'veo-2.0-generate-001')
+        duration: Duración en segundos (default según modelo: 5-8s para Veo 2.0, 4-8s para Veo 3.0)
+        aspect_ratio: Relación de aspecto ('16:9' o '9:16', default: '16:9')
+        
+        # Parámetros para HeyGen
+        avatar_id: ID del avatar de HeyGen (requerido para HeyGen)
+        voice_id: ID de la voz de HeyGen (requerido para HeyGen)
+        
+        # Parámetros para Sora
+        sora_model: Modelo de Sora ('sora-2' por defecto)
+        sora_size: Tamaño del video ('1280x720' por defecto)
+        
+        # Parámetros para Vuela AI
+        vuela_voice_id: ID de voz de Vuela AI
+        vuela_voice_style: Estilo de voz ('narrative', 'expressive', 'dynamic')
     
     Returns:
-        Dict con:
-            - status: 'success' o 'error'
-            - image_id: ID de la imagen creada
-            - title: Título de la imagen
-            - message: Mensaje descriptivo
-            - preview_url: URL de preview (si está disponible inmediatamente)
-            - detail_url: URL para ver detalles de la imagen
+        Dict con status, video_id, title, message, preview_url, detail_url, status_current
     """
     try:
-        # Validaciones
+        # Validaciones básicas
         if not prompt or not prompt.strip():
             return {'status': 'error', 'message': 'El prompt es requerido'}
 
@@ -67,25 +90,56 @@ def create_video_tool(
         # Crear servicio
         video_service = VideoService()
 
-        # Configuración ejemplo (ajustar según tu implementación)
-        config = {
-            'model': 'veo-2.0-generate-001',
-            'aspect_ratio': '16:9',
-            'duration': '4s',          # opcional
-            'safety_settings': 'default'
-        }
+        # Configurar según el servicio
+        video_type = None
+        config = {}
 
-        # Crear entidad Video en BD
+        if service == 'gemini_veo':
+            video_type = 'gemini_veo'
+            config = {
+                'veo_model': veo_model or 'veo-2.0-generate-001',
+                'aspect_ratio': aspect_ratio or '16:9',
+                'duration': duration or 5,  # Mínimo 5s para veo-2.0, 4s para veo-3.0
+                'enhance_prompt': True
+            }
+            
+        elif service == 'sora':
+            video_type = 'sora'
+            config = {
+                'sora_model': sora_model or 'sora-2',
+                'size': sora_size or '1280x720',
+                'duration': duration or 8  # Sora: 4, 8 o 12 segundos
+            }
+            
+        elif service == 'heygen':
+            if not avatar_id or not voice_id:
+                return {
+                    'status': 'error',
+                    'message': 'avatar_id y voice_id son requeridos para HeyGen. Usa list_avatars_tool y list_voices_tool para obtenerlos.'
+                }
+            video_type = 'heygen_avatar_v2'
+            config = {
+                'avatar_id': avatar_id,
+                'voice_id': voice_id,
+                'aspect_ratio': aspect_ratio or '16:9',
+                'voice_speed': 1.0,
+                'voice_pitch': 50,
+                'voice_emotion': 'Excited'
+            }
+        else:
+            return {'status': 'error', 'message': f'Servicio no soportado: {service}'}
+
+        # Crear entidad Video en BD usando el servicio existente
         video = video_service.create_video(
-            title=title,
-            video_type='text_to_video',
-            prompt=prompt,
-            config=config,
             created_by=user,
-            project=project
+            project=project,
+            title=title,
+            video_type=video_type,
+            script=prompt,
+            config=config
         )
 
-        # Generar video (puede ser async o sync según tu sistema)
+        # Generar video usando el servicio existente (con todas sus validaciones)
         try:
             video_service.generate_video(video)
 
@@ -101,10 +155,10 @@ def create_video_tool(
                 'status': 'success',
                 'video_id': video.id,
                 'title': video.title,
-                'message': f'Video "{video.title}" creado exitosamente',
+                'message': f'Video "{video.title}" creado exitosamente con {service}',
                 'preview_url': preview_url,
                 'detail_url': f'/videos/{video.id}/',
-                'status_current': video.status  # pending | processing | completed
+                'status_current': video.status
             }
 
         except (ValidationException, ServiceException) as e:
