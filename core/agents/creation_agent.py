@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from core.llm.factory import LLMFactory
+from core.agents.tools.create_video_tool import create_video_tool
 from core.agents.tools.create_image_tool import create_image_tool
 from core.monitoring.langsmith_config import setup_langsmith
 
@@ -50,7 +51,8 @@ class CreationAgent:
         
         # Tools disponibles (por ahora solo imagen)
         self.tools = [
-            create_image_tool
+            create_image_tool,
+            create_video_tool
         ]
         
         # Bind tools al LLM
@@ -63,6 +65,11 @@ Puedes crear:
 1. IMÁGENES: Usa create_image_tool para generar imágenes desde texto con Gemini Image
    - Ejemplo: "Crea una imagen de un perro haciendo surf"
    - Ejemplo: "Genera una imagen de un paisaje montañoso al atardecer"
+
+2. VIDEOS: Usa create_video_tool para generar un video desde texto con Gemini Veo
+    - Ejemplo: "Crea un video de un dinosaurio haciedno un backflip"
+    - Ejemplo: "Genera un video de una cascada en un rio mediaval"
+    - Ejemplo: "Haz un clip de 4 segundos de un mapache haciendo boxeo"
 
 Cuando el usuario solicite crear contenido:
 1. Identifica el tipo de contenido solicitado
