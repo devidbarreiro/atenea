@@ -132,8 +132,10 @@ jobs:
         # Ejecutar despliegue en el servidor
         echo "🚀 Ejecutando despliegue en el servidor"
         ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
-          ENV_DIR="$HOME/$ENV" ENV="$ENV" bash -s << 'DEPLOY_SCRIPT'
+          ENV="$ENV" bash -s << 'DEPLOY_SCRIPT'
         set -e
+        ENV_DIR="$HOME/$ENV"
+        echo "📂 Cambiando a directorio: $ENV_DIR"
         cd $ENV_DIR
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose down || true
