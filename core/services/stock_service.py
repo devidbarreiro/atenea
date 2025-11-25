@@ -78,7 +78,7 @@ class StockService:
         # FreeSound
         if hasattr(settings, 'FREESOUND_API_KEY') and settings.FREESOUND_API_KEY:
             try:
-                self.clients['freesound'] = FreeSoundClient(settings.FREESOUND_API_KEY)
+                self.clients['freesound'] = FreeSoundClient(settings.FREESOUND_API_KEY.strip())
                 logger.info("FreeSound client inicializado")
             except Exception as e:
                 logger.warning(f"No se pudo inicializar FreeSound client: {e}")
@@ -471,16 +471,37 @@ class StockService:
                 results_by_source[source] = source_results
                 all_results.extend(source_results)
                 
+                if source_results:
+                    logger.info(f"✓ {source}: {len(source_results)} resultados encontrados")
+                
             except Exception as e:
-                logger.error(f"Error buscando audio en {source}: {e}")
+                error_msg = str(e)
+                # Detectar errores de autenticación específicos
+                if '401' in error_msg or 'Unauthorized' in error_msg or 'Invalid token' in error_msg:
+                    logger.warning(f"⚠ {source}: Error de autenticación - API key/token inválido o no configurado")
+                elif '400' in error_msg or 'Bad Request' in error_msg or 'Invalid or missing API key' in error_msg:
+                    logger.warning(f"⚠ {source}: Error de API key - clave inválida o no configurada")
+                else:
+                    logger.error(f"✗ {source}: Error buscando audio: {e}")
                 results_by_source[source] = []
         
         all_results = all_results[:per_page]
+        
+        # Log resumen de búsqueda
+        successful_sources = [s for s, results in results_by_source.items() if results]
+        failed_sources = [s for s in sources if s not in successful_sources]
+        
+        if successful_sources:
+            logger.info(f"✓ Búsqueda de audio exitosa: {len(all_results)} resultados de {len(successful_sources)} fuente(s): {', '.join(successful_sources)}")
+        else:
+            logger.warning(f"⚠ Búsqueda de audio sin resultados: todas las fuentes fallaron ({', '.join(failed_sources)})")
         
         return {
             'query': query,
             'total': len(all_results),
             'sources_searched': sources,
+            'sources_successful': successful_sources,
+            'sources_failed': failed_sources,
             'results_by_source': results_by_source,
             'results': all_results,
             'page': page,
@@ -538,7 +559,14 @@ class StockService:
                 return []
         
         except Exception as e:
-            logger.error(f"Error buscando audio en {source}: {e}")
+            error_msg = str(e)
+            # Detectar errores de autenticación específicos para logging más detallado
+            if '401' in error_msg or 'Unauthorized' in error_msg:
+                logger.warning(f"⚠ {source}: Error de autenticación (401) - verificar API key/token")
+            elif '400' in error_msg and ('API key' in error_msg or 'Bad Request' in error_msg):
+                logger.warning(f"⚠ {source}: API key inválida o no configurada (400)")
+            else:
+                logger.error(f"✗ Error buscando audio en {source}: {e}")
             return []
     
     def get_available_sources(self) -> List[str]:

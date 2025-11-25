@@ -341,12 +341,20 @@ class PixabayClient:
             if user and user_id:
                 photographer_url = f"https://pixabay.com/users/{user}-{user_id}/"
             
+            # Construir URL de thumbnail desde picture_id
+            # Pixabay usa Vimeo CDN para thumbnails de videos
+            thumbnail_url = ''
+            picture_id = video.get('picture_id')
+            if picture_id:
+                # Construir URL de thumbnail usando el formato de Pixabay/Vimeo CDN
+                thumbnail_url = f"https://i.vimeocdn.com/video/{picture_id}_640x360.jpg"
+            
             parsed_item = {
                 'id': str(video.get('id', '')),
                 'title': video.get('tags', 'Sin título'),
                 'type': 'video',
                 'source': 'pixabay',
-                'thumbnail': video.get('picture_id', ''),
+                'thumbnail': thumbnail_url,
                 'preview': best_quality.get('url', '') if best_quality else '',
                 'download_url': best_quality.get('url', '') if best_quality else '',
                 'width': best_quality.get('width', 0) if best_quality else 0,

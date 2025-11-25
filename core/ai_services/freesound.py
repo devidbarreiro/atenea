@@ -1,6 +1,16 @@
 """
 Cliente para FreeSound API
 https://freesound.org/docs/api/
+
+Para obtener un token de API:
+1. Ve a https://freesound.org/apiv2/apply/
+2. Inicia sesión en tu cuenta de FreeSound
+3. Completa el formulario de aplicación API
+4. Copia el "API Key" (token) que aparece después de crear la aplicación
+5. Configúralo en tu .env como FREESOUND_API_KEY
+
+Nota: El token se usa para búsquedas básicas. Para descargas de archivos originales
+se requiere OAuth2 (no implementado aún).
 """
 import requests
 import logging
@@ -48,6 +58,8 @@ class FreeSoundClient:
     
     def _get_headers(self) -> Dict[str, str]:
         """Retorna los headers para las peticiones"""
+        # FreeSound API v2 usa "Token {api_key}" donde api_key es el "Client secret/Api key"
+        # de la tabla de aplicaciones en https://freesound.org/apiv2/apply/
         return {
             'Authorization': f'Token {self.api_key}',
             'Accept': 'application/json'
@@ -73,6 +85,10 @@ class FreeSoundClient:
         headers.update(self._get_headers())
         
         logger.info(f"FreeSound API Request: {method} {url}")
+        # Log parcial del token para debugging (solo si es necesario)
+        if logger.isEnabledFor(logging.DEBUG):
+            masked_token = f"{self.api_key[:4]}...{self.api_key[-4:]}" if len(self.api_key) > 8 else "***"
+            logger.debug(f"FreeSound usando token: {masked_token}")
         
         try:
             response = self.session.request(
@@ -188,11 +204,14 @@ class FreeSoundClient:
                     ''
                 )
             
-            # Obtener download URL (requiere autenticación y puede requerir descarga)
-            download_url = ''
-            if 'previews' in sound:
-                # La descarga real requiere usar el endpoint de descarga
-                download_url = f"https://freesound.org/apiv2/sounds/{sound.get('id')}/download/"
+            # Obtener download URL
+            # NOTA: FreeSound requiere autenticación OAuth2 para descargar archivos originales.
+            # El endpoint de descarga requiere un token de acceso válido en el header Authorization.
+            # Por ahora, marcamos como None ya que requiere autenticación adicional del usuario.
+            # Los usuarios pueden usar la URL de preview para escuchar el audio.
+            download_url = None
+            # Si en el futuro se implementa autenticación OAuth2, descomentar:
+            # download_url = f"https://freesound.org/apiv2/sounds/{sound.get('id')}/download/"
             
             parsed_item = {
                 'id': str(sound.get('id', '')),
@@ -202,7 +221,7 @@ class FreeSoundClient:
                 'source': 'freesound',
                 'thumbnail': '',  # FreeSound no tiene thumbnails de imágenes
                 'preview': preview_url,
-                'download_url': download_url,
+                'download_url': download_url,  # None - requiere autenticación OAuth2
                 'duration': sound.get('duration', 0),
                 'downloads': sound.get('downloads', 0),
                 'license': sound.get('license', ''),
@@ -212,7 +231,8 @@ class FreeSoundClient:
                 'is_premium': False  # FreeSound es siempre gratuito
             }
             
-            if parsed_item['preview'] or parsed_item['download_url']:
+            # Solo agregar si tiene preview (download_url puede ser None)
+            if parsed_item['preview']:
                 parsed.append(parsed_item)
         
         logger.info(f"Parseados {len(parsed)} resultados de FreeSound")

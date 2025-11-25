@@ -199,7 +199,8 @@ ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
 PEXELS_API_KEY = config('PEXELS_API_KEY', default='')
 UNSPLASH_ACCESS_KEY = config('UNSPLASH_ACCESS_KEY', default='')  # Access Key (Client-ID) de Unsplash
 PIXABAY_API_KEY = config('PIXABAY_API_KEY', default='')
-FREESOUND_API_KEY = config('FREESOUND_API_KEY', default='')  # Token de acceso de FreeSound
+FREESOUND_API_KEY = config('FREESOUND_API_KEY', default='')  # Token de acceso de FreeSound (para búsquedas)
+# FREESOUND_CLIENT_ID y FREESOUND_CLIENT_SECRET solo se necesitan para OAuth2 (descargas, no implementado aún)
 
 # ElevenLabs Defaults
 ELEVENLABS_DEFAULT_MODEL = config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5')

@@ -284,11 +284,54 @@
                     </template>
                     
                     <template x-if="contentType === 'audio'">
-                        <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
-                            <svg class="w-16 h-16 text-purple-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                            </svg>
-                            <span class="text-xs text-gray-600 font-medium" x-text="item.audio_type || 'Audio'"></span>
+                        <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-4"
+                             x-data="{ playing: false, duration: 0 }"
+                             x-init="
+                                $watch('$refs.audioPlayer', (audio) => {
+                                    if (audio) {
+                                        audio.addEventListener('loadedmetadata', () => {
+                                            duration = audio.duration || (item.duration || 0);
+                                        });
+                                    }
+                                });
+                                duration = item.duration || 0;
+                             ">
+                            <!-- Botón Play/Pause -->
+                            <button 
+                                @click.stop="
+                                    const audio = $refs.audioPlayer;
+                                    if (playing) {
+                                        audio.pause();
+                                        playing = false;
+                                    } else {
+                                        audio.play();
+                                        playing = true;
+                                    }
+                                "
+                                class="mb-2 p-4 bg-purple-500 hover:bg-purple-600 rounded-full text-white transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <!-- Icono Play -->
+                                <svg x-show="!playing" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"></path>
+                                </svg>
+                                <!-- Icono Pause -->
+                                <svg x-show="playing" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                </svg>
+                            </button>
+                            <!-- Duración -->
+                            <span class="text-xs text-gray-500 font-mono" 
+                                  x-text="duration > 0 ? formatDuration(duration) : ''"></span>
+                            <!-- Audio oculto -->
+                            <audio 
+                                x-ref="audioPlayer"
+                                :src="item.preview || item.download_url" 
+                                preload="metadata"
+                                @ended="playing = false"
+                                @pause="playing = false"
+                                @play="playing = true"
+                                @loadedmetadata="duration = $event.target.duration || duration"
+                                style="display: none;">
+                            </audio>
                         </div>
                     </template>
                     
@@ -400,11 +443,54 @@
                         </template>
                         
                         <template x-if="contentType === 'audio'">
-                            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
-                                <svg class="w-24 h-24 text-purple-400 mb-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                                </svg>
-                                <span class="text-sm text-gray-600 font-medium" x-text="results[currentIndex].audio_type || 'Audio'"></span>
+                            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-8"
+                                 x-data="{ playing: false, duration: 0 }"
+                                 x-init="
+                                    $watch('$refs.audioPlayerSingle', (audio) => {
+                                        if (audio) {
+                                            audio.addEventListener('loadedmetadata', () => {
+                                                duration = audio.duration || (results[currentIndex].duration || 0);
+                                            });
+                                        }
+                                    });
+                                    duration = results[currentIndex].duration || 0;
+                                 ">
+                                <!-- Botón Play/Pause grande -->
+                                <button 
+                                    @click.stop="
+                                        const audio = $refs.audioPlayerSingle;
+                                        if (playing) {
+                                            audio.pause();
+                                            playing = false;
+                                        } else {
+                                            audio.play();
+                                            playing = true;
+                                        }
+                                    "
+                                    class="mb-4 p-6 bg-purple-500 hover:bg-purple-600 rounded-full text-white transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                                    <!-- Icono Play -->
+                                    <svg x-show="!playing" class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"></path>
+                                    </svg>
+                                    <!-- Icono Pause -->
+                                    <svg x-show="playing" class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                    </svg>
+                                </button>
+                                <!-- Duración -->
+                                <span class="text-sm text-gray-500 font-mono" 
+                                      x-text="duration > 0 ? formatDuration(duration) : ''"></span>
+                                <!-- Audio oculto -->
+                                <audio 
+                                    x-ref="audioPlayerSingle"
+                                    :src="results[currentIndex].preview || results[currentIndex].download_url" 
+                                    preload="metadata"
+                                    @ended="playing = false"
+                                    @pause="playing = false"
+                                    @play="playing = true"
+                                    @loadedmetadata="duration = $event.target.duration || duration"
+                                    style="display: none;">
+                                </audio>
                             </div>
                         </template>
                         
@@ -563,6 +649,7 @@ function stockSearch() {
         error: null,
         page: 1,
         perPage: 20,
+        maxPage: 100,  // Límite máximo de páginas para evitar cargas infinitas
         hasMore: false,
         showProjectModal: false,
         selectedItem: null,
@@ -714,6 +801,19 @@ function stockSearch() {
         getUrlParam(name) {
             const params = new URLSearchParams(window.location.search);
             return params.get(name);
+        },
+        
+        formatDuration(seconds) {
+            // Formatea segundos a MM:SS o HH:MM:SS si es muy largo
+            if (!seconds || seconds === 0) return '';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            return `${minutes}:${String(secs).padStart(2, '0')}`;
         },
         
         getCSRFToken() {
@@ -956,8 +1056,8 @@ function stockSearch() {
                     const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
                     this.results = newResults;
                     this.totalResults = data.data?.total || this.results.length || 0;
-                    // Determinar si hay más resultados disponibles
-                    this.hasMore = newResults.length === 20; // perPage por defecto
+                    // Determinar si hay más resultados disponibles (considerando límite máximo de páginas)
+                    this.hasMore = newResults.length === 20 && this.page < this.maxPage; // perPage por defecto
                 } else {
                     this.results = [];
                     this.totalResults = 0;
@@ -986,6 +1086,14 @@ function stockSearch() {
                 this.page = 1;
                 this.results = [];
                 this.currentIndex = 0;
+            }
+            
+            // Verificar límite máximo de páginas antes de buscar
+            if (this.page >= this.maxPage) {
+                console.warn(`Límite máximo de páginas alcanzado (${this.maxPage})`);
+                this.hasMore = false;
+                this.error = `Se alcanzó el límite máximo de páginas (${this.maxPage}). Por favor, refina tu búsqueda.`;
+                return;
             }
 
             this.loading = resetPage;
@@ -1031,8 +1139,8 @@ function stockSearch() {
                     
                     this.totalResults = data.data?.total || this.results.length || 0;
                     
-                    // Determinar si hay más resultados
-                    this.hasMore = newResults.length === this.perPage;
+                    // Determinar si hay más resultados (considerando límite máximo de páginas)
+                    this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
                     
                     // Actualizar URL
                     this.updateUrl({
@@ -1068,6 +1176,13 @@ function stockSearch() {
         async loadMore() {
             if (this.loadingMore || !this.hasMore) return;
             
+            // Verificar límite máximo de páginas
+            if (this.page >= this.maxPage) {
+                console.warn(`Límite máximo de páginas alcanzado (${this.maxPage})`);
+                this.hasMore = false;
+                return;
+            }
+            
             // Si no hay query, usar la búsqueda destacada con página incrementada
             if (!this.query.trim()) {
                 // Cargar más contenido destacado
@@ -1101,8 +1216,8 @@ function stockSearch() {
                         // Agregar resultados a los existentes
                         this.results = [...this.results, ...newResults];
                         this.totalResults = data.data?.total || this.results.length || 0;
-                        // Determinar si hay más resultados
-                        this.hasMore = newResults.length === this.perPage;
+                        // Determinar si hay más resultados (considerando límite máximo de páginas)
+                        this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
                     } else {
                         this.hasMore = false;
                     }
