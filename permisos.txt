@@ -1,0 +1,111 @@
+======================================================================
+INSERTS SQL PARA PERMISOS DE USUARIO
+======================================================================
+
+Usuario fuente: romero (ID: 1)
+Usuario destino: admin (ID: 15)
+Fecha de generación: 2025-11-25 14:25:54
+
+======================================================================
+INSTRUCCIONES:
+======================================================================
+1. Ejecuta estos INSERTs en tu base de datos SQL
+2. Opción A - Desde Django shell:
+   python manage.py shell
+   >>> from django.db import connection
+   >>> cursor = connection.cursor()
+   >>> cursor.execute('INSERT ...')
+   >>> connection.commit()
+
+3. Opción B - Desde dbshell:
+   python manage.py dbshell
+   # Luego pega los INSERTs de abajo
+
+======================================================================
+INSERTS SQL:
+======================================================================
+
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 1);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 2);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 3);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 4);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 5);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 6);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 7);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 8);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 9);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 10);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 11);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 12);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 13);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 14);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 15);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 16);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 17);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 18);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 19);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 20);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 21);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 22);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 23);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 24);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 25);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 26);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 27);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 28);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 29);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 30);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 31);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 32);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 33);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 34);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 35);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 36);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 37);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 38);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 39);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 40);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 41);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 42);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 43);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 44);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 45);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 46);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 47);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 48);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 49);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 50);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 51);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 52);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 53);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 54);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 55);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 56);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 57);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 58);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 59);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 60);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 61);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 62);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 63);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 64);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 65);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 66);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 67);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 68);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 69);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 70);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 71);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 72);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 73);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 74);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 75);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 76);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 77);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 78);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 79);
+INSERT INTO auth_user_user_permissions (user_id, permission_id) VALUES (15, 80);
+
+======================================================================
+FIN
+======================================================================
