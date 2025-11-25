@@ -97,20 +97,14 @@ jobs:
         # Ejecutar despliegue directamente en el servidor
         # Pasar variables explícitamente al comando SSH
         ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
-          ENV="$ENV" BRANCH="$BRANCH" REPO="$REPO" bash << 'DEPLOY_SCRIPT'
+          ENV="$ENV" BRANCH="$BRANCH" REPO="$REPO" bash -s << 'DEPLOY_SCRIPT'
         set -e
-        
         ENV_DIR="$HOME/$ENV"
-        
         echo "📁 Preparando directorio $ENV_DIR"
         echo "🔧 Variables: ENV=$ENV, BRANCH=$BRANCH, REPO=$REPO"
         mkdir -p $ENV_DIR
         cd $ENV_DIR
-        
-        # Crear directorio html si no existe
         mkdir -p html
-        
-        # Actualizar código
         if [ -d "html/.git" ]; then
           echo "📥 Actualizando código desde branch $BRANCH"
           cd html
@@ -123,8 +117,6 @@ jobs:
           rm -rf html
           git clone -b "$BRANCH" "https://github.com/$REPO.git" html
         fi
-        
-        # Copiar docker-compose
         echo "📋 Copiando docker-compose.yml"
         if [ ! -f "html/docker/docker-compose.$ENV.yml" ]; then
           echo "❌ Error: No se encontró docker-compose.$ENV.yml en el repositorio"
@@ -132,26 +124,20 @@ jobs:
           exit 1
         fi
         cp html/docker/docker-compose.$ENV.yml docker-compose.yml
-        
-        # Desplegar
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose down || true
         docker compose build --no-cache
         docker compose up -d
-        
         echo "⏳ Esperando a que los servicios estén listos..."
         sleep 15
-        
         echo "🔄 Ejecutando migraciones"
         docker compose run --rm migrate || echo "⚠️  Advertencia: Error en migraciones"
-        
         echo "📦 Recolectando archivos estáticos"
         docker compose run --rm collectstatic || echo "⚠️  Advertencia: Error en collectstatic"
-        
         echo "✅ Despliegue a $ENV completado!"
         if [ "$ENV" == "prod" ]; then
           echo "🌐 URL: https://atenea.nxhumans.com"
         else
           echo "🌐 URL: https://$ENV.atenea.nxhumans.com"
         fi
-DEPLOY_SCRIPT
+        DEPLOY_SCRIPT
