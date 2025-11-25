@@ -1,5 +1,67 @@
 <div class="flex items-center gap-2 group">
+    {% if projects %}
+    <div class="relative" x-data="{ open: false }" @click.away="open = false">
+        <div 
+            role="button" 
+            tabindex="0" 
+            class="flex items-center gap-2 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black rounded-md px-2 -ml-2"
+            @click="open = !open"
+            @keydown.enter.prevent="open = !open"
+            @keydown.space.prevent="open = !open"
+        >
+            <h1 class="text-2xl font-bold text-gray-900" id="project-name-display">{{ project.name }}</h1>
+            <svg class="w-5 h-5 text-gray-500 transition-transform duration-200" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+        </div>
+        <div 
+            x-show="open" 
+            x-transition
+            x-cloak
+            class="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-20"
+        >
+            <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                Mis proyectos
+            </div>
+            <div class="max-h-64 overflow-y-auto py-1">
+                {% with active_tab|default:'videos' as current_tab %}
+                {% for project_item in projects %}
+                    {% if current_tab == 'videos' %}
+                        {% url 'core:project_videos' project_item.id as project_switch_url %}
+                    {% elif current_tab == 'images' %}
+                        {% url 'core:project_images' project_item.id as project_switch_url %}
+                    {% elif current_tab == 'audios' %}
+                        {% url 'core:project_audios' project_item.id as project_switch_url %}
+                    {% elif current_tab == 'music' %}
+                        {% url 'core:project_music' project_item.id as project_switch_url %}
+                    {% elif current_tab == 'scripts' %}
+                        {% url 'core:project_scripts' project_item.id as project_switch_url %}
+                    {% elif current_tab == 'agent' %}
+                        {% url 'core:project_agent' project_item.id as project_switch_url %}
+                    {% else %}
+                        {% url 'core:project_videos' project_item.id as project_switch_url %}
+                    {% endif %}
+                    <a 
+                        href="{{ project_switch_url }}"
+                        class="flex items-center justify-between px-4 py-2 text-sm transition-colors {% if project_item.id == project.id %}bg-gray-100 text-gray-900{% else %}text-gray-700 hover:bg-gray-50{% endif %}"
+                    >
+                        <span class="truncate">{{ project_item.name }}</span>
+                        {% if project_item.id == project.id %}
+                        <span class="ml-2 text-xs font-semibold text-blue-600">Actual</span>
+                        {% endif %}
+                    </a>
+                {% empty %}
+                    <div class="px-4 py-3 text-sm text-gray-500">
+                        No tienes proyectos aún.
+                    </div>
+                {% endfor %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+    {% else %}
     <h1 class="text-2xl font-bold text-gray-900" id="project-name-display">{{ project.name }}</h1>
+    {% endif %}
     {% if user_role == 'owner' or user_role == 'editor' %}
     <button 
         onclick="editProjectName()"
@@ -22,6 +84,7 @@ function editProjectName() {
     input.type = 'text';
     input.value = currentName;
     input.className = 'text-2xl font-bold text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-black focus:outline-none px-1';
+    input.style.maxWidth = '200px';
     input.style.minWidth = '200px';
     
     // Reemplazar display con input
