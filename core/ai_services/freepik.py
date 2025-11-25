@@ -420,18 +420,37 @@ class FreepikClient:
             if not parsed_item['preview'] and parsed_item['thumbnail']:
                 parsed_item['preview'] = parsed_item['thumbnail']
             
-            # URL de descarga - Freepik puede usar varios campos
-            if 'download_url' in item:
-                parsed_item['download_url'] = item['download_url']
-            elif 'url' in item:
-                parsed_item['download_url'] = item['url']
-            elif 'source' in item:
-                parsed_item['download_url'] = item['source']
+            # URL de descarga - Freepik: priorizar preview sobre url (url es página HTML)
+            # El campo 'url' en Freepik es la página web, no el archivo directo
+            # El campo 'preview' o 'image.source.url' contiene la URL directa de la imagen
             
-            # Si no hay download_url, usar preview como fallback
-            if not parsed_item['download_url']:
+            # Primero intentar campos específicos de descarga
+            if 'download_url' in item:
+                download_url_candidate = item['download_url']
+                # Verificar que no sea una página HTML
+                if download_url_candidate and not download_url_candidate.endswith(('.htm', '.html')):
+                    parsed_item['download_url'] = download_url_candidate
+            
+            # Si no hay download_url válido, usar preview (que es la URL directa de la imagen)
+            if not parsed_item['download_url'] and parsed_item['preview']:
                 parsed_item['download_url'] = parsed_item['preview']
-                logger.debug(f"  Using preview as download_url fallback for item {parsed_item['id']}")
+                logger.debug(f"  Using preview as download_url for item {parsed_item['id']}")
+            
+            # Fallback: intentar extraer URL directa de image.source si existe
+            if not parsed_item['download_url'] and 'image' in item:
+                img_data = item['image']
+                if isinstance(img_data, dict) and 'source' in img_data:
+                    source_data = img_data['source']
+                    if isinstance(source_data, dict) and 'url' in source_data:
+                        source_url = source_data['url']
+                        if source_url and not source_url.endswith(('.htm', '.html')):
+                            parsed_item['download_url'] = source_url
+                            logger.debug(f"  Using image.source.url as download_url for item {parsed_item['id']}")
+            
+            # Último fallback: usar thumbnail si no hay nada más
+            if not parsed_item['download_url'] and parsed_item['thumbnail']:
+                parsed_item['download_url'] = parsed_item['thumbnail']
+                logger.debug(f"  Using thumbnail as download_url fallback for item {parsed_item['id']}")
             
             # Determinar orientación
             if parsed_item['width'] and parsed_item['height']:

@@ -1,0 +1,1438 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Stock Content - Atenea{% endblock %}
+
+{% block content %}
+<div x-data="stockSearch()" x-init="init()">
+    <!-- Hero Section -->
+    <div class="mb-12 text-center">
+        <h1 class="text-5xl md:text-6xl font-bold mb-4 text-gray-900">
+            Contenido Stock Gratis y Premium
+        </h1>
+        <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Tu biblioteca completa de imágenes, vectores, ilustraciones, videos y más
+        </p>
+        
+        <!-- Barra de búsqueda principal -->
+        <div class="max-w-3xl mx-auto mb-8">
+            <form @submit.prevent="search()" class="relative">
+                <div class="relative">
+                    <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input 
+                        type="text" 
+                        x-model="query"
+                        placeholder="Buscar assets o empezar a crear..." 
+                        class="w-full pl-14 pr-32 py-4 text-lg border-2 border-gray-300 rounded-full focus:ring-2 focus:ring-black focus:border-black transition-all shadow-sm"
+                        @keyup.enter="search()">
+                    <button 
+                        type="submit"
+                        :disabled="loading || !query.trim()"
+                        class="absolute right-2 top-1/2 transform -translate-y-1/2 px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium">
+                        <span x-show="!loading">Buscar</span>
+                        <span x-show="loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Filtros de tipo de contenido -->
+        <div class="flex flex-wrap justify-center gap-3 mb-4">
+                <a 
+                    href="/stock/photos/"
+                    @click.prevent="changeContentType('image')"
+                    :class="contentType === 'image' ? 'bg-black text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'"
+                    class="px-6 py-3 rounded-full text-sm font-semibold transition-all">
+                    🖼️ Fotos
+                </a>
+                <a 
+                    href="/stock/videos/"
+                    @click.prevent="changeContentType('video')"
+                    :class="contentType === 'video' ? 'bg-black text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'"
+                    class="px-6 py-3 rounded-full text-sm font-semibold transition-all">
+                    📹 Videos
+                </a>
+                <a 
+                    href="/stock/audio/"
+                    @click.prevent="changeContentType('audio')"
+                    :class="contentType === 'audio' ? 'bg-black text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'"
+                    class="px-6 py-3 rounded-full text-sm font-semibold transition-all">
+                    🔊 Audio
+                </a>
+        </div>
+
+        <!-- Filtros: Fuentes centradas, Orientación y Licencia a la derecha -->
+        <div class="flex flex-col items-center gap-4 mb-8">
+            <!-- Filtro de fuentes - Estilo similar a Fotos/Videos/Audio -->
+            <div class="flex flex-wrap justify-center items-center gap-3" x-show="uniqueSources.length > 0">
+                <template x-for="(source, index) in uniqueSources" :key="`source-${source}-${index}`">
+                    <label class="flex items-center gap-2 cursor-pointer px-4 py-2 rounded-full text-xs font-semibold transition-all border border-gray-200"
+                           :class="selectedSources.includes(source) ? 'bg-black text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'">
+                        <input 
+                            type="checkbox" 
+                            :value="source"
+                            x-model="selectedSources"
+                            @change="search(); updateUrl({ sources: selectedSources })"
+                            class="sr-only">
+                        <!-- Iconos de las herramientas -->
+                        <template x-if="source === 'freepik'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                        </template>
+                        <template x-if="source === 'pexels'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </template>
+                        <template x-if="source === 'unsplash'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </template>
+                        <template x-if="source === 'pixabay'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                                <line x1="12" y1="22.08" x2="12" y2="12"/>
+                            </svg>
+                        </template>
+                        <template x-if="source === 'freesound'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                            </svg>
+                        </template>
+                        <span x-text="(source || '').charAt(0).toUpperCase() + (source || '').slice(1)"></span>
+                    </label>
+                </template>
+            </div>
+
+            <!-- Filtros a la derecha: Orientación y Licencia -->
+            <div class="flex flex-wrap justify-center items-center gap-4">
+                <!-- Filtro de orientación (solo para imágenes/videos) -->
+                <div x-show="contentType === 'image' || contentType === 'video'" class="flex items-center gap-2">
+                    <label class="text-xs font-medium text-gray-600">Orientación:</label>
+                    <select 
+                        x-model="orientation"
+                        @change="search(); updateUrl({ orientation: orientation })"
+                        class="px-3 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-black focus:border-black transition-all">
+                        <option value="">Todas</option>
+                        <option value="horizontal">Horizontal</option>
+                        <option value="vertical">Vertical</option>
+                        <option value="square">Cuadrada</option>
+                    </select>
+                </div>
+
+                <!-- Filtro de tipo de audio (solo para audio) -->
+                <div x-show="contentType === 'audio'" class="flex items-center gap-2">
+                    <label class="text-xs font-medium text-gray-600">Tipo:</label>
+                    <select 
+                        x-model="audioType"
+                        @change="search(); updateUrl({ audio_type: audioType })"
+                        class="px-3 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-black focus:border-black transition-all">
+                        <option value="all">Todos</option>
+                        <option value="music">Música</option>
+                        <option value="sound_effects">Efectos de sonido</option>
+                    </select>
+                </div>
+
+                <!-- Filtro de licencia (solo para imágenes con Freepik) -->
+                <div x-show="contentType === 'image' && selectedSources.includes('freepik')" class="flex items-center gap-2">
+                    <label class="text-xs font-medium text-gray-600">Licencia:</label>
+                    <select 
+                        x-model="licenseFilter"
+                        @change="search(); updateUrl({ license: licenseFilter })"
+                        class="px-3 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-black focus:border-black transition-all">
+                        <option value="all">Todas</option>
+                        <option value="free">Gratis</option>
+                        <option value="premium">Premium</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resultados -->
+    <div x-show="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <p x-text="error"></p>
+    </div>
+
+    <!-- Barra de herramientas: Contador y Toggle de vista -->
+    <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
+        <!-- Contador de resultados (solo cuando hay resultados) -->
+        <div class="flex-1 min-w-0">
+            <p x-show="results && Array.isArray(results) && results.length > 0" class="text-sm text-gray-600">
+                Mostrando <span class="font-semibold text-gray-900" x-text="results.length"></span> de 
+                <span class="font-semibold text-gray-900" x-text="totalResults || results.length"></span> resultados
+            </p>
+            <div x-show="!results || !Array.isArray(results) || results.length === 0" class="text-sm text-gray-400">
+                <!-- Espacio reservado cuando no hay resultados -->
+            </div>
+        </div>
+        
+        <!-- Toggle de vista - Siempre visible -->
+        <div class="flex items-center gap-2 bg-gray-100 rounded-lg p-1 shadow-sm border border-gray-200">
+            <button 
+                @click="viewMode = 'grid'; updateUrl({ view: 'grid' }); setupKeyboardNavigation();"
+                :class="viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                </svg>
+                <span>Cuadrícula</span>
+            </button>
+            <button 
+                @click="viewMode = 'single'; currentIndex = 0; updateUrl({ view: 'single', index: 0 }); setupKeyboardNavigation();"
+                :class="viewMode === 'single' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                <span>Vista única</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Loader durante carga inicial -->
+    <div x-show="loading && (!results || results.length === 0)" class="flex items-center justify-center py-20">
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin"></div>
+            <p class="text-sm text-gray-600">Cargando contenido...</p>
+        </div>
+    </div>
+
+    <!-- Vista cuadrícula -->
+    <div x-show="results && Array.isArray(results) && results.length > 0 && viewMode === 'grid'">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <template x-for="(item, index) in results" :key="index">
+            <div class="group bg-white rounded-lg overflow-hidden border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200"
+                 x-data="{ menuOpen: false, downloadLoading: false, imageError: false }"
+                 @click="menuOpen = false">
+                
+                <!-- Thumbnail -->
+                <div class="relative w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+                    <!-- Badge de fuente -->
+                    <span class="absolute top-2 left-2 px-2 py-0.5 rounded text-xs font-semibold z-10 bg-black bg-opacity-75 text-white backdrop-blur-sm"
+                          x-text="(item.source || 'stock').charAt(0).toUpperCase() + (item.source || 'stock').slice(1)"></span>
+                    
+                    <!-- Menú de opciones -->
+                    <div class="absolute top-2 right-2 z-20">
+                        <button 
+                            @click.stop="menuOpen = !menuOpen" 
+                            class="p-2 bg-white bg-opacity-90 backdrop-blur-sm rounded-lg hover:bg-opacity-100 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+                            :class="{ 'opacity-100': menuOpen }">
+                            <svg class="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+                            </svg>
+                        </button>
+                        
+                        <div x-show="menuOpen" @click.stop x-cloak
+                            class="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-30">
+                            
+                            <button 
+                                @click.stop="downloadItem(item); menuOpen = false" 
+                                :disabled="downloadLoading"
+                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors disabled:opacity-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                </svg>
+                                Descargar
+                            </button>
+                            
+                            <button 
+                                @click.stop="moveToProject(item); menuOpen = false" 
+                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                </svg>
+                                Mover a proyecto
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Imagen/Video/Audio preview -->
+                    <template x-if="contentType === 'image'">
+                        <img :src="item.thumbnail || item.preview || item.url" :alt="item.title" 
+                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                             x-show="!imageError"
+                             @error="imageError = true">
+                    </template>
+                    
+                    <template x-if="contentType === 'video'">
+                        <div class="relative w-full h-full bg-black group"
+                             x-data="{ 
+                                playing: false,
+                                get videoSrc() { 
+                                    if (!item) return null;
+                                    const url = item.preview || item.download_url;
+                                    if (!url) return null;
+                                    
+                                    // Lista de extensiones de video
+                                    const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.flv', '.wmv'];
+                                    // Lista de extensiones de imagen (para excluir)
+                                    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+                                    
+                                    // Si es claramente una imagen, no usar proxy
+                                    if (imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
+                                        return null; // No mostrar nada si es imagen
+                                    }
+                                    
+                                    // Verificar si es un video
+                                    const hasVideoExt = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+                                    const hasVideoIndicator = url.toLowerCase().includes('/videos/') || 
+                                                              url.toLowerCase().includes('/video/') ||
+                                                              url.toLowerCase().includes('video');
+                                    
+                                    // Si tiene extensión de video o indicador claro, usar proxy
+                                    if (hasVideoExt || hasVideoIndicator) {
+                                        return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+                                    }
+                                    
+                                    // Si no está claro, intentar usar la URL directa
+                                    return url;
+                                }
+                             }">
+                            <video 
+                                x-ref="videoPlayer"
+                                :src="videoSrc" 
+                                :poster="item ? (item.thumbnail || '') : ''"
+                                class="w-full h-full object-cover"
+                                preload="metadata"
+                                @click.stop="
+                                    if (playing) {
+                                        $refs.videoPlayer.pause();
+                                        playing = false;
+                                    } else {
+                                        $refs.videoPlayer.play();
+                                        playing = true;
+                                    }
+                                "
+                                @play="playing = true"
+                                @pause="playing = false"
+                                @ended="playing = false"
+                                muted>
+                                Tu navegador no soporta el elemento de video.
+                            </video>
+                            <!-- Overlay con botón play/pause -->
+                            <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-20 transition-all cursor-pointer pointer-events-none"
+                                 @click.stop="
+                                    if (playing) {
+                                        $refs.videoPlayer.pause();
+                                        playing = false;
+                                    } else {
+                                        $refs.videoPlayer.play();
+                                        playing = true;
+                                    }
+                                 ">
+                                <button class="p-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all transform hover:scale-110 pointer-events-auto">
+                                    <svg x-show="!playing" class="w-8 h-8 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"></path>
+                                    </svg>
+                                    <svg x-show="playing" class="w-8 h-8 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <template x-if="contentType === 'audio'">
+                        <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-4"
+                             x-data="{ playing: false, duration: 0 }"
+                             x-init="
+                                $watch('$refs.audioPlayer', (audio) => {
+                                    if (audio) {
+                                        audio.addEventListener('loadedmetadata', () => {
+                                            duration = audio.duration || (item.duration || 0);
+                                        });
+                                    }
+                                });
+                                duration = item.duration || 0;
+                             ">
+                            <!-- Botón Play/Pause -->
+                            <button 
+                                @click.stop="
+                                    const audio = $refs.audioPlayer;
+                                    if (playing) {
+                                        audio.pause();
+                                        playing = false;
+                                    } else {
+                                        audio.play();
+                                        playing = true;
+                                    }
+                                "
+                                class="mb-2 p-4 bg-purple-500 hover:bg-purple-600 rounded-full text-white transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <!-- Icono Play -->
+                                <svg x-show="!playing" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"></path>
+                                </svg>
+                                <!-- Icono Pause -->
+                                <svg x-show="playing" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                </svg>
+                            </button>
+                            <!-- Duración -->
+                            <span class="text-xs text-gray-500 font-mono" 
+                                  x-text="duration > 0 ? formatDuration(duration) : ''"></span>
+                            <!-- Audio oculto -->
+                            <audio 
+                                x-ref="audioPlayer"
+                                :src="item.preview || item.download_url" 
+                                preload="metadata"
+                                @ended="playing = false"
+                                @pause="playing = false"
+                                @play="playing = true"
+                                @loadedmetadata="duration = $event.target.duration || duration"
+                                style="display: none;">
+                            </audio>
+                        </div>
+                    </template>
+                    
+                    <!-- Placeholder para errores -->
+                    <div x-show="imageError" class="w-full h-full bg-gray-100 flex flex-col items-center justify-center">
+                        <svg class="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                </div>
+                
+                <!-- Información -->
+                <div class="p-3">
+                    <h3 class="font-medium text-gray-900 mb-1 truncate text-sm" 
+                        x-text="item.title || 'Sin título'"></h3>
+                    <div class="flex items-center justify-between text-xs text-gray-500">
+                        <span x-text="item.author || item.photographer || 'Desconocido'"></span>
+                        <a :href="item.url || item.photographer_url" target="_blank" 
+                           @click.stop
+                           class="text-blue-600 hover:underline font-medium">
+                            Ver →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </template>
+        </div>
+    </div>
+    
+    <!-- Loader durante carga de más resultados -->
+    <div x-show="loadingMore && viewMode === 'grid'" class="mt-8 text-center py-6">
+        <div class="flex flex-col items-center gap-3">
+            <div class="w-8 h-8 border-3 border-gray-200 border-t-black rounded-full animate-spin"></div>
+            <p class="text-sm text-gray-600">Cargando más resultados...</p>
+        </div>
+    </div>
+
+    <!-- Botón Cargar más - Visible cuando hay más resultados (vista cuadrícula) -->
+    <div x-show="viewMode === 'grid' && hasMore && results && Array.isArray(results) && results.length > 0 && !loadingMore" class="mt-8 text-center">
+        <button 
+            @click="loadMore()"
+            class="px-8 py-3 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium">
+            Cargar más
+        </button>
+    </div>
+
+    <!-- Vista única -->
+    <div x-show="results && Array.isArray(results) && results.length > 0 && viewMode === 'single'" 
+         class="relative max-w-5xl mx-auto mb-8"
+         x-data="{ imageError: false }">
+        <!-- Loader durante carga en vista única -->
+        <div x-show="loading && results.length === 0" class="flex items-center justify-center py-20">
+            <div class="flex flex-col items-center gap-4">
+                <div class="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin"></div>
+                <p class="text-sm text-gray-600">Cargando contenido...</p>
+            </div>
+        </div>
+        <template x-if="results[currentIndex]">
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden" style="height: calc(100vh - 250px); min-height: 600px; max-height: 800px;">
+                <!-- Navegación izquierda -->
+                <div class="absolute inset-y-0 left-0 flex items-center z-10">
+                    <button 
+                        @click="previousItem()"
+                        :disabled="currentIndex === 0"
+                        class="ml-4 p-3 bg-black bg-opacity-75 text-white rounded-full hover:bg-opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Navegación derecha -->
+                <div class="absolute inset-y-0 right-0 flex items-center z-10">
+                    <button 
+                        @click="nextItem()"
+                        :disabled="currentIndex >= results.length - 1 && !hasMore"
+                        class="mr-4 p-3 bg-black bg-opacity-75 text-white rounded-full hover:bg-opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Contenido principal -->
+                <div class="flex flex-col md:flex-row h-full">
+                    <!-- Imagen/Video/Audio -->
+                    <div class="relative w-full md:w-2/3 bg-gray-100 flex items-center justify-center overflow-hidden h-full">
+                        <template x-if="contentType === 'image' && results[currentIndex]">
+                            <img :src="results[currentIndex] ? (results[currentIndex].thumbnail || results[currentIndex].preview || results[currentIndex].url) : ''" 
+                                 :alt="results[currentIndex] ? (results[currentIndex].title || '') : ''" 
+                                 class="max-w-full max-h-full w-auto h-auto object-contain p-4"
+                                 x-show="!imageError"
+                                 @error="imageError = true">
+                        </template>
+                        
+                        <template x-if="contentType === 'video' && results[currentIndex]">
+                            <div class="relative w-full h-full flex items-center justify-center bg-black">
+                                <template x-if="getCurrentVideoSrc()">
+                                    <video 
+                                        :src="getCurrentVideoSrc()" 
+                                        :poster="results[currentIndex].thumbnail || ''"
+                                        class="max-w-full max-h-full w-auto h-auto object-contain"
+                                        preload="metadata"
+                                        controls
+                                        @click.stop>
+                                        Tu navegador no soporta el elemento de video.
+                                    </video>
+                                </template>
+                                <template x-if="!getCurrentVideoSrc()">
+                                    <div class="text-white text-center p-8">
+                                        <p>Video no disponible</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <template x-if="contentType === 'audio'">
+                            <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-8"
+                                 x-data="{ playing: false, duration: 0 }"
+                                 x-init="
+                                    $watch('$refs.audioPlayerSingle', (audio) => {
+                                        if (audio) {
+                                            audio.addEventListener('loadedmetadata', () => {
+                                                duration = audio.duration || (results[currentIndex].duration || 0);
+                                            });
+                                        }
+                                    });
+                                    duration = results[currentIndex].duration || 0;
+                                 ">
+                                <!-- Botón Play/Pause grande -->
+                                <button 
+                                    @click.stop="
+                                        const audio = $refs.audioPlayerSingle;
+                                        if (playing) {
+                                            audio.pause();
+                                            playing = false;
+                                        } else {
+                                            audio.play();
+                                            playing = true;
+                                        }
+                                    "
+                                    class="mb-4 p-6 bg-purple-500 hover:bg-purple-600 rounded-full text-white transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                                    <!-- Icono Play -->
+                                    <svg x-show="!playing" class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"></path>
+                                    </svg>
+                                    <!-- Icono Pause -->
+                                    <svg x-show="playing" class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                    </svg>
+                                </button>
+                                <!-- Duración -->
+                                <span class="text-sm text-gray-500 font-mono" 
+                                      x-text="duration > 0 ? formatDuration(duration) : ''"></span>
+                                <!-- Audio oculto -->
+                                <audio 
+                                    x-ref="audioPlayerSingle"
+                                    :src="results[currentIndex].preview || results[currentIndex].download_url" 
+                                    preload="metadata"
+                                    @ended="playing = false"
+                                    @pause="playing = false"
+                                    @play="playing = true"
+                                    @loadedmetadata="duration = $event.target.duration || duration"
+                                    style="display: none;">
+                                </audio>
+                            </div>
+                        </template>
+                        
+                        <div x-show="imageError" class="w-full h-full bg-gray-100 flex flex-col items-center justify-center">
+                            <svg class="w-16 h-16 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Información -->
+                    <div class="w-full md:w-1/3 p-6 flex flex-col justify-between h-full overflow-y-auto">
+                        <div>
+                            <!-- Badge fuente -->
+                            <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold mb-4 bg-gray-100 text-gray-700"
+                                  x-text="(results[currentIndex].source || 'stock').charAt(0).toUpperCase() + (results[currentIndex].source || 'stock').slice(1)"></span>
+                            
+                            <h2 class="text-2xl font-bold text-gray-900 mb-3" x-text="results[currentIndex].title || 'Sin título'"></h2>
+                            <p class="text-gray-600 mb-4 line-clamp-4" x-text="results[currentIndex].description || ''"></p>
+                            
+                            <div class="space-y-2 text-sm text-gray-500 mb-6">
+                                <div>
+                                    <span class="font-medium">Autor:</span>
+                                    <span x-text="results[currentIndex].author || results[currentIndex].photographer || 'Desconocido'"></span>
+                                </div>
+                                <div x-show="results[currentIndex].width && results[currentIndex].height">
+                                    <span class="font-medium">Dimensiones:</span>
+                                    <span x-text="results[currentIndex].width + ' × ' + results[currentIndex].height"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Acciones -->
+                        <div class="space-y-2">
+                            <button 
+                                @click="downloadItem(results[currentIndex])"
+                                :disabled="downloadLoading"
+                                class="w-full px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                </svg>
+                                Descargar
+                            </button>
+                            <button 
+                                @click="moveToProject(results[currentIndex])"
+                                class="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                </svg>
+                                Mover a proyecto
+                            </button>
+                            <a :href="results[currentIndex].url || results[currentIndex].photographer_url" 
+                               target="_blank"
+                               class="block w-full px-4 py-2 text-center text-blue-600 hover:text-blue-800 transition-colors">
+                                Ver original →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contador -->
+                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-black bg-opacity-75 text-white rounded-full text-sm backdrop-blur-sm">
+                    <span x-text="currentIndex + 1"></span> / <span x-text="results.length"></span>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Estado vacío -->
+    <div x-show="!loading && (!results || results.length === 0) && query" 
+         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+        <div class="hero-content text-center">
+            <div class="max-w-md">
+                <div class="text-6xl mb-4 opacity-30">🔍</div>
+                <h1 class="text-3xl font-bold text-gray-800">No se encontraron resultados</h1>
+                <p class="py-6 text-gray-600">
+                    Intenta con otros términos de búsqueda o ajusta los filtros
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estado inicial - solo se muestra si no hay resultados y no hay query -->
+    <div x-show="!loading && !query && (!results || results.length === 0)" 
+         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+        <div class="hero-content text-center">
+            <div class="max-w-md">
+                <div class="text-6xl mb-4 opacity-30">📚</div>
+                <h1 class="text-3xl font-bold text-gray-800">Cargando contenido destacado...</h1>
+                <p class="py-6 text-gray-600">
+                    Mostrando contenido popular mientras buscas
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para mover a proyecto -->
+    <div x-show="showProjectModal" x-cloak 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         @click.away="showProjectModal = false">
+        <div @click.stop class="bg-white rounded-lg shadow-lg w-96 max-w-full p-6">
+            <h3 class="text-lg font-semibold mb-4">Mover a proyecto</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+                <template x-for="(project, index) in projects" :key="`project-${project.id}-${index}`">
+                    <button 
+                        @click="confirmMoveToProject(project.id)"
+                        class="w-full text-left px-4 py-2 border rounded hover:bg-gray-50 flex items-center justify-between">
+                        <span x-text="project.name"></span>
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </button>
+                </template>
+            </div>
+            <div class="mt-4 text-right">
+                <button @click="showProjectModal = false" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function stockSearch() {
+    // Inicializar availableSources directamente (solo una vez)
+    let availableSourcesInit = [];
+    try {
+        const sourcesJson = {{ available_sources|safe }};
+        if (Array.isArray(sourcesJson)) {
+            // Eliminar duplicados usando lowercase para comparación
+            const seen = new Set();
+            for (const s of sourcesJson) {
+                if (!s || typeof s !== 'string' || s.trim() === '') continue;
+                const normalized = s.trim().toLowerCase();
+                if (!seen.has(normalized)) {
+                    seen.add(normalized);
+                    availableSourcesInit.push(s.trim());
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error parseando availableSources:', e);
+    }
+    
+    return {
+        query: '{{ query|default:"" }}',
+        contentType: '{{ content_type|default:"image" }}',
+        selectedSources: {{ sources|default:"[]"|safe }},
+        orientation: '{{ orientation|default:"" }}',
+        licenseFilter: '{{ license_filter|default:"all" }}',
+        audioType: '{{ audio_type|default:"all" }}',
+        availableSources: availableSourcesInit,
+        results: [],
+        totalResults: 0,
+        loading: false,
+        loadingMore: false,
+        error: null,
+        page: 1,
+        perPage: 20,
+        maxPage: 100,  // Límite máximo de páginas para evitar cargas infinitas
+        hasMore: false,
+        showProjectModal: false,
+        selectedItem: null,
+        projects: [],
+        downloadLoading: false,
+        viewMode: 'grid', // 'grid' o 'single'
+        currentIndex: 0,
+        _initialized: false,
+
+        get uniqueSources() {
+            // Computed property para asegurar que no hay duplicados (doble verificación)
+            if (!Array.isArray(this.availableSources) || this.availableSources.length === 0) {
+                return [];
+            }
+            const seen = new Set();
+            const result = [];
+            for (const s of this.availableSources) {
+                if (!s || typeof s !== 'string') continue;
+                const normalized = s.trim().toLowerCase();
+                if (!seen.has(normalized)) {
+                    seen.add(normalized);
+                    result.push(s.trim());
+                }
+            }
+            // Log solo si hay duplicados detectados
+            if (result.length !== this.availableSources.length) {
+                console.warn('Duplicados detectados en uniqueSources:', {
+                    original: this.availableSources,
+                    unique: result
+                });
+            }
+            return result;
+        },
+
+        init() {
+            // Evitar múltiples inicializaciones
+            if (this._initialized) {
+                return;
+            }
+            this._initialized = true;
+            
+            console.log('Available sources inicializados (sin duplicados):', this.availableSources);
+            
+            // Leer query params de la URL
+            this.readUrlParams();
+            
+            // Parsear projects desde JSON
+            try {
+                const projectsJson = {{ projects|safe }};
+                const projectsArray = Array.isArray(projectsJson) ? projectsJson : [];
+                // Eliminar duplicados por ID
+                const seenIds = new Set();
+                this.projects = projectsArray.filter(project => {
+                    if (!project || !project.id) return false;
+                    if (seenIds.has(project.id)) return false;
+                    seenIds.add(project.id);
+                    return true;
+                });
+            } catch (e) {
+                console.error('Error parseando projects:', e);
+                this.projects = [];
+            }
+            
+            // Parsear selectedSources desde JSON o URL
+            try {
+                const sourcesStr = {{ sources|default:"[]"|safe }};
+                this.selectedSources = Array.isArray(sourcesStr) ? sourcesStr : [];
+            } catch (e) {
+                this.selectedSources = [];
+            }
+            
+            // Si hay sources en URL, usarlos
+            const urlSources = this.getUrlParam('sources');
+            if (urlSources) {
+                this.selectedSources = urlSources.split(',').filter(s => s);
+            }
+            
+            // Inicializar fuentes seleccionadas si no hay ninguna
+            if (this.selectedSources.length === 0 && this.availableSources.length > 0) {
+                this.selectedSources = [...this.availableSources];
+            }
+            
+            // Si hay query inicial, buscar
+            if (this.query) {
+                this.search();
+            } else {
+                // Precargar contenido genérico
+                this.loadFeaturedContent();
+            }
+            
+            // Configurar navegación de teclado solo si estamos en vista única
+            if (this.viewMode === 'single') {
+                this.setupKeyboardNavigation();
+            }
+            
+            // Configurar listener para navegación del navegador (back/forward)
+            this.setupPopstateListener();
+        },
+        
+        setupPopstateListener() {
+            // Remover listener anterior si existe
+            if (this._popstateHandler) {
+                window.removeEventListener('popstate', this._popstateHandler);
+                this._popstateHandler = null;
+            }
+            
+            // Crear nuevo handler
+            this._popstateHandler = () => {
+                this.readUrlParams();
+                if (this.query) {
+                    this.search();
+                } else {
+                    this.loadFeaturedContent();
+                }
+                // Reconfigurar navegación de teclado si cambió el modo de vista
+                if (this.viewMode === 'single') {
+                    this.setupKeyboardNavigation();
+                }
+            };
+            
+            window.addEventListener('popstate', this._popstateHandler);
+        },
+
+        readUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            const path = window.location.pathname;
+            
+            // Determinar content_type desde la ruta o query param
+            if (path.includes('/photos')) {
+                this.contentType = 'image';
+            } else if (path.includes('/videos')) {
+                this.contentType = 'video';
+            } else if (path.includes('/audio')) {
+                this.contentType = 'audio';
+            } else {
+                this.contentType = params.get('type') || '{{ content_type|default:"image" }}';
+            }
+            
+            // Leer otros parámetros
+            this.query = params.get('q') || '{{ query|default:"" }}';
+            this.orientation = params.get('orientation') || '{{ orientation|default:"" }}';
+            this.licenseFilter = params.get('license') || '{{ license_filter|default:"all" }}';
+            this.audioType = params.get('audio_type') || '{{ audio_type|default:"all" }}';
+            this.page = parseInt(params.get('page')) || {{ page|default:1 }};
+            this.viewMode = params.get('view') || 'grid';
+            this.currentIndex = parseInt(params.get('index')) || 0;
+        },
+
+        getUrlParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name);
+        },
+        
+        formatDuration(seconds) {
+            // Formatea segundos a MM:SS o HH:MM:SS si es muy largo
+            if (!seconds || seconds === 0) return '';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            return `${minutes}:${String(secs).padStart(2, '0')}`;
+        },
+        
+        getVideoSrc(item) {
+            // Función helper para construir la URL del proxy de video de forma segura
+            if (!item) return null;
+            const url = item.preview || item.download_url;
+            if (!url) return null;
+            // Solo usar proxy para URLs que parezcan videos
+            const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v'];
+            const isVideoUrl = videoExtensions.some(ext => url.toLowerCase().includes(ext)) || 
+                              url.includes('/videos/') || 
+                              url.includes('video');
+            if (!isVideoUrl) return url; // Si no es video, devolver URL directa
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+        },
+        
+        getCurrentItem() {
+            // Función helper para obtener el item actual de forma segura
+            if (!this.results || this.results.length === 0) return null;
+            if (this.currentIndex < 0 || this.currentIndex >= this.results.length) return null;
+            return this.results[this.currentIndex];
+        },
+        
+        getCurrentVideoSrc() {
+            // Función helper para obtener la URL del proxy de video para el item actual
+            const item = this.getCurrentItem();
+            if (!item) return null;
+            const url = item.preview || item.download_url;
+            if (!url) return null;
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+        },
+        
+        getCSRFToken() {
+            // Intentar obtener CSRF token de múltiples formas
+            // 1. Desde input hidden con name=csrfmiddlewaretoken
+            let token = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+            if (token) return token;
+            
+            // 2. Desde cookie csrftoken
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    token = value;
+                    break;
+                }
+            }
+            if (token) return token;
+            
+            // 3. Desde meta tag
+            const metaToken = document.querySelector('meta[name=csrf-token]')?.content;
+            if (metaToken) return metaToken;
+            
+            return null;
+        },
+
+        updateUrl(updateParams = {}) {
+            const params = new URLSearchParams(window.location.search);
+            
+            // Determinar la ruta base según el tipo de contenido
+            let basePath = '/stock/';
+            if (this.contentType === 'image') {
+                basePath = '/stock/photos/';
+            } else if (this.contentType === 'video') {
+                basePath = '/stock/videos/';
+            } else if (this.contentType === 'audio') {
+                basePath = '/stock/audio/';
+            }
+            
+            // Actualizar parámetros
+            if (updateParams.hasOwnProperty('query')) {
+                if (updateParams.query) {
+                    params.set('q', updateParams.query);
+                } else {
+                    params.delete('q');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('sources')) {
+                if (updateParams.sources && updateParams.sources.length > 0) {
+                    params.set('sources', updateParams.sources.join(','));
+                } else {
+                    params.delete('sources');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('orientation')) {
+                if (updateParams.orientation) {
+                    params.set('orientation', updateParams.orientation);
+                } else {
+                    params.delete('orientation');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('license')) {
+                if (updateParams.license && updateParams.license !== 'all') {
+                    params.set('license', updateParams.license);
+                } else {
+                    params.delete('license');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('audio_type')) {
+                if (updateParams.audio_type && updateParams.audio_type !== 'all') {
+                    params.set('audio_type', updateParams.audio_type);
+                } else {
+                    params.delete('audio_type');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('page')) {
+                if (updateParams.page > 1) {
+                    params.set('page', updateParams.page);
+                } else {
+                    params.delete('page');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('view')) {
+                if (updateParams.view && updateParams.view !== 'grid') {
+                    params.set('view', updateParams.view);
+                } else {
+                    params.delete('view');
+                }
+            }
+            
+            if (updateParams.hasOwnProperty('index')) {
+                if (updateParams.index > 0) {
+                    params.set('index', updateParams.index);
+                } else {
+                    params.delete('index');
+                }
+            }
+            
+            // Construir nueva URL
+            const queryString = params.toString();
+            const newUrl = basePath + (queryString ? '?' + queryString : '');
+            
+            // Actualizar URL sin recargar
+            window.history.pushState({}, '', newUrl);
+        },
+
+        setupKeyboardNavigation() {
+            // Remover listener anterior si existe (importante: usar el mismo flag de capture)
+            if (this._keyboardHandler) {
+                document.removeEventListener('keydown', this._keyboardHandler, true);
+                this._keyboardHandler = null;
+            }
+            
+            // Solo configurar si estamos en vista única
+            if (this.viewMode !== 'single') return;
+            
+            // Crear nuevo handler con bind para mantener el contexto
+            this._keyboardHandler = (e) => {
+                // Solo funcionar en vista única y si hay resultados
+                if (this.viewMode !== 'single' || !this.results || this.results.length === 0) return;
+                
+                // Evitar si está escribiendo en un input, textarea o contenteditable
+                const target = e.target;
+                if (target.tagName === 'INPUT' || 
+                    target.tagName === 'TEXTAREA' || 
+                    target.isContentEditable ||
+                    target.closest('input, textarea, [contenteditable]')) {
+                    return;
+                }
+                
+                // Manejar flechas izquierda/derecha y arriba/abajo
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    this.previousItem();
+                } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    this.nextItem();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    this.viewMode = 'grid';
+                    this.updateUrl({ view: 'grid' });
+                    this.setupKeyboardNavigation(); // Reconfigurar para desactivar navegación
+                }
+            };
+            
+            // Agregar listener con capture para asegurar que se ejecute
+            document.addEventListener('keydown', this._keyboardHandler, true);
+        },
+
+        async nextItem() {
+            // Evitar múltiples llamadas simultáneas
+            if (this._navigating) return;
+            this._navigating = true;
+            
+            try {
+                if (this.currentIndex < this.results.length - 1) {
+                    // Avanzar al siguiente item si hay más cargados
+                    this.currentIndex++;
+                    this.updateUrl({ index: this.currentIndex });
+                } else if (this.hasMore) {
+                    // Si estamos al final y hay más resultados, cargar más automáticamente
+                    await this.loadMore();
+                    // Después de cargar más, avanzar al siguiente item
+                    if (this.currentIndex < this.results.length - 1) {
+                        this.currentIndex++;
+                        this.updateUrl({ index: this.currentIndex });
+                    }
+                }
+            } finally {
+                this._navigating = false;
+            }
+        },
+
+        previousItem() {
+            // Evitar múltiples llamadas simultáneas
+            if (this._navigating) return;
+            this._navigating = true;
+            
+            try {
+                if (this.currentIndex > 0) {
+                    this.currentIndex--;
+                    this.updateUrl({ index: this.currentIndex });
+                }
+            } finally {
+                this._navigating = false;
+            }
+        },
+
+        changeContentType(newType) {
+            this.contentType = newType;
+            this.page = 1;
+            this.currentIndex = 0;
+            this.query = '';
+            this.results = [];
+            this.updateUrl({ query: '', page: 1, view: 'grid', index: 0 });
+            this.loadFeaturedContent();
+        },
+
+        async loadFeaturedContent() {
+            // Búsquedas genéricas para mostrar contenido destacado
+            const featuredQueries = {
+                'image': 'nature',
+                'video': 'nature',
+                'audio': 'ambient'
+            };
+            
+            const featuredQuery = featuredQueries[this.contentType] || 'nature';
+            this.loading = true;
+            this.error = null;
+            
+            try {
+                // Buscar directamente sin modificar el input
+                const params = new URLSearchParams({
+                    query: featuredQuery,
+                    type: this.contentType,
+                    page: 1,
+                    per_page: 20
+                });
+
+                if (this.selectedSources.length > 0) {
+                    params.append('sources', this.selectedSources.join(','));
+                }
+
+                const response = await fetch(`/api/stock/search/?${params.toString()}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
+                    this.results = newResults;
+                    this.totalResults = data.data?.total || this.results.length || 0;
+                    // Determinar si hay más resultados disponibles (considerando límite máximo de páginas)
+                    this.hasMore = newResults.length === 20 && this.page < this.maxPage; // perPage por defecto
+                } else {
+                    this.results = [];
+                    this.totalResults = 0;
+                    this.hasMore = false;
+                }
+            } catch (e) {
+                console.error('Error cargando contenido destacado:', e);
+                this.results = [];
+                this.totalResults = 0;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async search(resetPage = true) {
+            if (!this.query.trim()) {
+                this.results = [];
+                this.totalResults = 0;
+                this.hasMore = false;
+                this.currentIndex = 0;
+                this.updateUrl({ query: '', page: 1 });
+                return;
+            }
+
+            if (resetPage) {
+                this.page = 1;
+                this.results = [];
+                this.currentIndex = 0;
+            }
+            
+            // Verificar límite máximo de páginas antes de buscar
+            if (this.page >= this.maxPage) {
+                console.warn(`Límite máximo de páginas alcanzado (${this.maxPage})`);
+                this.hasMore = false;
+                this.error = `Se alcanzó el límite máximo de páginas (${this.maxPage}). Por favor, refina tu búsqueda.`;
+                return;
+            }
+
+            this.loading = resetPage;
+            this.loadingMore = !resetPage;
+            this.error = null;
+
+            try {
+                const params = new URLSearchParams({
+                    query: this.query,
+                    type: this.contentType,
+                    page: this.page,
+                    per_page: this.perPage
+                });
+
+                if (this.selectedSources.length > 0) {
+                    params.append('sources', this.selectedSources.join(','));
+                }
+
+                if (this.orientation) {
+                    params.append('orientation', this.orientation);
+                }
+
+                if (this.licenseFilter && this.licenseFilter !== 'all') {
+                    params.append('license', this.licenseFilter);
+                }
+
+                if (this.contentType === 'audio' && this.audioType !== 'all') {
+                    params.append('audio_type', this.audioType);
+                }
+
+                const response = await fetch(`/api/stock/search/?${params.toString()}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
+                    
+                    if (resetPage) {
+                        this.results = newResults;
+                    } else {
+                        // Agregar resultados a los existentes
+                        this.results = [...this.results, ...newResults];
+                    }
+                    
+                    this.totalResults = data.data?.total || this.results.length || 0;
+                    
+                    // Determinar si hay más resultados (considerando límite máximo de páginas)
+                    this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
+                    
+                    // Actualizar URL
+                    this.updateUrl({
+                        query: this.query,
+                        sources: this.selectedSources,
+                        orientation: this.orientation,
+                        license: this.licenseFilter,
+                        audio_type: this.audioType,
+                        page: this.page
+                    });
+                } else {
+                    this.error = data.error?.message || 'Error en la búsqueda';
+                    if (resetPage) {
+                        this.results = [];
+                        this.totalResults = 0;
+                    }
+                    this.hasMore = false;
+                }
+            } catch (e) {
+                this.error = 'Error de conexión. Intenta de nuevo.';
+                if (resetPage) {
+                    this.results = [];
+                    this.totalResults = 0;
+                }
+                this.hasMore = false;
+                console.error('Error en búsqueda:', e);
+            } finally {
+                this.loading = false;
+                this.loadingMore = false;
+            }
+        },
+
+        async loadMore() {
+            if (this.loadingMore || !this.hasMore) return;
+            
+            // Verificar límite máximo de páginas
+            if (this.page >= this.maxPage) {
+                console.warn(`Límite máximo de páginas alcanzado (${this.maxPage})`);
+                this.hasMore = false;
+                return;
+            }
+            
+            // Si no hay query, usar la búsqueda destacada con página incrementada
+            if (!this.query.trim()) {
+                // Cargar más contenido destacado
+                const featuredQueries = {
+                    'image': 'nature',
+                    'video': 'landscape',
+                    'audio': 'ambient'
+                };
+                
+                const featuredQuery = featuredQueries[this.contentType] || 'nature';
+                this.page += 1;
+                this.loadingMore = true;
+                
+                try {
+                    const params = new URLSearchParams({
+                        query: featuredQuery,
+                        type: this.contentType,
+                        page: this.page,
+                        per_page: this.perPage
+                    });
+
+                    if (this.selectedSources.length > 0) {
+                        params.append('sources', this.selectedSources.join(','));
+                    }
+
+                    const response = await fetch(`/api/stock/search/?${params.toString()}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
+                        // Agregar resultados a los existentes
+                        this.results = [...this.results, ...newResults];
+                        this.totalResults = data.data?.total || this.results.length || 0;
+                        // Determinar si hay más resultados (considerando límite máximo de páginas)
+                        this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
+                    } else {
+                        this.hasMore = false;
+                    }
+                } catch (e) {
+                    console.error('Error cargando más contenido destacado:', e);
+                    this.hasMore = false;
+                } finally {
+                    this.loadingMore = false;
+                }
+            } else {
+                // Búsqueda normal con query
+                this.page += 1;
+                await this.search(false);
+            }
+        },
+
+        async downloadItem(item) {
+            this.downloadLoading = true;
+            try {
+                // Obtener CSRF token de forma segura
+                const csrfToken = this.getCSRFToken();
+                if (!csrfToken) {
+                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    return;
+                }
+                
+                // Descargar y guardar en BD usando la API
+                const response = await fetch('/api/stock/download/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        item: item,
+                        content_type: this.contentType
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // También descargar el archivo directamente usando download_url si está disponible
+                    const downloadUrl = item.download_url || item.url;
+                    if (downloadUrl) {
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = item.title || 'stock-item';
+                        link.target = '_blank';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }
+                    
+                    alert(data.message || 'Item descargado y guardado correctamente');
+                } else {
+                    console.error('Error en descarga:', data);
+                    alert('Error: ' + (data.error || 'Error al descargar'));
+                }
+            } catch (e) {
+                alert('Error al descargar: ' + e.message);
+                console.error('Error descargando:', e);
+            } finally {
+                this.downloadLoading = false;
+            }
+        },
+
+        moveToProject(item) {
+            this.selectedItem = item;
+            this.showProjectModal = true;
+        },
+
+        async confirmMoveToProject(projectId) {
+            if (!this.selectedItem) return;
+
+            this.downloadLoading = true;
+            try {
+                // Obtener CSRF token de forma segura
+                const csrfToken = this.getCSRFToken();
+                if (!csrfToken) {
+                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    return;
+                }
+                
+                // Descargar y guardar en BD con proyecto asignado
+                const response = await fetch('/api/stock/download/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        item: this.selectedItem,
+                        content_type: this.contentType,
+                        project_id: projectId
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(data.message || 'Item guardado en proyecto correctamente');
+                    this.showProjectModal = false;
+                } else {
+                    alert('Error: ' + (data.error || 'Error al guardar en proyecto'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+                console.error('Error moviendo a proyecto:', e);
+            } finally {
+                this.downloadLoading = false;
+            }
+        }
+    }
+}
+</script>
+{% endblock %}
+
