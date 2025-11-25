@@ -69,9 +69,21 @@ jobs:
     - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 700 ~/.ssh
+        # Guardar la clave SSH preservando saltos de línea correctamente
+        # Usar printf para preservar saltos de línea y caracteres especiales
+        printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+        # Verificar que la clave es válida
+        if ! ssh-keygen -l -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+          echo "❌ Error: La clave SSH no es válida"
+          echo "Primeras líneas de la clave:"
+          head -3 ~/.ssh/deploy_key
+          exit 1
+        fi
+        echo "✅ Clave SSH válida"
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+        chmod 644 ~/.ssh/known_hosts
     
     - name: Deploy to ${{ steps.env.outputs.env }}
       env:
