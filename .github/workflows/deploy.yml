@@ -130,7 +130,7 @@ jobs:
         
         # Ejecutar despliegue en el servidor
         echo "🚀 Ejecutando despliegue en el servidor"
-        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash << DEPLOY_SCRIPT
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash -s << 'DEPLOY_SCRIPT'
         set -e
         cd $ENV_DIR
         echo "🔨 Construyendo y reiniciando contenedores"
@@ -149,4 +149,4 @@ jobs:
         else
           echo "🌐 URL: https://$ENV.atenea.nxhumans.com"
         fi
-DEPLOY_SCRIPT
+        DEPLOY_SCRIPT
