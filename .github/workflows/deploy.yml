@@ -85,45 +85,54 @@ jobs:
         ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
         chmod 644 ~/.ssh/known_hosts
     
+    - name: Prepare deployment files
+      run: |
+        echo "📋 Verificando docker-compose para ${{ steps.env.outputs.env }}"
+        if [ ! -f "docker/docker-compose.${{ steps.env.outputs.env }}.yml" ]; then
+          echo "❌ Error: No se encontró docker-compose.${{ steps.env.outputs.env }}.yml"
+          exit 1
+        fi
+        echo "✅ Archivos listos para despliegue"
+    
     - name: Deploy to ${{ steps.env.outputs.env }}
       env:
         SSH_KEY: ~/.ssh/deploy_key
         SSH_HOST: ${{ secrets.SSH_HOST }}
         SSH_USER: ${{ secrets.SSH_USERNAME }}
-        BRANCH: ${{ github.ref_name }}
         ENV: ${{ steps.env.outputs.env }}
-        REPO: ${{ github.repository }}
       run: |
-        # Ejecutar despliegue directamente en el servidor
-        # Pasar variables explícitamente al comando SSH
-        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
-          ENV="$ENV" BRANCH="$BRANCH" REPO="$REPO" bash -s << 'DEPLOY_SCRIPT'
-        set -e
         ENV_DIR="$HOME/$ENV"
-        echo "📁 Preparando directorio $ENV_DIR"
-        echo "🔧 Variables: ENV=$ENV, BRANCH=$BRANCH, REPO=$REPO"
-        mkdir -p $ENV_DIR
-        cd $ENV_DIR
-        mkdir -p html
-        if [ -d "html/.git" ]; then
-          echo "📥 Actualizando código desde branch $BRANCH"
-          cd html
-          git fetch origin
-          git checkout $BRANCH || git checkout -b $BRANCH origin/$BRANCH
-          git pull origin $BRANCH
-          cd ..
-        else
-          echo "📥 Clonando repositorio branch $BRANCH"
-          rm -rf html
-          git clone -b "$BRANCH" "https://github.com/$REPO.git" html
-        fi
+        echo "📁 Preparando directorio $ENV_DIR en el servidor"
+        
+        # Crear directorio en el servidor
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+          "mkdir -p $ENV_DIR/html $ENV_DIR/backups"
+        
+        # Copiar código al servidor usando rsync (excluyendo .git y otros archivos innecesarios)
+        echo "📤 Copiando código al servidor..."
+        rsync -avz --delete \
+          -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+          --exclude='.git' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
+          --exclude='.env' \
+          --exclude='venv' \
+          --exclude='db.sqlite3' \
+          --exclude='.pytest_cache' \
+          --exclude='node_modules' \
+          ./ $SSH_USER@$SSH_HOST:$ENV_DIR/html/
+        
+        # Copiar docker-compose al servidor
         echo "📋 Copiando docker-compose.yml"
-        if [ ! -f "html/docker/docker-compose.$ENV.yml" ]; then
-          echo "❌ Error: No se encontró docker-compose.$ENV.yml en el repositorio"
-          ls -la html/docker/ || echo "Directorio docker no existe"
-          exit 1
-        fi
-        cp html/docker/docker-compose.$ENV.yml docker-compose.yml
+        scp -i $SSH_KEY -o StrictHostKeyChecking=no \
+          docker/docker-compose.$ENV.yml \
+          $SSH_USER@$SSH_HOST:$ENV_DIR/docker-compose.yml
+        
+        # Ejecutar despliegue en el servidor
+        echo "🚀 Ejecutando despliegue en el servidor"
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash << DEPLOY_SCRIPT
+        set -e
+        cd $ENV_DIR
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose down || true
         docker compose build --no-cache
@@ -140,4 +149,4 @@ jobs:
         else
           echo "🌐 URL: https://$ENV.atenea.nxhumans.com"
         fi
-        DEPLOY_SCRIPT
+DEPLOY_SCRIPT
