@@ -273,19 +273,28 @@
                         <div class="relative w-full h-full bg-black group"
                              x-data="{ 
                                 playing: false,
-                                get videoSrc() { 
-                                    if (!item) return null;
+                                videoSrc: null,
+                                init() {
+                                    if (!item) return;
+                                    
                                     const url = item.preview || item.download_url;
-                                    if (!url) return null;
+                                    if (!url) return;
                                     
                                     // Lista de extensiones de video
                                     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.flv', '.wmv'];
                                     // Lista de extensiones de imagen (para excluir)
                                     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
                                     
-                                    // Si es claramente una imagen, no usar proxy
+                                    // Si es claramente una imagen (thumbnail), para Freepik necesitamos obtener la URL real
                                     if (imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
-                                        return null; // No mostrar nada si es imagen
+                                        // Si es Freepik, usar el proxy con resource_id para que obtenga la URL oficial
+                                        if (item.source === 'freepik' && item.id) {
+                                            // El proxy detectará que es Freepik y obtendrá la URL oficial automáticamente
+                                            this.videoSrc = `/api/stock/video-proxy/?url=${encodeURIComponent(url)}&resource_id=${item.id}&source=freepik`;
+                                        } else {
+                                            return null; // Para otros proveedores, no mostrar nada si es imagen
+                                        }
+                                        return;
                                     }
                                     
                                     // Verificar si es un video
@@ -296,14 +305,17 @@
                                     
                                     // Si tiene extensión de video o indicador claro, usar proxy
                                     if (hasVideoExt || hasVideoIndicator) {
-                                        return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+                                        // Pasar source como parámetro para que el proxy sepa cómo manejar la URL
+                                        const sourceParam = item.source ? `&source=${item.source}` : '';
+                                        this.videoSrc = '/api/stock/video-proxy/?url=' + encodeURIComponent(url) + sourceParam;
+                                    } else {
+                                        // Si no está claro, intentar usar la URL directa
+                                        this.videoSrc = url;
                                     }
-                                    
-                                    // Si no está claro, intentar usar la URL directa
-                                    return url;
                                 }
                              }">
                             <video 
+                                x-show="videoSrc"
                                 x-ref="videoPlayer"
                                 :src="videoSrc" 
                                 :poster="item ? (item.thumbnail || '') : ''"
@@ -324,6 +336,11 @@
                                 muted>
                                 Tu navegador no soporta el elemento de video.
                             </video>
+                            <div x-show="!videoSrc" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
+                                <div class="text-white text-center p-4">
+                                    <p>Video no disponible</p>
+                                </div>
+                            </div>
                             <!-- Overlay con botón play/pause -->
                             <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-20 transition-all cursor-pointer pointer-events-none"
                                  @click.stop="
@@ -492,23 +509,63 @@
                         </template>
                         
                         <template x-if="contentType === 'video' && results[currentIndex]">
-                            <div class="relative w-full h-full flex items-center justify-center bg-black">
-                                <template x-if="getCurrentVideoSrc()">
-                                    <video 
-                                        :src="getCurrentVideoSrc()" 
-                                        :poster="results[currentIndex].thumbnail || ''"
-                                        class="max-w-full max-h-full w-auto h-auto object-contain"
-                                        preload="metadata"
-                                        controls
-                                        @click.stop>
-                                        Tu navegador no soporta el elemento de video.
-                                    </video>
-                                </template>
-                                <template x-if="!getCurrentVideoSrc()">
-                                    <div class="text-white text-center p-8">
-                                        <p>Video no disponible</p>
-                                    </div>
-                                </template>
+                            <div class="relative w-full h-full flex items-center justify-center bg-black"
+                                 x-data="{
+                                    videoSrc: null,
+                                    init() {
+                                        const item = getCurrentItem();
+                                        if (!item) return;
+                                        
+                                        const url = item.preview || item.download_url;
+                                        if (!url) return;
+                                        
+                                        // Lista de extensiones de video
+                                        const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.flv', '.wmv'];
+                                        // Lista de extensiones de imagen (para excluir)
+                                        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+                                        
+                                        // Si es claramente una imagen (thumbnail), para Freepik necesitamos obtener la URL real
+                                        if (imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
+                                            // Si es Freepik, usar el proxy con resource_id para que obtenga la URL oficial
+                                            if (item.source === 'freepik' && item.id) {
+                                                // El proxy detectará que es Freepik y obtendrá la URL oficial automáticamente
+                                                this.videoSrc = `/api/stock/video-proxy/?url=${encodeURIComponent(url)}&resource_id=${item.id}&source=freepik`;
+                                            } else {
+                                                return; // Para otros proveedores, no mostrar nada si es imagen
+                                            }
+                                            return;
+                                        }
+                                        
+                                        // Verificar si es un video
+                                        const hasVideoExt = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+                                        const hasVideoIndicator = url.toLowerCase().includes('/videos/') || 
+                                                                  url.toLowerCase().includes('/video/') ||
+                                                                  url.toLowerCase().includes('video');
+                                        
+                                        // Si tiene extensión de video o indicador claro, usar proxy
+                                        if (hasVideoExt || hasVideoIndicator) {
+                                            // Pasar source como parámetro para que el proxy sepa cómo manejar la URL
+                                            const sourceParam = item.source ? `&source=${item.source}` : '';
+                                            this.videoSrc = '/api/stock/video-proxy/?url=' + encodeURIComponent(url) + sourceParam;
+                                        } else {
+                                            // Si no está claro, intentar usar la URL directa
+                                            this.videoSrc = url;
+                                        }
+                                    }
+                                 }">
+                                <video 
+                                    x-show="videoSrc"
+                                    :src="videoSrc" 
+                                    :poster="results[currentIndex] ? (results[currentIndex].thumbnail || '') : ''"
+                                    class="max-w-full max-h-full w-auto h-auto object-contain"
+                                    preload="metadata"
+                                    controls
+                                    @click.stop>
+                                    Tu navegador no soporta el elemento de video.
+                                </video>
+                                <div x-show="!videoSrc" class="text-white text-center p-8">
+                                    <p>Video no disponible</p>
+                                </div>
                             </div>
                         </template>
                         
@@ -897,7 +954,9 @@ function stockSearch() {
                               url.includes('/videos/') || 
                               url.includes('video');
             if (!isVideoUrl) return url; // Si no es video, devolver URL directa
-            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+            // Pasar source como parámetro para que el proxy sepa cómo manejar la URL
+            const sourceParam = item.source ? `&source=${item.source}` : '';
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url) + sourceParam;
         },
         
         getCurrentItem() {
@@ -913,7 +972,18 @@ function stockSearch() {
             if (!item) return null;
             const url = item.preview || item.download_url;
             if (!url) return null;
-            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+            
+            // Lista de extensiones de imagen (para detectar thumbnails)
+            const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+            
+            // Si es Freepik y es un thumbnail, pasar resource_id y source
+            if (item.source === 'freepik' && item.id && imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
+                return `/api/stock/video-proxy/?url=${encodeURIComponent(url)}&resource_id=${item.id}&source=freepik`;
+            }
+            
+            // Pasar source como parámetro para que el proxy sepa cómo manejar la URL
+            const sourceParam = item.source ? `&source=${item.source}` : '';
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url) + sourceParam;
         },
         
         getCSRFToken() {

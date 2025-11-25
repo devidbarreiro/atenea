@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ script.title }} - {{ script.project.name }}{% endblock %}
+{% block title %}{{ script.title }}{% if script.project %} - {{ script.project.name }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto">

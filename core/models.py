@@ -254,22 +254,64 @@ class Video(models.Model):
 
     def mark_as_completed(self, gcs_path=None, metadata=None, charge_credits=True):
         """Marca el video como completado y cobra créditos si es necesario"""
+        # Inicializar metadata si no existe
+        if not self.metadata:
+            self.metadata = {}
+        
+        # Actualizar metadata PRIMERO (incluyendo duración) antes de calcular el costo
+        if metadata:
+            self.metadata.update(metadata)
+        
+        # Actualizar campo duration si está en metadata
+        if 'duration' in self.metadata and self.metadata['duration']:
+            try:
+                duration_value = self.metadata['duration']
+                # Convertir a int si es necesario
+                if isinstance(duration_value, (int, float)):
+                    self.duration = int(duration_value)
+                elif isinstance(duration_value, str):
+                    self.duration = int(float(duration_value))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"No se pudo convertir duración para video {self.id}: {duration_value}, error: {e}")
+        
+        # Marcar como completado
         self.status = 'completed'
         self.completed_at = timezone.now()
         if gcs_path:
             self.gcs_path = gcs_path
-        if metadata:
-            self.metadata = metadata
-        self.save(update_fields=['status', 'completed_at', 'gcs_path', 'metadata', 'updated_at'])
         
-        # Cobrar créditos automáticamente
-        if charge_credits and self.created_by:
-            try:
-                from core.services.credits import CreditService
-                CreditService.deduct_credits_for_video(self.created_by, self)
-            except Exception as e:
-                logger.error(f"Error al cobrar créditos para video {self.id}: {e}")
-                # No fallar la operación si falla el cobro
+        # Guardar primero para tener la duración disponible
+        self.save(update_fields=['status', 'completed_at', 'gcs_path', 'duration', 'metadata', 'updated_at'])
+        
+        # AHORA intentar cobrar créditos DESPUÉS de tener la metadata y duración guardadas
+        if charge_credits:
+            if not self.created_by:
+                logger.warning(f"Video {self.id} no tiene created_by, no se pueden cobrar créditos")
+            else:
+                try:
+                    from core.services.credits import CreditService, InsufficientCreditsException
+                    # Refrescar desde BD para asegurar que tenemos el metadata más reciente
+                    self.refresh_from_db()
+                    
+                    # Verificar si ya se cobraron créditos
+                    if not self.metadata.get('credits_charged'):
+                        logger.info(f"Cobrando créditos para video {self.id} (tipo: {self.type})")
+                        CreditService.deduct_credits_for_video(self.created_by, self)
+                    else:
+                        logger.info(f"Créditos ya cobrados para video {self.id}")
+                except InsufficientCreditsException as e:
+                    logger.error(f"Créditos insuficientes para video {self.id}: {e}")
+                    # Marcar en metadata que el cobro está pendiente
+                    self.metadata['credits_charge_pending'] = True
+                    self.metadata['credits_charge_error'] = str(e)
+                    self.save(update_fields=['metadata'])
+                    # El polling intentará cobrar de nuevo más tarde
+                    logger.warning(f"Video {self.id} completado pero créditos pendientes. Se intentará cobrar durante el polling.")
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para video {self.id}: {e}", exc_info=True)
+                    # Marcar en metadata que hubo un error pero continuar
+                    self.metadata['credits_charge_error'] = str(e)
+                    self.save(update_fields=['metadata'])
 
     def mark_as_error(self, error_message):
         """Marca el video con error"""
@@ -377,18 +419,36 @@ class Image(models.Model):
         self.completed_at = timezone.now()
         if gcs_path:
             self.gcs_path = gcs_path
+        
+        # Inicializar metadata si no existe
+        if not self.metadata:
+            self.metadata = {}
+        
+        # Actualizar metadata sin sobrescribir
         if metadata:
-            self.metadata = metadata
+            self.metadata.update(metadata)
+        
         self.save(update_fields=['status', 'completed_at', 'gcs_path', 'metadata', 'updated_at'])
         
         # Cobrar créditos automáticamente
-        if charge_credits and self.created_by:
-            try:
-                from core.services.credits import CreditService
-                CreditService.deduct_credits_for_image(self.created_by, self)
-            except Exception as e:
-                logger.error(f"Error al cobrar créditos para imagen {self.id}: {e}")
-                # No fallar la operación si falla el cobro
+        if charge_credits:
+            if not self.created_by:
+                logger.warning(f"Imagen {self.id} no tiene created_by, no se pueden cobrar créditos")
+            else:
+                try:
+                    from core.services.credits import CreditService
+                    # Refrescar desde BD para asegurar que tenemos el metadata más reciente
+                    self.refresh_from_db()
+                    
+                    # Verificar si ya se cobraron créditos
+                    if not self.metadata.get('credits_charged'):
+                        logger.info(f"Cobrando créditos para imagen {self.id} (tipo: {self.type})")
+                        CreditService.deduct_credits_for_image(self.created_by, self)
+                    else:
+                        logger.info(f"Créditos ya cobrados para imagen {self.id}")
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para imagen {self.id}: {e}", exc_info=True)
+                    # No fallar la operación si falla el cobro
 
     def mark_as_error(self, error_message):
         """Marca la imagen con error"""
@@ -536,19 +596,38 @@ class Audio(models.Model):
             self.metadata = metadata
         if alignment:
             self.alignment = alignment
+        # Inicializar metadata si no existe
+        if not self.metadata:
+            self.metadata = {}
+        
+        # Actualizar metadata sin sobrescribir
+        if metadata:
+            self.metadata.update(metadata)
+        
         self.save(update_fields=[
             'status', 'completed_at', 'gcs_path', 'duration', 
             'metadata', 'alignment', 'updated_at'
         ])
         
         # Cobrar créditos automáticamente
-        if charge_credits and self.created_by:
-            try:
-                from core.services.credits import CreditService
-                CreditService.deduct_credits_for_audio(self.created_by, self)
-            except Exception as e:
-                logger.error(f"Error al cobrar créditos para audio {self.id}: {e}")
-                # No fallar la operación si falla el cobro
+        if charge_credits:
+            if not self.created_by:
+                logger.warning(f"Audio {self.id} no tiene created_by, no se pueden cobrar créditos")
+            else:
+                try:
+                    from core.services.credits import CreditService
+                    # Refrescar desde BD para asegurar que tenemos el metadata más reciente
+                    self.refresh_from_db()
+                    
+                    # Verificar si ya se cobraron créditos
+                    if not self.metadata.get('credits_charged'):
+                        logger.info(f"Cobrando créditos para audio {self.id} (caracteres: {len(self.text)})")
+                        CreditService.deduct_credits_for_audio(self.created_by, self)
+                    else:
+                        logger.info(f"Créditos ya cobrados para audio {self.id}")
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para audio {self.id}: {e}", exc_info=True)
+                    # No fallar la operación si falla el cobro
 
     def mark_as_error(self, error_message):
         """Marca el audio con error"""
@@ -997,18 +1076,36 @@ class Scene(models.Model):
         self.completed_at = timezone.now()
         if gcs_path:
             self.video_gcs_path = gcs_path
+        
+        # Inicializar metadata si no existe
+        if not self.metadata:
+            self.metadata = {}
+        
+        # Actualizar metadata sin sobrescribir
         if metadata:
-            self.metadata = metadata
+            self.metadata.update(metadata)
+        
         self.save(update_fields=['video_status', 'completed_at', 'video_gcs_path', 'metadata', 'updated_at'])
         
         # Cobrar créditos automáticamente
-        if charge_credits and self.script.created_by:
-            try:
-                from core.services.credits import CreditService
-                CreditService.deduct_credits_for_scene_video(self.script.created_by, self)
-            except Exception as e:
-                logger.error(f"Error al cobrar créditos para video de escena {self.id}: {e}")
-                # No fallar la operación si falla el cobro
+        if charge_credits:
+            if not self.script.created_by:
+                logger.warning(f"Escena {self.id} no tiene script.created_by, no se pueden cobrar créditos")
+            else:
+                try:
+                    from core.services.credits import CreditService
+                    # Refrescar desde BD para asegurar que tenemos el metadata más reciente
+                    self.refresh_from_db()
+                    
+                    # Verificar si ya se cobraron créditos
+                    if not self.metadata.get('credits_charged'):
+                        logger.info(f"Cobrando créditos para video de escena {self.scene_id} (ID: {self.id}, servicio: {self.ai_service})")
+                        CreditService.deduct_credits_for_scene_video(self.script.created_by, self)
+                    else:
+                        logger.info(f"Créditos ya cobrados para video de escena {self.scene_id} (ID: {self.id})")
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para video de escena {self.id}: {e}", exc_info=True)
+                    # No fallar la operación si falla el cobro
 
     def mark_video_as_error(self, error_message):
         """Marca el video con error"""
@@ -1031,30 +1128,48 @@ class Scene(models.Model):
             self.audio_voice_id = voice_id
         if voice_name:
             self.audio_voice_name = voice_name
-        self.save(update_fields=['audio_status', 'audio_gcs_path', 'audio_duration', 'audio_voice_id', 'audio_voice_name', 'updated_at'])
+        
+        # Inicializar metadata si no existe
+        if not self.metadata:
+            self.metadata = {}
         
         # Cobrar créditos automáticamente
-        if charge_credits and self.script.created_by:
-            try:
-                from core.services.credits import CreditService
-                # Calcular costo basado en script_text de la escena
-                cost = CreditService.estimate_audio_cost(self.script_text)
-                if cost > 0:
-                    CreditService.deduct_credits(
-                        user=self.script.created_by,
-                        amount=cost,
-                        service_name='elevenlabs',
-                        operation_type='audio_generation',
-                        resource=self,
-                        metadata={
-                            'character_count': len(self.script_text),
-                            'duration': duration,
-                            'voice_id': voice_id,
-                        }
-                    )
-            except Exception as e:
-                logger.error(f"Error al cobrar créditos para audio de escena {self.id}: {e}")
-                # No fallar la operación si falla el cobro
+        if charge_credits:
+            if not self.script.created_by:
+                logger.warning(f"Escena {self.id} no tiene script.created_by, no se pueden cobrar créditos de audio")
+            else:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos
+                    if not self.metadata.get('audio_credits_charged'):
+                        # Calcular costo basado en script_text de la escena
+                        cost = CreditService.estimate_audio_cost(self.script_text)
+                        if cost > 0:
+                            logger.info(f"Cobrando {cost} créditos por audio de escena {self.scene_id} (ID: {self.id}, caracteres: {len(self.script_text)})")
+                            CreditService.deduct_credits(
+                                user=self.script.created_by,
+                                amount=cost,
+                                service_name='elevenlabs',
+                                operation_type='audio_generation',
+                                resource=self,
+                                metadata={
+                                    'character_count': len(self.script_text),
+                                    'duration': duration,
+                                    'voice_id': voice_id,
+                                }
+                            )
+                            # Marcar como cobrado
+                            self.metadata['audio_credits_charged'] = True
+                            logger.info(f"✓ Créditos de audio cobrados y marcados en metadata para escena {self.scene_id} (ID: {self.id})")
+                        else:
+                            logger.warning(f"Costo de audio es 0 para escena {self.scene_id} (ID: {self.id})")
+                    else:
+                        logger.info(f"Créditos de audio ya cobrados para escena {self.scene_id} (ID: {self.id})")
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para audio de escena {self.id}: {e}", exc_info=True)
+                    # No fallar la operación si falla el cobro
+        
+        self.save(update_fields=['audio_status', 'audio_gcs_path', 'audio_duration', 'audio_voice_id', 'audio_voice_name', 'metadata', 'updated_at'])
     
     def mark_audio_as_error(self, error_message: str):
         """Marca el audio como error"""
@@ -1417,6 +1532,9 @@ class UserCredits(models.Model):
     @property
     def credits_remaining(self):
         """Créditos restantes del mes"""
+        # Si el límite es 0, es ilimitado
+        if self.monthly_limit == 0:
+            return Decimal('999999999')  # Valor muy alto para representar ilimitado
         return max(Decimal('0'), self.monthly_limit - self.current_month_usage)
     
     @property

@@ -812,7 +812,12 @@ class VideoService:
         client = self._get_veo_client(model_name)
         
         # Preparar storage URI
-        storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
+        if video.project:
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
+        elif video.created_by:
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/users/{video.created_by.id}/videos/{video.id}/"
+        else:
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/standalone/videos/{video.id}/"
         
         # Parámetros
         params = {
@@ -828,6 +833,14 @@ class VideoService:
             'seed': video.config.get('seed'),
             'storage_uri': storage_uri,
         }
+        
+        # Parámetros específicos de Veo 3/3.1
+        if video.config.get('generate_audio') is not None:
+            params['generate_audio'] = video.config.get('generate_audio', False)
+        if video.config.get('resolution'):
+            params['resolution'] = video.config.get('resolution')
+        if video.config.get('resize_mode'):
+            params['resize_mode'] = video.config.get('resize_mode')
         
         # Imagen inicial (imagen-a-video)
         if video.config.get('input_image_gcs_uri'):
@@ -920,8 +933,19 @@ class VideoService:
         if not video.external_id:
             raise ValidationException('Video no tiene external_id')
         
-        # Si ya está en estado final, no consultar
+        # Si ya está en estado final, verificar si se cobraron créditos
         if video.status in ['completed', 'error']:
+            # Verificar y cobrar créditos si no se han cobrado aún
+            if video.status == 'completed' and video.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos
+                    if not video.metadata.get('credits_charged'):
+                        logger.info(f"Video {video.id} completado pero sin créditos cobrados. Cobrando ahora...")
+                        CreditService.deduct_credits_for_video(video.created_by, video)
+                except Exception as e:
+                    logger.error(f"Error al verificar/cobrar créditos para video {video.id}: {e}")
+            
             return {
                 'status': video.status,
                 'message': 'Video ya procesado'
@@ -929,11 +953,33 @@ class VideoService:
         
         try:
             if video.type in ['heygen_avatar_v2', 'heygen_avatar_iv']:
-                return self._check_heygen_status(video)
+                status_data = self._check_heygen_status(video)
             elif video.type == 'gemini_veo':
-                return self._check_veo_status(video)
+                status_data = self._check_veo_status(video)
             elif video.type == 'sora':
-                return self._check_sora_status(video)
+                status_data = self._check_sora_status(video)
+            else:
+                status_data = {'status': video.status}
+            
+            # Si el video está completado pero tiene créditos pendientes, intentar cobrar de nuevo
+            if video.status == 'completed' and video.created_by:
+                video.refresh_from_db()
+                if video.metadata.get('credits_charge_pending') and not video.metadata.get('credits_charged'):
+                    logger.info(f"Video {video.id} tiene créditos pendientes. Intentando cobrar de nuevo.")
+                    try:
+                        from core.services.credits import CreditService
+                        CreditService.deduct_credits_for_video(video.created_by, video)
+                        # Si el cobro fue exitoso, limpiar el flag de pendiente
+                        video.refresh_from_db()
+                        if video.metadata.get('credits_charged'):
+                            video.metadata.pop('credits_charge_pending', None)
+                            video.metadata.pop('credits_charge_error', None)
+                            video.save(update_fields=['metadata'])
+                            logger.info(f"✓ Créditos cobrados exitosamente para video {video.id}")
+                    except Exception as e:
+                        logger.warning(f"No se pudieron cobrar créditos pendientes para video {video.id}: {e}")
+            
+            return status_data
         except Exception as e:
             logger.error(f"Error al consultar estado: {e}")
             raise ServiceException(str(e))
@@ -948,7 +994,12 @@ class VideoService:
         if api_status == 'completed':
             video_url = status_data.get('video_url')
             if video_url:
-                gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                if video.project:
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                elif video.created_by:
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/final_video.mp4"
+                else:
+                    gcs_path = f"standalone/videos/{video.id}/final_video.mp4"
                 gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
                 
                 metadata = {
@@ -982,7 +1033,12 @@ class VideoService:
                 for idx, video_data in enumerate(all_video_urls):
                     url = video_data['url']
                     filename = f"video_{idx + 1}.mp4" if len(all_video_urls) > 1 else "video.mp4"
-                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                    if video.project:
+                        gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                    elif video.created_by:
+                        gcs_path = f"users/{video.created_by.id}/videos/{video.id}/{filename}"
+                    else:
+                        gcs_path = f"standalone/videos/{video.id}/{filename}"
                     
                     if url.startswith('gs://'):
                         if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
@@ -1008,6 +1064,8 @@ class VideoService:
                     'rai_filtered_count': status_data.get('rai_filtered_count', 0),
                     'videos_raw': status_data.get('videos', []),
                     'operation_data': status_data.get('operation_data', {}),
+                    # Agregar duración desde la configuración del video
+                    'duration': video.config.get('duration', 8),
                 }
                 
                 video.mark_as_completed(
@@ -1042,7 +1100,12 @@ class VideoService:
                 
                 if success:
                     # Subir a GCS
-                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                    if video.project:
+                        gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                    elif video.created_by:
+                        gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                    else:
+                        gcs_path = f"standalone/videos/{video.id}/video.mp4"
                     
                     with open(tmp_path, 'rb') as video_file:
                         gcs_full_path = gcs_storage.upload_from_bytes(
@@ -1068,7 +1131,12 @@ class VideoService:
                             thumb_path = thumb_file.name
                         
                         if client.download_thumbnail(video.external_id, thumb_path):
-                            thumb_gcs_path = f"projects/{video.project.id}/videos/{video.id}/thumbnail.webp"
+                            if video.project:
+                                thumb_gcs_path = f"projects/{video.project.id}/videos/{video.id}/thumbnail.webp"
+                            elif video.created_by:
+                                thumb_gcs_path = f"users/{video.created_by.id}/videos/{video.id}/thumbnail.webp"
+                            else:
+                                thumb_gcs_path = f"standalone/videos/{video.id}/thumbnail.webp"
                             
                             with open(thumb_path, 'rb') as thumb:
                                 thumb_gcs_full = gcs_storage.upload_from_bytes(
@@ -2016,6 +2084,17 @@ class AudioService:
 # ====================
 
 class SceneService:
+    @staticmethod
+    def _get_project_id_for_path(scene):
+        """Obtiene el ID del proyecto para rutas de almacenamiento"""
+        if scene.project:
+            return f"projects/{scene.project.id}"
+        elif scene.script and scene.script.project:
+            return f"projects/{scene.script.project.id}"
+        elif scene.script and scene.script.created_by:
+            return f"users/{scene.script.created_by.id}"
+        else:
+            return "standalone"
     """Servicio para manejar escenas del agente de video"""
     
     def __init__(self):
@@ -2273,7 +2352,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             
             # Subir a GCS
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_destination = f"scene_previews/project_{scene.project.id}/scene_{scene.id}/{timestamp}_preview.png"
+            project_prefix = SceneService._get_project_id_for_path(scene).replace('projects/', '').replace('users/', 'user_').replace('standalone', 'standalone')
+            gcs_destination = f"scene_previews/{project_prefix}/scene_{scene.id}/{timestamp}_preview.png"
             
             logger.info(f"Guardando preview de escena {scene.scene_id} en GCS: {gcs_destination}")
             gcs_path = gcs_storage.upload_from_bytes(
@@ -2450,7 +2530,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         client = GeminiVeoClient(api_key=settings.GEMINI_API_KEY, model_name=model_name)
         
         # Preparar storage URI
-        storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{scene.project.id}/scenes/{scene.id}/"
+        project_prefix = SceneService._get_project_id_for_path(scene)
+        storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/{project_prefix}/scenes/{scene.id}/"
         
         # Usar visual_prompt si existe, sino fallback a script_text + broll
         if scene.visual_prompt:
@@ -2605,8 +2686,19 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         if not scene.external_id:
             raise ValidationException('La escena no tiene external_id')
         
-        # Si ya está en estado final, no consultar
+        # Si ya está en estado final, verificar si se cobraron créditos
         if scene.video_status in ['completed', 'error']:
+            # Verificar y cobrar créditos si no se han cobrado aún
+            if scene.video_status == 'completed' and scene.script.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos
+                    if not scene.metadata.get('credits_charged'):
+                        logger.info(f"Escena {scene.scene_id} completada pero sin créditos cobrados. Cobrando ahora...")
+                        CreditService.deduct_credits_for_scene_video(scene.script.created_by, scene)
+                except Exception as e:
+                    logger.error(f"Error al verificar/cobrar créditos para escena {scene.scene_id}: {e}")
+            
             return {
                 'status': scene.video_status,
                 'message': 'Video ya procesado'
@@ -2645,7 +2737,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         if api_status == 'completed':
             video_url = status_data.get('video_url')
             if video_url:
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                project_prefix = SceneService._get_project_id_for_path(scene)
+                gcs_path = f"{project_prefix}/scenes/{scene.id}/video.mp4"
                 gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
                 
                 metadata = {
@@ -2681,7 +2774,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 # Usar el primer video generado
                 video_data = all_video_urls[0]
                 url = video_data['url']
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                project_prefix = SceneService._get_project_id_for_path(scene)
+                gcs_path = f"{project_prefix}/scenes/{scene.id}/video.mp4"
                 
                 if url.startswith('gs://'):
                     if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
@@ -2731,7 +2825,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 success = client.download_video(scene.external_id, tmp_path)
                 
                 if success:
-                    gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                    project_prefix = SceneService._get_project_id_for_path(scene)
+                    gcs_path = f"{project_prefix}/scenes/{scene.id}/video.mp4"
                     
                     with open(tmp_path, 'rb') as video_file:
                         gcs_full_path = gcs_storage.upload_from_bytes(
@@ -2783,18 +2878,21 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             # Preparar ruta en GCS
             from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/freepik_video_{timestamp}.mp4"
+            project_prefix = SceneService._get_project_id_for_path(scene)
+            gcs_path = f"{project_prefix}/scenes/{scene.id}/freepik_video_{timestamp}.mp4"
             
             # Descargar y subir a GCS
             logger.info(f"Descargando video de Freepik: {download_url}")
             gcs_full_path = gcs_storage.upload_from_url(download_url, gcs_path)
             
-            # Actualizar escena
-            scene.video_gcs_path = gcs_full_path
-            scene.video_status = 'completed'
+            # Actualizar escena usando mark_video_as_completed para cobrar créditos
+            metadata = {
+                'freepik_resource_id': resource_id,
+                'image_source': 'freepik_stock',
+            }
             scene.freepik_resource_id = resource_id
             scene.image_source = 'freepik_stock'
-            scene.save()
+            scene.mark_video_as_completed(gcs_path=gcs_full_path, metadata=metadata)
             
             logger.info(f"✓ Video de Freepik subido para escena {scene.id}: {gcs_full_path}")
             return gcs_full_path
@@ -2838,7 +2936,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                         f.write(chunk)
                 
                 # Subir a GCS
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/video.mp4"
+                project_prefix = SceneService._get_project_id_for_path(scene)
+                gcs_path = f"{project_prefix}/scenes/{scene.id}/video.mp4"
                 
                 with open(tmp_path, 'rb') as video_file:
                     gcs_full_path = gcs_storage.upload_from_bytes(
@@ -2949,7 +3048,8 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 # Subir a GCS
                 from datetime import datetime
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/audio_{timestamp}.mp3"
+                project_prefix = SceneService._get_project_id_for_path(scene)
+                gcs_path = f"{project_prefix}/scenes/{scene.id}/audio_{timestamp}.mp3"
                 
                 with open(tmp_path, 'rb') as f:
                     gcs_full_path = gcs_storage.upload_from_bytes(
@@ -3011,10 +3111,17 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             scene.mark_final_video_as_processing()
             
             # Combinar con FFmpeg
+            # Obtener project_id de manera segura
+            project_id = None
+            if scene.project:
+                project_id = scene.project.id
+            elif scene.script and scene.script.project:
+                project_id = scene.script.project.id
+            
             final_gcs_path = self._combine_video_and_audio(
                 scene.video_gcs_path,
                 scene.audio_gcs_path,
-                scene.project.id,
+                project_id,
                 scene.id
             )
             
@@ -3170,7 +3277,11 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             
             # Subir a GCS
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_destination = f"projects/{project_id}/scenes/{scene_id}/final_{timestamp}.mp4"
+            if project_id:
+                gcs_destination = f"projects/{project_id}/scenes/{scene_id}/final_{timestamp}.mp4"
+            else:
+                # Si no hay proyecto, usar una ruta alternativa
+                gcs_destination = f"standalone/scenes/{scene_id}/final_{timestamp}.mp4"
             
             with open(output_path, 'rb') as f:
                 gcs_full_path = gcs_storage.upload_from_bytes(
@@ -3464,8 +3575,16 @@ class VideoCompositionService:
             logger.info(f"Video combinado: {file_size} bytes")
             
             # Subir video combinado a GCS
-            project_id = scenes[0].project.id if hasattr(scenes[0], 'project') else 'unknown'
-            gcs_destination = f"projects/{project_id}/combined_videos/{output_filename}"
+            project_id = None
+            if scenes[0].project:
+                project_id = scenes[0].project.id
+            elif scenes[0].script and scenes[0].script.project:
+                project_id = scenes[0].script.project.id
+            
+            if project_id:
+                gcs_destination = f"projects/{project_id}/combined_videos/{output_filename}"
+            else:
+                gcs_destination = f"standalone/combined_videos/{output_filename}"
             
             with open(output_path, 'rb') as video_file:
                 gcs_full_path = gcs_storage.upload_from_bytes(

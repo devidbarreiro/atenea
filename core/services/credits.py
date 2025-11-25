@@ -96,6 +96,10 @@ class CreditService:
         credits = CreditService.get_or_create_user_credits(user)
         amount_decimal = Decimal(str(amount))
         
+        # Si el límite es 0, no hay límite (ilimitado)
+        if credits.monthly_limit == 0:
+            return
+        
         if credits.current_month_usage + amount_decimal > credits.monthly_limit:
             raise RateLimitExceededException(
                 f"Límite mensual excedido. Usado: {credits.current_month_usage}/{credits.monthly_limit} créditos. "
@@ -164,9 +168,28 @@ class CreditService:
     @staticmethod
     def calculate_video_cost(video):
         """Calcula costo de un video"""
-        duration = video.duration or video.metadata.get('duration', 0)
-        if duration == 0:
-            logger.warning(f"Video {video.id} no tiene duración, usando estimación")
+        # Intentar obtener duración de múltiples fuentes
+        duration = None
+        
+        # 1. Campo duration del modelo
+        if video.duration:
+            duration = video.duration
+        # 2. Metadata duration
+        elif video.metadata and video.metadata.get('duration'):
+            duration = video.metadata.get('duration')
+        # 3. Config duration (para Veo y Sora)
+        elif video.config and video.config.get('duration'):
+            duration = video.config.get('duration')
+        
+        # Convertir a int si es necesario
+        if duration:
+            try:
+                duration = int(float(duration))
+            except (ValueError, TypeError):
+                duration = None
+        
+        if not duration or duration == 0:
+            logger.warning(f"Video {video.id} no tiene duración, usando estimación. duration={video.duration}, metadata.duration={video.metadata.get('duration') if video.metadata else None}, config.duration={video.config.get('duration') if video.config else None}")
             duration = 8  # Estimación por defecto
         
         if video.type == 'heygen_avatar_v2':
@@ -174,12 +197,32 @@ class CreditService:
         elif video.type == 'heygen_avatar_iv':
             return Decimal(str(duration * CreditService.PRICING['heygen_avatar_iv']['video']))
         elif video.type == 'gemini_veo':
-            has_audio = video.metadata.get('generate_audio', False)
+            # Priorizar config sobre metadata (config es la fuente de verdad al crear el video)
+            has_audio = False
+            if video.config:
+                has_audio = video.config.get('generate_audio', False)
+            elif video.metadata:
+                has_audio = video.metadata.get('generate_audio', False)
+            
             price_key = 'video_audio' if has_audio else 'video'
-            return Decimal(str(duration * CreditService.PRICING['gemini_veo'][price_key]))
+            # Validar que la clave existe en PRICING
+            if price_key not in CreditService.PRICING['gemini_veo']:
+                logger.error(f"Clave de precio '{price_key}' no encontrada en PRICING para gemini_veo. Usando 'video' por defecto.")
+                price_key = 'video'
+            price_per_second = CreditService.PRICING['gemini_veo'][price_key]
+            cost = Decimal(str(duration * price_per_second))
+            logger.info(f"Cálculo costo Veo: duración={duration}s, audio={has_audio}, precio/seg={price_per_second}, costo={cost}")
+            return cost
         elif video.type == 'sora':
             model = video.config.get('sora_model', 'sora-2')
-            return Decimal(str(duration * CreditService.PRICING['sora'][model]))
+            # Validar que el modelo existe en PRICING
+            if model not in CreditService.PRICING['sora']:
+                logger.error(f"Modelo Sora '{model}' no encontrado en PRICING. Modelos disponibles: {list(CreditService.PRICING['sora'].keys())}. Usando 'sora-2' por defecto.")
+                model = 'sora-2'
+            price_per_second = CreditService.PRICING['sora'][model]
+            cost = Decimal(str(duration * price_per_second))
+            logger.info(f"Cálculo costo Sora: duración={duration}s, modelo={model}, precio/seg={price_per_second}, costo={cost}")
+            return cost
         
         return Decimal('0')
     
@@ -221,14 +264,22 @@ class CreditService:
     @staticmethod
     def deduct_credits_for_video(user, video):
         """Deduce créditos para un video"""
+        # Inicializar metadata si no existe
+        if not video.metadata:
+            video.metadata = {}
+        
         if video.metadata.get('credits_charged'):
-            logger.warning(f"Video {video.id} ya fue cobrado")
+            logger.info(f"Créditos ya cobrados para video {video.id} (tipo: {video.type})")
             return
         
         cost = CreditService.calculate_video_cost(video)
         if cost == 0:
-            logger.warning(f"No se pudo calcular costo para video {video.id}")
+            logger.warning(f"No se pudo calcular costo para video {video.id} (tipo: {video.type}, duración: {video.duration or video.metadata.get('duration') or video.config.get('duration', 'N/A')})")
             return
+        
+        # Obtener duración para logging
+        duration_for_log = video.duration or video.metadata.get('duration') or video.config.get('duration', 'N/A')
+        logger.info(f"Cobrando {cost} créditos por video {video.id} (tipo: {video.type}, duración: {duration_for_log}s)")
         
         metadata = {
             'duration': video.duration or video.metadata.get('duration'),
@@ -256,14 +307,22 @@ class CreditService:
         
         video.metadata['credits_charged'] = True
         video.save(update_fields=['metadata'])
+        logger.info(f"✓ Créditos cobrados y marcados en metadata para video {video.id}")
     
     @staticmethod
     def deduct_credits_for_image(user, image):
         """Deduce créditos para una imagen"""
+        # Inicializar metadata si no existe
+        if not image.metadata:
+            image.metadata = {}
+        
         if image.metadata.get('credits_charged'):
+            logger.info(f"Créditos ya cobrados para imagen {image.id} (tipo: {image.type})")
             return
         
         cost = CreditService.calculate_image_cost(image)
+        
+        logger.info(f"Cobrando {cost} créditos por imagen {image.id} (tipo: {image.type})")
         
         metadata = {
             'image_type': image.type,
@@ -281,14 +340,22 @@ class CreditService:
         
         image.metadata['credits_charged'] = True
         image.save(update_fields=['metadata'])
+        logger.info(f"✓ Créditos cobrados y marcados en metadata para imagen {image.id}")
     
     @staticmethod
     def deduct_credits_for_audio(user, audio):
         """Deduce créditos para un audio"""
+        # Inicializar metadata si no existe
+        if not audio.metadata:
+            audio.metadata = {}
+        
         if audio.metadata.get('credits_charged'):
+            logger.info(f"Créditos ya cobrados para audio {audio.id} (caracteres: {len(audio.text)})")
             return
         
         cost = CreditService.calculate_audio_cost(audio)
+        
+        logger.info(f"Cobrando {cost} créditos por audio {audio.id} (caracteres: {len(audio.text)}, duración: {audio.duration or 'N/A'}s)")
         
         metadata = {
             'character_count': len(audio.text),
@@ -308,6 +375,7 @@ class CreditService:
         
         audio.metadata['credits_charged'] = True
         audio.save(update_fields=['metadata'])
+        logger.info(f"✓ Créditos cobrados y marcados en metadata para audio {audio.id}")
     
     @staticmethod
     def deduct_credits_for_scene_preview(user, scene):
@@ -326,13 +394,20 @@ class CreditService:
     @staticmethod
     def deduct_credits_for_scene_video(user, scene):
         """Deduce créditos para video de escena"""
+        # Inicializar metadata si no existe
+        if not scene.metadata:
+            scene.metadata = {}
+        
         if scene.metadata.get('credits_charged'):
+            logger.info(f"Créditos ya cobrados para video de escena {scene.scene_id} (ID: {scene.id})")
             return
         
         cost = CreditService.calculate_scene_video_cost(scene)
         if cost == 0:
-            logger.warning(f"No se pudo calcular costo para escena {scene.id}")
+            logger.warning(f"No se pudo calcular costo para escena {scene.scene_id} (ID: {scene.id}, ai_service: {scene.ai_service}, duration: {scene.duration_sec})")
             return
+        
+        logger.info(f"Cobrando {cost} créditos por video de escena {scene.scene_id} (ID: {scene.id}, servicio: {scene.ai_service}, duración: {scene.duration_sec}s)")
         
         metadata = {
             'duration': scene.duration_sec,
@@ -351,6 +426,7 @@ class CreditService:
         
         scene.metadata['credits_charged'] = True
         scene.save(update_fields=['metadata'])
+        logger.info(f"✓ Créditos cobrados y marcados en metadata para escena {scene.scene_id} (ID: {scene.id})")
     
     @staticmethod
     def estimate_video_cost(video_type, duration, config=None):

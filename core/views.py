@@ -1065,13 +1065,17 @@ class VideoDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     pk_url_kwarg = 'video_id'
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        
+        # Solo agregar proyecto si existe
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
-            {'label': self.object.title, 'url': None}
-        ]
+            })
+        
+        breadcrumbs.append({'label': self.object.title, 'url': None})
+        return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1268,7 +1272,14 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             'enhance_prompt': request.POST.get('enhance_prompt', 'true').lower() == 'true',
             'person_generation': request.POST.get('person_generation', 'allow_adult'),
             'compression_quality': request.POST.get('compression_quality', 'optimized'),
+            'generate_audio': request.POST.get('generate_audio') == 'on',  # Checkbox devuelve 'on' si está marcado
         }
+        
+        # Parámetros específicos de Veo 3/3.1
+        if request.POST.get('resolution'):
+            config['resolution'] = request.POST.get('resolution')
+        if request.POST.get('resize_mode'):
+            config['resize_mode'] = request.POST.get('resize_mode')
         
         # Seed opcional
         seed_value = request.POST.get('seed', '')
@@ -1436,11 +1447,20 @@ class VideoCreatePartialView(ServiceMixin, FormView):
     
     def _build_veo_config(self, request, project, video_service):
         """Configuración para Gemini Veo"""
-        return {
+        config = {
             'veo_model': request.POST.get('veo_model', 'veo-2.0-generate-001'),
             'aspect_ratio': request.POST.get('aspect_ratio', '16:9'),
-            'duration': int(request.POST.get('duration', 8))
+            'duration': int(request.POST.get('duration', 8)),
+            'generate_audio': request.POST.get('generate_audio') == 'on',  # Checkbox devuelve 'on' si está marcado
         }
+        
+        # Parámetros específicos de Veo 3/3.1
+        if request.POST.get('resolution'):
+            config['resolution'] = request.POST.get('resolution')
+        if request.POST.get('resize_mode'):
+            config['resize_mode'] = request.POST.get('resize_mode')
+        
+        return config
     
     def _build_sora_config(self, request, project, video_service):
         """Configuración para OpenAI Sora"""
@@ -1584,8 +1604,20 @@ class VideoStatusView(ServiceMixin, View):
     def get(self, request, video_id):
         video = get_object_or_404(Video, pk=video_id)
         
-        # Si ya está en estado final
+        # Si ya está en estado final, verificar si se cobraron créditos
         if video.status in ['completed', 'error']:
+            # Verificar y cobrar créditos si no se han cobrado aún
+            if video.status == 'completed' and video.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos
+                    if not video.metadata.get('credits_charged'):
+                        logger.info(f"Video {video_id} completado pero sin créditos cobrados. Cobrando ahora...")
+                        CreditService.deduct_credits_for_video(video.created_by, video)
+                        video.refresh_from_db()  # Refrescar después del cobro
+                except Exception as e:
+                    logger.error(f"Error al verificar/cobrar créditos para video {video_id}: {e}")
+            
             return JsonResponse({
                 'status': video.status,
                 'message': 'Video ya procesado',
@@ -1602,6 +1634,20 @@ class VideoStatusView(ServiceMixin, View):
         video_service = self.get_video_service()
         try:
             status_data = video_service.check_video_status(video)
+            # Refrescar video desde BD después de check_video_status
+            video.refresh_from_db()
+            
+            # Si ahora está completado, verificar créditos
+            if video.status == 'completed' and video.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    if not video.metadata.get('credits_charged'):
+                        logger.info(f"Video {video_id} completado después de check_status. Cobrando créditos...")
+                        CreditService.deduct_credits_for_video(video.created_by, video)
+                        video.refresh_from_db()
+                except Exception as e:
+                    logger.error(f"Error al cobrar créditos para video {video_id}: {e}")
+            
             return JsonResponse({
                 'status': video.status,
                 'external_status': status_data,
@@ -2032,13 +2078,17 @@ class AudioDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     pk_url_kwarg = 'audio_id'
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        
+        # Solo agregar proyecto si existe
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
-            {'label': self.object.title, 'url': None}
-        ]
+            })
+        
+        breadcrumbs.append({'label': self.object.title, 'url': None})
+        return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2323,6 +2373,22 @@ class VideoStatusPartialView(View):
                 # Refrescar el objeto desde la BD para obtener el estado actualizado
                 video.refresh_from_db()
                 
+                # Si el video está completado pero tiene créditos pendientes, intentar cobrar de nuevo
+                if video.status == 'completed' and video.created_by:
+                    if video.metadata.get('credits_charge_pending') and not video.metadata.get('credits_charged'):
+                        logger.info(f"Video {video_id} tiene créditos pendientes. Intentando cobrar de nuevo.")
+                        try:
+                            from core.services.credits import CreditService
+                            CreditService.deduct_credits_for_video(video.created_by, video)
+                            # Si el cobro fue exitoso, limpiar el flag de pendiente
+                            if video.metadata.get('credits_charged'):
+                                video.metadata.pop('credits_charge_pending', None)
+                                video.metadata.pop('credits_charge_error', None)
+                                video.save(update_fields=['metadata'])
+                                logger.info(f"✓ Créditos cobrados exitosamente para video {video_id}")
+                        except Exception as e:
+                            logger.warning(f"No se pudieron cobrar créditos pendientes para video {video_id}: {e}")
+                
             except Exception as e:
                 logger.error(f"Error al consultar estado del video {video_id}: {e}")
         
@@ -2397,13 +2463,17 @@ class ScriptDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
     pk_url_kwarg = 'script_id'
     
     def get_breadcrumbs(self):
-        return [
-            {
+        breadcrumbs = []
+        
+        # Solo agregar proyecto si existe
+        if self.object.project:
+            breadcrumbs.append({
                 'label': self.object.project.name, 
                 'url': reverse('core:project_detail', args=[self.object.project.pk])
-            },
-            {'label': self.object.title, 'url': None}
-        ]
+            })
+        
+        breadcrumbs.append({'label': self.object.title, 'url': None})
+        return breadcrumbs
 
 
 class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
@@ -3231,6 +3301,49 @@ class SceneStatusView(View):
                 except Exception as e:
                     logger.error(f"Error al consultar estado de escena {scene_id}: {e}")
             
+            # Si está completada pero no se han cobrado créditos, cobrarlos ahora
+            elif scene.video_status == 'completed' and scene.script.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos
+                    if not scene.metadata.get('credits_charged'):
+                        logger.info(f"Escena {scene.scene_id} completada pero sin créditos cobrados. Cobrando ahora...")
+                        CreditService.deduct_credits_for_scene_video(scene.script.created_by, scene)
+                        scene.refresh_from_db()  # Refrescar después del cobro
+                except Exception as e:
+                    logger.error(f"Error al verificar/cobrar créditos para escena {scene_id}: {e}")
+            
+            # Verificar también el audio completado
+            if scene.audio_status == 'completed' and scene.script.created_by:
+                try:
+                    from core.services.credits import CreditService
+                    # Verificar si ya se cobraron créditos del audio
+                    if not scene.metadata.get('audio_credits_charged'):
+                        logger.info(f"Audio de escena {scene.scene_id} completado pero sin créditos cobrados. Cobrando ahora...")
+                        # Calcular y cobrar créditos del audio
+                        cost = CreditService.estimate_audio_cost(scene.script_text)
+                        if cost > 0:
+                            CreditService.deduct_credits(
+                                user=scene.script.created_by,
+                                amount=cost,
+                                service_name='elevenlabs',
+                                operation_type='audio_generation',
+                                resource=scene,
+                                metadata={
+                                    'character_count': len(scene.script_text),
+                                    'duration': scene.audio_duration,
+                                    'voice_id': scene.audio_voice_id,
+                                }
+                            )
+                            # Marcar como cobrado en metadata
+                            if not scene.metadata:
+                                scene.metadata = {}
+                            scene.metadata['audio_credits_charged'] = True
+                            scene.save(update_fields=['metadata'])
+                            scene.refresh_from_db()
+                except Exception as e:
+                    logger.error(f"Error al verificar/cobrar créditos de audio para escena {scene_id}: {e}")
+            
             # Generar URLs firmadas
             scene_data = SceneService().get_scene_with_signed_urls(scene)
             
@@ -3460,10 +3573,8 @@ class SceneUploadVideoView(View):
             logger.info(f"Subiendo video manual a GCS: {safe_filename}")
             gcs_path = gcs_storage.upload_django_file(video_file, gcs_destination)
             
-            # Marcar escena como completada
-            scene.video_gcs_path = gcs_path
-            scene.video_status = 'completed'
-            scene.save()
+            # Marcar escena como completada usando el método para cobrar créditos
+            scene.mark_video_as_completed(gcs_path=gcs_path)
             
             logger.info(f"✓ Video manual subido para escena {scene.id}: {gcs_path}")
             
@@ -5874,11 +5985,80 @@ class StockVideoProxyView(LoginRequiredMixin, View):
         
         Query params:
             - url: URL del video a reproducir
+            - resource_id: (opcional) ID del recurso de Freepik para obtener URL oficial
+            - source: (opcional) Fuente del video ('freepik', 'pexels', etc.)
         """
         import requests
         from urllib.parse import unquote
+        from django.conf import settings
         
         video_url = request.GET.get('url')
+        resource_id = request.GET.get('resource_id')
+        source = request.GET.get('source', '').lower()
+        
+        # Si es Freepik y tenemos resource_id, obtener URL oficial de descarga
+        if source == 'freepik' and resource_id:
+            try:
+                from .ai_services.freepik import FreepikClient
+                from requests.exceptions import HTTPError
+                
+                if settings.FREEPIK_API_KEY:
+                    client = FreepikClient(api_key=settings.FREEPIK_API_KEY)
+                    try:
+                        download_info = client.get_download_url(resource_id=resource_id)
+                    except HTTPError as e:
+                        # Manejar errores específicos de Freepik
+                        if e.response.status_code == 403:
+                            logger.warning(f"Freepik recurso {resource_id} requiere cuenta Premium")
+                            return HttpResponse('Este video requiere cuenta Premium de Freepik', status=403)
+                        elif e.response.status_code == 404:
+                            logger.warning(f"Freepik recurso {resource_id} no encontrado")
+                            return HttpResponse('Video no encontrado en Freepik', status=404)
+                        elif e.response.status_code == 429:
+                            logger.warning(f"Límite de API de Freepik alcanzado")
+                            return HttpResponse('Límite de API de Freepik alcanzado', status=429)
+                        else:
+                            raise
+                    
+                    # Extraer URL de video de la respuesta
+                    video_url = None
+                    if 'data' in download_info:
+                        data = download_info['data']
+                        video_url = (
+                            data.get('url') or 
+                            data.get('download_url') or 
+                            data.get('video_url') or
+                            data.get('link') or
+                            data.get('href')
+                        )
+                        if isinstance(data, str):
+                            video_url = data
+                    
+                    if not video_url:
+                        video_url = (
+                            download_info.get('url') or 
+                            download_info.get('download_url') or 
+                            download_info.get('video_url') or
+                            download_info.get('link')
+                        )
+                    
+                    if video_url:
+                        # Verificar que la URL obtenida sea realmente un video, no una imagen
+                        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
+                        if any(video_url.lower().endswith(ext) for ext in image_extensions):
+                            logger.warning(f"Freepik devolvió URL de imagen en lugar de video: {video_url[:100]}")
+                            return HttpResponse('Freepik devolvió una imagen en lugar de un video', status=400)
+                        logger.info(f"URL de video de Freepik obtenida: {video_url[:100]}...")
+                    else:
+                        logger.warning(f"No se encontró URL de video en respuesta de Freepik: {download_info}")
+                        return HttpResponse('No se pudo obtener la URL del video de Freepik', status=404)
+            except HTTPError:
+                # Ya manejado arriba
+                raise
+            except Exception as e:
+                logger.error(f"Error obteniendo URL de video de Freepik: {e}", exc_info=True)
+                return HttpResponse(f'Error al obtener URL de video: {str(e)}', status=500)
+        
         if not video_url:
             return HttpResponse('URL no proporcionada', status=400)
         
@@ -5894,14 +6074,20 @@ class StockVideoProxyView(LoginRequiredMixin, View):
         image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
         
         # Verificar extensiones de imagen primero (más común)
+        # Pero solo rechazar si NO es Pexels (Pexels puede tener URLs sin extensión)
         if any(video_url.lower().endswith(ext) for ext in image_extensions):
-            return HttpResponse('Esta URL parece ser una imagen, no un video', status=400)
+            if source != 'pexels':  # Pexels puede tener URLs sin extensión clara
+                return HttpResponse('Esta URL parece ser una imagen, no un video', status=400)
         
         # Verificar si tiene extensión de video o contiene indicadores de video
         has_video_ext = any(video_url.lower().endswith(ext) for ext in video_extensions)
-        has_video_indicator = '/videos/' in video_url.lower() or '/video/' in video_url.lower()
+        has_video_indicator = '/videos/' in video_url.lower() or '/video/' in video_url.lower() or 'pexels.com' in video_url.lower()
         
-        if not has_video_ext and not has_video_indicator:
+        # Para Pexels, confiar en la URL aunque no tenga extensión clara
+        if source == 'pexels':
+            # Pexels URLs son confiables
+            pass
+        elif not has_video_ext and not has_video_indicator:
             # Si no tiene indicadores claros, permitir pero registrar advertencia
             logger.warning(f"URL sin indicadores claros de video: {video_url}")
         
@@ -5928,9 +6114,13 @@ class StockVideoProxyView(LoginRequiredMixin, View):
             # Verificar que sea un video
             content_type = response.headers.get('Content-Type', '')
             if 'video' not in content_type and 'application/octet-stream' not in content_type:
-                # Intentar detectar por extensión
-                if not any(video_url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']):
-                    return HttpResponse('URL no parece ser un video', status=400)
+                # Para Pexels, confiar en la URL aunque el Content-Type no sea claro
+                if source == 'pexels':
+                    logger.info(f"Pexels video con Content-Type no estándar: {content_type}, continuando...")
+                else:
+                    # Intentar detectar por extensión
+                    if not any(video_url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']):
+                        return HttpResponse('URL no parece ser un video', status=400)
             
             # Crear respuesta de streaming
             stream_response = StreamingHttpResponse(
