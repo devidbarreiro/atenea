@@ -652,11 +652,12 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function generateAllScenes() {
-    console.log('Generando todas las escenas automáticamente...');
+    console.log('Generando solo las escenas marcadas (is_included=true)...');
     
     {% for scene_data in scenes_with_urls %}
     {% with scene=scene_data.scene %}
-    {% if scene.video_status == 'pending' %}
+    {% if scene.video_status == 'pending' and scene.is_included %}
+    // Solo generar escenas marcadas para incluir
     // Pequeño delay entre cada generación para no saturar
     setTimeout(() => {
         generateScene({{ scene.id }});

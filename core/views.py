@@ -2606,7 +2606,8 @@ class ScriptCreatePartialView(ServiceMixin, FormView):
                 title=title,
                 original_script=original_script,
                 desired_duration_min=int(desired_duration_min),
-                status='pending'
+                status='pending',
+                created_by=request.user  # Asignar usuario para poder cobrar créditos
             )
             
             service = get_script_service()
@@ -2878,7 +2879,8 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 enable_audio=enable_audio,
                 default_voice_id=default_voice_id if enable_audio else None,
                 default_voice_name=default_voice_name if enable_audio else None,
-                status='pending'
+                status='pending',
+                created_by=request.user  # Asignar usuario para poder cobrar créditos
             )
             
             # Procesar con el servicio configurado (n8n o LangChain)
@@ -3705,6 +3707,11 @@ class SceneUpdateConfigView(View):
             if 'order' in data:
                 scene.order = int(data['order'])
                 logger.info(f"  order actualizado a: {data['order']}")
+            
+            # Actualizar is_included si viene (para selección de escenas)
+            if 'is_included' in data:
+                scene.is_included = bool(data['is_included'])
+                logger.info(f"  is_included actualizado a: {scene.is_included}")
             
             scene.save()
             

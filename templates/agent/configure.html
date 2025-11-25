@@ -90,7 +90,9 @@
                     <!-- Checkbox -->
                     <div class="flex items-center h-6 mt-1">
                         <input type="checkbox" 
-                               checked 
+                               id="scene-checkbox-{{ scene.id }}"
+                               {% if scene.is_included %}checked{% endif %}
+                               onchange="toggleSceneIncluded({{ scene.id }}, this.checked)"
                                class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                     </div>
 
@@ -745,6 +747,12 @@ function saveSceneAiConfig(sceneId, key, value) {
     const aiConfig = {};
     aiConfig[key] = value;
     saveSceneConfig(sceneId, { ai_config: aiConfig });
+}
+
+// Función para actualizar is_included cuando se marca/desmarca el checkbox
+function toggleSceneIncluded(sceneId, isIncluded) {
+    saveSceneConfig(sceneId, { is_included: isIncluded });
+    console.log(`Escena ${sceneId} ${isIncluded ? 'incluida' : 'excluida'} del video final`);
 }
 
 // Cargar avatares y voces de HeyGen
