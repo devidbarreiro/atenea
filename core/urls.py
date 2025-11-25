@@ -133,6 +133,7 @@ urlpatterns = [
     path('stock/videos/', views.StockListView.as_view(), {'type': 'video'}, name='stock_videos'),
     path('stock/audio/', views.StockListView.as_view(), {'type': 'audio'}, name='stock_audio'),
     path('api/stock/download/', views.StockDownloadView.as_view(), name='stock_download'),
+    path('api/stock/video-proxy/', views.StockVideoProxyView.as_view(), name='stock_video_proxy'),
     
     # Vuela.ai API
     path('api/vuela/validate-token/', views.VuelaAIValidateTokenView.as_view(), name='vuela_validate_token'),

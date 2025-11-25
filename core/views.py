@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import Http404
 from django.urls import reverse_lazy, reverse
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -5863,6 +5863,108 @@ class StockListView(LoginRequiredMixin, View):
         }
         
         return render(request, self.template_name, context)
+
+
+class StockVideoProxyView(LoginRequiredMixin, View):
+    """Proxy para streaming de videos de stock sin descargarlos completamente"""
+    
+    def get(self, request):
+        """
+        Hace streaming de un video desde la URL proporcionada
+        
+        Query params:
+            - url: URL del video a reproducir
+        """
+        import requests
+        from urllib.parse import unquote
+        
+        video_url = request.GET.get('url')
+        if not video_url:
+            return HttpResponse('URL no proporcionada', status=400)
+        
+        # Decodificar URL si está codificada
+        video_url = unquote(video_url)
+        
+        # Validar que sea una URL válida
+        if not video_url.startswith(('http://', 'https://')):
+            return HttpResponse('URL inválida', status=400)
+        
+        # Validar que la URL parezca ser un video ANTES de hacer la petición
+        video_extensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.flv', '.wmv']
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
+        
+        # Verificar extensiones de imagen primero (más común)
+        if any(video_url.lower().endswith(ext) for ext in image_extensions):
+            return HttpResponse('Esta URL parece ser una imagen, no un video', status=400)
+        
+        # Verificar si tiene extensión de video o contiene indicadores de video
+        has_video_ext = any(video_url.lower().endswith(ext) for ext in video_extensions)
+        has_video_indicator = '/videos/' in video_url.lower() or '/video/' in video_url.lower()
+        
+        if not has_video_ext and not has_video_indicator:
+            # Si no tiene indicadores claros, permitir pero registrar advertencia
+            logger.warning(f"URL sin indicadores claros de video: {video_url}")
+        
+        try:
+            # Hacer streaming del video
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            # Obtener el rango de bytes si está presente (para video streaming)
+            range_header = request.META.get('HTTP_RANGE', '')
+            
+            req_headers = headers.copy()
+            if range_header:
+                req_headers['Range'] = range_header
+            
+            response = requests.get(
+                video_url,
+                headers=req_headers,
+                stream=True,
+                timeout=30
+            )
+            
+            # Verificar que sea un video
+            content_type = response.headers.get('Content-Type', '')
+            if 'video' not in content_type and 'application/octet-stream' not in content_type:
+                # Intentar detectar por extensión
+                if not any(video_url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']):
+                    return HttpResponse('URL no parece ser un video', status=400)
+            
+            # Crear respuesta de streaming
+            stream_response = StreamingHttpResponse(
+                response.iter_content(chunk_size=8192),
+                content_type=content_type or 'video/mp4'
+            )
+            
+            # Copiar headers importantes
+            if 'Content-Length' in response.headers:
+                stream_response['Content-Length'] = response.headers['Content-Length']
+            if 'Content-Range' in response.headers:
+                stream_response['Content-Range'] = response.headers['Content-Range']
+            if 'Accept-Ranges' in response.headers:
+                stream_response['Accept-Ranges'] = response.headers['Accept-Ranges']
+            
+            # Headers para video streaming
+            stream_response['Accept-Ranges'] = 'bytes'
+            stream_response['Cache-Control'] = 'public, max-age=3600'  # Cache por 1 hora
+            
+            # Status code
+            status_code = response.status_code
+            if status_code == 206:  # Partial Content (para range requests)
+                stream_response.status_code = 206
+            else:
+                stream_response.status_code = 200
+            
+            return stream_response
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error en proxy de video: {e}")
+            return HttpResponse(f'Error al obtener el video: {str(e)}', status=500)
+        except Exception as e:
+            logger.error(f"Error inesperado en proxy de video: {e}", exc_info=True)
+            return HttpResponse('Error interno', status=500)
 
 
 class StockDownloadView(LoginRequiredMixin, View):

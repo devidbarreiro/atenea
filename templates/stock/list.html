@@ -270,15 +270,79 @@
                     </template>
                     
                     <template x-if="contentType === 'video'">
-                        <div class="relative w-full h-full">
-                            <img :src="item.thumbnail || item.preview || item.url" :alt="item.title" 
-                                 class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                 x-show="!imageError"
-                                 @error="imageError = true">
-                            <div x-show="!imageError" class="absolute inset-0 flex items-center justify-center pointer-events-none bg-black bg-opacity-20 group-hover:bg-opacity-10 transition-all">
-                                <svg class="w-12 h-12 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8 5v14l11-7z"></path>
-                                </svg>
+                        <div class="relative w-full h-full bg-black group"
+                             x-data="{ 
+                                playing: false,
+                                get videoSrc() { 
+                                    if (!item) return null;
+                                    const url = item.preview || item.download_url;
+                                    if (!url) return null;
+                                    
+                                    // Lista de extensiones de video
+                                    const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.flv', '.wmv'];
+                                    // Lista de extensiones de imagen (para excluir)
+                                    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+                                    
+                                    // Si es claramente una imagen, no usar proxy
+                                    if (imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
+                                        return null; // No mostrar nada si es imagen
+                                    }
+                                    
+                                    // Verificar si es un video
+                                    const hasVideoExt = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+                                    const hasVideoIndicator = url.toLowerCase().includes('/videos/') || 
+                                                              url.toLowerCase().includes('/video/') ||
+                                                              url.toLowerCase().includes('video');
+                                    
+                                    // Si tiene extensión de video o indicador claro, usar proxy
+                                    if (hasVideoExt || hasVideoIndicator) {
+                                        return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+                                    }
+                                    
+                                    // Si no está claro, intentar usar la URL directa
+                                    return url;
+                                }
+                             }">
+                            <video 
+                                x-ref="videoPlayer"
+                                :src="videoSrc" 
+                                :poster="item ? (item.thumbnail || '') : ''"
+                                class="w-full h-full object-cover"
+                                preload="metadata"
+                                @click.stop="
+                                    if (playing) {
+                                        $refs.videoPlayer.pause();
+                                        playing = false;
+                                    } else {
+                                        $refs.videoPlayer.play();
+                                        playing = true;
+                                    }
+                                "
+                                @play="playing = true"
+                                @pause="playing = false"
+                                @ended="playing = false"
+                                muted>
+                                Tu navegador no soporta el elemento de video.
+                            </video>
+                            <!-- Overlay con botón play/pause -->
+                            <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-20 transition-all cursor-pointer pointer-events-none"
+                                 @click.stop="
+                                    if (playing) {
+                                        $refs.videoPlayer.pause();
+                                        playing = false;
+                                    } else {
+                                        $refs.videoPlayer.play();
+                                        playing = true;
+                                    }
+                                 ">
+                                <button class="p-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all transform hover:scale-110 pointer-events-auto">
+                                    <svg x-show="!playing" class="w-8 h-8 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"></path>
+                                    </svg>
+                                    <svg x-show="playing" class="w-8 h-8 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"></path>
+                                    </svg>
+                                </button>
                             </div>
                         </div>
                     </template>
@@ -419,26 +483,32 @@
                 <div class="flex flex-col md:flex-row h-full">
                     <!-- Imagen/Video/Audio -->
                     <div class="relative w-full md:w-2/3 bg-gray-100 flex items-center justify-center overflow-hidden h-full">
-                        <template x-if="contentType === 'image'">
-                            <img :src="results[currentIndex].thumbnail || results[currentIndex].preview || results[currentIndex].url" 
-                                 :alt="results[currentIndex].title" 
+                        <template x-if="contentType === 'image' && results[currentIndex]">
+                            <img :src="results[currentIndex] ? (results[currentIndex].thumbnail || results[currentIndex].preview || results[currentIndex].url) : ''" 
+                                 :alt="results[currentIndex] ? (results[currentIndex].title || '') : ''" 
                                  class="max-w-full max-h-full w-auto h-auto object-contain p-4"
                                  x-show="!imageError"
                                  @error="imageError = true">
                         </template>
                         
-                        <template x-if="contentType === 'video'">
-                            <div class="relative w-full h-full flex items-center justify-center">
-                                <img :src="results[currentIndex].thumbnail || results[currentIndex].preview || results[currentIndex].url" 
-                                     :alt="results[currentIndex].title" 
-                                     class="max-w-full max-h-full w-auto h-auto object-contain p-4"
-                                     x-show="!imageError"
-                                     @error="imageError = true">
-                                <div x-show="!imageError" class="absolute inset-0 flex items-center justify-center pointer-events-none bg-black bg-opacity-20">
-                                    <svg class="w-20 h-20 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M8 5v14l11-7z"></path>
-                                    </svg>
-                                </div>
+                        <template x-if="contentType === 'video' && results[currentIndex]">
+                            <div class="relative w-full h-full flex items-center justify-center bg-black">
+                                <template x-if="getCurrentVideoSrc()">
+                                    <video 
+                                        :src="getCurrentVideoSrc()" 
+                                        :poster="results[currentIndex].thumbnail || ''"
+                                        class="max-w-full max-h-full w-auto h-auto object-contain"
+                                        preload="metadata"
+                                        controls
+                                        @click.stop>
+                                        Tu navegador no soporta el elemento de video.
+                                    </video>
+                                </template>
+                                <template x-if="!getCurrentVideoSrc()">
+                                    <div class="text-white text-center p-8">
+                                        <p>Video no disponible</p>
+                                    </div>
+                                </template>
                             </div>
                         </template>
                         
@@ -814,6 +884,36 @@ function stockSearch() {
                 return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
             }
             return `${minutes}:${String(secs).padStart(2, '0')}`;
+        },
+        
+        getVideoSrc(item) {
+            // Función helper para construir la URL del proxy de video de forma segura
+            if (!item) return null;
+            const url = item.preview || item.download_url;
+            if (!url) return null;
+            // Solo usar proxy para URLs que parezcan videos
+            const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v'];
+            const isVideoUrl = videoExtensions.some(ext => url.toLowerCase().includes(ext)) || 
+                              url.includes('/videos/') || 
+                              url.includes('video');
+            if (!isVideoUrl) return url; // Si no es video, devolver URL directa
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
+        },
+        
+        getCurrentItem() {
+            // Función helper para obtener el item actual de forma segura
+            if (!this.results || this.results.length === 0) return null;
+            if (this.currentIndex < 0 || this.currentIndex >= this.results.length) return null;
+            return this.results[this.currentIndex];
+        },
+        
+        getCurrentVideoSrc() {
+            // Función helper para obtener la URL del proxy de video para el item actual
+            const item = this.getCurrentItem();
+            if (!item) return null;
+            const url = item.preview || item.download_url;
+            if (!url) return null;
+            return '/api/stock/video-proxy/?url=' + encodeURIComponent(url);
         },
         
         getCSRFToken() {
