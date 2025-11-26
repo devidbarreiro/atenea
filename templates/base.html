@@ -103,6 +103,9 @@
         <!-- Modal de Creación -->
         {% include 'includes/create_modal.html' %}
         
+        <!-- Modal de Detalle de Item -->
+        {% include 'includes/item_detail_modal.html' %}
+        
         <!-- Asistente de Documentación -->
         {% include 'assistant/chat.html' %}
         
@@ -157,6 +160,9 @@
             {% endfor %}
         </div>
         {% endif %}
+        
+        <!-- Breadcrumbs -->
+        {% include 'includes/breadcrumbs.html' %}
         
         <!-- Contenido Principal -->
         <main class="transition-all duration-300 px-4 sm:px-6 lg:px-8 py-8"

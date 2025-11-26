@@ -18,10 +18,12 @@ urlpatterns = [
     # Projects
     path('projects/', views.ProjectsListView.as_view(), name='projects_list'),
     path('projects/create/', views.ProjectCreateView.as_view(), name='project_create'),
-    path('projects/<int:project_id>/', views.ProjectDetailView.as_view(), name='project_detail'),
-    path('projects/<int:project_id>/videos/', views.ProjectDetailView.as_view(), {'tab': 'videos'}, name='project_videos'),
-    path('projects/<int:project_id>/images/', views.ProjectDetailView.as_view(), {'tab': 'images'}, name='project_images'),
-    path('projects/<int:project_id>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
+    path('projects/<int:project_id>/', views.ProjectOverviewView.as_view(), name='project_overview'),
+    path('projects/<int:project_id>/detail/', views.ProjectDetailView.as_view(), name='project_detail'),
+    # Estas rutas ahora apuntan a las vistas unificadas (ver más abajo)
+    # path('projects/<int:project_id>/videos/', views.ProjectDetailView.as_view(), {'tab': 'videos'}, name='project_videos'),
+    # path('projects/<int:project_id>/images/', views.ProjectDetailView.as_view(), {'tab': 'images'}, name='project_images'),
+    # path('projects/<int:project_id>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
     path('projects/<int:project_id>/music/', views.ProjectDetailView.as_view(), {'tab': 'music'}, name='project_music'),
     path('projects/<int:project_id>/scripts/', views.ProjectDetailView.as_view(), {'tab': 'scripts'}, name='project_scripts'),
     path('projects/<int:project_id>/agent/', views.ProjectDetailView.as_view(), {'tab': 'agent'}, name='project_agent'),
@@ -29,34 +31,28 @@ urlpatterns = [
     path('projects/<int:project_id>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
     path('items/<int:item_id>/move/', views.ProjectItemsManagementView.move_item, name='move_item'),
     
-    # Videos (standalone - sin proyecto)
-    path('videos/create/', views.VideoCreateView.as_view(), name='video_create_standalone'),
-    
-    # Videos (con proyecto)
-    path('projects/<int:project_id>/videos/create/', views.VideoCreateView.as_view(), name='video_create'),
-    path('projects/<int:project_id>/videos/create/partial/', views.VideoCreatePartialView.as_view(), name='video_create_partial'),
+    # Videos (nueva vista unificada - creación + biblioteca)
+    path('videos/', views.VideoLibraryView.as_view(), name='video_library'),
+    path('projects/<int:project_id>/videos/', views.VideoLibraryView.as_view(), name='project_videos_library'),
     path('videos/<int:video_id>/', views.VideoDetailView.as_view(), name='video_detail'),
+    path('projects/<int:project_id>/videos/<int:video_id>/', views.VideoDetailView.as_view(), name='project_video_detail'),
     path('videos/<int:video_id>/delete/', views.VideoDeleteView.as_view(), name='video_delete'),
     path('videos/<int:video_id>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
     path('videos/<int:video_id>/status/', views.VideoStatusView.as_view(), name='video_status'),
     
-    # Images (standalone - sin proyecto)
-    path('images/create/', views.ImageCreateView.as_view(), name='image_create_standalone'),
-    
-    # Images (con proyecto)
-    path('projects/<int:project_id>/images/create/', views.ImageCreateView.as_view(), name='image_create'),
-    path('projects/<int:project_id>/images/create/partial/', views.ImageCreatePartialView.as_view(), name='image_create_partial'),
+    # Images (nueva vista unificada - creación + biblioteca)
+    path('images/', views.ImageLibraryView.as_view(), name='image_library'),
+    path('projects/<int:project_id>/images/', views.ImageLibraryView.as_view(), name='project_images_library'),
     path('images/<int:image_id>/', views.ImageDetailView.as_view(), name='image_detail'),
+    path('projects/<int:project_id>/images/<int:image_id>/', views.ImageDetailView.as_view(), name='project_image_detail'),
     path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     
-    # Audios (standalone - sin proyecto)
-    path('audios/create/', views.AudioCreateView.as_view(), name='audio_create_standalone'),
-    
-    # Audios (con proyecto)
-    path('projects/<int:project_id>/audios/create/', views.AudioCreateView.as_view(), name='audio_create'),
-    path('projects/<int:project_id>/audios/create/partial/', views.AudioCreatePartialView.as_view(), name='audio_create_partial'),
+    # Audios (nueva vista unificada - creación + biblioteca)
+    path('audios/', views.AudioLibraryView.as_view(), name='audio_library'),
+    path('projects/<int:project_id>/audios/', views.AudioLibraryView.as_view(), name='project_audios_library'),
     path('audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='audio_detail'),
+    path('projects/<int:project_id>/audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='project_audio_detail'),
     path('audios/<int:audio_id>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
     path('audios/<int:audio_id>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
     
@@ -87,6 +83,10 @@ urlpatterns = [
     path('scripts/<int:script_id>/status-partial/', views.ScriptStatusPartialView.as_view(), name='script_status_partial'),
     
     # API endpoints
+    path('api/models/config/', views.ModelConfigAPIView.as_view(), name='api_models_config'),
+    path('api/library/items/', views.LibraryItemsAPIView.as_view(), name='api_library_items'),
+    path('api/items/<str:item_type>/<int:item_id>/', views.ItemDetailAPIView.as_view(), name='api_item_detail'),
+    path('api/items/create/', views.CreateItemAPIView.as_view(), name='api_create_item'),
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),
     path('api/image-assets/', views.ListImageAssetsView.as_view(), name='api_list_image_assets'),

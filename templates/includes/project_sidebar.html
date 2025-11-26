@@ -90,15 +90,15 @@
                      x-cloak
                      x-transition
                      class="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2">
-                    <a href="{% url 'core:video_create' project.id %}"
+                    <a href="{% url 'core:project_videos_library' project.id %}"
                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <span>🎬</span> Video
                     </a>
-                    <a href="{% url 'core:image_create' project.id %}"
+                    <a href="{% url 'core:project_images_library' project.id %}"
                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <span>🖼️</span> Imagen
                     </a>
-                    <a href="{% url 'core:audio_create' project.id %}"
+                    <a href="{% url 'core:project_audios_library' project.id %}"
                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <span>🎙️</span> Audio
                     </a>

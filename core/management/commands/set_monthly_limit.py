@@ -59,3 +59,4 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f'Error al actualizar límite mensual: {str(e)}')
 
+

@@ -31,6 +31,7 @@ from .models import Project, Video, Image, Audio, Script, Scene, Music, UserCred
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 from .services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+from .ai_services.model_config import get_model_info_for_item
 # N8nService se importa dinámicamente en get_script_service() para compatibilidad
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
@@ -614,18 +615,101 @@ class ProjectItemsManagementView:
         
         return JsonResponse({'success': True, 'new_project_name': project.name})
 
+class ProjectOverviewView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
+    """Vista general de un proyecto con estadísticas y links rápidos"""
+    model = Project
+    template_name = 'projects/overview.html'
+    context_object_name = 'project'
+    pk_url_kwarg = 'project_id'
+    
+    def get_object(self, queryset=None):
+        """Obtener proyecto y verificar permisos"""
+        project_id = self.kwargs.get('project_id')
+        project = get_object_or_404(Project, pk=project_id)
+        
+        # Verificar que el usuario tenga acceso
+        if not ProjectService.user_has_access(project, self.request.user):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('No tienes acceso a este proyecto')
+        
+        return project
+    
+    def get_breadcrumbs(self):
+        return [
+            {'label': self.object.name, 'url': None}
+        ]
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.object
+        
+        # Estadísticas del proyecto
+        context['stats'] = {
+            'videos': {
+                'total': project.videos.count(),
+                'completed': project.videos.filter(status='completed').count(),
+                'processing': project.videos.filter(status='processing').count(),
+                'pending': project.videos.filter(status='pending').count(),
+            },
+            'images': {
+                'total': project.images.count(),
+                'completed': project.images.filter(status='completed').count(),
+                'processing': project.images.filter(status='processing').count(),
+                'pending': project.images.filter(status='pending').count(),
+            },
+            'audios': {
+                'total': project.audios.count(),
+                'completed': project.audios.filter(status='completed').count(),
+                'processing': project.audios.filter(status='processing').count(),
+                'pending': project.audios.filter(status='pending').count(),
+            },
+            'scripts': {
+                'total': project.scripts.count(),
+                'completed': project.scripts.filter(status='completed').count(),
+            },
+            'music': {
+                'total': project.music_tracks.count(),
+                'completed': project.music_tracks.filter(status='completed').count(),
+            },
+        }
+        
+        # Últimos items creados (máximo 5 de cada tipo)
+        from django.db.models import Q
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Últimos videos
+        recent_videos = project.videos.select_related('project').order_by('-created_at')[:5]
+        context['recent_videos'] = recent_videos
+        
+        # Últimas imágenes
+        recent_images = project.images.select_related('project').order_by('-created_at')[:5]
+        context['recent_images'] = recent_images
+        
+        # Últimos audios
+        recent_audios = project.audios.select_related('project').order_by('-created_at')[:5]
+        context['recent_audios'] = recent_audios
+        
+        # Información del proyecto
+        context['user_role'] = project.get_user_role(self.request.user)
+        context['project_owner'] = project.owner
+        context['project_members'] = project.members.select_related('user').all()
+        
+        return context
+
+
 class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
-    """Detalle de un proyecto con sus videos"""
+    """Detalle de un proyecto con sus videos (legacy - mantiene tabs)"""
     model = Project
     template_name = 'projects/detail.html'
     context_object_name = 'project'
     pk_url_kwarg = 'project_id'
     
     def get(self, request, *args, **kwargs):
-        """Si no hay tab especificado, redirigir a /videos/"""
+        """Si no hay tab especificado, redirigir a overview"""
         if 'tab' not in kwargs:
             project_id = kwargs.get('project_id')
-            return redirect('core:project_videos', project_id=project_id)
+            return redirect('core:project_overview', project_id=project_id)
         return super().get(request, *args, **kwargs)
     
     def get_object(self, queryset=None):
@@ -965,7 +1049,7 @@ class ProjectCreateView(SuccessMessageMixin, BreadcrumbMixin, ServiceMixin, Crea
     success_message = 'Proyecto creado exitosamente'
     
     def get_success_url(self):
-        return reverse('core:project_detail', kwargs={'project_id': self.object.pk})
+        return reverse('core:project_overview', kwargs={'project_id': self.object.pk})
     
     def get_breadcrumbs(self):
         return [
@@ -1052,7 +1136,7 @@ class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
     
     def get_breadcrumbs(self):
         return [
-            {'label': self.object.name, 'url': reverse('core:project_detail', args=[self.object.pk])},
+            {'label': self.object.name, 'url': reverse('core:project_overview', args=[self.object.pk])},
             {'label': 'Eliminar', 'url': None}
         ]
     
@@ -1068,41 +1152,111 @@ class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
             return redirect(success_url)
         except Exception as e:
             messages.error(request, f'Error al eliminar proyecto: {str(e)}')
-            return redirect('core:project_detail', project_id=self.object.pk)
+            return redirect('core:project_overview', project_id=self.object.pk)
 
 
 # ====================
 # VIDEO VIEWS
 # ====================
 
-class VideoDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
-    """Detalle de un video"""
+class VideoLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+    """Vista unificada para creación y biblioteca de videos"""
+    template_name = 'creation/base_creation.html'
+    
+    def get_project(self):
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
+    
+    def get(self, request, *args, **kwargs):
+        from django.db.models import Q
+        
+        project = self.get_project()
+        user = request.user
+        
+        # Calcular conteo de videos
+        if project:
+            video_count = Video.objects.filter(project=project).count()
+        else:
+            user_projects = ProjectService.get_user_projects(user)
+            user_project_ids = [p.id for p in user_projects]
+            base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
+            video_count = Video.objects.filter(base_filter).count()
+        
+        context = {
+            'project': project,
+            'active_tab': 'video',
+            'breadcrumbs': self.get_breadcrumbs(),
+            'projects': ProjectService.get_user_projects(request.user),
+            'items_count': video_count,
+        }
+        
+        if project:
+            context['user_role'] = project.get_user_role(request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
+        
+        return render(request, self.template_name, context)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_overview', args=[project.pk])
+                },
+                {'label': 'Videos', 'url': None}
+            ]
+        return [
+            {'label': 'Videos', 'url': None}
+        ]
+
+
+class VideoDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de un video - usa el layout de creación unificado"""
     model = Video
-    template_name = 'videos/detail.html'
+    template_name = 'creation/base_creation.html'
     context_object_name = 'video'
     pk_url_kwarg = 'video_id'
     
+    def get_project(self):
+        """Obtener proyecto de la URL o del objeto"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return self.object.project
+    
     def get_breadcrumbs(self):
+        project = self.get_project()
         breadcrumbs = []
-        
-        # Solo agregar proyecto si existe
-        if self.object.project:
+        if project:
             breadcrumbs.append({
-                'label': self.object.project.name, 
-                'url': reverse('core:project_detail', args=[self.object.project.pk])
+                'label': project.name, 
+                'url': reverse('core:project_overview', args=[project.pk])
             })
-        
+            breadcrumbs.append({
+                'label': 'Videos', 
+                'url': reverse('core:project_videos_library', args=[project.pk])
+            })
+        else:
+            breadcrumbs.append({'label': 'Videos', 'url': reverse('core:video_library')})
         breadcrumbs.append({'label': self.object.title, 'url': None})
         return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Usar servicio para obtener URLs firmadas
-        video_service = self.get_video_service()
-        video_data = video_service.get_video_with_signed_urls(self.object)
-        
-        context.update(video_data)
+        project = self.get_project()
+        context['active_tab'] = 'video'
+        context['initial_item_type'] = 'video'
+        context['initial_item_id'] = self.object.id
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
 
 
@@ -1753,6 +1907,742 @@ class ListVoicesView(ServiceMixin, View):
             }, status=503)  # 503 Service Unavailable es más apropiado que 500
 
 
+class ModelConfigAPIView(View):
+    """API endpoint para obtener configuración de modelos"""
+    
+    def get(self, request):
+        """
+        Retorna configuración de modelos
+        
+        Query params:
+            type: Filtrar por tipo ('video', 'image', 'audio')
+            service: Filtrar por servicio ('gemini_veo', 'openai', etc.)
+            grouped: Si es 'true', agrupa por servicio
+        """
+        from .utils.model_capabilities import (
+            get_models_by_type,
+            get_models_grouped_by_service,
+            get_models_by_service,
+        )
+        
+        item_type = request.GET.get('type')
+        service = request.GET.get('service')
+        grouped = request.GET.get('grouped', 'false').lower() == 'true'
+        
+        try:
+            if grouped:
+                # Agrupar por servicio
+                models_data = get_models_grouped_by_service(item_type)
+                return JsonResponse({
+                    'models': models_data,
+                    'grouped': True
+                })
+            elif service:
+                # Filtrar por servicio
+                models = get_models_by_service(service)
+                if item_type:
+                    models = [m for m in models if m.get('type') == item_type]
+                return JsonResponse({
+                    'models': models,
+                    'grouped': False
+                })
+            elif item_type:
+                # Filtrar por tipo
+                models = get_models_by_type(item_type)
+                return JsonResponse({
+                    'models': models,
+                    'grouped': False
+                })
+            else:
+                # Todos los modelos
+                from .ai_services.model_config import MODEL_CAPABILITIES
+                all_models = [
+                    {**model, 'id': model_id}
+                    for model_id, model in MODEL_CAPABILITIES.items()
+                ]
+                return JsonResponse({
+                    'models': all_models,
+                    'grouped': False
+                })
+        except Exception as e:
+            logger.error(f"Error al obtener configuración de modelos: {e}")
+            return JsonResponse({
+                'error': 'Error al cargar configuración de modelos',
+                'error_detail': str(e),
+                'models': []
+            }, status=500)
+
+
+class LibraryItemsAPIView(ServiceMixin, View):
+    """API endpoint para obtener items de la biblioteca filtrados por tipo y proyecto"""
+    
+    def get(self, request):
+        """
+        Retorna items de la biblioteca
+        
+        Query params:
+            type: Filtrar por tipo ('video', 'image', 'audio')
+            project_id: Filtrar por proyecto (opcional)
+        """
+        from django.db.models import Q
+        
+        item_type = request.GET.get('type', 'video')
+        project_id = request.GET.get('project_id')
+        user = request.user
+        
+        # Obtener proyectos del usuario
+        user_projects = ProjectService.get_user_projects(user)
+        user_project_ids = [p.id for p in user_projects]
+        
+        # Construir filtro base
+        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
+        
+        # Si hay project_id específico, filtrar por ese proyecto
+        if project_id:
+            try:
+                project_id_int = int(project_id)
+                if project_id_int in user_project_ids:
+                    base_filter = Q(project_id=project_id_int)
+                else:
+                    # Verificar permisos del proyecto
+                    project = get_object_or_404(Project, pk=project_id_int)
+                    if not ProjectService.user_has_access(project, user):
+                        return JsonResponse({'error': 'No tienes acceso a este proyecto'}, status=403)
+                    base_filter = Q(project_id=project_id_int)
+            except (ValueError, Project.DoesNotExist):
+                return JsonResponse({'error': 'Proyecto no encontrado'}, status=404)
+        
+        items_data = []
+        
+        try:
+            if item_type == 'video':
+                videos = Video.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                video_service = self.get_video_service()
+                for video in videos:
+                    item_data = {
+                        'id': video.id,
+                        'type': 'video',
+                        'title': video.title,
+                        'status': video.status,
+                        'status_display': video.get_status_display(),
+                        'created_at': video.created_at.isoformat(),
+                        'project': video.project.name if video.project else None,
+                        'video_type': video.get_type_display(),
+                        'script': video.script[:100] if video.script else '',
+                        'signed_url': None,
+                        'detail_url': reverse('core:video_detail', args=[video.id]),
+                        'delete_url': reverse('core:video_delete', args=[video.id]),
+                    }
+                    if video.status == 'completed' and video.gcs_path:
+                        try:
+                            video_data = video_service.get_video_with_signed_urls(video)
+                            item_data['signed_url'] = video_data.get('signed_url')
+                        except Exception:
+                            pass
+                    items_data.append(item_data)
+                    
+            elif item_type == 'image':
+                images = Image.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                image_service = self.get_image_service()
+                for image in images:
+                    item_data = {
+                        'id': image.id,
+                        'type': 'image',
+                        'title': image.title,
+                        'status': image.status,
+                        'status_display': image.get_status_display(),
+                        'created_at': image.created_at.isoformat(),
+                        'project': image.project.name if image.project else None,
+                        'image_type': image.get_type_display(),
+                        'prompt': image.prompt[:100] if image.prompt else '',
+                        'signed_url': None,
+                        'detail_url': reverse('core:image_detail', args=[image.id]),
+                        'delete_url': reverse('core:image_delete', args=[image.id]),
+                    }
+                    if image.status == 'completed' and image.gcs_path:
+                        try:
+                            image_data = image_service.get_image_with_signed_url(image)
+                            item_data['signed_url'] = image_data.get('signed_url')
+                        except Exception:
+                            pass
+                    items_data.append(item_data)
+                    
+            elif item_type == 'audio':
+                audios = Audio.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                audio_service = self.get_audio_service()
+                for audio in audios:
+                    item_data = {
+                        'id': audio.id,
+                        'type': 'audio',
+                        'title': audio.title,
+                        'status': audio.status,
+                        'status_display': audio.get_status_display(),
+                        'created_at': audio.created_at.isoformat(),
+                        'project': audio.project.name if audio.project else None,
+                        'signed_url': None,
+                        'detail_url': reverse('core:audio_detail', args=[audio.id]),
+                        'delete_url': reverse('core:audio_delete', args=[audio.id]),
+                    }
+                    if audio.status == 'completed' and audio.gcs_path:
+                        try:
+                            audio_data = audio_service.get_audio_with_signed_url(audio)
+                            item_data['signed_url'] = audio_data.get('signed_url')
+                        except Exception:
+                            pass
+                    items_data.append(item_data)
+            else:
+                return JsonResponse({'error': 'Tipo no válido'}, status=400)
+                
+            return JsonResponse({
+                'items': items_data,
+                'count': len(items_data),
+                'type': item_type
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al obtener items de biblioteca: {e}")
+            return JsonResponse({
+                'error': 'Error al cargar items',
+                'error_detail': str(e),
+                'items': []
+            }, status=500)
+
+
+class ItemDetailAPIView(ServiceMixin, View):
+    """API endpoint para obtener detalles completos de un item (video, image, audio)"""
+    
+    def get(self, request, item_type, item_id):
+        """
+        Retorna detalles completos de un item
+        
+        Args:
+            item_type: 'video', 'image', 'audio'
+            item_id: ID del item
+        """
+        from django.db.models import Q
+        
+        user = request.user
+        user_projects = ProjectService.get_user_projects(user)
+        user_project_ids = [p.id for p in user_projects]
+        
+        # Parámetro opcional para filtrar por proyecto específico
+        project_id = request.GET.get('project_id')
+        if project_id:
+            try:
+                project_id = int(project_id)
+            except (ValueError, TypeError):
+                project_id = None
+        
+        try:
+            if item_type == 'video':
+                video = get_object_or_404(Video, pk=item_id)
+                
+                # Verificar acceso - manejar caso donde created_by puede ser None
+                has_project_access = video.project_id in user_project_ids if video.project_id else False
+                has_direct_access = video.project is None and video.created_by_id and video.created_by_id == user.id
+                
+                if not (has_project_access or has_direct_access):
+                    return JsonResponse({'error': 'No tienes acceso a este video'}, status=403)
+                
+                # Determinar el contexto del proyecto para navegación
+                # Si viene project_id en la petición, usar ese; sino usar el del item
+                nav_project_id = project_id or (video.project_id if video.project else None)
+                
+                # Filtro para navegación: solo items del mismo proyecto o sin proyecto
+                if nav_project_id:
+                    nav_filter = Q(project_id=nav_project_id)
+                else:
+                    nav_filter = Q(project__isnull=True, created_by=user)
+                
+                # Obtener signed URL de forma segura
+                signed_url = None
+                try:
+                    video_service = self.get_video_service()
+                    video_data = video_service.get_video_with_signed_urls(video)
+                    signed_url = video_data.get('signed_url') if video_data else None
+                except Exception:
+                    pass
+                
+                # Obtener items previo y siguiente dentro del mismo contexto
+                prev_item = None
+                next_item = None
+                try:
+                    prev_item = Video.objects.filter(
+                        nav_filter,
+                        created_at__lt=video.created_at
+                    ).order_by('-created_at').first()
+                    
+                    next_item = Video.objects.filter(
+                        nav_filter,
+                        created_at__gt=video.created_at
+                    ).order_by('created_at').first()
+                except Exception:
+                    pass
+                
+                # Serializar config de forma segura
+                config = video.config if isinstance(video.config, dict) else {}
+                
+                # Obtener info del modelo
+                model_info = get_model_info_for_item('video', video.type)
+                
+                # URL de detalle con contexto de proyecto si aplica
+                if nav_project_id:
+                    detail_url = reverse('core:project_video_detail', args=[nav_project_id, video.id])
+                    prev_url = reverse('core:project_video_detail', args=[nav_project_id, prev_item.id]) if prev_item else None
+                    next_url = reverse('core:project_video_detail', args=[nav_project_id, next_item.id]) if next_item else None
+                else:
+                    detail_url = reverse('core:video_detail', args=[video.id])
+                    prev_url = reverse('core:video_detail', args=[prev_item.id]) if prev_item else None
+                    next_url = reverse('core:video_detail', args=[next_item.id]) if next_item else None
+                
+                return JsonResponse({
+                    'item': {
+                        'id': video.id,
+                        'type': 'video',
+                        'title': video.title or 'Sin título',
+                        'status': video.status,
+                        'status_display': video.get_status_display(),
+                        'created_at': video.created_at.isoformat() if video.created_at else None,
+                        'completed_at': video.completed_at.isoformat() if video.completed_at else None,
+                        'project': {
+                            'id': video.project.id if video.project else None,
+                            'name': video.project.name if video.project else None,
+                        },
+                        'video_type': video.get_type_display() if video.type else None,
+                        'video_type_key': video.type,
+                        'script': video.script or '',
+                        'prompt': video.script or '',  # Video usa script, no prompt
+                        'config': config,
+                        'error_message': video.error_message or '',
+                        'signed_url': signed_url,
+                        'detail_url': detail_url,
+                        'delete_url': reverse('core:video_delete', args=[video.id]),
+                        'generate_url': reverse('core:video_generate', args=[video.id]),
+                        # Información del modelo
+                        'model': model_info,
+                        # Datos adicionales
+                        'duration': video.duration,
+                        'resolution': video.resolution,
+                        'aspect_ratio': config.get('aspect_ratio') or config.get('orientation'),
+                    },
+                    'navigation': {
+                        'prev': {
+                            'id': prev_item.id,
+                            'type': 'video',
+                            'title': prev_item.title or 'Sin título',
+                            'url': prev_url
+                        } if prev_item else None,
+                        'next': {
+                            'id': next_item.id,
+                            'type': 'video',
+                            'title': next_item.title or 'Sin título',
+                            'url': next_url
+                        } if next_item else None,
+                        'project_id': nav_project_id,
+                    }
+                })
+                
+            elif item_type == 'image':
+                image = get_object_or_404(Image, pk=item_id)
+                if not (image.project_id in user_project_ids or (image.project is None and image.created_by == user)):
+                    return JsonResponse({'error': 'No tienes acceso a esta imagen'}, status=403)
+                
+                # Determinar el contexto del proyecto para navegación
+                nav_project_id = project_id or (image.project_id if image.project else None)
+                
+                # Filtro para navegación: solo items del mismo proyecto o sin proyecto
+                if nav_project_id:
+                    nav_filter = Q(project_id=nav_project_id)
+                else:
+                    nav_filter = Q(project__isnull=True, created_by=user)
+                
+                image_service = self.get_image_service()
+                image_data = image_service.get_image_with_signed_url(image)
+                
+                # Obtener items previo y siguiente dentro del mismo contexto
+                prev_item = Image.objects.filter(
+                    nav_filter,
+                    created_at__lt=image.created_at
+                ).order_by('-created_at').first()
+                
+                next_item = Image.objects.filter(
+                    nav_filter,
+                    created_at__gt=image.created_at
+                ).order_by('created_at').first()
+                
+                # Obtener info del modelo
+                model_info = get_model_info_for_item('image', image.type)
+                
+                # URL de detalle con contexto de proyecto si aplica
+                if nav_project_id:
+                    detail_url = reverse('core:project_image_detail', args=[nav_project_id, image.id])
+                    prev_url = reverse('core:project_image_detail', args=[nav_project_id, prev_item.id]) if prev_item else None
+                    next_url = reverse('core:project_image_detail', args=[nav_project_id, next_item.id]) if next_item else None
+                else:
+                    detail_url = reverse('core:image_detail', args=[image.id])
+                    prev_url = reverse('core:image_detail', args=[prev_item.id]) if prev_item else None
+                    next_url = reverse('core:image_detail', args=[next_item.id]) if next_item else None
+                
+                return JsonResponse({
+                    'item': {
+                        'id': image.id,
+                        'type': 'image',
+                        'title': image.title,
+                        'status': image.status,
+                        'status_display': image.get_status_display(),
+                        'created_at': image.created_at.isoformat(),
+                        'completed_at': image.completed_at.isoformat() if image.completed_at else None,
+                        'project': {
+                            'id': image.project.id if image.project else None,
+                            'name': image.project.name if image.project else None,
+                        },
+                        'image_type': image.get_type_display(),
+                        'image_type_key': image.type,
+                        'prompt': image.prompt,
+                        'aspect_ratio': image.aspect_ratio,
+                        'width': image.width,
+                        'height': image.height,
+                        'config': image.config or {},
+                        'metadata': image.metadata or {},
+                        'error_message': image.error_message,
+                        'signed_url': image_data.get('signed_url'),
+                        'detail_url': detail_url,
+                        'delete_url': reverse('core:image_delete', args=[image.id]),
+                        'generate_url': reverse('core:image_generate', args=[image.id]),
+                        # Información del modelo
+                        'model': model_info,
+                    },
+                    'navigation': {
+                        'prev': {
+                            'id': prev_item.id,
+                            'type': 'image',
+                            'title': prev_item.title or 'Sin título',
+                            'url': prev_url
+                        } if prev_item else None,
+                        'next': {
+                            'id': next_item.id,
+                            'type': 'image',
+                            'title': next_item.title or 'Sin título',
+                            'url': next_url
+                        } if next_item else None,
+                        'project_id': nav_project_id,
+                    }
+                })
+                
+            elif item_type == 'audio':
+                audio = get_object_or_404(Audio, pk=item_id)
+                if not (audio.project_id in user_project_ids or (audio.project is None and audio.created_by == user)):
+                    return JsonResponse({'error': 'No tienes acceso a este audio'}, status=403)
+                
+                # Determinar el contexto del proyecto para navegación
+                nav_project_id = project_id or (audio.project_id if audio.project else None)
+                
+                # Filtro para navegación: solo items del mismo proyecto o sin proyecto
+                if nav_project_id:
+                    nav_filter = Q(project_id=nav_project_id)
+                else:
+                    nav_filter = Q(project__isnull=True, created_by=user)
+                
+                audio_service = self.get_audio_service()
+                audio_data = audio_service.get_audio_with_signed_url(audio)
+                
+                # Obtener items previo y siguiente dentro del mismo contexto
+                prev_item = Audio.objects.filter(
+                    nav_filter,
+                    created_at__lt=audio.created_at
+                ).order_by('-created_at').first()
+                
+                next_item = Audio.objects.filter(
+                    nav_filter,
+                    created_at__gt=audio.created_at
+                ).order_by('created_at').first()
+                
+                # Obtener info del modelo
+                model_info = get_model_info_for_item('audio')
+                
+                # URL de detalle con contexto de proyecto si aplica
+                if nav_project_id:
+                    detail_url = reverse('core:project_audio_detail', args=[nav_project_id, audio.id])
+                    prev_url = reverse('core:project_audio_detail', args=[nav_project_id, prev_item.id]) if prev_item else None
+                    next_url = reverse('core:project_audio_detail', args=[nav_project_id, next_item.id]) if next_item else None
+                else:
+                    detail_url = reverse('core:audio_detail', args=[audio.id])
+                    prev_url = reverse('core:audio_detail', args=[prev_item.id]) if prev_item else None
+                    next_url = reverse('core:audio_detail', args=[next_item.id]) if next_item else None
+                
+                return JsonResponse({
+                    'item': {
+                        'id': audio.id,
+                        'type': 'audio',
+                        'title': audio.title,
+                        'status': audio.status,
+                        'status_display': audio.get_status_display(),
+                        'created_at': audio.created_at.isoformat(),
+                        'completed_at': audio.completed_at.isoformat() if audio.completed_at else None,
+                        'project': {
+                            'id': audio.project.id if audio.project else None,
+                            'name': audio.project.name if audio.project else None,
+                        },
+                        'text': audio.text,
+                        'prompt': audio.text,  # Para consistencia con otros tipos
+                        'config': audio.config or {},
+                        'error_message': audio.error_message,
+                        'signed_url': audio_data.get('signed_url'),
+                        'detail_url': detail_url,
+                        'delete_url': reverse('core:audio_delete', args=[audio.id]),
+                        # Información del modelo
+                        'model': model_info,
+                        # Datos adicionales de audio
+                        'voice_id': audio.voice_id,
+                        'voice_name': audio.voice_name,
+                        'duration': audio.duration,
+                    },
+                    'navigation': {
+                        'prev': {
+                            'id': prev_item.id,
+                            'type': 'audio',
+                            'title': prev_item.title or 'Sin título',
+                            'url': prev_url
+                        } if prev_item else None,
+                        'next': {
+                            'id': next_item.id,
+                            'type': 'audio',
+                            'title': next_item.title or 'Sin título',
+                            'url': next_url
+                        } if next_item else None,
+                        'project_id': nav_project_id,
+                    }
+                })
+            else:
+                return JsonResponse({'error': 'Tipo no válido'}, status=400)
+                
+        except Exception as e:
+            logger.error(f"Error al obtener detalles del item: {e}")
+            return JsonResponse({
+                'error': 'Error al cargar detalles',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class CreateItemAPIView(ServiceMixin, View):
+    """API endpoint para crear items (video, image, audio) vía AJAX"""
+    
+    def post(self, request):
+        """
+        Crea un nuevo item según el tipo especificado
+        
+        Body JSON:
+            type: 'video', 'image', 'audio'
+            model_id: ID del modelo seleccionado
+            title: Título del item
+            prompt/script/text: Contenido según tipo
+            project_id: ID del proyecto (opcional)
+            settings: Diccionario con configuración adicional
+        """
+        import json
+        
+        try:
+            data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+        except json.JSONDecodeError:
+            data = request.POST
+        
+        item_type = data.get('type')
+        model_id = data.get('model_id')
+        title = data.get('title')
+        project_id = data.get('project_id')
+        settings = data.get('settings', {})
+        
+        if not all([item_type, model_id, title]):
+            return JsonResponse({
+                'success': False,
+                'error': 'Faltan campos requeridos: type, model_id, title'
+            }, status=400)
+        
+        project = None
+        if project_id:
+            try:
+                project = get_object_or_404(Project, pk=project_id)
+                if not ProjectService.user_has_access(project, request.user):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'No tienes acceso a este proyecto'
+                    }, status=403)
+            except (ValueError, Project.DoesNotExist):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Proyecto no encontrado'
+                }, status=404)
+        
+        try:
+            if item_type == 'video':
+                return self._create_video(request, data, project, settings)
+            elif item_type == 'image':
+                return self._create_image(request, data, project, settings)
+            elif item_type == 'audio':
+                return self._create_audio(request, data, project, settings)
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Tipo no válido: {item_type}'
+                }, status=400)
+        except Exception as e:
+            logger.error(f"Error al crear item: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    def _create_video(self, request, data, project, settings):
+        """Crear video"""
+        from .ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID, MODEL_CAPABILITIES
+        
+        model_id = data.get('model_id')
+        title = data.get('title')
+        script = data.get('script') or data.get('prompt', '')
+        
+        # Mapear model_id a video_type
+        video_type = None
+        for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+            if mid == model_id:
+                video_type = vtype
+                break
+        
+        if not video_type:
+            # Si no hay mapeo, intentar usar el model_id directamente
+            video_type = model_id
+        
+        video_service = self.get_video_service()
+        
+        # Construir configuración
+        config = {
+            'duration': settings.get('duration'),
+            'aspect_ratio': settings.get('aspect_ratio'),
+            'mode': settings.get('mode'),
+            'negative_prompt': settings.get('negative_prompt'),
+            'seed': settings.get('seed'),
+        }
+        
+        # Referencias (imágenes)
+        if settings.get('start_image'):
+            config['start_image'] = settings['start_image']
+        if settings.get('end_image'):
+            config['end_image'] = settings['end_image']
+        
+        # Crear video
+        video = video_service.create_video(
+            created_by=request.user,
+            project=project,
+            title=title,
+            video_type=video_type,
+            script=script,
+            config=config
+        )
+        
+        # Generar automáticamente
+        try:
+            video_service.generate_video(video)
+            generate_status = 'started'
+        except Exception as e:
+            logger.warning(f"Error al iniciar generación de video: {e}")
+            generate_status = 'error'
+        
+        return JsonResponse({
+            'success': True,
+            'item': {
+                'id': video.id,
+                'type': 'video',
+                'title': video.title,
+                'status': video.status,
+                'detail_url': reverse('core:video_detail', args=[video.id]),
+            },
+            'generate_status': generate_status
+        })
+    
+    def _create_image(self, request, data, project, settings):
+        """Crear imagen"""
+        model_id = data.get('model_id')
+        title = data.get('title')
+        prompt = data.get('prompt', '')
+        
+        image_service = self.get_image_service()
+        
+        # Construir configuración
+        config = {
+            'aspect_ratio': settings.get('aspect_ratio', '1:1'),
+            'negative_prompt': settings.get('negative_prompt'),
+            'seed': settings.get('seed'),
+        }
+        
+        # Crear imagen
+        image = image_service.create_image(
+            created_by=request.user,
+            project=project,
+            title=title,
+            image_type='text_to_image',  # Por defecto, se puede ajustar según model_id
+            prompt=prompt,
+            config=config
+        )
+        
+        # Generar automáticamente
+        try:
+            image_service.generate_image(image)
+            generate_status = 'started'
+        except Exception as e:
+            logger.warning(f"Error al iniciar generación de imagen: {e}")
+            generate_status = 'error'
+        
+        return JsonResponse({
+            'success': True,
+            'item': {
+                'id': image.id,
+                'type': 'image',
+                'title': image.title,
+                'status': image.status,
+                'detail_url': reverse('core:image_detail', args=[image.id]),
+            },
+            'generate_status': generate_status
+        })
+    
+    def _create_audio(self, request, data, project, settings):
+        """Crear audio"""
+        from decouple import config as get_config
+        
+        title = data.get('title')
+        text = data.get('text') or data.get('prompt', '')
+        voice_id = settings.get('voice') or get_config('ELEVENLABS_DEFAULT_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+        
+        audio_service = self.get_audio_service()
+        
+        # Crear audio con los parámetros correctos
+        audio = audio_service.create_audio(
+            title=title,
+            text=text,
+            voice_id=voice_id,
+            created_by=request.user,
+            project=project
+        )
+        
+        # Generar automáticamente
+        try:
+            audio_service.generate_audio(audio)
+            generate_status = 'started'
+        except Exception as e:
+            logger.warning(f"Error al iniciar generación de audio: {e}")
+            generate_status = 'error'
+        
+        return JsonResponse({
+            'success': True,
+            'item': {
+                'id': audio.id,
+                'type': 'audio',
+                'title': audio.title,
+                'status': audio.status,
+                'detail_url': reverse('core:audio_detail', args=[audio.id]),
+            },
+            'generate_status': generate_status
+        })
+
+
 class ListImageAssetsView(ServiceMixin, View):
     """Lista imágenes disponibles en HeyGen con manejo robusto de errores"""
     
@@ -1796,31 +2686,104 @@ class ListElevenLabsVoicesView(ServiceMixin, View):
 # IMAGE VIEWS
 # ====================
 
-class ImageDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
-    """Detalle de una imagen"""
+class ImageLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+    """Vista unificada para creación y biblioteca de imágenes"""
+    template_name = 'creation/base_creation.html'
+    
+    def get_project(self):
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
+    
+    def get(self, request, *args, **kwargs):
+        from django.db.models import Q
+        
+        project = self.get_project()
+        user = request.user
+        
+        # Calcular conteo de imágenes
+        if project:
+            image_count = Image.objects.filter(project=project).count()
+        else:
+            user_projects = ProjectService.get_user_projects(user)
+            user_project_ids = [p.id for p in user_projects]
+            base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
+            image_count = Image.objects.filter(base_filter).count()
+        
+        context = {
+            'project': project,
+            'active_tab': 'image',
+            'breadcrumbs': self.get_breadcrumbs(),
+            'projects': ProjectService.get_user_projects(request.user),
+            'items_count': image_count,
+        }
+        
+        if project:
+            context['user_role'] = project.get_user_role(request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
+        
+        return render(request, self.template_name, context)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_overview', args=[project.pk])
+                },
+                {'label': 'Imágenes', 'url': None}
+            ]
+        return [
+            {'label': 'Imágenes', 'url': None}
+        ]
+
+
+class ImageDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de una imagen - usa el layout de creación unificado"""
     model = Image
-    template_name = 'images/detail.html'
+    template_name = 'creation/base_creation.html'
     context_object_name = 'image'
     pk_url_kwarg = 'image_id'
     
+    def get_project(self):
+        """Obtener proyecto de la URL o del objeto"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return self.object.project
+    
     def get_breadcrumbs(self):
+        project = self.get_project()
         breadcrumbs = []
-        if self.object.project:
+        if project:
             breadcrumbs.append({
-                'label': self.object.project.name, 
-                'url': reverse('core:project_detail', args=[self.object.project.pk])
+                'label': project.name, 
+                'url': reverse('core:project_overview', args=[project.pk])
             })
+            breadcrumbs.append({
+                'label': 'Imágenes', 
+                'url': reverse('core:project_images_library', args=[project.pk])
+            })
+        else:
+            breadcrumbs.append({'label': 'Imágenes', 'url': reverse('core:image_library')})
         breadcrumbs.append({'label': self.object.title, 'url': None})
         return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Usar servicio para obtener URLs firmadas
-        image_service = self.get_image_service()
-        image_data = image_service.get_image_with_signed_url(self.object)
-        
-        context.update(image_data)
+        project = self.get_project()
+        context['active_tab'] = 'image'
+        context['initial_item_type'] = 'image'
+        context['initial_item_id'] = self.object.id
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
 
 
@@ -2120,34 +3083,104 @@ class ImageGenerateView(ServiceMixin, View):
 # AUDIO VIEWS
 # ====================
 
-class AudioDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
-    """Detalle de un audio"""
+class AudioLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+    """Vista unificada para creación y biblioteca de audios"""
+    template_name = 'creation/base_creation.html'
+    
+    def get_project(self):
+        """Obtener proyecto del contexto (opcional)"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return None
+    
+    def get(self, request, *args, **kwargs):
+        from django.db.models import Q
+        
+        project = self.get_project()
+        user = request.user
+        
+        # Calcular conteo de audios
+        if project:
+            audio_count = Audio.objects.filter(project=project).count()
+        else:
+            user_projects = ProjectService.get_user_projects(user)
+            user_project_ids = [p.id for p in user_projects]
+            base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
+            audio_count = Audio.objects.filter(base_filter).count()
+        
+        context = {
+            'project': project,
+            'active_tab': 'audio',
+            'breadcrumbs': self.get_breadcrumbs(),
+            'projects': ProjectService.get_user_projects(request.user),
+            'items_count': audio_count,
+        }
+        
+        if project:
+            context['user_role'] = project.get_user_role(request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
+        
+        return render(request, self.template_name, context)
+    
+    def get_breadcrumbs(self):
+        project = self.get_project()
+        if project:
+            return [
+                {
+                    'label': project.name, 
+                    'url': reverse('core:project_overview', args=[project.pk])
+                },
+                {'label': 'Audios', 'url': None}
+            ]
+        return [
+            {'label': 'Audios', 'url': None}
+        ]
+
+
+class AudioDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
+    """Detalle de un audio - usa el layout de creación unificado"""
     model = Audio
-    template_name = 'audios/detail.html'
+    template_name = 'creation/base_creation.html'
     context_object_name = 'audio'
     pk_url_kwarg = 'audio_id'
     
+    def get_project(self):
+        """Obtener proyecto de la URL o del objeto"""
+        project_id = self.kwargs.get('project_id')
+        if project_id:
+            return get_object_or_404(Project, pk=project_id)
+        return self.object.project
+    
     def get_breadcrumbs(self):
+        project = self.get_project()
         breadcrumbs = []
-        
-        # Solo agregar proyecto si existe
-        if self.object.project:
+        if project:
             breadcrumbs.append({
-                'label': self.object.project.name, 
-                'url': reverse('core:project_detail', args=[self.object.project.pk])
+                'label': project.name, 
+                'url': reverse('core:project_overview', args=[project.pk])
             })
-        
+            breadcrumbs.append({
+                'label': 'Audios', 
+                'url': reverse('core:project_audios_library', args=[project.pk])
+            })
+        else:
+            breadcrumbs.append({'label': 'Audios', 'url': reverse('core:audio_library')})
         breadcrumbs.append({'label': self.object.title, 'url': None})
         return breadcrumbs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Usar servicio para obtener URL firmada
-        audio_service = self.get_audio_service()
-        audio_data = audio_service.get_audio_with_signed_url(self.object)
-        
-        context.update(audio_data)
+        project = self.get_project()
+        context['active_tab'] = 'audio'
+        context['initial_item_type'] = 'audio'
+        context['initial_item_id'] = self.object.id
+        if project:
+            context['project'] = project
+            context['user_role'] = project.get_user_role(self.request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
         return context
 
 
@@ -5647,12 +6680,18 @@ class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin,
 # CREATION AGENT (Chat de Creación)
 # ====================
 
-class CreationAgentView(LoginRequiredMixin, View):
+class CreationAgentView(LoginRequiredMixin, SidebarProjectsMixin, View):
     """Vista principal del chat de creación"""
     template_name = 'chat/creation_agent.html'
     
     def get(self, request):
-        return render(request, self.template_name)
+        context = {
+            'breadcrumbs': [
+                {'label': 'Chat de Creación', 'url': None}
+            ],
+            'projects': ProjectService.get_user_projects(request.user),
+        }
+        return render(request, self.template_name, context)
 
 
 class CreationAgentChatView(LoginRequiredMixin, View):

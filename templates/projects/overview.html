@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} - Atenea{% endblock %}
+
+{% block content %}
+<div class="flex flex-col lg:flex-row gap-0">
+    <!-- Sidebar del proyecto -->
+    {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
+    
+    <!-- Contenido principal -->
+    <main class="flex-1 min-w-0 lg:ml-80">
+        <div class="p-6 lg:p-8">
+            <!-- Header -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ project.name }}</h1>
+                {% if project.description %}
+                <p class="text-gray-600">{{ project.description }}</p>
+                {% endif %}
+                <div class="mt-4 flex items-center gap-4 text-sm text-gray-500">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <span>Creado {{ project.created_at|date:"d M Y" }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Estadísticas -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Videos -->
+                <a href="{% url 'core:project_videos_library' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🎬</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Videos</h3>
+                                <p class="text-sm text-gray-500">Total: {{ stats.videos.total }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Completados</span>
+                            <span class="font-medium text-green-600">{{ stats.videos.completed }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Procesando</span>
+                            <span class="font-medium text-yellow-600">{{ stats.videos.processing }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Pendientes</span>
+                            <span class="font-medium text-gray-600">{{ stats.videos.pending }}</span>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Imágenes -->
+                <a href="{% url 'core:project_images_library' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🖼️</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Imágenes</h3>
+                                <p class="text-sm text-gray-500">Total: {{ stats.images.total }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Completadas</span>
+                            <span class="font-medium text-green-600">{{ stats.images.completed }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Procesando</span>
+                            <span class="font-medium text-yellow-600">{{ stats.images.processing }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Pendientes</span>
+                            <span class="font-medium text-gray-600">{{ stats.images.pending }}</span>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Audios -->
+                <a href="{% url 'core:project_audios_library' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🎙️</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Audios</h3>
+                                <p class="text-sm text-gray-500">Total: {{ stats.audios.total }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Completados</span>
+                            <span class="font-medium text-green-600">{{ stats.audios.completed }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Procesando</span>
+                            <span class="font-medium text-yellow-600">{{ stats.audios.processing }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Pendientes</span>
+                            <span class="font-medium text-gray-600">{{ stats.audios.pending }}</span>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Guiones -->
+                <a href="{% url 'core:project_scripts' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">📝</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Guiones</h3>
+                                <p class="text-sm text-gray-500">Total: {{ stats.scripts.total }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Completados</span>
+                            <span class="font-medium text-green-600">{{ stats.scripts.completed }}</span>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Música -->
+                <a href="{% url 'core:project_music' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🎵</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Música</h3>
+                                <p class="text-sm text-gray-500">Total: {{ stats.music.total }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">Completadas</span>
+                            <span class="font-medium text-green-600">{{ stats.music.completed }}</span>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Video con Agente -->
+                <a href="{% url 'core:project_agent' project.id %}" 
+                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">✨</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900">Video con Agente</h3>
+                                <p class="text-sm text-gray-500">IA asistida</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        Crea videos guiados por IA
+                    </div>
+                </a>
+            </div>
+            
+            <!-- Últimos items creados -->
+            {% if recent_videos or recent_images or recent_audios %}
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Actividad reciente</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {% if recent_videos %}
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>🎬</span> Últimos Videos
+                        </h3>
+                        <div class="space-y-2">
+                            {% for video in recent_videos|slice:":3" %}
+                            <a href="{% url 'core:video_detail' video.id %}" 
+                               class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
+                                <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ video.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ video.created_at|date:"d M Y" }}</div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if recent_images %}
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>🖼️</span> Últimas Imágenes
+                        </h3>
+                        <div class="space-y-2">
+                            {% for image in recent_images|slice:":3" %}
+                            <a href="{% url 'core:image_detail' image.id %}" 
+                               class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
+                                <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ image.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ image.created_at|date:"d M Y" }}</div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if recent_audios %}
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <span>🎙️</span> Últimos Audios
+                        </h3>
+                        <div class="space-y-2">
+                            {% for audio in recent_audios|slice:":3" %}
+                            <a href="{% url 'core:audio_detail' audio.id %}" 
+                               class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
+                                <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ audio.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ audio.created_at|date:"d M Y" }}</div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+</div>
+{% endblock %}
+
