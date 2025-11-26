@@ -280,6 +280,24 @@ class ServiceMixin:
     def get_api_service(self):
         return APIService()
 
+
+class SidebarProjectsMixin:
+    """Mixin para exponer los proyectos del usuario en plantillas con sidebar."""
+    _sidebar_projects_cache = None
+
+    def get_sidebar_projects(self):
+        if self._sidebar_projects_cache is None:
+            self._sidebar_projects_cache = ProjectService.get_user_projects(self.request.user)
+        return self._sidebar_projects_cache
+
+    def add_sidebar_projects_to_context(self, context):
+        context.setdefault('projects', self.get_sidebar_projects())
+        return context
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return self.add_sidebar_projects_to_context(context)
+
 # ====================
 # LOGIN
 # ====================
@@ -596,7 +614,7 @@ class ProjectItemsManagementView:
         
         return JsonResponse({'success': True, 'new_project_name': project.name})
 
-class ProjectDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
+class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, DetailView):
     """Detalle de un proyecto con sus videos"""
     model = Project
     template_name = 'projects/detail.html'
@@ -1088,7 +1106,7 @@ class VideoDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return context
 
 
-class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormView):
     """Crear nuevo video"""
     template_name = 'videos/create.html'
     
@@ -1127,6 +1145,7 @@ class VideoCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             context['user_role'] = project.get_user_role(self.request.user)
             context['project_owner'] = project.owner
             context['project_members'] = project.members.select_related('user').all()
+            context.setdefault('active_tab', 'videos')
         return context
     
     def get_breadcrumbs(self):
@@ -1805,7 +1824,7 @@ class ImageDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return context
 
 
-class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+class ImageCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormView):
     """Crear nueva imagen"""
     template_name = 'images/create.html'
     form_class = GeminiImageForm
@@ -1825,6 +1844,7 @@ class ImageCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             context['user_role'] = project.get_user_role(self.request.user)
             context['project_owner'] = project.owner
             context['project_members'] = project.members.select_related('user').all()
+            context.setdefault('active_tab', 'images')
         return context
     
     def get_breadcrumbs(self):
@@ -2131,7 +2151,7 @@ class AudioDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return context
 
 
-class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+class AudioCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormView):
     """Crear nuevo audio"""
     template_name = 'audios/create.html'
     form_class = AudioForm
@@ -2151,6 +2171,7 @@ class AudioCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             context['user_role'] = project.get_user_role(self.request.user)
             context['project_owner'] = project.owner
             context['project_members'] = project.members.select_related('user').all()
+            context.setdefault('active_tab', 'audios')
         
         # Listar voces disponibles
         try:
@@ -2506,7 +2527,7 @@ class ScriptDetailView(BreadcrumbMixin, ServiceMixin, DetailView):
         return breadcrumbs
 
 
-class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
+class ScriptCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormView):
     """Crear nuevo guión"""
     template_name = 'scripts/create.html'
     form_class = ScriptForm
@@ -2532,6 +2553,7 @@ class ScriptCreateView(BreadcrumbMixin, ServiceMixin, FormView):
             context['user_role'] = project.get_user_role(self.request.user)
             context['project_owner'] = project.owner
             context['project_members'] = project.members.select_related('user').all()
+            context.setdefault('active_tab', 'scripts')
         return context
     
     def get_breadcrumbs(self):
@@ -2762,7 +2784,7 @@ class ScriptRetryView(ServiceMixin, View):
 # AGENT VIDEO FLOW
 # ====================
 
-class AgentCreateView(BreadcrumbMixin, View):
+class AgentCreateView(SidebarProjectsMixin, BreadcrumbMixin, View):
     """Paso 1: Crear contenido (script o PDF)"""
     template_name = 'agent/create.html'
     
@@ -2787,6 +2809,8 @@ class AgentCreateView(BreadcrumbMixin, View):
             'project_owner': project.owner,
             'project_members': project.members.select_related('user').all()
         }
+        context['active_tab'] = 'agent'
+        context = self.add_sidebar_projects_to_context(context)
         
         return render(request, self.template_name, context)
     
@@ -4897,7 +4921,7 @@ def activate_account(request, uidb64, token):
 # MUSIC VIEWS
 # ====================
 
-class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
+class MusicCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
     """Crear nueva música con ElevenLabs Music"""
     template_name = 'music/create.html'
     
@@ -4921,7 +4945,8 @@ class MusicCreateView(BreadcrumbMixin, ServiceMixin, View):
                 'project_owner': project.owner,
                 'project_members': project.members.select_related('user').all()
             })
-        return context
+        context['active_tab'] = 'music'
+        return self.add_sidebar_projects_to_context(context)
     
     def get_breadcrumbs(self):
         project = self.get_project()
