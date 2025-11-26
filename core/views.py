@@ -4545,7 +4545,6 @@ class VuelaAIVideoDetailsView(View):
 # ====================
 # MANAGEMENT USERS
 # ====================
-
 class UserMenuView(View):
     """
     User management view with permission-based access control.
@@ -4568,11 +4567,13 @@ class UserMenuView(View):
         has_delete = request.user.has_perm('auth.delete_user')
         has_view = request.user.has_perm('auth.view_user')
         has_add = request.user.has_perm('auth.add_user')
+        has_credits_access = request.user.has_perm('core.view_credittransaction')
 
         # Superuser shortcut
         if request.user.is_superuser:
             has_admin_access = True
             has_create_access = True
+            has_credits_access = True
         else:
             # Admin access if change or delete
             if has_change or has_delete:
@@ -4585,10 +4586,14 @@ class UserMenuView(View):
             has_create_access = has_add
         
         # If user has neither admin nor create permissions, deny access
-        if not (has_admin_access or has_create_access):
+        if not (has_admin_access or has_create_access or has_credits_access):
             messages.error(request, 'No tienes permiso para acceder a esta página.')
             return redirect(self.login_url)
-        
+
+        # Set access flags for template and data loading
+        request.has_credits_access = has_credits_access
+        request.has_admin_access = has_admin_access
+        request.has_create_access = has_create_access
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request):
@@ -4597,10 +4602,12 @@ class UserMenuView(View):
         has_delete = request.user.has_perm('auth.delete_user')
         has_view = request.user.has_perm('auth.view_user')
         has_add = request.user.has_perm('auth.add_user')
+        has_credits_access = request.user.has_perm('core.view_credittransaction')
 
         if request.user.is_superuser:
             has_admin_access = True
             has_create_access = True
+            has_credits_access = True
         else:
             if has_change or has_delete:
                 has_admin_access = True
@@ -4615,13 +4622,8 @@ class UserMenuView(View):
         # Load groups always (needed for the create form). Only load the
         # full users list when the user has admin access.
         groups = Group.objects.all()
-        if has_admin_access:
-            # Prefetch groups para evitar N+1 queries
-            users = User.objects.prefetch_related('groups').all()
-        else:
-            # For create-only users, don't load the admin list
-            users = []
-
+        users = User.objects.prefetch_related('groups').all() if has_admin_access else []
+        
         # Determine whether the current user belongs to an "editar" role or has change_user
         can_reset_password = (
             request.user.is_superuser or
@@ -4636,6 +4638,7 @@ class UserMenuView(View):
             'can_reset_password': can_reset_password,
             'has_admin_access': has_admin_access,
             'has_create_access': has_create_access,
+            'has_credits_access': has_credits_access,
         })
 
     # ------------------------------
