@@ -46,8 +46,32 @@ document.addEventListener('alpine:init', () => {
         onModelChange() {
             if (this.selectedModel && this.allModels[this.selectedModel]) {
                 this.selectedModelData = this.allModels[this.selectedModel];
+                
+                // Mostrar loader mientras se cargan los campos
+                const container = document.getElementById('dynamic-fields-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-3"></div>
+                            <p class="text-xs text-gray-500">Cargando opciones del modelo...</p>
+                        </div>
+                    `;
+                }
+                
+                // Cargar campos dinámicos vía HTMX
+                if (typeof htmx !== 'undefined') {
+                    htmx.ajax('GET', '/videos/form-fields/?model_id=' + this.selectedModel, {
+                        target: '#dynamic-fields-container',
+                        swap: 'innerHTML'
+                    });
+                }
             } else {
                 this.selectedModelData = null;
+                // Limpiar campos dinámicos
+                const container = document.getElementById('dynamic-fields-container');
+                if (container) {
+                    container.innerHTML = '<div class="text-center py-4 text-gray-400 text-xs"><p>Selecciona un modelo para ver opciones</p></div>';
+                }
             }
         },
         
@@ -72,26 +96,142 @@ document.addEventListener('alpine:init', () => {
             this.submitting = true;
             
             try {
-                const formData = {
-                    type: this.activeTab,
-                    model_id: this.selectedModel,
-                    title: 'New ' + this.activeTab,
-                    prompt: this.prompt,
-                    script: this.prompt,
-                    text: this.prompt,
-                    project_id: this.projectId,
-                    settings: {}
-                };
+                // Recoger todos los valores del formulario dinámico
+                const settings = {};
+                
+                // Duración
+                const durationInput = document.getElementById('duration-input');
+                if (durationInput) {
+                    const duration = durationInput.value;
+                    if (duration) settings.duration = parseInt(duration);
+                }
+                
+                // Aspect Ratio
+                const aspectInput = document.getElementById('aspect-input');
+                if (aspectInput) {
+                    const aspectRatio = aspectInput.value;
+                    if (aspectRatio) settings.aspect_ratio = aspectRatio;
+                }
+                
+                // Resolución
+                const resolutionInput = document.getElementById('resolution-input');
+                if (resolutionInput) {
+                    const resolution = resolutionInput.value;
+                    if (resolution) settings.resolution = resolution;
+                }
+                
+                // Audio
+                const audioInput = document.getElementById('audio-input');
+                if (audioInput) {
+                    const audio = audioInput.value;
+                    if (audio) settings.generate_audio = audio === 'true';
+                }
+                
+                // Negative Prompt
+                const negativePrompt = document.querySelector('textarea[name="negative_prompt"]');
+                if (negativePrompt && negativePrompt.value) {
+                    settings.negative_prompt = negativePrompt.value;
+                }
+                
+                // Seed
+                const seedInput = document.querySelector('input[name="seed"]');
+                if (seedInput && seedInput.value) {
+                    settings.seed = parseInt(seedInput.value);
+                }
+                
+                // Mode (para Kling)
+                const modeInput = document.querySelector('select[name="mode"]');
+                if (modeInput && modeInput.value) {
+                    settings.mode = modeInput.value;
+                }
+                
+                // Campos específicos del modelo (HeyGen)
+                const avatarId = document.querySelector('select[name="avatar_id"]');
+                if (avatarId && avatarId.value) {
+                    settings.avatar_id = avatarId.value;
+                }
+                
+                const voiceId = document.querySelector('select[name="voice_id"]');
+                if (voiceId && voiceId.value) {
+                    settings.voice_id = voiceId.value;
+                }
+                
+                const avatarImageId = document.querySelector('select[name="avatar_image_id"]');
+                if (avatarImageId && avatarImageId.value) {
+                    settings.avatar_image_id = avatarImageId.value;
+                }
+                
+                // Verificar si hay imágenes de referencia para enviar como FormData
+                const startImage = document.querySelector('input[name="start_image"]');
+                const endImage = document.querySelector('input[name="end_image"]');
+                const styleImage = document.querySelector('input[name="style_image"]');
+                const assetImage = document.querySelector('input[name="asset_image"]');
+                
+                const hasReferenceImages = (startImage && startImage.files && startImage.files[0]) ||
+                                          (endImage && endImage.files && endImage.files[0]) ||
+                                          (styleImage && styleImage.files && styleImage.files[0]) ||
+                                          (assetImage && assetImage.files && assetImage.files[0]);
                 
                 const token = document.querySelector('[name=csrfmiddlewaretoken]');
-                const response = await fetch('/api/items/create/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': token ? token.value : ''
-                    },
-                    body: JSON.stringify(formData)
-                });
+                let response;
+                
+                if (hasReferenceImages) {
+                    // Usar FormData para enviar archivos
+                    const formData = new FormData();
+                    formData.append('type', this.activeTab);
+                    formData.append('model_id', this.selectedModel);
+                    formData.append('title', 'New ' + this.activeTab);
+                    formData.append('prompt', this.prompt);
+                    formData.append('script', this.prompt);
+                    formData.append('text', this.prompt);
+                    if (this.projectId) {
+                        formData.append('project_id', this.projectId);
+                    }
+                    formData.append('settings', JSON.stringify(settings));
+                    
+                    // Agregar imágenes de referencia
+                    if (startImage && startImage.files && startImage.files[0]) {
+                        formData.append('start_image', startImage.files[0]);
+                    }
+                    if (endImage && endImage.files && endImage.files[0]) {
+                        formData.append('end_image', endImage.files[0]);
+                    }
+                    if (styleImage && styleImage.files && styleImage.files[0]) {
+                        formData.append('style_image', styleImage.files[0]);
+                    }
+                    if (assetImage && assetImage.files && assetImage.files[0]) {
+                        formData.append('asset_image', assetImage.files[0]);
+                    }
+                    
+                    response = await fetch('/api/items/create/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': token ? token.value : ''
+                        },
+                        body: formData
+                    });
+                } else {
+                    // Usar JSON si no hay imágenes
+                    const formData = {
+                        type: this.activeTab,
+                        model_id: this.selectedModel,
+                        title: 'New ' + this.activeTab,
+                        prompt: this.prompt,
+                        script: this.prompt,
+                        text: this.prompt,
+                        project_id: this.projectId,
+                        settings: settings
+                    };
+                    
+                    response = await fetch('/api/items/create/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': token ? token.value : ''
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                }
                 
                 const data = await response.json();
                 
@@ -142,20 +282,28 @@ document.addEventListener('alpine:init', () => {
     </div>
     
     <!-- Contenido del Sidebar -->
-    <div class="p-6 space-y-6">
+    <div class="p-6 space-y-5">
         
         <!-- Sección MODEL -->
         <div>
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">MODEL</label>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">MODEL</label>
             
             <!-- Dropdown personalizado -->
             <div x-data="{ dropdownOpen: false, searchQuery: '' }" class="relative">
                 <!-- Botón de selección -->
                 <button type="button"
                         @click="dropdownOpen = !dropdownOpen"
-                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm text-left flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <span class="truncate" x-text="selectedModel && allModels[selectedModel] ? allModels[selectedModel].name : 'Seleccionar modelo...'"></span>
-                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" 
+                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm text-left flex items-center gap-2 hover:bg-gray-50 transition-colors">
+                    <img x-show="selectedModel && allModels[selectedModel] && allModels[selectedModel].logo" 
+                         :src="selectedModel && allModels[selectedModel] ? allModels[selectedModel].logo : ''" 
+                         :alt="selectedModel && allModels[selectedModel] ? allModels[selectedModel].service : ''"
+                         class="w-5 h-5 rounded flex-shrink-0 object-contain"
+                         onerror="this.style.display='none'">
+                    <div x-show="selectedModel && allModels[selectedModel] && !allModels[selectedModel].logo" class="w-5 h-5 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xs font-semibold text-gray-500" x-text="selectedModel && allModels[selectedModel] ? (allModels[selectedModel].service || allModels[selectedModel].name).charAt(0).toUpperCase() : ''"></span>
+                    </div>
+                    <span class="truncate flex-1" x-text="selectedModel && allModels[selectedModel] ? allModels[selectedModel].name : 'Seleccionar modelo...'"></span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0" 
                          :class="dropdownOpen ? 'transform rotate-180' : ''"
                          fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -225,61 +373,38 @@ document.addEventListener('alpine:init', () => {
         
         <!-- Sección PROMPT -->
         <div>
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">PROMPT</label>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">PROMPT</label>
             <textarea x-model="prompt"
                       :placeholder="'Describe tu ' + activeTab + '...'"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                      class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black resize-none transition-all"
                       rows="6"></textarea>
         </div>
         
-        <!-- Sección SETTINGS (simplificada) -->
-        <div x-show="selectedModelData">
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">SETTINGS</label>
-            <div class="space-y-3">
-                <!-- Aspect Ratio -->
-                <div x-show="selectedModelData && selectedModelData.supports && selectedModelData.supports.aspect_ratio && selectedModelData.supports.aspect_ratio.length > 0">
-                    <label class="block text-xs text-gray-600 mb-1">Aspect Ratio</label>
-                    <div class="flex flex-wrap gap-2">
-                        <template x-for="ratio in (selectedModelData && selectedModelData.supports && selectedModelData.supports.aspect_ratio) || []" :key="ratio">
-                            <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
-                                    x-text="ratio"></button>
-                        </template>
-                    </div>
-                </div>
-                
-                <!-- Duration -->
-                <div x-show="selectedModelData && selectedModelData.supports && selectedModelData.supports.duration">
-                    <label class="block text-xs text-gray-600 mb-1">Duration</label>
-                    <select x-show="selectedModelData && selectedModelData.supports && selectedModelData.supports.duration && selectedModelData.supports.duration.options" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <template x-for="dur in (selectedModelData && selectedModelData.supports && selectedModelData.supports.duration && selectedModelData.supports.duration.options) || []" :key="dur">
-                            <option :value="dur" x-text="dur + 's'"></option>
-                        </template>
-                    </select>
-                    <div x-show="selectedModelData && selectedModelData.supports && selectedModelData.supports.duration && selectedModelData.supports.duration.fixed"
-                         class="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
-                        <span x-text="(selectedModelData && selectedModelData.supports && selectedModelData.supports.duration) ? selectedModelData.supports.duration.fixed + 's' : ''"></span>
-                        <span class="text-xs text-gray-400 ml-2">(fijo)</span>
-                    </div>
-                </div>
+        <!-- Sección SETTINGS (cargada dinámicamente vía HTMX) -->
+        <div id="dynamic-fields-container" 
+             x-show="selectedModel"
+             x-transition>
+            <div x-show="!selectedModel" class="text-center py-6 text-gray-400 text-xs">
+                <p>Selecciona un modelo para ver opciones</p>
             </div>
         </div>
         
-        <div x-show="!selectedModelData" class="text-center py-4 text-gray-400 text-xs">
-            <p>Selecciona un modelo para ver opciones</p>
-        </div>
         
-        <!-- Botón Generate -->
+        <!-- Botón Generar con Costo Estimado -->
         <div class="pt-4 border-t border-gray-200">
             <button @click="submitForm()"
                     :disabled="!selectedModel || !prompt || submitting"
                     :class="(!selectedModel || !prompt || submitting) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'"
                     class="w-full bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
-                <span x-show="!submitting">Generate</span>
+                <span x-show="!submitting">Generar</span>
                 <span x-show="submitting">Generando...</span>
                 <svg x-show="!submitting" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                 </svg>
+                <!-- Costo estimado (se carga dinámicamente vía HTMX) -->
+                <span id="estimated-cost-container" x-show="!submitting" class="text-xs opacity-75">
+                    <!-- Se carga vía HTMX junto con los campos dinámicos -->
+                </span>
             </button>
         </div>
         

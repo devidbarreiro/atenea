@@ -178,6 +178,16 @@ class GeminiVeoClient:
     ):
         """Valida parámetros según el modelo seleccionado"""
         
+        # Validar que duration no sea None
+        if duration is None:
+            raise ValueError("La duración es requerida y no puede ser None")
+        
+        # Asegurar que duration sea int
+        try:
+            duration = int(duration)
+        except (ValueError, TypeError):
+            raise ValueError(f"Duración inválida: {duration}")
+        
         # Validar duración
         min_dur, max_dur = self.model_config['duration_range']
         if duration < min_dur or duration > max_dur:

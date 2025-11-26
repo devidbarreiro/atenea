@@ -561,9 +561,54 @@ class CreditService:
         logger.info(f"✓ Créditos cobrados y marcados en metadata para escena {scene.scene_id} (ID: {scene.id})")
     
     @staticmethod
-    def estimate_video_cost(video_type, duration, config=None):
-        """Estima costo antes de generar (para mostrar al usuario)"""
+    def estimate_video_cost(video_type=None, duration=None, config=None, model_id=None):
+        """
+        Estima costo antes de generar (para mostrar al usuario)
+        
+        Args:
+            video_type: Tipo de video (ej: 'gemini_veo', 'sora') - DEPRECATED, usar model_id
+            duration: Duración en segundos
+            config: Configuración del video
+            model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
+        """
+        from core.ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID, get_model_capabilities
+        
         duration = duration or 8
+        
+        # Si se proporciona model_id, intentar mapear a video_type
+        if model_id and not video_type:
+            # Buscar video_type que corresponda a este model_id
+            for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+                if mid == model_id:
+                    video_type = vtype
+                    break
+            
+            # Si no se encuentra en el mapeo, intentar inferir del model_id
+            if not video_type:
+                if 'veo' in model_id:
+                    video_type = 'gemini_veo'
+                elif 'sora' in model_id:
+                    video_type = 'sora'
+                elif 'heygen-avatar-v2' in model_id:
+                    video_type = 'heygen_avatar_v2'
+                elif 'heygen-avatar-iv' in model_id:
+                    video_type = 'heygen_avatar_iv'
+                elif 'kling-v' in model_id:
+                    # Mapear kling-v1 -> kling_v1, etc.
+                    video_type = model_id.replace('-', '_')
+                elif 'higgsfield-ai/dop/standard' in model_id:
+                    video_type = 'higgsfield_dop_standard'
+                elif 'higgsfield-ai/dop/preview' in model_id:
+                    video_type = 'higgsfield_dop_preview'
+                elif 'seedance' in model_id:
+                    video_type = 'higgsfield_seedance_v1_pro'
+                elif 'kling-video/v2.1/pro' in model_id:
+                    video_type = 'higgsfield_kling_v2_1_pro'
+                elif 'vuela-ai' in model_id or 'vuela_ai' in model_id:
+                    video_type = 'vuela_ai'
+        
+        if not video_type:
+            return Decimal('0')
         
         if video_type == 'heygen_avatar_v2':
             return Decimal(str(duration * CreditService.PRICING['heygen_avatar_v2']['video']))
@@ -575,6 +620,8 @@ class CreditService:
             return Decimal(str(duration * CreditService.PRICING['gemini_veo'][price_key]))
         elif video_type == 'sora':
             model = (config and config.get('sora_model')) or 'sora-2'
+            if model not in CreditService.PRICING.get('sora', {}):
+                model = 'sora-2'  # Fallback
             return Decimal(str(duration * CreditService.PRICING['sora'][model]))
         elif video_type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
             # Higgsfield: precio fijo por video
@@ -605,8 +652,20 @@ class CreditService:
         return Decimal('0')
     
     @staticmethod
-    def estimate_image_cost():
-        """Estima costo de una imagen"""
+    def estimate_image_cost(model_id=None):
+        """Estima costo de una imagen según el modelo"""
+        if model_id:
+            # Mapear model_id a clave de pricing
+            model_pricing_map = {
+                'higgsfield-ai/soul/standard': 'higgsfield_soul_standard',
+                'reve/text-to-image': 'reve_text_to_image',
+            }
+            
+            pricing_key = model_pricing_map.get(model_id)
+            if pricing_key and pricing_key in CreditService.PRICING:
+                return Decimal(str(CreditService.PRICING[pricing_key]['image']))
+        
+        # Por defecto, usar Gemini
         return Decimal(str(CreditService.PRICING['gemini_image']['image']))
     
     @staticmethod

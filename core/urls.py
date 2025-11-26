@@ -84,6 +84,9 @@ urlpatterns = [
     
     # API endpoints
     path('api/models/config/', views.ModelConfigAPIView.as_view(), name='api_models_config'),
+    path('api/models/<str:model_id>/capabilities/', views.ModelCapabilitiesAPIView.as_view(), name='api_model_capabilities'),
+    path('api/models/estimate-cost/', views.EstimateCostAPIView.as_view(), name='api_estimate_cost'),
+    path('videos/form-fields/', views.DynamicFormFieldsView.as_view(), name='dynamic_form_fields'),
     path('api/library/items/', views.LibraryItemsAPIView.as_view(), name='api_library_items'),
     path('api/items/<str:item_type>/<int:item_id>/', views.ItemDetailAPIView.as_view(), name='api_item_detail'),
     path('api/items/create/', views.CreateItemAPIView.as_view(), name='api_create_item'),

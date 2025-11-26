@@ -41,6 +41,15 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('item-created', () => {
                 this.loadItems();
             });
+            // Escuchar cambios de estado de videos para recargar items
+            window.addEventListener('video-status-changed', (e) => {
+                if (this.activeTab === 'video') {
+                    // Pequeño delay para asegurar que el estado se guardó en BD
+                    setTimeout(() => {
+                        this.loadItems();
+                    }, 500);
+                }
+            });
             // Manejar navegación del browser
             window.addEventListener('popstate', () => {
                 this.selectedItem = null;
@@ -354,7 +363,45 @@ document.addEventListener('alpine:init', () => {
                 <div x-show="!loading && items.length > 0" 
                      class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <template x-for="item in items" :key="item.id">
-                        <div x-data="{ menuOpen: false, videoPlaying: false }"
+                        <div x-data="{ 
+                                menuOpen: false, 
+                                videoPlaying: false,
+                                pollingInterval: null,
+                                init() {
+                                    // Iniciar polling si el video está procesando
+                                    if (item.type === 'video' && item.status === 'processing') {
+                                        this.startPolling(item.id);
+                                    }
+                                },
+                                startPolling(videoId) {
+                                    // Limpiar intervalo anterior si existe
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                    }
+                                    // Hacer polling cada 5 segundos
+                                    this.pollingInterval = setInterval(async () => {
+                                        try {
+                                            const response = await fetch(`/videos/${videoId}/status-partial/?template=badge`);
+                                            const html = await response.text();
+                                            // Si el estado cambió, disparar evento para recargar items
+                                            if (html.includes('completed') || html.includes('error')) {
+                                                clearInterval(this.pollingInterval);
+                                                // Disparar evento global para que el componente padre recargue items
+                                                window.dispatchEvent(new CustomEvent('video-status-changed', {
+                                                    detail: { videoId, status: html.includes('completed') ? 'completed' : 'error' }
+                                                }));
+                                            }
+                                        } catch (error) {
+                                            console.error('Error polling video status:', error);
+                                        }
+                                    }, 5000);
+                                },
+                                destroy() {
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                    }
+                                }
+                            }"
                              class="group rounded-lg overflow-hidden hover:shadow-lg transition-all cursor-pointer relative bg-white border border-gray-200">
                             
                             <!-- Thumbnail -->
@@ -400,7 +447,7 @@ document.addEventListener('alpine:init', () => {
                                 <!-- Procesando -->
                                 <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
                                     <div class="text-center">
-                                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400 mb-2"></div>
+                                        <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
                                         <p class="text-xs text-gray-500">Procesando...</p>
                                     </div>
                                 </div>
@@ -570,10 +617,10 @@ document.addEventListener('alpine:init', () => {
                         <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                             <img x-show="selectedItem.model?.logo" 
                                  :src="selectedItem.model?.logo" 
-                                 :alt="selectedItem.model?.service"
-                                 class="w-8 h-8 object-contain rounded"
+                                 :alt="selectedItem.model?.service || 'Modelo'"
+                                 class="w-8 h-8 object-contain rounded flex-shrink-0"
                                  onerror="this.style.display='none'">
-                            <div>
+                            <div class="flex-1 min-w-0">
                                 <p class="font-medium text-sm text-gray-900" x-text="selectedItem.model?.name || 'Modelo'"></p>
                                 <p class="text-xs text-gray-500" x-text="selectedItem.model?.service || ''"></p>
                             </div>
@@ -709,7 +756,7 @@ document.addEventListener('alpine:init', () => {
                             <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
                                 Eliminar <span x-text="deleteModal.item?.type === 'video' ? 'Video' : (deleteModal.item?.type === 'image' ? 'Imagen' : 'Audio')"></span>
                             </h3>
-                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + (deleteModal.item?.title || 'Sin título') + '\"'"></p>
+                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + escapeHtml(deleteModal.item?.title || 'Sin título') + '\"'"></p>
                             <p class="mt-1 text-xs text-gray-500">
                                 Esta acción no se puede deshacer. El item y sus archivos asociados se eliminarán permanentemente.
                             </p>
@@ -752,7 +799,7 @@ document.addEventListener('alpine:init', () => {
                 <!-- Header -->
                 <div class="px-6 py-5 border-b border-gray-200">
                     <h3 class="text-lg font-semibold text-gray-900">Mover a otro proyecto</h3>
-                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + (moveModal.item?.title || '') + '\"'"></p>
+                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + escapeHtml(moveModal.item?.title || '') + '\"'"></p>
                 </div>
                 
                 <!-- Lista de proyectos -->
