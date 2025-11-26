@@ -9,12 +9,3 @@ reviews:
   # Mostrar estado de revisión
   review_status: true
 
-# Configuración de paths a revisar (opcional)
-paths:
-  # Incluir todos los archivos Python
-  - "**/*.py"
-  # Incluir archivos de configuración
-  - "**/*.yaml"
-  - "**/*.yml"
-  - "**/*.json"
-

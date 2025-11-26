@@ -98,7 +98,7 @@
                             <h3 class="text-lg font-bold text-gray-900">IMAGEN</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:image_create_standalone' %}" 
+                            <a href="{% url 'core:image_library' %}" 
                                @click="toolsModalOpen = false"
                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Generar imágenes</span>
@@ -136,7 +136,7 @@
                             <h3 class="text-lg font-bold text-gray-900">VÍDEO</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:video_create_standalone' %}" 
+                            <a href="{% url 'core:video_library' %}" 
                                @click="toolsModalOpen = false"
                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Generar vídeos</span>
@@ -170,7 +170,7 @@
                             <h3 class="text-lg font-bold text-gray-900">AUDIO</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:audio_create_standalone' %}" 
+                            <a href="{% url 'core:audio_library' %}" 
                                @click="toolsModalOpen = false"
                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Texto a voz</span>
@@ -253,7 +253,7 @@
             </a>
             
             <!-- Generar imágenes -->
-            <a href="{% url 'core:image_create_standalone' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:image_library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
                     <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
                         <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,7 +279,7 @@
             </a>
 
             <!-- Generar audio -->
-            <a href="{% url 'core:audio_create_standalone' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:audio_library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
                     <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
                         <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -409,7 +409,7 @@
                 </svg>
                 <h3 class="text-lg font-semibold text-gray-900 mb-2">No se han encontrado creaciones</h3>
                 <p class="text-gray-600 mb-6">Comienza creando tu primer contenido con IA</p>
-                <a href="{% url 'core:image_create_standalone' %}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
+                <a href="{% url 'core:image_library' %}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
