@@ -208,7 +208,7 @@ class Video(models.Model):
         help_text='Usuario que creó este video'
     )
     title = models.CharField(max_length=255)
-    type = models.CharField(max_length=20, choices=VIDEO_TYPES)
+    type = models.CharField(max_length=30, choices=VIDEO_TYPES)
     status = models.CharField(
         max_length=20,
         choices=VIDEO_STATUS,
