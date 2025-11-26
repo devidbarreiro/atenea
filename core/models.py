@@ -15,6 +15,18 @@ VIDEO_TYPES = [
     ('heygen_avatar_iv', 'HeyGen Avatar IV'),
     ('gemini_veo', 'Gemini Veo'),
     ('sora', 'OpenAI Sora'),
+    # Higgsfield
+    ('higgsfield_dop_standard', 'Higgsfield DoP Standard'),
+    ('higgsfield_dop_preview', 'Higgsfield DoP Preview'),
+    ('higgsfield_seedance_v1_pro', 'Higgsfield Seedance V1 Pro'),
+    ('higgsfield_kling_v2_1_pro', 'Higgsfield Kling V2.1 Pro'),
+    # Kling
+    ('kling_v1', 'Kling V1'),
+    ('kling_v1_5', 'Kling V1.5'),
+    ('kling_v1_6', 'Kling V1.6'),
+    ('kling_v2_master', 'Kling V2 Master'),
+    ('kling_v2_1', 'Kling V2.1'),
+    ('kling_v2_5_turbo', 'Kling V2.5 Turbo'),
 ]
 
 VIDEO_STATUS = [
@@ -77,6 +89,18 @@ SCENE_AI_SERVICES = [
     ('heygen_v2', 'HeyGen Avatar V2'),
     ('heygen_avatar_iv', 'HeyGen Avatar IV'),
     ('vuela_ai', 'Vuela.ai'),
+    # Higgsfield
+    ('higgsfield_dop_standard', 'Higgsfield DoP Standard'),
+    ('higgsfield_dop_preview', 'Higgsfield DoP Preview'),
+    ('higgsfield_seedance_v1_pro', 'Higgsfield Seedance V1 Pro'),
+    ('higgsfield_kling_v2_1_pro', 'Higgsfield Kling V2.1 Pro'),
+    # Kling
+    ('kling_v1', 'Kling V1'),
+    ('kling_v1_5', 'Kling V1.5'),
+    ('kling_v1_6', 'Kling V1.6'),
+    ('kling_v2_master', 'Kling V2 Master'),
+    ('kling_v2_1', 'Kling V2.1'),
+    ('kling_v2_5_turbo', 'Kling V2.5 Turbo'),
 ]
 
 

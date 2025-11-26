@@ -463,6 +463,8 @@ class VideoService:
         self.heygen_client = None
         self.veo_client = None
         self.sora_client = None
+        self.higgsfield_client = None
+        self.kling_client = None
     
     def _get_heygen_client(self) -> HeyGenClient:
         """Lazy initialization de HeyGen client"""
@@ -485,6 +487,30 @@ class VideoService:
                 raise ValidationException('OPENAI_API_KEY no está configurada')
             self.sora_client = SoraClient(api_key=settings.OPENAI_API_KEY)
         return self.sora_client
+    
+    def _get_higgsfield_client(self):
+        """Lazy initialization de Higgsfield client"""
+        if not self.higgsfield_client:
+            from .ai_services.higgsfield import HiggsfieldClient
+            if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
+                raise ValidationException('HIGGSFIELD_API_KEY_ID y HIGGSFIELD_API_KEY deben estar configuradas')
+            self.higgsfield_client = HiggsfieldClient(
+                api_key_id=settings.HIGGSFIELD_API_KEY_ID,
+                api_key_secret=settings.HIGGSFIELD_API_KEY
+            )
+        return self.higgsfield_client
+    
+    def _get_kling_client(self):
+        """Lazy initialization de Kling client"""
+        if not self.kling_client:
+            from .ai_services.kling import KlingClient
+            if not settings.KLING_ACCESS_KEY or not settings.KLING_SECRET_KEY:
+                raise ValidationException('KLING_ACCESS_KEY y KLING_SECRET_KEY deben estar configuradas')
+            self.kling_client = KlingClient(
+                access_key=settings.KLING_ACCESS_KEY,
+                secret_key=settings.KLING_SECRET_KEY
+            )
+        return self.kling_client
     
     # ----------------
     # CREAR VIDEO
@@ -722,6 +748,10 @@ class VideoService:
                 external_id = self._generate_veo_video(video)
             elif video.type == 'sora':
                 external_id = self._generate_sora_video(video)
+            elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                external_id = self._generate_higgsfield_video(video)
+            elif video.type.startswith('kling_'):
+                external_id = self._generate_kling_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -915,6 +945,108 @@ class VideoService:
             )
         
         return response.get('video_id')
+    
+    def _generate_higgsfield_video(self, video: Video) -> str:
+        """Genera video con Higgsfield"""
+        client = self._get_higgsfield_client()
+        
+        # Mapear tipo de video a model_id de Higgsfield
+        model_map = {
+            'higgsfield_dop_standard': 'higgsfield-ai/dop/standard',
+            'higgsfield_dop_preview': 'higgsfield-ai/dop/preview',
+            'higgsfield_seedance_v1_pro': 'bytedance/seedance/v1/pro/image-to-video',
+            'higgsfield_kling_v2_1_pro': 'kling-video/v2.1/pro/image-to-video',
+        }
+        
+        model_id = model_map.get(video.type)
+        if not model_id:
+            raise ValidationException(f'Tipo de video Higgsfield no válido: {video.type}')
+        
+        # Obtener configuración
+        prompt = video.script
+        
+        # Obtener URL de imagen si existe (requerido para image-to-video)
+        image_url = None
+        if video.config.get('input_image_gcs_path'):
+            # Obtener URL firmada de GCS
+            gcs_path = video.config['input_image_gcs_path']
+            image_url = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de GCS: {gcs_path}")
+        elif video.config.get('image_url'):
+            image_url = video.config['image_url']
+        
+        if not image_url:
+            raise ValidationException(f'El modelo {model_id} requiere una imagen de entrada (image_url o input_image_gcs_path)')
+        
+        # Preparar parámetros opcionales (solo si están en config)
+        kwargs = {}
+        if 'aspect_ratio' in video.config:
+            kwargs['aspect_ratio'] = video.config['aspect_ratio']
+        if 'resolution' in video.config:
+            kwargs['resolution'] = video.config['resolution']
+        if 'duration' in video.config:
+            kwargs['duration'] = video.config['duration']
+        
+        # Generar video
+        response = client.generate_video(
+            model_id=model_id,
+            prompt=prompt,
+            image_url=image_url,
+            **kwargs
+        )
+        
+        return response.get('request_id')
+    
+    def _generate_kling_video(self, video: Video) -> str:
+        """Genera video con Kling"""
+        client = self._get_kling_client()
+        
+        # Mapear tipo de video a model_name de Kling
+        model_map = {
+            'kling_v1': 'kling-v1',
+            'kling_v1_5': 'kling-v1-5',
+            'kling_v1_6': 'kling-v1-6',
+            'kling_v2_master': 'kling-v2-master',
+            'kling_v2_1': 'kling-v2-1',
+            'kling_v2_5_turbo': 'kling-v2-5-turbo',
+        }
+        
+        model_name = model_map.get(video.type)
+        if not model_name:
+            raise ValidationException(f'Tipo de video Kling no válido: {video.type}')
+        
+        # Obtener configuración
+        prompt = video.script
+        mode = video.config.get('mode', 'std')  # 'std' o 'pro'
+        duration = int(video.config.get('duration', 5))
+        aspect_ratio = video.config.get('aspect_ratio', '16:9')
+        
+        # Validar duración (Kling solo soporta 5 o 10 segundos)
+        if duration not in [5, 10]:
+            logger.warning(f"Duración {duration}s ajustada a 5s (Kling solo soporta 5 o 10 segundos)")
+            duration = 5
+        
+        # Obtener URL de imagen si existe (para image-to-video)
+        image_url = None
+        if video.config.get('input_image_gcs_path'):
+            # Obtener URL firmada de GCS
+            gcs_path = video.config['input_image_gcs_path']
+            image_url = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de GCS: {gcs_path}")
+        elif video.config.get('image_url'):
+            image_url = video.config['image_url']
+        
+        # Generar video
+        response = client.generate_video(
+            model_name=model_name,
+            prompt=prompt,
+            image_url=image_url,
+            mode=mode,
+            duration=duration,
+            aspect_ratio=aspect_ratio
+        )
+        
+        return response.get('task_id')
     
     # ----------------
     # CONSULTAR ESTADO
@@ -2431,6 +2563,10 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 external_id = self._generate_sora_scene_video(scene)
             elif scene.ai_service == 'vuela_ai':
                 external_id = self._generate_vuela_ai_scene_video(scene)
+            elif scene.ai_service in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                external_id = self._generate_higgsfield_scene_video(scene)
+            elif scene.ai_service.startswith('kling_'):
+                external_id = self._generate_kling_scene_video(scene)
             else:
                 raise ValidationException(f"Servicio de IA no soportado: {scene.ai_service}")
             
@@ -2672,6 +2808,140 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             raise ValidationException('Vuela.ai no devolvió video_id')
         
         return video_id
+    
+    def _generate_higgsfield_scene_video(self, scene):
+        """Genera video de escena con Higgsfield"""
+        from .ai_services.higgsfield import HiggsfieldClient
+        
+        if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
+            raise ValidationException('HIGGSFIELD_API_KEY_ID y HIGGSFIELD_API_KEY deben estar configuradas')
+        
+        client = HiggsfieldClient(
+            api_key_id=settings.HIGGSFIELD_API_KEY_ID,
+            api_key_secret=settings.HIGGSFIELD_API_KEY
+        )
+        
+        # Mapear ai_service a model_id
+        model_map = {
+            'higgsfield_dop_standard': 'higgsfield-ai/dop/standard',
+            'higgsfield_dop_preview': 'higgsfield-ai/dop/preview',
+            'higgsfield_seedance_v1_pro': 'bytedance/seedance/v1/pro/image-to-video',
+            'higgsfield_kling_v2_1_pro': 'kling-video/v2.1/pro/image-to-video',
+        }
+        
+        model_id = model_map.get(scene.ai_service)
+        if not model_id:
+            raise ValidationException(f'Servicio de IA Higgsfield no válido: {scene.ai_service}')
+        
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        
+        # Obtener configuración
+        config = scene.ai_config
+        
+        # Obtener URL de imagen (requerido para image-to-video)
+        image_url = None
+        if scene.preview_image_gcs_path:
+            # Obtener URL firmada de GCS
+            image_url = gcs_storage.get_signed_url(scene.preview_image_gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de preview desde GCS: {scene.preview_image_gcs_path}")
+        elif config.get('image_url'):
+            image_url = config['image_url']
+        
+        if not image_url:
+            raise ValidationException(f'El modelo {model_id} requiere una imagen de entrada (preview_image_gcs_path o image_url en ai_config)')
+        
+        # Preparar parámetros opcionales (solo si están en config)
+        kwargs = {}
+        if 'aspect_ratio' in config:
+            kwargs['aspect_ratio'] = config['aspect_ratio']
+        if 'resolution' in config:
+            kwargs['resolution'] = config['resolution']
+        if 'duration' in config:
+            kwargs['duration'] = config['duration']
+        elif scene.duration_sec:
+            kwargs['duration'] = scene.duration_sec
+        
+        # Generar video
+        response = client.generate_video(
+            model_id=model_id,
+            prompt=prompt,
+            image_url=image_url,
+            **kwargs
+        )
+        
+        return response.get('request_id')
+    
+    def _generate_kling_scene_video(self, scene):
+        """Genera video de escena con Kling"""
+        from .ai_services.kling import KlingClient
+        
+        if not settings.KLING_ACCESS_KEY or not settings.KLING_SECRET_KEY:
+            raise ValidationException('KLING_ACCESS_KEY y KLING_SECRET_KEY deben estar configuradas')
+        
+        client = KlingClient(
+            access_key=settings.KLING_ACCESS_KEY,
+            secret_key=settings.KLING_SECRET_KEY
+        )
+        
+        # Mapear ai_service a model_name
+        model_map = {
+            'kling_v1': 'kling-v1',
+            'kling_v1_5': 'kling-v1-5',
+            'kling_v1_6': 'kling-v1-6',
+            'kling_v2_master': 'kling-v2-master',
+            'kling_v2_1': 'kling-v2-1',
+            'kling_v2_5_turbo': 'kling-v2-5-turbo',
+        }
+        
+        model_name = model_map.get(scene.ai_service)
+        if not model_name:
+            raise ValidationException(f'Servicio de IA Kling no válido: {scene.ai_service}')
+        
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        
+        # Obtener configuración
+        config = scene.ai_config
+        mode = config.get('mode', 'std')  # 'std' o 'pro'
+        duration = int(config.get('duration', scene.duration_sec or 5))
+        aspect_ratio = config.get('aspect_ratio', '16:9')
+        
+        # Validar duración (Kling solo soporta 5 o 10 segundos)
+        if duration not in [5, 10]:
+            logger.warning(f"Duración {duration}s ajustada a 5s (Kling solo soporta 5 o 10 segundos)")
+            duration = 5
+        
+        # Obtener URL de imagen si existe (para image-to-video)
+        image_url = None
+        if scene.preview_image_gcs_path:
+            # Obtener URL firmada de GCS
+            image_url = gcs_storage.get_signed_url(scene.preview_image_gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de preview desde GCS: {scene.preview_image_gcs_path}")
+        elif config.get('image_url'):
+            image_url = config['image_url']
+        
+        # Generar video
+        response = client.generate_video(
+            model_name=model_name,
+            prompt=prompt,
+            image_url=image_url,
+            mode=mode,
+            duration=duration,
+            aspect_ratio=aspect_ratio
+        )
+        
+        return response.get('task_id')
     
     def check_scene_video_status(self, scene) -> Dict:
         """
