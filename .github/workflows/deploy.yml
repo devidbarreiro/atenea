@@ -158,14 +158,19 @@ jobs:
         docker compose rm -f || true
         # Forzar eliminación de contenedores por nombre si aún existen
         # Los contenedores de docker-compose se nombran como: {project}-{service}-{number}
-        # Buscar y eliminar contenedores que empiecen con el nombre del entorno
-        for container in $(docker ps -a --filter "name=${ENV}-" --format "{{.Names}}" 2>/dev/null || true); do
-          [ ! -z "$container" ] && docker rm -f "$container" || true
-        done
-        # También buscar contenedores con el patrón exacto del error
-        for container in $(docker ps -a --filter "name=^${ENV}" --format "{{.Names}}" 2>/dev/null || true); do
-          [ ! -z "$container" ] && docker rm -f "$container" || true
-        done
+        # Buscar TODOS los contenedores y eliminar los que coincidan con el patrón
+        echo "🔍 Buscando contenedores huérfanos..."
+        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || true)
+        if [ ! -z "$ALL_CONTAINERS" ]; then
+          echo "$ALL_CONTAINERS" | while read container; do
+            if [ ! -z "$container" ] && [[ "$container" == "${ENV}-"* ]]; then
+              echo "🗑️  Eliminando contenedor: $container"
+              docker rm -f "$container" 2>/dev/null || true
+            fi
+          done
+        fi
+        # También intentar eliminar contenedores específicos comunes
+        docker rm -f "${ENV}-web-1" "${ENV}-db-1" "${ENV}-migrate-1" "${ENV}-collectstatic-1" 2>/dev/null || true
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
