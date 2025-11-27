@@ -15,7 +15,7 @@ from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import permission_required, login_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
@@ -148,9 +148,6 @@ def send_invitation_email(request, invitation):
         logger.error(f"Error enviando email de invitación a {invitation.email}: {e}")
         # No lanzar excepción para no interrumpir el flujo
 
-
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
 
 @login_required
 def no_permissions(request):
@@ -1973,6 +1970,247 @@ class ModelConfigAPIView(View):
             }, status=500)
 
 
+class ModelCapabilitiesAPIView(View):
+    """API endpoint para obtener capacidades de un modelo específico"""
+    
+    def get(self, request, model_id):
+        """
+        Retorna capacidades de un modelo específico
+        
+        Args:
+            model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
+        """
+        from .ai_services.model_config import get_model_capabilities
+        
+        try:
+            capabilities = get_model_capabilities(model_id)
+            
+            if not capabilities:
+                return JsonResponse({
+                    'error': f'Modelo {model_id} no encontrado'
+                }, status=404)
+            
+            return JsonResponse({
+                'model_id': model_id,
+                'capabilities': capabilities
+            })
+        except Exception as e:
+            logger.error(f"Error al obtener capacidades del modelo {model_id}: {e}")
+            return JsonResponse({
+                'error': 'Error al cargar capacidades del modelo',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class EstimateCostAPIView(LoginRequiredMixin, View):
+    """API endpoint para calcular costo estimado de generación"""
+    
+    def post(self, request):
+        """
+        Calcula costo estimado basado en modelo y configuración
+        
+        Body JSON:
+        {
+            "model_id": "veo-3.1-generate-preview",
+            "item_type": "video",  // "video", "image", "audio"
+            "config": {
+                "duration": 8,
+                "generate_audio": true,
+                "mode": "std",
+                ...
+            },
+            "text": "..."  // Para audio (caracteres)
+        }
+        """
+        from .services.credits import CreditService
+        from .ai_services.model_config import get_model_capabilities, VIDEO_TYPE_TO_MODEL_ID
+        from decimal import Decimal
+        import json
+        
+        try:
+            data = json.loads(request.body)
+            model_id = data.get('model_id')
+            item_type = data.get('item_type', 'video')
+            config = data.get('config', {})
+            text = data.get('text', '')
+            
+            if not model_id:
+                return JsonResponse({
+                    'error': 'model_id es requerido'
+                }, status=400)
+            
+            # Obtener capacidades del modelo
+            model_capabilities = get_model_capabilities(model_id)
+            if not model_capabilities:
+                return JsonResponse({
+                    'error': f'Modelo {model_id} no encontrado'
+                }, status=404)
+            
+            # Calcular costo según tipo
+            if item_type == 'video':
+                duration = config.get('duration') or 8
+                # Usar el método mejorado que acepta model_id directamente
+                cost = CreditService.estimate_video_cost(
+                    video_type=None, 
+                    duration=duration, 
+                    config=config, 
+                    model_id=model_id
+                )
+                    
+            elif item_type == 'image':
+                cost = CreditService.estimate_image_cost()
+                
+            elif item_type == 'audio':
+                cost = CreditService.estimate_audio_cost(text)
+                
+            else:
+                return JsonResponse({
+                    'error': f'Tipo de item no válido: {item_type}'
+                }, status=400)
+            
+            return JsonResponse({
+                'model_id': model_id,
+                'item_type': item_type,
+                'estimated_cost': float(cost),
+                'estimated_cost_formatted': f'{cost:.2f}'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'JSON inválido'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"Error al calcular costo estimado: {e}")
+            return JsonResponse({
+                'error': 'Error al calcular costo',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class DynamicFormFieldsView(LoginRequiredMixin, View):
+    """Vista para renderizar campos dinámicos del formulario según el modelo seleccionado"""
+    
+    def get(self, request):
+        model_id = request.GET.get('model_id')
+        if not model_id:
+            return HttpResponse('')
+        
+        from core.forms.dynamic import get_model_specific_fields
+        from core.ai_services.model_config import get_model_capabilities, MODEL_CAPABILITIES
+        from core.services.credits import CreditService
+        from decimal import Decimal
+        
+        # Obtener capacidades del modelo
+        capabilities = get_model_capabilities(model_id)
+        if not capabilities:
+            return HttpResponse('<p class="text-red-500">Modelo no encontrado</p>')
+        
+        supports = capabilities.get('supports', {})
+        service = capabilities.get('service', '')
+        
+        # Generar opciones de duración si solo hay min/max sin options
+        if supports.get('duration') and not supports['duration'].get('options') and not supports['duration'].get('fixed'):
+            if supports['duration'].get('min') and supports['duration'].get('max'):
+                min_val = supports['duration']['min']
+                max_val = supports['duration']['max']
+                supports['duration']['options'] = list(range(min_val, max_val + 1))
+        
+        # Verificar si hay referencias habilitadas (solo para mostrar los campos)
+        # NOTA: No forzamos duración aquí porque solo se requiere 8s cuando realmente se sube una imagen
+        has_references = False
+        if supports.get('references'):
+            refs = supports['references']
+            has_references = any([
+                refs.get('start_image'),
+                refs.get('end_image'),
+                refs.get('style_image'),
+                refs.get('asset_image')
+            ])
+        
+        # Obtener campos específicos del modelo (avatares, voces, etc.)
+        model_specific = get_model_specific_fields(model_id, service)
+        logger.info(f"DynamicFormFieldsView: Modelo {model_id}, campos específicos: {len(model_specific.get('fields', []))}")
+        
+        # Calcular costo estimado
+        estimated_cost = Decimal('0')
+        estimated_cost_formatted = '0.00'
+        try:
+            if capabilities.get('type') == 'video':
+                # Obtener duración por defecto
+                duration = 8
+                if supports.get('duration'):
+                    dur_config = supports['duration']
+                    if dur_config.get('fixed'):
+                        duration = dur_config['fixed']
+                    elif dur_config.get('options'):
+                        duration = dur_config['options'][0]
+                    elif dur_config.get('min'):
+                        duration = dur_config['min']
+                
+                video_type = None
+                from core.ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID
+                for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+                    if mid == model_id:
+                        video_type = vtype
+                        break
+                
+                if not video_type:
+                    if 'veo' in model_id:
+                        video_type = 'gemini_veo'
+                    elif 'sora' in model_id:
+                        video_type = 'sora'
+                    elif 'heygen' in model_id:
+                        video_type = 'heygen_avatar_v2' if 'v2' in model_id else 'heygen_avatar_iv'
+                    elif 'kling' in model_id:
+                        video_type = model_id.replace('-', '_')
+                    elif 'higgsfield' in model_id or 'seedance' in model_id:
+                        if 'dop/standard' in model_id:
+                            video_type = 'higgsfield_dop_standard'
+                        elif 'dop/preview' in model_id:
+                            video_type = 'higgsfield_dop_preview'
+                        elif 'seedance' in model_id:
+                            video_type = 'higgsfield_seedance_v1_pro'
+                        elif 'kling-video' in model_id:
+                            video_type = 'higgsfield_kling_v2_1_pro'
+                    elif 'vuela' in model_id:
+                        video_type = 'vuela_ai'
+                
+                if video_type:
+                    config = {}
+                    estimated_cost = CreditService.estimate_video_cost(
+                        video_type=video_type,
+                        duration=duration,
+                        config=config,
+                        model_id=model_id
+                    )
+                    estimated_cost_formatted = f'{int(estimated_cost)}'
+        except Exception as e:
+            logger.error(f"Error calculando costo estimado: {e}")
+        
+        # Debug: Log de referencias (para verificar en consola del servidor)
+        references = supports.get('references', {})
+        logger.info(f"[DynamicFormFields] Modelo: {model_id}")
+        logger.info(f"[DynamicFormFields] Referencias disponibles: {references}")
+        logger.info(f"[DynamicFormFields] style_image: {references.get('style_image')} (tipo: {type(references.get('style_image')).__name__})")
+        logger.info(f"[DynamicFormFields] asset_image: {references.get('asset_image')} (tipo: {type(references.get('asset_image')).__name__})")
+        
+        # Renderizar template con los campos
+        context = {
+            'model_id': model_id,
+            'capabilities': capabilities,
+            'supports': supports,
+            'model_specific_fields': model_specific.get('fields', []),
+            'model_specific_data': model_specific.get('data', {}),
+            'estimated_cost': float(estimated_cost),
+            'estimated_cost_formatted': estimated_cost_formatted,
+            'has_references': has_references,
+        }
+        
+        logger.debug(f"DynamicFormFieldsView: Contexto para {model_id}: supports.references = {supports.get('references')}")
+        
+        return render(request, 'videos/_dynamic_fields.html', context)
+
+
 class LibraryItemsAPIView(ServiceMixin, View):
     """API endpoint para obtener items de la biblioteca filtrados por tipo y proyecto"""
     
@@ -2182,8 +2420,12 @@ class ItemDetailAPIView(ServiceMixin, View):
                 # Serializar config de forma segura
                 config = video.config if isinstance(video.config, dict) else {}
                 
-                # Obtener info del modelo
-                model_info = get_model_info_for_item('video', video.type)
+                # Obtener info del modelo usando model_id del config si está disponible
+                model_id = config.get('model_id') or config.get('veo_model')
+                if model_id:
+                    model_info = get_model_info_for_item('video', model_id)
+                else:
+                    model_info = get_model_info_for_item('video', video.type)
                 
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_id:
@@ -2270,8 +2512,12 @@ class ItemDetailAPIView(ServiceMixin, View):
                     created_at__gt=image.created_at
                 ).order_by('created_at').first()
                 
-                # Obtener info del modelo
-                model_info = get_model_info_for_item('image', image.type)
+                # Obtener info del modelo usando model_id del config si está disponible
+                model_id = image.config.get('model_id')
+                if model_id:
+                    model_info = get_model_info_for_item('image', model_id)
+                else:
+                    model_info = get_model_info_for_item('image', image.type)
                 
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_id:
@@ -2431,26 +2677,45 @@ class CreateItemAPIView(ServiceMixin, View):
         """
         Crea un nuevo item según el tipo especificado
         
-        Body JSON:
+        Body JSON o FormData:
             type: 'video', 'image', 'audio'
             model_id: ID del modelo seleccionado
             title: Título del item
             prompt/script/text: Contenido según tipo
             project_id: ID del proyecto (opcional)
-            settings: Diccionario con configuración adicional
+            settings: Diccionario con configuración adicional (JSON string si es FormData)
+            start_image, end_image, style_image, asset_image: Archivos de imagen (opcional, solo FormData)
         """
         import json
         
-        try:
-            data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
-        except json.JSONDecodeError:
-            data = request.POST
+        # Detectar si es FormData o JSON
+        is_form_data = request.content_type and 'multipart/form-data' in request.content_type
+        
+        logger.info(f"[CreateItemAPIView] Content-Type: {request.content_type}")
+        logger.info(f"[CreateItemAPIView] Es FormData: {is_form_data}")
+        logger.info(f"[CreateItemAPIView] request.FILES keys: {list(request.FILES.keys())}")
+        
+        if is_form_data:
+            data = request.POST.copy()
+            # Parsear settings si viene como JSON string
+            if 'settings' in data:
+                try:
+                    settings = json.loads(data['settings'])
+                except (json.JSONDecodeError, TypeError):
+                    settings = {}
+            else:
+                settings = {}
+        else:
+            try:
+                data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+            except json.JSONDecodeError:
+                data = request.POST
+            settings = data.get('settings', {})
         
         item_type = data.get('type')
         model_id = data.get('model_id')
         title = data.get('title')
         project_id = data.get('project_id')
-        settings = data.get('settings', {})
         
         if not all([item_type, model_id, title]):
             return JsonResponse({
@@ -2494,39 +2759,135 @@ class CreateItemAPIView(ServiceMixin, View):
     
     def _create_video(self, request, data, project, settings):
         """Crear video"""
-        from .ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID, MODEL_CAPABILITIES
+        from .ai_services.model_config import get_video_type_from_model_id
+        from datetime import datetime
         
         model_id = data.get('model_id')
         title = data.get('title')
         script = data.get('script') or data.get('prompt', '')
         
-        # Mapear model_id a video_type
-        video_type = None
-        for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
-            if mid == model_id:
-                video_type = vtype
-                break
+        # Mapear model_id a video_type usando la función helper
+        video_type = get_video_type_from_model_id(model_id)
         
         if not video_type:
-            # Si no hay mapeo, intentar usar el model_id directamente
-            video_type = model_id
+            raise ValidationException(f'No se pudo determinar el tipo de video para el modelo: {model_id}')
         
         video_service = self.get_video_service()
         
         # Construir configuración
+        # Convertir duration a int, usando valor por defecto si es None o vacío
+        duration = settings.get('duration')
+        if duration is None or duration == '':
+            # Obtener duración por defecto del modelo
+            from core.ai_services.model_config import get_model_capabilities
+            capabilities = get_model_capabilities(model_id)
+            if capabilities:
+                supports = capabilities.get('supports', {})
+                dur_config = supports.get('duration', {})
+                if dur_config.get('fixed'):
+                    duration = dur_config['fixed']
+                elif dur_config.get('options'):
+                    duration = dur_config['options'][0]
+                elif dur_config.get('min'):
+                    duration = dur_config['min']
+                else:
+                    duration = 8  # Default general
+            else:
+                duration = 8
+        else:
+            # Convertir a int si es string
+            try:
+                duration = int(duration)
+            except (ValueError, TypeError):
+                duration = 8
+        
         config = {
-            'duration': settings.get('duration'),
+            'model_id': model_id,  # Guardar model_id para usar el modelo correcto al generar
+            'duration': duration,
             'aspect_ratio': settings.get('aspect_ratio'),
             'mode': settings.get('mode'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
         }
         
-        # Referencias (imágenes)
-        if settings.get('start_image'):
-            config['start_image'] = settings['start_image']
-        if settings.get('end_image'):
-            config['end_image'] = settings['end_image']
+        # Para Veo, también guardar veo_model (nombre del modelo de Veo)
+        if video_type == 'gemini_veo':
+            config['veo_model'] = model_id  # El model_id ya es el nombre del modelo de Veo (ej: veo-2.0-generate-exp)
+        
+        # Procesar imágenes de referencia desde request.FILES
+        # Nota: Veo solo acepta "asset" o "style" como referenceType
+        # start_image y end_image son para otros servicios (Kling, Higgsfield) y se manejan diferente
+        reference_images = []
+        reference_types = []
+        
+        logger.info(f"[_create_video] request.FILES keys disponibles: {list(request.FILES.keys())}")
+        
+        # Para Veo: solo style_image y asset_image son imágenes de referencia
+        # start_image y end_image se manejan como input_image para image-to-video
+        if 'style_image' in request.FILES:
+            ref_file = request.FILES['style_image']
+            reference_images.append(ref_file)
+            reference_types.append('style')
+            logger.info(f"✅ Imagen de referencia encontrada: style_image -> style (tamaño: {ref_file.size} bytes)")
+        else:
+            logger.info(f"❌ style_image no encontrado en request.FILES")
+        
+        if 'asset_image' in request.FILES:
+            ref_file = request.FILES['asset_image']
+            reference_images.append(ref_file)
+            reference_types.append('asset')
+            logger.info(f"✅ Imagen de referencia encontrada: asset_image -> asset (tamaño: {ref_file.size} bytes)")
+        else:
+            logger.info(f"❌ asset_image no encontrado en request.FILES")
+        
+        # Subir imágenes de referencia si hay alguna (solo para Veo)
+        if reference_images and video_type == 'gemini_veo':
+            # IMPORTANTE: Veo requiere duración de 8s cuando hay imágenes de referencia
+            if duration != 8:
+                logger.warning(f"Duración ajustada de {duration}s a 8s porque hay imágenes de referencia")
+                duration = 8
+                config['duration'] = 8
+            
+            uploaded_refs = video_service.upload_veo_reference_images(
+                reference_images, reference_types, project
+            )
+            config['reference_images'] = uploaded_refs
+            logger.info(f"✅ {len(uploaded_refs)} imagen(es) de referencia subida(s) para Veo")
+        
+        # start_image y end_image se manejan diferente según el servicio
+        # Para Veo: start_image es input_image (image-to-video)
+        # Para otros servicios: pueden ser referencias específicas
+        if 'start_image' in request.FILES:
+            start_file = request.FILES['start_image']
+            if video_type == 'gemini_veo':
+                # Para Veo, start_image es input_image para image-to-video
+                from .storage.gcs import gcs_storage
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = start_file.name.replace(' ', '_')
+                gcs_destination = f"videos/project_{project.id if project else 'standalone'}/{timestamp}_start_{safe_filename}"
+                gcs_path = gcs_storage.upload_django_file(start_file, gcs_destination)
+                config['input_image_gcs_uri'] = gcs_path
+                config['input_image_mime_type'] = start_file.content_type or 'image/jpeg'
+                logger.info(f"✅ Imagen inicial subida para image-to-video: {gcs_path}")
+            else:
+                # Para otros servicios, guardar en config para procesamiento específico
+                from .storage.gcs import gcs_storage
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = start_file.name.replace(' ', '_')
+                gcs_destination = f"videos/project_{project.id if project else 'standalone'}/{timestamp}_start_{safe_filename}"
+                gcs_path = gcs_storage.upload_django_file(start_file, gcs_destination)
+                config['start_image'] = gcs_path
+                logger.info(f"✅ Imagen inicial subida: {gcs_path}")
+        
+        if 'end_image' in request.FILES:
+            end_file = request.FILES['end_image']
+            from .storage.gcs import gcs_storage
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = end_file.name.replace(' ', '_')
+            gcs_destination = f"videos/project_{project.id if project else 'standalone'}/{timestamp}_end_{safe_filename}"
+            gcs_path = gcs_storage.upload_django_file(end_file, gcs_destination)
+            config['end_image'] = gcs_path
+            logger.info(f"✅ Imagen final subida: {gcs_path}")
         
         # Crear video
         video = video_service.create_video(
@@ -2568,6 +2929,7 @@ class CreateItemAPIView(ServiceMixin, View):
         
         # Construir configuración
         config = {
+            'model_id': model_id,  # Guardar model_id para usar el servicio correcto
             'aspect_ratio': settings.get('aspect_ratio', '1:1'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
@@ -3441,42 +3803,75 @@ class VideoStatusPartialView(View):
         
         video = get_object_or_404(Video, pk=video_id)
         
-        # Si el video está procesando y tiene external_id, consultar estado externo
-        if video.status == 'processing' and video.external_id:
-            try:
-                video_service = VideoService()
-                status_data = video_service.check_video_status(video)
-                
-                # Log del polling
-                logger.info(f"=== POLLING VIDEO {video_id} ===")
-                logger.info(f"Estado actual: {video.status}")
-                logger.info(f"External ID: {video.external_id}")
-                logger.info(f"Estado externo: {status_data.get('status', 'unknown')}")
-                logger.info(f"Timestamp: {timezone.now()}")
-                
-                # Refrescar el objeto desde la BD para obtener el estado actualizado
+        # Siempre consultar estado si el video está procesando y tiene external_id
+        if video.status == 'processing':
+            if video.external_id:
+                try:
+                    video_service = VideoService()
+                    
+                    # Log del polling ANTES de consultar
+                    logger.info(f"=== POLLING VIDEO {video_id} ===")
+                    logger.info(f"Estado actual ANTES: {video.status}")
+                    logger.info(f"External ID: {video.external_id}")
+                    logger.info(f"Timestamp: {timezone.now()}")
+                    
+                    status_data = video_service.check_video_status(video)
+                    
+                    # Log del polling DESPUÉS de consultar
+                    video.refresh_from_db()
+                    logger.info(f"Estado actual DESPUÉS: {video.status}")
+                    logger.info(f"Estado externo: {status_data.get('status', 'unknown')}")
+                    
+                    # Refrescar el objeto desde la BD para obtener el estado actualizado
+                    video.refresh_from_db()
+                    
+                    # Si el video está completado pero tiene créditos pendientes, intentar cobrar de nuevo
+                    if video.status == 'completed' and video.created_by:
+                        if video.metadata.get('credits_charge_pending') and not video.metadata.get('credits_charged'):
+                            logger.info(f"Video {video_id} tiene créditos pendientes. Intentando cobrar de nuevo.")
+                            try:
+                                from core.services.credits import CreditService
+                                CreditService.deduct_credits_for_video(video.created_by, video)
+                                # Si el cobro fue exitoso, limpiar el flag de pendiente
+                                video.refresh_from_db()
+                                if video.metadata.get('credits_charged'):
+                                    video.metadata.pop('credits_charge_pending', None)
+                                    video.metadata.pop('credits_charge_error', None)
+                                    video.save(update_fields=['metadata'])
+                                    logger.info(f"✓ Créditos cobrados exitosamente para video {video_id}")
+                            except Exception as e:
+                                logger.warning(f"No se pudieron cobrar créditos pendientes para video {video_id}: {e}")
+                    
+                except Exception as e:
+                    logger.error(f"Error al consultar estado del video {video_id}: {e}")
+            else:
+                # Video procesando pero sin external_id aún - refrescar desde BD por si acaso
                 video.refresh_from_db()
-                
-                # Si el video está completado pero tiene créditos pendientes, intentar cobrar de nuevo
-                if video.status == 'completed' and video.created_by:
-                    if video.metadata.get('credits_charge_pending') and not video.metadata.get('credits_charged'):
-                        logger.info(f"Video {video_id} tiene créditos pendientes. Intentando cobrar de nuevo.")
-                        try:
-                            from core.services.credits import CreditService
-                            CreditService.deduct_credits_for_video(video.created_by, video)
-                            # Si el cobro fue exitoso, limpiar el flag de pendiente
-                            if video.metadata.get('credits_charged'):
-                                video.metadata.pop('credits_charge_pending', None)
-                                video.metadata.pop('credits_charge_error', None)
-                                video.save(update_fields=['metadata'])
-                                logger.info(f"✓ Créditos cobrados exitosamente para video {video_id}")
-                        except Exception as e:
-                            logger.warning(f"No se pudieron cobrar créditos pendientes para video {video_id}: {e}")
-                
-            except Exception as e:
-                logger.error(f"Error al consultar estado del video {video_id}: {e}")
         
-        html = render_to_string('partials/video_status.html', {'video': video})
+        # Determinar qué template usar según el contexto
+        # Si viene de la lista, usar el badge pequeño, si viene del detalle, usar el completo
+        template_name = request.GET.get('template', 'partials/video_status.html')
+        if template_name == 'badge':
+            template_name = 'partials/video_status_badge.html'
+        else:
+            template_name = 'partials/video_status.html'
+        
+        html = render_to_string(template_name, {'video': video})
+        
+        # Si el video cambió de estado, disparar evento para recargar items en la lista
+        if video.status in ['completed', 'error']:
+            # Añadir script para recargar items si estamos en la lista
+            html += f'''
+            <script>
+                // Disparar evento para recargar items en la lista
+                if (window.dispatchEvent) {{
+                    window.dispatchEvent(new CustomEvent('video-status-changed', {{
+                        detail: {{ videoId: {video.id}, status: '{video.status}' }}
+                    }}));
+                }}
+            </script>
+            '''
+        
         return HttpResponse(html)
 
 

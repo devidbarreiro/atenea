@@ -57,8 +57,9 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     },
     'veo-2.0-generate-exp': {
         'service': 'gemini_veo',
-        'name': 'Veo 2.0 Experimental',
+        'name': 'Veo-2.0-Generate-Exp',
         'description': 'Soporta imágenes de referencia (Asset y Style)',
+        'logo': '/static/img/logos/google.png',
         'type': 'video',
         'supports': {
             'text_to_video': True,
@@ -516,10 +517,10 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     'kling-v2-1': {
         'service': 'kling',
         'name': 'Kling V2.1',
-        'description': 'Versión 2.1 mejorada',
+        'description': 'Versión 2.1 mejorada con soporte para text-to-video e image-to-video',
         'type': 'video',
         'supports': {
-            'text_to_video': False,
+            'text_to_video': True,  # Corregido: Kling v2.1 sí soporta text-to-video
             'image_to_video': True,
             'duration': {'min': 5, 'max': 10, 'options': [5, 10]},
             'aspect_ratio': ['16:9', '9:16'],
@@ -787,6 +788,52 @@ def get_model_id_from_video_type(video_type: str) -> Optional[str]:
     return VIDEO_TYPE_TO_MODEL_ID.get(video_type)
 
 
+def get_video_type_from_model_id(model_id: str) -> Optional[str]:
+    """
+    Convierte un ID de modelo a un tipo de video de la BD
+    
+    Args:
+        model_id: ID del modelo (ej: 'veo-2.0-generate-001', 'sora-2')
+    
+    Returns:
+        Tipo de video o None si no existe
+    """
+    # Primero buscar en MODEL_CAPABILITIES por el campo video_type
+    if model_id in MODEL_CAPABILITIES:
+        capabilities = MODEL_CAPABILITIES[model_id]
+        video_type = capabilities.get('video_type')
+        if video_type:
+            return video_type
+    
+    # Si no está en MODEL_CAPABILITIES, buscar en el mapeo inverso
+    for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+        if mid == model_id:
+            return vtype
+    
+    # Fallback: intentar inferir del model_id
+    if 'veo' in model_id:
+        return 'gemini_veo'
+    elif 'sora' in model_id:
+        return 'sora'
+    elif 'heygen' in model_id:
+        return 'heygen_avatar_v2' if 'v2' in model_id else 'heygen_avatar_iv'
+    elif 'kling' in model_id:
+        return model_id.replace('-', '_')
+    elif 'higgsfield' in model_id or 'seedance' in model_id:
+        if 'dop/standard' in model_id:
+            return 'higgsfield_dop_standard'
+        elif 'dop/preview' in model_id:
+            return 'higgsfield_dop_preview'
+        elif 'seedance' in model_id:
+            return 'higgsfield_seedance_v1_pro'
+        elif 'kling-video' in model_id:
+            return 'higgsfield_kling_v2_1_pro'
+    elif 'vuela' in model_id:
+        return 'vuela_ai'
+    
+    return None
+
+
 def get_model_info_for_item(item_type: str, model_key: str = None) -> Dict:
     """
     Obtiene información del modelo para un item (video, image, audio)
@@ -809,6 +856,16 @@ def get_model_info_for_item(item_type: str, model_key: str = None) -> Dict:
     }
     
     if item_type == 'video':
+        # Si model_key es un model_id directo (ej: 'veo-2.0-generate-exp'), usarlo directamente
+        if model_key and model_key in MODEL_CAPABILITIES:
+            model = MODEL_CAPABILITIES[model_key]
+            return {
+                'name': model.get('name', model_key),
+                'logo': model.get('logo', '/static/img/logos/default.png'),
+                'service': model.get('service', 'unknown'),
+                'model_id': model_key
+            }
+        
         # Mapear video.type a model_id
         model_id = VIDEO_TYPE_TO_MODEL_ID.get(model_key)
         if model_id and model_id in MODEL_CAPABILITIES:
@@ -828,7 +885,17 @@ def get_model_info_for_item(item_type: str, model_key: str = None) -> Dict:
         }
     
     elif item_type == 'image':
-        # Las imágenes por ahora solo usan Gemini
+        # model_key puede ser el model_id del config o image.type como fallback
+        # Si model_key está en MODEL_CAPABILITIES, usarlo directamente
+        if model_key and model_key in MODEL_CAPABILITIES:
+            model = MODEL_CAPABILITIES[model_key]
+            return {
+                'name': model.get('name', 'Modelo desconocido'),
+                'logo': model.get('logo', '/static/img/logos/default.png'),
+                'service': model.get('service', 'unknown'),
+                'model_id': model_key
+            }
+        # Fallback: Las imágenes por defecto usan Gemini
         return {
             'name': 'Gemini 2.5 Flash Image',
             'logo': '/static/img/logos/google.png',
