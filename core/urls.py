@@ -149,7 +149,9 @@ urlpatterns = [
     path('no-permissions/', views.no_permissions, name='no_permissions'),
     path("credits/add/", views.AddCreditsView.as_view(), name="add_credits"),
     path('user/set-monthly-limit/', views.SetMonthlyLimitView.as_view(), name='set_monthly_limit'),
-    
+    path('users/credits/history/<int:user_id>/', views.UserCreditsHistoryAPI.as_view(), name='user-credits-history-api'),
+
+
     # Documentacion
     path('docs/structure/', views.docs_structure, name='docs_structure'),
     path('docs/api/services/<path:path>/', views.docs_md_view, name='docs_md'),

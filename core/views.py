@@ -6246,6 +6246,52 @@ class UserMenuView(View):
                 token = default_token_generator.make_token(user)
                 activation_url = request.build_absolute_uri(reverse('core:activate_account', args=[uid, token]))
 
+                # =========================
+                # Créditos iniciales
+                # =========================
+                initial_credits = request.POST.get('initial_credits', 0)
+                monthly_limit = request.POST.get('monthly_limit', 0)
+
+                credits = CreditService.get_or_create_user_credits(user)
+
+                try:
+                    initial_credits = int(initial_credits)
+                    if initial_credits > 0:
+                        credits.credits = initial_credits
+                except (TypeError, ValueError):
+                    initial_credits = 0
+
+                try:
+                    monthly_limit = int(monthly_limit)
+                    if monthly_limit >= 0:
+                        credits.monthly_limit = monthly_limit
+                except (TypeError, ValueError):
+                    monthly_limit = 0
+
+                credits.save()
+
+                # Registrar transacción de créditos iniciales
+                if initial_credits > 0:
+                    CreditTransaction.objects.create(
+                        user=user,
+                        transaction_type='add',
+                        amount=initial_credits,
+                        balance_before=0,
+                        balance_after=initial_credits,
+                        description='Créditos iniciales al crear usuario'
+                    )
+
+                # Registrar límite mensual inicial
+                if monthly_limit > 0:
+                    CreditTransaction.objects.create(
+                        user=user,
+                        transaction_type='limit_change',
+                        amount=0,
+                        balance_before=credits.credits,
+                        balance_after=credits.credits,
+                        description=f'Límite mensual inicial: {monthly_limit}'
+                    )
+
                 # Send activation email
                 try:
                     context = {'user': user, 'activation_url': activation_url}
@@ -6426,6 +6472,18 @@ class SetMonthlyLimitView(View):
 
             credits.monthly_limit = limit
             credits.save(update_fields=['monthly_limit', 'updated_at'])
+
+            # ============================
+            # Registrar en el historial
+            # ============================
+            CreditTransaction.objects.create(
+                user=user,
+                transaction_type='limit_change',  # Debe estar definido en choices
+                amount=0,  # No afecta saldo
+                balance_before=credits.credits,
+                balance_after=credits.credits,
+                description=f"Límite mensual cambiado: {old_limit} → {limit}. {description}",
+            )
 
             response = {
                 'success': True,
@@ -7253,7 +7311,6 @@ class CreditsDashboardView(ServiceMixin, View):
         # Obtener uso por servicio (últimos 30 días)
         from datetime import timedelta
         thirty_days_ago = timezone.now() - timedelta(days=30)
-        
         usage_by_service = ServiceUsage.objects.filter(
             user=user,
             created_at__gte=thirty_days_ago
@@ -7271,6 +7328,29 @@ class CreditsDashboardView(ServiceMixin, View):
         
         return render(request, self.template_name, context)
 
+# ====================
+# CREDITS HISTORIAL
+# ====================
+class UserCreditsHistoryAPI(View):
+    """Devuelve todas las transacciones de un usuario en JSON, incluyendo cambios de límite mensual"""
+    
+    def get(self, request, user_id):
+        # Obtener todas las transacciones del usuario, ordenadas de más reciente a más antigua
+        transactions = CreditTransaction.objects.filter(user_id=user_id).order_by('-created_at')
+
+        # Preparar lista de transacciones para JSON
+        data = []
+        for t in transactions:
+            data.append({
+                'id': t.id,
+                'type': t.get_transaction_type_display(),   # muestra "Créditos sumados", "Créditos restados", "Cambio de límite mensual", etc.
+                'amount': float(t.amount),
+                'service_name': t.service_name or '',
+                'description': t.description or '',
+                'created_at': timezone.localtime(t.created_at).strftime("%d/%m/%Y %H:%M"),  # hora local
+            })
+
+        return JsonResponse({'transactions': data})
 
 # ====================
 # STOCK SEARCH API
