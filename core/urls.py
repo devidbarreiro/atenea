@@ -150,8 +150,8 @@ urlpatterns = [
 
     # Documentacion
     path('docs/structure/', views.docs_structure, name='docs_structure'),
-    path('docs/api/services/<path:path>/', views.docs_md_view, name='docs_md'),
-    re_path(r'^docs/.*$', views.docs_home, name='docs_home'),
+    path('docs/<path:path>/', views.docs_md_view, name='docs_md'),
+    re_path(r'^docs/?$', views.docs_home, name='docs_home'),
     
     # Project Invitations
     path('projects/<int:project_id>/invite/', views.ProjectInviteView.as_view(), name='project_invite'),
