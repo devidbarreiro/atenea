@@ -172,7 +172,7 @@
                     <input type="checkbox" 
                            name="groups" 
                            value="{{ g.id }}" 
-                           class="group-checkbox scale-125 accent-blue-600 mr-2" 
+                           class="group-checkbox scale-125 accent-blue-600" 
                            data-group-name="{{ g.name }}"
                            {% if not has_create_access %}disabled{% endif %}>
                     <span class="{% if not has_create_access %}text-gray-500{% endif %}">{{ g.name }}</span>
@@ -663,32 +663,33 @@ function handleRoleChangeInRow(changed) {
     const edit = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'editar');
     const del = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'borrar');
 
-    // If admin toggled -> set/unset all others
+    // Si se marca admin → marcar/desmarcar todos
     if (roleName === 'admin') {
         const checked = !!changed.checked;
         all.forEach(cb => cb.checked = checked);
-        // If enabling admin, ensure dependencies
+        // Dependencias normales
         if (checked && view) view.checked = true;
         return;
     }
 
-    // If edit or delete checked -> ensure view is checked
+    // Si edit o delete se marca → asegurar que view esté marcado
     if ((roleName === 'editar' || roleName === 'borrar') && changed.checked) {
         if (view && !view.checked) view.checked = true;
     }
 
-    // If view unchecked -> unset edit and delete
+    // Si view se desmarca → desmarcar edit y delete
     if (roleName === 'ver' && !changed.checked) {
         if (edit) edit.checked = false;
         if (del) del.checked = false;
     }
 
-    // After any change, update admin checkbox: admin is checked only if all non-admin are checked
+    // Actualizar admin → incluir **todos menos admin** (créditos sí se cuenta)
     if (admin) {
         const nonAdmin = all.filter(cb => (cb.dataset.groupName || '').toLowerCase() !== 'admin');
         admin.checked = nonAdmin.length > 0 && nonAdmin.every(cb => cb.checked);
     }
 }
+
 
 function userAdmin() {
   return {
