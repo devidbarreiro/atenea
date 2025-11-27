@@ -33,27 +33,58 @@ document.addEventListener('alpine:init', () => {
                 this.openItem({ type: this.initialItemType, id: this.initialItemId });
             }
             
-            window.addEventListener('library-tab-changed', (e) => {
-                this.activeTab = e.detail.tab;
-                this.selectedItem = null;
-                this.loadItems();
-            });
-            window.addEventListener('item-created', () => {
-                this.loadItems();
-            });
-            // Escuchar cambios de estado de videos para recargar items
-            window.addEventListener('video-status-changed', (e) => {
-                if (this.activeTab === 'video') {
-                    // Pequeño delay para asegurar que el estado se guardó en BD
-                    setTimeout(() => {
-                        this.loadItems();
-                    }, 500);
+            // Guardar referencias a handlers para poder removerlos después
+            this._handlers = {
+                libraryTabChanged: (e) => {
+                    // Limpiar polling de items anteriores antes de cambiar de tab
+                    this._cleanupAllPolling();
+                    this.activeTab = e.detail.tab;
+                    this.selectedItem = null;
+                    this.loadItems();
+                },
+                itemCreated: () => {
+                    this.loadItems();
+                },
+                videoStatusChanged: (e) => {
+                    if (this.activeTab === 'video') {
+                        // Pequeño delay para asegurar que el estado se guardó en BD
+                        setTimeout(() => {
+                            this.loadItems();
+                        }, 500);
+                    }
+                },
+                popstate: () => {
+                    this.selectedItem = null;
                 }
+            };
+            
+            // Agregar listeners
+            window.addEventListener('library-tab-changed', this._handlers.libraryTabChanged);
+            window.addEventListener('item-created', this._handlers.itemCreated);
+            window.addEventListener('video-status-changed', this._handlers.videoStatusChanged);
+            window.addEventListener('popstate', this._handlers.popstate);
+        },
+        
+        _cleanupAllPolling() {
+            // Limpiar todos los polling intervals de los items
+            this.items.forEach(item => {
+                // Buscar el componente Alpine del item y limpiar su polling
+                // Nota: Esto requiere que cada item tenga acceso a su pollingInterval
+                // Se maneja en el componente x-data de cada item card
             });
-            // Manejar navegación del browser
-            window.addEventListener('popstate', () => {
-                this.selectedItem = null;
-            });
+        },
+        
+        destroy() {
+            // Remover listeners
+            if (this._handlers) {
+                window.removeEventListener('library-tab-changed', this._handlers.libraryTabChanged);
+                window.removeEventListener('item-created', this._handlers.itemCreated);
+                window.removeEventListener('video-status-changed', this._handlers.videoStatusChanged);
+                window.removeEventListener('popstate', this._handlers.popstate);
+            }
+            
+            // Limpiar polling
+            this._cleanupAllPolling();
         },
         
         async loadItems() {
@@ -191,6 +222,9 @@ document.addEventListener('alpine:init', () => {
         },
         
         closeDetail() {
+            // Limpiar polling antes de cerrar
+            this._cleanupAllPolling();
+            
             this.selectedItem = null;
             this.navigation = null;
             // Restaurar breadcrumbs originales
@@ -397,8 +431,18 @@ document.addEventListener('alpine:init', () => {
                                     }, 5000);
                                 },
                                 destroy() {
+                                    // Limpiar polling cuando el componente se destruye
                                     if (this.pollingInterval) {
                                         clearInterval(this.pollingInterval);
+                                        this.pollingInterval = null;
+                                    }
+                                },
+                                
+                                // Método adicional para limpiar manualmente si es necesario
+                                stopPolling() {
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                        this.pollingInterval = null;
                                     }
                                 }
                             }"

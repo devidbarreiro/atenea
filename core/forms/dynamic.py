@@ -245,6 +245,131 @@ class DynamicVideoForm(forms.Form):
                 label='Modo',
                 required=False
             )
+    
+    def clean(self):
+        """
+        Valida los campos según las capacidades del modelo seleccionado
+        """
+        cleaned_data = super().clean()
+        model_id = cleaned_data.get('model_id')
+        
+        if not model_id:
+            # Si no hay modelo seleccionado, no podemos validar campos dinámicos
+            return cleaned_data
+        
+        # Obtener capacidades del modelo
+        capabilities = get_model_capabilities(model_id)
+        if not capabilities:
+            logger.warning(f"No se encontraron capacidades para el modelo: {model_id}")
+            return cleaned_data
+        
+        supports = capabilities.get('supports', {})
+        
+        # Validar duration según el modelo
+        if 'duration' in cleaned_data and supports.get('duration'):
+            duration_value = cleaned_data.get('duration')
+            if duration_value:
+                try:
+                    # Convertir a int si viene como string desde ChoiceField
+                    duration_int = int(duration_value) if isinstance(duration_value, str) else duration_value
+                    duration_config = supports['duration']
+                    
+                    # Validar según tipo de configuración
+                    if duration_config.get('fixed'):
+                        if duration_int != duration_config['fixed']:
+                            raise ValidationError(
+                                f"La duración debe ser {duration_config['fixed']} segundos para este modelo"
+                            )
+                    elif duration_config.get('options'):
+                        if duration_int not in duration_config['options']:
+                            raise ValidationError(
+                                f"La duración debe ser una de: {', '.join(map(str, duration_config['options']))} segundos"
+                            )
+                    elif duration_config.get('min') and duration_config.get('max'):
+                        if not (duration_config['min'] <= duration_int <= duration_config['max']):
+                            raise ValidationError(
+                                f"La duración debe estar entre {duration_config['min']} y {duration_config['max']} segundos"
+                            )
+                    
+                    cleaned_data['duration'] = duration_int
+                except (ValueError, TypeError):
+                    raise ValidationError("La duración debe ser un número válido")
+        
+        # Validar aspect_ratio según el modelo
+        if 'aspect_ratio' in cleaned_data and supports.get('aspect_ratio'):
+            aspect_ratio = cleaned_data.get('aspect_ratio')
+            if aspect_ratio:
+                supported_ratios = supports['aspect_ratio']
+                if aspect_ratio not in supported_ratios:
+                    raise ValidationError(
+                        f"El aspect ratio '{aspect_ratio}' no está soportado. Opciones válidas: {', '.join(supported_ratios)}"
+                    )
+        
+        # Validar resolution según el modelo
+        if 'resolution' in cleaned_data and supports.get('resolution'):
+            resolution = cleaned_data.get('resolution')
+            if resolution:
+                supported_resolutions = supports['resolution']
+                if isinstance(supported_resolutions, list) and resolution not in supported_resolutions:
+                    raise ValidationError(
+                        f"La resolución '{resolution}' no está soportada. Opciones válidas: {', '.join(supported_resolutions)}"
+                    )
+        
+        # Validar campos específicos de modelo (HeyGen)
+        if model_id in ['heygen-avatar-v2', 'heygen-avatar-iv']:
+            # Validar avatar_id (puede venir de select o input text)
+            avatar_id = cleaned_data.get('avatar_id')
+            if not avatar_id:
+                # Solo requerir si el modelo lo necesita
+                if model_id == 'heygen-avatar-v2':
+                    raise ValidationError({
+                        'avatar_id': 'El avatar es requerido para HeyGen Avatar V2'
+                    })
+                elif model_id == 'heygen-avatar-iv':
+                    avatar_image_id = cleaned_data.get('avatar_image_id')
+                    if not avatar_image_id:
+                        raise ValidationError({
+                            'avatar_image_id': 'La imagen de avatar es requerida para HeyGen Avatar IV'
+                        })
+            
+            # Validar voice_id
+            voice_id = cleaned_data.get('voice_id')
+            if not voice_id:
+                raise ValidationError({
+                    'voice_id': 'La voz es requerida para HeyGen'
+                })
+            
+            # Si tenemos los datos de HeyGen disponibles, validar que los IDs existan
+            # Nota: Esto requiere acceso a los datos de get_model_specific_fields
+            # Por ahora solo validamos que estén presentes
+        
+        # Validar seed si está presente
+        if 'seed' in cleaned_data:
+            seed = cleaned_data.get('seed')
+            if seed is not None:
+                try:
+                    seed_int = int(seed) if not isinstance(seed, int) else seed
+                    if seed_int < 0 or seed_int > 4294967295:
+                        raise ValidationError({
+                            'seed': 'El seed debe estar entre 0 y 4294967295'
+                        })
+                    cleaned_data['seed'] = seed_int
+                except (ValueError, TypeError):
+                    raise ValidationError({
+                        'seed': 'El seed debe ser un número válido'
+                    })
+        
+        # Validar mode si está presente (para Kling)
+        if 'mode' in cleaned_data and supports.get('modes'):
+            mode = cleaned_data.get('mode')
+            if mode:
+                supported_modes = supports['modes']
+                if mode not in supported_modes:
+                    raise ValidationError({
+                        'mode': f"El modo '{mode}' no está soportado. Opciones válidas: {', '.join(supported_modes)}"
+                    })
+        
+        return cleaned_data
 
 
 def get_model_specific_fields(model_id, service):
@@ -331,14 +456,64 @@ def get_model_specific_fields(model_id, service):
             })
         except Exception as e:
             logger.error(f"Error cargando datos de HeyGen V2: {e}", exc_info=True)
-            # Añadir campo de error visible para debugging
+            # Mostrar advertencia y permitir entrada manual
+            error_msg = str(e)
+            if 'API_KEY' in error_msg:
+                error_msg = 'API Key no configurada'
+            elif 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                error_msg = 'Error de conexión con HeyGen API'
+            else:
+                error_msg = 'No se pudieron cargar opciones automáticamente'
+            
             fields.append({
-                'name': 'heygen_error',
-                'label': 'Error',
+                'name': 'heygen_warning',
+                'label': 'Advertencia',
                 'required': False,
                 'html': f'''
-                    <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p class="text-sm text-red-600">Error cargando datos de HeyGen: {str(e)}</p>
+                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p class="text-sm text-yellow-800 font-semibold mb-2">
+                            ⚠️ {error_msg}
+                        </p>
+                        <p class="text-xs text-yellow-700 mb-3">
+                            Puedes ingresar los IDs manualmente si los conoces:
+                        </p>
+                    </div>
+                '''
+            })
+            
+            # Campos de entrada manual (opcionales cuando hay error)
+            fields.append({
+                'name': 'avatar_id',
+                'label': 'Avatar ID',
+                'required': False,  # Hacer opcional cuando hay error
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            AVATAR ID <span class="text-yellow-600">(manual)</span>
+                        </label>
+                        <input type="text" 
+                               name="avatar_id" 
+                               placeholder="Ej: avatar_123456" 
+                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID del avatar si lo conoces</p>
+                    </div>
+                '''
+            })
+            
+            fields.append({
+                'name': 'voice_id',
+                'label': 'Voice ID',
+                'required': False,  # Hacer opcional cuando hay error
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            VOZ ID <span class="text-yellow-600">(manual)</span>
+                        </label>
+                        <input type="text" 
+                               name="voice_id" 
+                               placeholder="Ej: voice_123456" 
+                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID de la voz si lo conoces</p>
                     </div>
                 '''
             })
@@ -409,14 +584,64 @@ def get_model_specific_fields(model_id, service):
             })
         except Exception as e:
             logger.error(f"Error cargando datos de HeyGen IV: {e}", exc_info=True)
-            # Añadir campo de error visible para debugging
+            # Mostrar advertencia y permitir entrada manual
+            error_msg = str(e)
+            if 'API_KEY' in error_msg:
+                error_msg = 'API Key no configurada'
+            elif 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                error_msg = 'Error de conexión con HeyGen API'
+            else:
+                error_msg = 'No se pudieron cargar opciones automáticamente'
+            
             fields.append({
-                'name': 'heygen_error',
-                'label': 'Error',
+                'name': 'heygen_warning',
+                'label': 'Advertencia',
                 'required': False,
                 'html': f'''
-                    <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p class="text-sm text-red-600">Error cargando datos de HeyGen IV: {str(e)}</p>
+                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p class="text-sm text-yellow-800 font-semibold mb-2">
+                            ⚠️ {error_msg}
+                        </p>
+                        <p class="text-xs text-yellow-700 mb-3">
+                            Puedes ingresar los IDs manualmente si los conoces:
+                        </p>
+                    </div>
+                '''
+            })
+            
+            # Campos de entrada manual (opcionales cuando hay error)
+            fields.append({
+                'name': 'avatar_image_id',
+                'label': 'Avatar Image ID',
+                'required': False,  # Hacer opcional cuando hay error
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            IMAGEN DE AVATAR ID <span class="text-yellow-600">(manual)</span>
+                        </label>
+                        <input type="text" 
+                               name="avatar_image_id" 
+                               placeholder="Ej: asset_123456" 
+                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID del asset de imagen si lo conoces</p>
+                    </div>
+                '''
+            })
+            
+            fields.append({
+                'name': 'voice_id',
+                'label': 'Voice ID',
+                'required': False,  # Hacer opcional cuando hay error
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            VOZ ID <span class="text-yellow-600">(manual)</span>
+                        </label>
+                        <input type="text" 
+                               name="voice_id" 
+                               placeholder="Ej: voice_123456" 
+                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID de la voz si lo conoces</p>
                     </div>
                 '''
             })

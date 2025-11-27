@@ -561,6 +561,76 @@ class CreditService:
         logger.info(f"✓ Créditos cobrados y marcados en metadata para escena {scene.scene_id} (ID: {scene.id})")
     
     @staticmethod
+    def _map_model_id_to_video_type(model_id: str) -> str:
+        """
+        Mapea model_id a video_type de forma centralizada
+        
+        Args:
+            model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
+        
+        Returns:
+            video_type o None si no se puede mapear
+        """
+        from core.ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID
+        
+        if not model_id:
+            return None
+        
+        # 1. Buscar en mapeo explícito
+        for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+            if mid == model_id:
+                return vtype
+        
+        # 2. Fallback basado en strings en model_id
+        model_id_lower = model_id.lower()
+        
+        if 'veo' in model_id_lower:
+            return 'gemini_veo'
+        elif 'sora' in model_id_lower:
+            return 'sora'
+        elif 'heygen-avatar-v2' in model_id_lower or 'heygen_avatar_v2' in model_id_lower:
+            return 'heygen_avatar_v2'
+        elif 'heygen-avatar-iv' in model_id_lower or 'heygen_avatar_iv' in model_id_lower:
+            return 'heygen_avatar_iv'
+        elif 'kling-v' in model_id_lower:
+            # Mapear kling-v1 -> kling_v1, etc.
+            return model_id.replace('-', '_')
+        elif 'higgsfield-ai/dop/standard' in model_id_lower:
+            return 'higgsfield_dop_standard'
+        elif 'higgsfield-ai/dop/preview' in model_id_lower:
+            return 'higgsfield_dop_preview'
+        elif 'seedance' in model_id_lower:
+            return 'higgsfield_seedance_v1_pro'
+        elif 'kling-video/v2.1/pro' in model_id_lower:
+            return 'higgsfield_kling_v2_1_pro'
+        elif 'vuela-ai' in model_id_lower or 'vuela_ai' in model_id_lower:
+            return 'vuela_ai'
+        
+        return None
+    
+    @staticmethod
+    def _validate_pricing_key(service_key: str, price_key: str = None) -> bool:
+        """
+        Valida que una clave de pricing existe
+        
+        Args:
+            service_key: Clave del servicio (ej: 'gemini_veo')
+            price_key: Clave de precio opcional (ej: 'video', 'video_audio')
+        
+        Returns:
+            True si existe, False si no
+        """
+        if service_key not in CreditService.PRICING:
+            logger.error(f"Servicio '{service_key}' no encontrado en PRICING")
+            return False
+        
+        if price_key and price_key not in CreditService.PRICING[service_key]:
+            logger.error(f"Clave de precio '{price_key}' no encontrada en PRICING para {service_key}")
+            return False
+        
+        return True
+    
+    @staticmethod
     def estimate_video_cost(video_type=None, duration=None, config=None, model_id=None):
         """
         Estima costo antes de generar (para mostrar al usuario)
@@ -571,43 +641,18 @@ class CreditService:
             config: Configuración del video
             model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
         """
-        from core.ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID, get_model_capabilities
-        
         duration = duration or 8
         
         # Si se proporciona model_id, intentar mapear a video_type
         if model_id and not video_type:
-            # Buscar video_type que corresponda a este model_id
-            for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
-                if mid == model_id:
-                    video_type = vtype
-                    break
-            
-            # Si no se encuentra en el mapeo, intentar inferir del model_id
-            if not video_type:
-                if 'veo' in model_id:
-                    video_type = 'gemini_veo'
-                elif 'sora' in model_id:
-                    video_type = 'sora'
-                elif 'heygen-avatar-v2' in model_id:
-                    video_type = 'heygen_avatar_v2'
-                elif 'heygen-avatar-iv' in model_id:
-                    video_type = 'heygen_avatar_iv'
-                elif 'kling-v' in model_id:
-                    # Mapear kling-v1 -> kling_v1, etc.
-                    video_type = model_id.replace('-', '_')
-                elif 'higgsfield-ai/dop/standard' in model_id:
-                    video_type = 'higgsfield_dop_standard'
-                elif 'higgsfield-ai/dop/preview' in model_id:
-                    video_type = 'higgsfield_dop_preview'
-                elif 'seedance' in model_id:
-                    video_type = 'higgsfield_seedance_v1_pro'
-                elif 'kling-video/v2.1/pro' in model_id:
-                    video_type = 'higgsfield_kling_v2_1_pro'
-                elif 'vuela-ai' in model_id or 'vuela_ai' in model_id:
-                    video_type = 'vuela_ai'
+            video_type = CreditService._map_model_id_to_video_type(model_id)
         
         if not video_type:
+            logger.warning(f"No se pudo determinar video_type para model_id: {model_id}")
+            return Decimal('0')
+        
+        # Validar que el servicio existe en PRICING
+        if not CreditService._validate_pricing_key(video_type):
             return Decimal('0')
         
         if video_type == 'heygen_avatar_v2':
@@ -617,22 +662,19 @@ class CreditService:
         elif video_type == 'gemini_veo':
             has_audio = config and config.get('generate_audio', False)
             price_key = 'video_audio' if has_audio else 'video'
+            if not CreditService._validate_pricing_key('gemini_veo', price_key):
+                price_key = 'video'  # Fallback
             return Decimal(str(duration * CreditService.PRICING['gemini_veo'][price_key]))
         elif video_type == 'sora':
             model = (config and config.get('sora_model')) or 'sora-2'
-            if model not in CreditService.PRICING.get('sora', {}):
+            if not CreditService._validate_pricing_key('sora', model):
                 model = 'sora-2'  # Fallback
             return Decimal(str(duration * CreditService.PRICING['sora'][model]))
         elif video_type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
             # Higgsfield: precio fijo por video
-            if video_type not in CreditService.PRICING:
-                return Decimal('0')
             return Decimal(str(CreditService.PRICING[video_type]['video']))
         elif video_type.startswith('kling_'):
             # Kling: precio según modelo, modo y duración
-            if video_type not in CreditService.PRICING:
-                return Decimal('0')
-            
             model_pricing = CreditService.PRICING[video_type]
             mode = (config and config.get('mode')) or 'std'
             
@@ -640,12 +682,14 @@ class CreditService:
             if video_type == 'kling_v2_master':
                 duration_key = f"{duration}s"
                 if duration_key not in model_pricing:
+                    logger.error(f"Duración {duration}s no válida para {video_type}. Opciones: {list(model_pricing.keys())}")
                     return Decimal('0')
                 return Decimal(str(model_pricing[duration_key]))
             else:
                 # Para otros modelos: modo + duración
                 duration_key = f"{mode}_{duration}s"
                 if duration_key not in model_pricing:
+                    logger.error(f"Combinación '{duration_key}' no válida para {video_type}. Opciones: {list(model_pricing.keys())}")
                     return Decimal('0')
                 return Decimal(str(model_pricing[duration_key]))
         

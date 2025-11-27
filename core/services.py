@@ -1164,6 +1164,12 @@ class VideoService:
                 status_data = self._check_veo_status(video)
             elif video.type == 'sora':
                 status_data = self._check_sora_status(video)
+            elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                status_data = self._check_higgsfield_status(video)
+            elif video.type.startswith('kling_'):
+                # Kling tiene su propio método de verificación si se implementa
+                # Por ahora, usar el estado del modelo
+                status_data = {'status': video.status}
             else:
                 status_data = {'status': video.status}
             
@@ -1373,6 +1379,54 @@ class VideoService:
         elif api_status == 'failed':
             error_msg = status_data.get('error', 'Video generation failed')
             video.mark_as_error(error_msg)
+        
+        return status_data
+    
+    def _check_higgsfield_status(self, video: Video) -> Dict:
+        """Consulta estado en Higgsfield API"""
+        client = self._get_higgsfield_client()
+        status_data = client.get_request_status(video.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            video_url = status_data.get('video_url')
+            if video_url:
+                # Determinar ruta GCS según contexto
+                if video.project:
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                elif video.created_by:
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                else:
+                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                
+                try:
+                    # Descargar video desde URL y subir a GCS
+                    gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                    
+                    # Preparar metadata
+                    metadata = {
+                        'video_url_original': video_url,
+                        'request_id': video.external_id,
+                        'image_urls': status_data.get('image_urls', []),
+                        'raw_response': status_data.get('raw_response', {}),
+                    }
+                    
+                    video.mark_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"Video Higgsfield {video.id} completado: {gcs_full_path}")
+                except Exception as e:
+                    logger.error(f"Error al descargar/subir video de Higgsfield {video.id}: {e}")
+                    video.mark_as_error(f"Error al procesar video: {str(e)}")
+            else:
+                logger.warning(f"Video Higgsfield {video.id} completado pero sin URL de video")
+                video.mark_as_error("Video completado pero sin URL disponible")
+        
+        elif api_status in ['failed', 'error', 'nsfw']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            if api_status == 'nsfw':
+                error_msg = 'Content failed moderation checks (NSFW)'
+            video.mark_as_error(error_msg)
+            logger.error(f"Video Higgsfield {video.id} falló: {error_msg}")
         
         return status_data
     
