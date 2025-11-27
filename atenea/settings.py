@@ -35,6 +35,29 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# CSRF Trusted Origins
+# Añadir los dominios desde los que se pueden hacer peticiones POST
+# Por defecto incluye localhost para desarrollo
+default_csrf_origins = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
+# Añadir dominios de producción desde variable de entorno o usar los conocidos
+csrf_origins_env = config('CSRF_TRUSTED_ORIGINS', default='')
+if csrf_origins_env:
+    CSRF_TRUSTED_ORIGINS = csrf_origins_env.split(',')
+else:
+    # Si no hay variable de entorno, usar los dominios conocidos
+    CSRF_TRUSTED_ORIGINS = default_csrf_origins.copy()
+    # Añadir dominios de producción conocidos
+    production_domains = [
+        'https://dev.atenea.nxhumans.com',
+        'https://demo.atenea.nxhumans.com',
+        'https://atenea.nxhumans.com',
+    ]
+    CSRF_TRUSTED_ORIGINS.extend(production_domains)
+
 
 # Application definition
 
