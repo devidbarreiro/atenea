@@ -504,12 +504,29 @@
 <div id="user-credits-asigment" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
     <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
         <div class="flex justify-between items-center border-b pb-3 mb-3">
-            <h1 class="text-xl font-bold">Esto es la asignacion de creditos para el usuario</h1>
+            <h1 class="text-xl font-bold"></h1>
             <button onclick="closeCreditModals()" class="text-gray-500 hover:text-gray-700 font-bold text-2xl">
                 &times;
             </button>
         </div>
-        <p>Formulario para sumar o restar créditos.</p>
+
+        <p class="mb-3">Formulario para sumar o restar créditos.</p>
+
+        <input type="hidden" id="credit-user-id">
+
+        <label class="block font-semibold mb-1">Cantidad (positivo o negativo):</label>
+        <input id="credit-amount" type="number" step="0.01" class="w-full border rounded px-3 py-2 mb-3">
+        
+        <label class="block font-semibold mb-1">Nuevo límite mensual:</label>
+        <input id="credit-new-limit" type="number" step="1" class="w-full border rounded px-3 py-2 mb-3">
+
+        <label class="block font-semibold mb-1">Descripción:</label>
+        <input id="credit-description" type="text" class="w-full border rounded px-3 py-2 mb-3">
+
+        <div class="flex justify-end gap-3 mt-4">
+            <button onclick="closeCreditModals()" class="bg-gray-300 px-4 py-2 rounded">Cancelar</button>
+            <button onclick="submitCreditAdjustment()" class="bg-blue-600 text-white px-4 py-2 rounded">Guardar</button>
+        </div>
     </div>
 </div>
 {%endif%}
@@ -1202,17 +1219,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // MODAL DE AJUSTE DE CRÉDITOS (Para el botón "+/- Créditos")
 window.openCreditAdjustmentModal = function(userId, username) {
-    // 1. Ocultar todos los modales/secciones relacionadas
+    // Ocultar otros modales
     document.getElementById('user-credits-history').classList.add('hidden');
-    document.getElementById('user-credits-asigment').classList.add('hidden');
-    
-    // 2. Mostrar el modal de asignación/ajuste
-    const assignmentModal = document.getElementById('user-credits-asigment');
-    assignmentModal.classList.remove('hidden');
+    document.getElementById('user-credits-asigment').classList.remove('hidden');
 
-    // Opcional: Actualizar el título/contenido del modal
-    // Podrías añadir un elemento <h1> en 'user-credits-asigment' y actualizarlo aquí.
-    assignmentModal.querySelector('h1').textContent = `Asignar/Ajustar Créditos para ${username}`;
+    // Guardar ID en el hidden
+    document.getElementById('credit-user-id').value = userId;
+
+    // Actualizar el título
+    document.querySelector('#user-credits-asigment h1').textContent =
+        `Asignar/Ajustar Créditos a ${username}`;
+
+    // Reset inputs
+    document.getElementById('credit-amount').value = "";
+    document.getElementById('credit-description').value = "";
 };
 
 // MODAL DE HISTORIAL DE CRÉDITOS (Para el botón "Historial")
@@ -1236,6 +1256,77 @@ window.viewUserCreditsDetails = function(userId, username) {
 window.closeCreditModals = function() {
     document.getElementById('user-credits-history').classList.add('hidden');
     document.getElementById('user-credits-asigment').classList.add('hidden');
+}
+
+function submitCreditAdjustment() {
+    const userId = document.getElementById('credit-user-id').value;
+    const amount = parseFloat(document.getElementById('credit-amount').value);
+    const newLimit = parseInt(document.getElementById('credit-new-limit').value);
+    const description = document.getElementById('credit-description').value.trim();
+
+    const row = document.querySelector(`#tabla-usuarios-admin tr[data-id="${userId}"]`);
+    if (!row) {
+        alert("Usuario no encontrado");
+        return;
+    }
+    const username = row.querySelector('.username input').value;
+
+    // Si hay cantidad para sumar/restar créditos
+    if (!isNaN(amount) && amount !== 0) {
+        const formData = new FormData();
+        formData.append("user_id", userId);
+        formData.append("amount", amount);
+        if (description) formData.append("description", description);
+
+        fetch("{% url 'core:add_credits' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Créditos ajustados para ${username}: ${data.saldo_anterior} → ${data.saldo_actual}`);
+                const creditCell = row.querySelector('.current-credits');
+                if (creditCell) creditCell.textContent = data.saldo_actual;
+            } else {
+                alert(`❌ Error al ajustar créditos: ${data.error}`);
+            }
+        })
+        .catch(err => alert("❌ Error de red: " + err.message));
+    }
+
+    // Si hay nuevo límite mensual
+    if (!isNaN(newLimit)) {
+        const formData = new FormData();
+        formData.append("username", username);
+        formData.append("limit", newLimit);
+        if (description) formData.append("description", description);
+
+        fetch("{% url 'core:set_monthly_limit' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Límite mensual actualizado para ${username}: ${data.old_limit} → ${data.new_limit}`);
+                const limitCell = row.querySelector('.monthly-limit');
+                if (limitCell) limitCell.textContent = data.new_limit;
+                closeCreditModals();
+            } else {
+                alert(`❌ Error al actualizar límite: ${data.error}`);
+            }
+        })
+        .catch(err => alert("❌ Error de red: " + err.message));
+    }
 }
 </script>
 

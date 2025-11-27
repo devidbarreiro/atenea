@@ -6346,8 +6346,102 @@ def activate_account(request, uidb64, token):
 
     return render(request, 'users/activate_account.html', {'form': form, 'user': user})
 
+class AddCreditsView(View):
+    def post(self, request):
+        user_id = request.POST.get("user_id")
+        amount = request.POST.get("amount")
+        description = request.POST.get("description") or ""
 
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "Usuario no encontrado"}, status=404)
 
+        try:
+            amount = float(amount)
+        except:
+            return JsonResponse({"error": "Cantidad inválida"}, status=400)
+
+        if amount == 0:
+            return JsonResponse({"error": "La cantidad no puede ser 0"}, status=400)
+
+        description = description or f"Ajuste de créditos: {amount}"
+
+        try:
+            credits_before = CreditService.get_or_create_user_credits(user).credits
+
+            credits = CreditService.add_credits(
+                user=user,
+                amount=amount,
+                description=description,
+                transaction_type="adjustment"
+            )
+
+            return JsonResponse({
+                "success": True,
+                "saldo_anterior": credits_before,
+                "saldo_actual": credits.credits
+            })
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+class SetMonthlyLimitView(View):
+    """
+    View para actualizar el límite mensual de créditos de un usuario.
+    Espera POST con:
+        - username
+        - limit
+        - description (opcional)
+    """
+
+    @method_decorator(csrf_exempt)  # si usas AJAX desde JS
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def post(self, request):
+        username = request.POST.get('username')
+        limit = request.POST.get('limit')
+        description = request.POST.get('description', '')
+
+        # Validaciones básicas
+        if not username or limit is None:
+            return JsonResponse({'success': False, 'error': 'Faltan parámetros'}, status=400)
+
+        try:
+            limit = int(limit)
+            if limit < 0:
+                return JsonResponse({'success': False, 'error': 'El límite debe ser >= 0'}, status=400)
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'El límite debe ser un número entero'}, status=400)
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'error': f'Usuario "{username}" no encontrado'}, status=404)
+
+        try:
+            credits = CreditService.get_or_create_user_credits(user)
+            old_limit = credits.monthly_limit
+
+            credits.monthly_limit = limit
+            credits.save(update_fields=['monthly_limit', 'updated_at'])
+
+            response = {
+                'success': True,
+                'username': username,
+                'old_limit': old_limit,
+                'new_limit': limit,
+                'current_usage': credits.current_month_usage,
+                'remaining': credits.credits_remaining
+            }
+            if description:
+                response['description'] = description
+
+            return JsonResponse(response)
+
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Error al actualizar límite mensual: {str(e)}'}, status=500)
 # ====================
 # MUSIC VIEWS
 # ====================

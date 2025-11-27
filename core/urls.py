@@ -147,6 +147,9 @@ urlpatterns = [
     path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
     path('users/activate/<uidb64>/<token>/', views.activate_account, name='activate_account'),
     path('no-permissions/', views.no_permissions, name='no_permissions'),
+    path("credits/add/", views.AddCreditsView.as_view(), name="add_credits"),
+    path('user/set-monthly-limit/', views.SetMonthlyLimitView.as_view(), name='set_monthly_limit'),
+    
     # Documentacion
     path('docs/structure/', views.docs_structure, name='docs_structure'),
     path('docs/api/services/<path:path>/', views.docs_md_view, name='docs_md'),
