@@ -626,6 +626,7 @@ class GeminiVeoClient:
                         response_data = operation_data.get('response', {})
                         videos = response_data.get('videos', [])
                         rai_filtered_count = response_data.get('raiMediaFilteredCount', 0)
+                        rai_filtered_reasons = response_data.get('raiMediaFilteredReasons', [])
                         
                         video_url = None
                         all_video_urls = []
@@ -647,6 +648,8 @@ class GeminiVeoClient:
                         
                         logger.info(f"✅ Video completado!")
                         logger.info(f"   Videos generados: {len(all_video_urls)}, Filtrados: {rai_filtered_count}")
+                        if rai_filtered_count > 0:
+                            logger.warning(f"   ⚠️ Videos filtrados por RAI: {rai_filtered_reasons}")
                         if len(all_video_urls) > 1:
                             logger.info(f"   📹 Multi-generación: {len(all_video_urls)} videos disponibles")
                         
@@ -656,7 +659,8 @@ class GeminiVeoClient:
                             'all_video_urls': all_video_urls,  # TODOS los videos
                             'operation_data': operation_data,
                             'videos': videos,
-                            'rai_filtered_count': rai_filtered_count
+                            'rai_filtered_count': rai_filtered_count,
+                            'rai_filtered_reasons': rai_filtered_reasons  # Razones del filtrado RAI
                         }
                 else:
                     # Aún procesando

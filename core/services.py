@@ -1239,6 +1239,23 @@ class VideoService:
         
         if api_status == 'completed':
             all_video_urls = status_data.get('all_video_urls', [])
+            rai_filtered_count = status_data.get('rai_filtered_count', 0)
+            
+            # Si todos los videos fueron filtrados por RAI, marcar como error
+            if not all_video_urls and rai_filtered_count > 0:
+                rai_reasons = status_data.get('rai_filtered_reasons', [])
+                reason_text = rai_reasons[0] if rai_reasons else 'Violación de políticas de uso de Vertex AI'
+                error_message = (
+                    f"El video fue filtrado por las políticas de uso de Vertex AI. "
+                    f"{rai_filtered_count} video(s) bloqueado(s). "
+                    f"Razón: {reason_text}. "
+                    f"Intenta reformular el prompt evitando contenido violento, sexual o controversial."
+                )
+                logger.warning(f"Video {video.id} filtrado por RAI: {error_message}")
+                video.mark_as_error(error_message)
+                return status_data
+            
+            # Si hay videos disponibles, procesarlos
             if all_video_urls:
                 # Procesar todos los videos
                 all_gcs_paths = []
@@ -1273,7 +1290,7 @@ class VideoService:
                 metadata = {
                     'sample_count': len(all_gcs_paths),
                     'all_videos': all_gcs_paths,
-                    'rai_filtered_count': status_data.get('rai_filtered_count', 0),
+                    'rai_filtered_count': rai_filtered_count,
                     'videos_raw': status_data.get('videos', []),
                     'operation_data': status_data.get('operation_data', {}),
                     # Agregar duración desde la configuración del video
@@ -1284,6 +1301,11 @@ class VideoService:
                     gcs_path=all_gcs_paths[0]['gcs_path'],
                     metadata=metadata
                 )
+            elif not all_video_urls:
+                # Caso edge: completed pero sin videos y sin filtros RAI (no debería pasar)
+                error_message = "Video completado pero sin videos disponibles"
+                logger.warning(f"Video {video.id}: {error_message}")
+                video.mark_as_error(error_message)
         
         elif api_status in ['failed', 'error']:
             error_msg = status_data.get('error', 'Video generation failed')
