@@ -33,7 +33,56 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS: dominios permitidos para la aplicación
+# Se puede configurar via variable de entorno o usar los conocidos
+allowed_hosts_env = config('ALLOWED_HOSTS', default='')
+if allowed_hosts_env:
+    ALLOWED_HOSTS = allowed_hosts_env.split(',')
+else:
+    # Dominios por defecto (desarrollo)
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    # Añadir dominios de producción conocidos
+    production_hosts = [
+        'dev.atenea.nxhumans.com',
+        'demo.atenea.nxhumans.com',
+        'atenea.nxhumans.com',
+        'dev.atenea.ailumtech.com',
+        'demo.atenea.ailumtech.com',
+        'test.atenea.ailumtech.com',
+        'npm.atenea.ailumtech.com',
+    ]
+    ALLOWED_HOSTS.extend(production_hosts)
+
+# CSRF Trusted Origins
+# Añadir los dominios desde los que se pueden hacer peticiones POST
+# Por defecto incluye localhost para desarrollo
+default_csrf_origins = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
+# Añadir dominios de producción desde variable de entorno o usar los conocidos
+csrf_origins_env = config('CSRF_TRUSTED_ORIGINS', default='')
+if csrf_origins_env:
+    CSRF_TRUSTED_ORIGINS = csrf_origins_env.split(',')
+else:
+    # Si no hay variable de entorno, usar los dominios conocidos
+    CSRF_TRUSTED_ORIGINS = default_csrf_origins.copy()
+    # Añadir dominios de producción conocidos (nxhumans)
+    production_domains = [
+        'https://dev.atenea.nxhumans.com',
+        'https://demo.atenea.nxhumans.com',
+        'https://atenea.nxhumans.com',
+    ]
+    CSRF_TRUSTED_ORIGINS.extend(production_domains)
+    # Añadir dominios de producción conocidos (ailumtech)
+    production_domains_ailumtech = [
+        'https://dev.atenea.ailumtech.com',
+        'https://demo.atenea.ailumtech.com',
+        'https://test.atenea.ailumtech.com',
+        'https://npm.atenea.ailumtech.com',
+    ]
+    CSRF_TRUSTED_ORIGINS.extend(production_domains_ailumtech)
 
 
 # Application definition
@@ -144,6 +193,15 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
+
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -159,7 +217,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]

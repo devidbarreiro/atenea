@@ -12,6 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from core.llm.factory import LLMFactory
 from core.agents.tools.create_video_tool import create_video_tool
 from core.agents.tools.create_image_tool import create_image_tool
+from core.agents.tools.create_quote_tool import create_quote_tool
 from core.agents.tools.list_avatars_tool import list_avatars_tool
 from core.agents.tools.list_voices_tool import list_voices_tool
 from core.monitoring.langsmith_config import setup_langsmith
@@ -55,6 +56,7 @@ class CreationAgent:
         self.tools = [
             create_image_tool,
             create_video_tool,
+            create_quote_tool,
             list_avatars_tool,
             list_voices_tool
         ]
@@ -82,12 +84,20 @@ HERRAMIENTAS DISPONIBLES:
    - duration: Duración en segundos (5-8s para Veo 2.0, 4-8s para Veo 3.0, 4/8/12s para Sora)
    - aspect_ratio: '16:9' o '9:16' (default: '16:9')
 
-3. LISTAR AVATARES: list_avatars_tool - Lista avatares disponibles de HeyGen
+3. CITAS ANIMADAS: create_quote_tool - Genera videos animados de citas con texto y autor opcional
+   - Ejemplo: "Crea un video de cita con el texto 'La estrategia no se diseña en un despacho' y autor 'David Barreiro'"
+   - Ejemplo: "Genera una cita animada: 'Solo texto sin autor'"
+   - Parámetros opcionales:
+   - author: Nombre del autor (opcional)
+   - duration: Duración en segundos (opcional, se calcula automáticamente)
+   - quality: 'l' (baja), 'm' (media), 'h' (alta), 'k' (4K máxima, default)
+
+4. LISTAR AVATARES: list_avatars_tool - Lista avatares disponibles de HeyGen
    - Ejemplo: "Dime 5 avatares mujeres que empiecen con la letra A"
    - Ejemplo: "Lista avatares masculinos"
    - Parámetros: gender ('male', 'female'), starts_with (letra/texto inicial), limit
 
-4. LISTAR VOCES: list_voices_tool - Lista voces disponibles de HeyGen
+5. LISTAR VOCES: list_voices_tool - Lista voces disponibles de HeyGen
    - Ejemplo: "Dame voces en español"
    - Ejemplo: "Lista voces femeninas"
    - Parámetros: gender ('male', 'female'), language (ej: 'es', 'en'), limit

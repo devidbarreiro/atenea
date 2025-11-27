@@ -804,6 +804,8 @@ class VideoService:
                 external_id = self._generate_higgsfield_video(video)
             elif video.type.startswith('kling_'):
                 external_id = self._generate_kling_video(video)
+            elif video.type == 'manim_quote':
+                external_id = self._generate_manim_quote_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -1122,6 +1124,58 @@ class VideoService:
         
         return response.get('task_id')
     
+    def _generate_manim_quote_video(self, video: Video) -> str:
+        """Genera video de cita con Manim"""
+        from core.ai_services.manim import ManimClient
+        
+        client = ManimClient()
+        
+        # Obtener configuración
+        quote = video.script  # El texto de la cita va en script
+        author = video.config.get('author')
+        duration = video.config.get('duration')
+        quality = video.config.get('quality', 'k')  # Default: máxima calidad
+        container_color = video.config.get('container_color')  # Color del contenedor
+        text_color = video.config.get('text_color')  # Color del texto
+        font_family = video.config.get('font_family')  # Tipo de fuente
+        
+        # Generar video localmente
+        result = client.generate_quote_video(
+            quote=quote,
+            author=author,
+            duration=duration,
+            quality=quality,
+            container_color=container_color,
+            text_color=text_color,
+            font_family=font_family
+        )
+        
+        video_path = result['video_path']
+        
+        # Subir video a GCS
+        if video.project:
+            gcs_destination = f"projects/{video.project.id}/videos/{video.id}/manim_quote.mp4"
+        elif video.created_by:
+            gcs_destination = f"users/{video.created_by.id}/videos/{video.id}/manim_quote.mp4"
+        else:
+            gcs_destination = f"standalone/videos/{video.id}/manim_quote.mp4"
+        
+        logger.info(f"Subiendo video de Manim a GCS: {gcs_destination}")
+        gcs_path = gcs_storage.upload_file(video_path, gcs_destination)
+        
+        # Marcar como completado inmediatamente (Manim genera síncronamente)
+        metadata = {
+            'duration': duration or video.config.get('estimated_duration'),
+            'quality': quality,
+            'author': author,
+            'local_path': video_path,
+        }
+        
+        video.mark_as_completed(gcs_path=gcs_path, metadata=metadata)
+        
+        # Usar el ID del video como external_id (Manim no tiene external_id)
+        return f"manim_{video.id}"
+    
     # ----------------
     # CONSULTAR ESTADO
     # ----------------
@@ -1168,6 +1222,9 @@ class VideoService:
                 status_data = self._check_higgsfield_status(video)
             elif video.type.startswith('kling_'):
                 status_data = self._check_kling_status(video)
+            elif video.type == 'manim_quote':
+                # Manim genera síncronamente, así que si está aquí es porque ya está completado
+                status_data = {'status': video.status}
             else:
                 status_data = {'status': video.status}
             

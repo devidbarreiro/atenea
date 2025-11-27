@@ -202,6 +202,42 @@ document.addEventListener('alpine:init', () => {
                     settings.mode = modeInput.value;
                 }
                 
+                // Autor (para Manim Quote)
+                const authorInput = document.querySelector('input[name="author"]');
+                if (authorInput && authorInput.value) {
+                    settings.author = authorInput.value;
+                }
+                
+                // Calidad (para Manim Quote)
+                const qualityInput = document.querySelector('select[name="quality"]');
+                if (qualityInput && qualityInput.value) {
+                    settings.quality = qualityInput.value;
+                }
+                
+                // Color del Contenedor (para Manim Quote) - puede venir del picker o del input hidden
+                const containerColorPicker = document.getElementById('container-color-picker');
+                const containerColorInput = document.querySelector('input[name="container_color"]');
+                if (containerColorPicker && containerColorPicker.value) {
+                    settings.container_color = containerColorPicker.value;
+                } else if (containerColorInput && containerColorInput.value) {
+                    settings.container_color = containerColorInput.value;
+                }
+                
+                // Color del Texto (para Manim Quote) - puede venir del picker o del input hidden
+                const textColorPicker = document.getElementById('text-color-picker');
+                const textColorInput = document.querySelector('input[name="text_color"]');
+                if (textColorPicker && textColorPicker.value) {
+                    settings.text_color = textColorPicker.value;
+                } else if (textColorInput && textColorInput.value) {
+                    settings.text_color = textColorInput.value;
+                }
+                
+                // Tipo de Fuente (para Manim Quote)
+                const fontFamilyInput = document.getElementById('font-family-input');
+                if (fontFamilyInput && fontFamilyInput.value) {
+                    settings.font_family = fontFamilyInput.value;
+                }
+                
                 // Campos específicos del modelo (HeyGen) - soportar tanto select como input text
                 const avatarIdSelect = document.querySelector('select[name="avatar_id"]');
                 const avatarIdInput = document.querySelector('input[name="avatar_id"]');
@@ -248,6 +284,13 @@ document.addEventListener('alpine:init', () => {
                     formData.append('text', this.prompt);
                     if (this.projectId) {
                         formData.append('project_id', this.projectId);
+                    }
+                    // Añadir campos específicos de Manim directamente al FormData también
+                    if (settings.author) {
+                        formData.append('author', settings.author);
+                    }
+                    if (settings.quality) {
+                        formData.append('quality', settings.quality);
                     }
                     formData.append('settings', JSON.stringify(settings));
                     

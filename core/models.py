@@ -27,6 +27,8 @@ VIDEO_TYPES = [
     ('kling_v2_master', 'Kling V2 Master'),
     ('kling_v2_1', 'Kling V2.1'),
     ('kling_v2_5_turbo', 'Kling V2.5 Turbo'),
+    # Manim
+    ('manim_quote', 'Manim Quote'),
 ]
 
 VIDEO_STATUS = [

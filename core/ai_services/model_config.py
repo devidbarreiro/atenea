@@ -24,6 +24,7 @@ VIDEO_TYPE_TO_MODEL_ID = {
     'heygen_avatar_v2': 'heygen-avatar-v2',
     'heygen_avatar_iv': 'heygen-avatar-iv',
     'vuela_ai': 'vuela-ai',
+    'manim_quote': 'manim-quote',
 }
 
 # Configuración completa de capacidades de modelos
@@ -648,6 +649,37 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'video_type': 'vuela_ai',
     },
     
+    # ==================== MANIM QUOTE ====================
+    'manim-quote': {
+        'service': 'manim',
+        'name': 'Manim Quote',
+        'description': 'Genera videos animados de citas con texto y autor opcional',
+        'type': 'video',
+        'supports': {
+            'text_to_video': True,
+            'image_to_video': False,
+            'duration': {'min': 5, 'max': 12, 'variable': True},
+            'aspect_ratio': ['16:9'],
+            'resolution': False,
+            'audio': False,
+            'references': {
+                'start_image': False,
+                'end_image': False,
+                'style_image': False,
+                'asset_image': False,
+            },
+            'negative_prompt': False,
+            'seed': False,
+            'quality': ['l', 'm', 'h', 'k'],
+            'author': True,
+            'container_color': True,  # Color del contenedor (hex)
+            'text_color': True,  # Color del texto (hex)
+            'font_family': ['normal', 'bold', 'italic', 'bold_italic'],  # Tipo de fuente
+        },
+        'logo': '/static/img/logos/manim.png',
+        'video_type': 'manim_quote',
+    },
+    
     # ==================== GEMINI IMAGE ====================
     'gemini-2.5-flash-image': {
         'service': 'gemini_image',
@@ -830,6 +862,8 @@ def get_video_type_from_model_id(model_id: str) -> Optional[str]:
             return 'higgsfield_kling_v2_1_pro'
     elif 'vuela' in model_id:
         return 'vuela_ai'
+    elif 'manim' in model_id:
+        return 'manim_quote'
     
     return None
 
