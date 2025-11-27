@@ -354,50 +354,83 @@ class QuoteAnimation(Scene):
         text_content = '\n'.join(lines)
         
         # Mapear font_family a parámetros de Manim
-        font_weight = NORMAL
+        # Manim usa constantes de Weight de manimpango
+        # Valores válidos: NORMAL, BOLD, etc. (no strings)
+        font_weight = None  # None = NORMAL por defecto
         font_slant = NORMAL
         
         if font_family.lower() == 'bold':
-            font_weight = "bold"
+            # Usar Weight.BOLD de manimpango si está disponible
+            try:
+                from manimpango import Weight
+                font_weight = Weight.BOLD
+            except (ImportError, AttributeError):
+                # Fallback: no especificar weight (será NORMAL)
+                font_weight = None
         elif font_family.lower() == 'italic':
             font_slant = ITALIC
         elif font_family.lower() == 'bold_italic':
-            font_weight = "bold"
+            try:
+                from manimpango import Weight
+                font_weight = Weight.BOLD
+            except (ImportError, AttributeError):
+                font_weight = None
             font_slant = ITALIC
         
-        quote_text = Text(
-            text_content,
-            font_size=font_size,
-            color=text_color,
-            line_spacing=1.2,
-            weight=font_weight,
-            slant=font_slant
-        )
+        # Construir parámetros del Text
+        text_params = {
+            'text': text_content,
+            'font_size': font_size,
+            'color': text_color,
+            'line_spacing': 1.2,
+            'slant': font_slant
+        }
+        
+        # Solo añadir weight si no es None
+        if font_weight is not None:
+            text_params['weight'] = font_weight
+        
+        quote_text = Text(**text_params)
         
         return quote_text
     
     def _create_author_text(self, author, text_color="#FFFFFF", font_family="normal"):
         """Crea el texto del autor con encoding UTF-8"""
         # Mapear font_family a parámetros de Manim
-        font_weight = NORMAL
+        # Manim usa constantes de Weight de manimpango
+        font_weight = None  # None = NORMAL por defecto
         font_slant = ITALIC  # Por defecto el autor es itálico
         
         if font_family.lower() == 'bold':
-            font_weight = "bold"
+            try:
+                from manimpango import Weight
+                font_weight = Weight.BOLD
+            except (ImportError, AttributeError):
+                font_weight = None
             font_slant = ITALIC  # Mantener itálico para autor
         elif font_family.lower() == 'italic':
             font_slant = ITALIC
         elif font_family.lower() == 'bold_italic':
-            font_weight = "bold"
+            try:
+                from manimpango import Weight
+                font_weight = Weight.BOLD
+            except (ImportError, AttributeError):
+                font_weight = None
             font_slant = ITALIC
         
-        author_text = Text(
-            author,
-            font_size=28,
-            color=text_color,
-            slant=font_slant,
-            weight=font_weight
-        )
+        # Construir parámetros del Text
+        text_params = {
+            'text': author,
+            'font_size': 28,
+            'color': text_color,
+            'slant': font_slant
+        }
+        
+        # Solo añadir weight si no es None
+        if font_weight is not None:
+            text_params['weight'] = font_weight
+        
+        author_text = Text(**text_params)
         return author_text
     
     def _ensure_text_fits(self, card, quote_text, author_text, card_width, card_height):
