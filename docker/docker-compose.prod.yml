@@ -30,7 +30,7 @@ services:
     command: gunicorn atenea.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
     volumes:
       - ./html:/app
-      - prod_static_volume:/app/static
+      - prod_static_volume:/app/staticfilesfiles
       - prod_media_volume:/app/media
       - prod_logs_volume:/app/logs
       # Credenciales de GCS desde el servidor
@@ -80,7 +80,7 @@ services:
     command: python manage.py collectstatic --noinput
     volumes:
       - ./html:/app
-      - prod_static_volume:/app/static
+      - prod_static_volume:/app/staticfiles
     env_file:
       - .env
     networks:
