@@ -1589,6 +1589,8 @@ class VideoCreatePartialView(ServiceMixin, FormView):
             config = self._build_veo_config(request, project, video_service)
         elif video_type == 'sora':
             config = self._build_sora_config(request, project, video_service)
+        elif video_type == 'manim_quote':
+            config = self._build_manim_quote_config(request)
         return config
     
     def _build_heygen_v2_config(self, request):
@@ -1646,6 +1648,23 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 upload_result = video_service.upload_sora_input_reference(input_reference, project)
                 config['input_reference_gcs_path'] = upload_result['gcs_path']
                 config['input_reference_mime_type'] = upload_result['mime_type']
+        
+        return config
+    
+    def _build_manim_quote_config(self, request):
+        """Configuración para Manim Quote"""
+        config = {
+            'author': request.POST.get('author'),
+            'quality': request.POST.get('quality', 'k'),
+        }
+        
+        # Duración opcional
+        duration = request.POST.get('duration')
+        if duration:
+            try:
+                config['duration'] = float(duration)
+            except ValueError:
+                pass
         
         return config
 
@@ -2813,6 +2832,21 @@ class CreateItemAPIView(ServiceMixin, View):
         # Para Veo, también guardar veo_model (nombre del modelo de Veo)
         if video_type == 'gemini_veo':
             config['veo_model'] = model_id  # El model_id ya es el nombre del modelo de Veo (ej: veo-2.0-generate-exp)
+        
+        # Para Manim Quote, añadir campos específicos
+        if video_type == 'manim_quote':
+            config['author'] = settings.get('author') or data.get('author')
+            config['quality'] = settings.get('quality') or data.get('quality', 'k')
+            config['container_color'] = settings.get('container_color') or data.get('container_color') or '#0066CC'
+            config['text_color'] = settings.get('text_color') or data.get('text_color') or '#FFFFFF'
+            config['font_family'] = settings.get('font_family') or data.get('font_family') or 'normal'
+            # Si duration viene como string desde el formulario, convertir a float (Manim acepta decimales)
+            if duration:
+                try:
+                    duration = float(duration)
+                    config['duration'] = duration
+                except (ValueError, TypeError):
+                    pass
         
         # Procesar imágenes de referencia desde request.FILES
         # Nota: Veo solo acepta "asset" o "style" como referenceType

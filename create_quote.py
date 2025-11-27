@@ -135,6 +135,11 @@ class QuoteAnimation(Scene):
         
         has_author = author is not None and author.strip() != ""
         
+        # Leer parámetros de personalización desde variables de entorno
+        container_color = os.environ.get('QUOTE_ANIMATION_CONTAINER_COLOR', '#0066CC')
+        text_color = os.environ.get('QUOTE_ANIMATION_TEXT_COLOR', '#FFFFFF')
+        font_family = os.environ.get('QUOTE_ANIMATION_FONT_FAMILY', 'normal')
+        
         background_color = "#D3D3D3"
         card_width = 13
         card_height = 5
@@ -143,8 +148,8 @@ class QuoteAnimation(Scene):
         # Configurar fondo gris claro
         self.camera.background_color = background_color
         
-        # === CREAR TARJETA AZUL CON GRADIENTE VERTICAL ===
-        # Container azul con esquinas redondeadas
+        # === CREAR TARJETA CON COLOR PERSONALIZADO ===
+        # Container con esquinas redondeadas
         card = RoundedRectangle(
             corner_radius=card_corner_radius,
             width=card_width,
@@ -153,22 +158,17 @@ class QuoteAnimation(Scene):
             stroke_width=0
         )
         
-        # Aplicar color azul vibrante y visible
-        card.set_fill(color="#0066CC", opacity=1.0)
+        # Aplicar color personalizado del contenedor
+        card.set_fill(color=container_color, opacity=1.0)
         card.set_stroke(width=0)
         
-        # Intentar agregar gradiente vertical
-        # Gradiente de azul oscuro (arriba) a azul claro (abajo)
-        card.set_fill(color=[BLUE_E, BLUE_C], opacity=1.0)
-        card.set_sheen_direction(UP)
-        
         # === CREAR TEXTO DE LA CITA ===
-        quote_text = self._create_quote_text(quote)
+        quote_text = self._create_quote_text(quote, text_color=text_color, font_family=font_family)
         
         # === CREAR AUTOR (si existe) ===
         author_text = None
         if has_author:
-            author_text = self._create_author_text(author)
+            author_text = self._create_author_text(author, text_color=text_color, font_family=font_family)
         
         # === POSICIONAR ELEMENTOS ===
         if has_author:
@@ -278,7 +278,7 @@ class QuoteAnimation(Scene):
         
         self.wait(0.5)
     
-    def _create_quote_text(self, quote):
+    def _create_quote_text(self, quote, text_color="#FFFFFF", font_family="normal"):
         """Crea el texto de la cita con ajuste automático y encoding UTF-8"""
         max_line_length = 45
         
@@ -352,24 +352,51 @@ class QuoteAnimation(Scene):
         # Crear texto - Manim maneja UTF-8 correctamente
         # Asegurar que el texto se pasa como string Unicode
         text_content = '\n'.join(lines)
+        
+        # Mapear font_family a parámetros de Manim
+        font_weight = NORMAL
+        font_slant = NORMAL
+        
+        if font_family.lower() == 'bold':
+            font_weight = "bold"
+        elif font_family.lower() == 'italic':
+            font_slant = ITALIC
+        elif font_family.lower() == 'bold_italic':
+            font_weight = "bold"
+            font_slant = ITALIC
+        
         quote_text = Text(
             text_content,
             font_size=font_size,
-            color=WHITE,
+            color=text_color,
             line_spacing=1.2,
-            weight=NORMAL
+            weight=font_weight,
+            slant=font_slant
         )
         
         return quote_text
     
-    def _create_author_text(self, author):
+    def _create_author_text(self, author, text_color="#FFFFFF", font_family="normal"):
         """Crea el texto del autor con encoding UTF-8"""
+        # Mapear font_family a parámetros de Manim
+        font_weight = NORMAL
+        font_slant = ITALIC  # Por defecto el autor es itálico
+        
+        if font_family.lower() == 'bold':
+            font_weight = "bold"
+            font_slant = ITALIC  # Mantener itálico para autor
+        elif font_family.lower() == 'italic':
+            font_slant = ITALIC
+        elif font_family.lower() == 'bold_italic':
+            font_weight = "bold"
+            font_slant = ITALIC
+        
         author_text = Text(
             author,
             font_size=28,
-            color=WHITE,
-            slant=ITALIC,
-            weight=NORMAL
+            color=text_color,
+            slant=font_slant,
+            weight=font_weight
         )
         return author_text
     

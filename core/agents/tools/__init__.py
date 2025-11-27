@@ -10,6 +10,7 @@ from .auto_corrector import auto_correct_scene, auto_correct_all_scenes
 
 # Creation tools (para CreationAgent)
 from .create_image_tool import create_image_tool
+from .create_quote_tool import create_quote_tool
 
 __all__ = [
     # Validation tools
@@ -25,5 +26,6 @@ __all__ = [
     'auto_correct_all_scenes',
     # Creation tools
     'create_image_tool',
+    'create_quote_tool',
 ]
 

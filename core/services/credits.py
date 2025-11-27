@@ -132,6 +132,9 @@ class CreditService:
             'pro_5s': 35,   # $0.35
             'pro_10s': 70,  # $0.70
         },
+        'manim_quote': {
+            'quote': 1,  # 1 crédito cada 4 segundos (redondeado hacia arriba)
+        },
     }
     
     @staticmethod
@@ -339,6 +342,15 @@ class CreditService:
             
             logger.info(f"Cálculo costo Kling: modelo={model_name}, modo={mode}, duración={duration}s, costo={cost}")
             return cost
+        elif video.type == 'manim_quote':
+            # Manim: 1 crédito cada 4 segundos
+            cost_per_4_seconds = CreditService.PRICING['manim_quote']['quote']
+            # Calcular créditos según duración (redondeado hacia arriba)
+            import math
+            credits = math.ceil(duration / 4.0) * cost_per_4_seconds
+            cost = Decimal(str(credits))
+            logger.info(f"Cálculo costo Manim: duración={duration}s, créditos={credits}, costo={cost}")
+            return cost
         
         return Decimal('0')
     
@@ -450,6 +462,7 @@ class CreditService:
             'kling_v2_master': 'kling_v2_master',
             'kling_v2_1': 'kling_v2_1',
             'kling_v2_5_turbo': 'kling_v2_5_turbo',
+            'manim_quote': 'manim_quote',
         }
         service_name = service_name_map.get(video.type, video.type)
         
@@ -630,6 +643,8 @@ class CreditService:
             return 'higgsfield_kling_v2_1_pro'
         elif 'vuela-ai' in model_id_lower or 'vuela_ai' in model_id_lower:
             return 'vuela_ai'
+        elif 'manim' in model_id_lower:
+            return 'manim_quote'
         
         return None
     
@@ -717,6 +732,12 @@ class CreditService:
                     logger.error(f"Combinación '{duration_key}' no válida para {video_type}. Opciones: {list(model_pricing.keys())}")
                     return Decimal('0')
                 return Decimal(str(model_pricing[duration_key]))
+        elif video_type == 'manim_quote':
+            # Manim: 1 crédito cada 4 segundos
+            import math
+            cost_per_4_seconds = CreditService.PRICING['manim_quote']['quote']
+            credits = math.ceil(duration / 4.0) * cost_per_4_seconds
+            return Decimal(str(credits))
         
         return Decimal('0')
     

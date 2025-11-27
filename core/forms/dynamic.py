@@ -58,6 +58,8 @@ class DynamicVideoForm(forms.Form):
         initial_model_id = self.initial.get('model_id') or (self.data.get('model_id') if self.data else None)
         if initial_model_id:
             self._add_dynamic_fields(initial_model_id)
+            # Personalizar campo script según el modelo
+            self._customize_script_field(initial_model_id)
     
     def _get_available_models(self, item_type):
         """Obtiene lista de modelos disponibles para el tipo especificado"""
@@ -245,6 +247,44 @@ class DynamicVideoForm(forms.Form):
                 label='Modo',
                 required=False
             )
+        
+        # Autor (para Manim Quote)
+        if supports.get('author'):
+            self.fields['author'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                    'placeholder': 'Nombre del autor (opcional)',
+                }),
+                label='Autor',
+            )
+        
+        # Calidad (para Manim Quote)
+        if supports.get('quality'):
+            quality_labels = {
+                'l': 'Baja (480p)',
+                'm': 'Media (720p)',
+                'h': 'Alta (1080p)',
+                'k': '4K Máxima (2160p)',
+            }
+            choices = [(q, quality_labels.get(q, q.upper())) for q in supports['quality']]
+            self.fields['quality'] = forms.ChoiceField(
+                choices=choices,
+                initial='k',
+                widget=forms.Select(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                }),
+                label='Calidad',
+                required=False
+            )
+    
+    def _customize_script_field(self, model_id):
+        """Personaliza el campo script según el modelo"""
+        if model_id == 'manim-quote':
+            # Para Manim Quote, cambiar label y placeholder
+            self.fields['script'].label = 'Texto de la cita'
+            self.fields['script'].widget.attrs['placeholder'] = 'Escribe el texto de la cita que quieres animar...'
+            self.fields['script'].widget.attrs['rows'] = 4
     
     def clean(self):
         """
