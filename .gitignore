@@ -60,3 +60,6 @@ docker-compose.override.yml
 
 # LangGraph API (archivos generados localmente)
 .langgraph_api/
+
+# Archivos con claves API (no subir nunca)
+API_KEYS_ORGANIZED.md

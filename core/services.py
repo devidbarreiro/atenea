@@ -463,6 +463,8 @@ class VideoService:
         self.heygen_client = None
         self.veo_client = None
         self.sora_client = None
+        self.higgsfield_client = None
+        self.kling_client = None
     
     def _get_heygen_client(self) -> HeyGenClient:
         """Lazy initialization de HeyGen client"""
@@ -485,6 +487,30 @@ class VideoService:
                 raise ValidationException('OPENAI_API_KEY no está configurada')
             self.sora_client = SoraClient(api_key=settings.OPENAI_API_KEY)
         return self.sora_client
+    
+    def _get_higgsfield_client(self):
+        """Lazy initialization de Higgsfield client"""
+        if not self.higgsfield_client:
+            from .ai_services.higgsfield import HiggsfieldClient
+            if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
+                raise ValidationException('HIGGSFIELD_API_KEY_ID y HIGGSFIELD_API_KEY deben estar configuradas')
+            self.higgsfield_client = HiggsfieldClient(
+                api_key_id=settings.HIGGSFIELD_API_KEY_ID,
+                api_key_secret=settings.HIGGSFIELD_API_KEY
+            )
+        return self.higgsfield_client
+    
+    def _get_kling_client(self):
+        """Lazy initialization de Kling client"""
+        if not self.kling_client:
+            from .ai_services.kling import KlingClient
+            if not settings.KLING_ACCESS_KEY or not settings.KLING_SECRET_KEY:
+                raise ValidationException('KLING_ACCESS_KEY y KLING_SECRET_KEY deben estar configuradas')
+            self.kling_client = KlingClient(
+                access_key=settings.KLING_ACCESS_KEY,
+                secret_key=settings.KLING_SECRET_KEY
+            )
+        return self.kling_client
     
     # ----------------
     # CREAR VIDEO
@@ -598,7 +624,7 @@ class VideoService:
         self,
         images: List[UploadedFile],
         reference_types: List[str],
-        project: Project
+        project: Project = None
     ) -> List[Dict]:
         """
         Sube imágenes de referencia para Veo
@@ -606,32 +632,84 @@ class VideoService:
         Args:
             images: Lista de archivos de imagen
             reference_types: Lista de tipos ('asset' o 'style')
-            project: Proyecto relacionado
+            project: Proyecto relacionado (opcional)
         
         Returns:
             Lista de dicts con datos de las imágenes subidas
         """
+        from PIL import Image
+        import io
+        
         reference_images = []
+        
+        # Formatos soportados por Veo
+        SUPPORTED_FORMATS = ['JPEG', 'PNG']
+        SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png']
         
         for i, (image, ref_type) in enumerate(zip(images, reference_types)):
             if image:
                 try:
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                     safe_filename = image.name.replace(' ', '_')
-                    gcs_destination = f"veo_reference_images/project_{project.id}/{timestamp}_{i+1}_{safe_filename}"
                     
-                    logger.info(f"Subiendo imagen de referencia {i+1} ({ref_type}): {safe_filename}")
-                    gcs_path = gcs_storage.upload_django_file(image, gcs_destination)
+                    # Leer la imagen
+                    image_file = image.read()
+                    image.seek(0)  # Resetear el puntero
+                    
+                    # Detectar formato y convertir si es necesario
+                    pil_image = Image.open(io.BytesIO(image_file))
+                    original_format = pil_image.format
+                    mime_type = image.content_type or f'image/{original_format.lower()}' if original_format else 'image/jpeg'
+                    
+                    # Convertir a JPEG si el formato no es soportado
+                    if original_format not in SUPPORTED_FORMATS or mime_type not in SUPPORTED_MIME_TYPES:
+                        logger.warning(f"Formato {original_format} ({mime_type}) no soportado por Veo. Convirtiendo a JPEG...")
+                        
+                        # Convertir a RGB si tiene canal alpha (RGBA, LA, etc.)
+                        if pil_image.mode in ('RGBA', 'LA', 'P'):
+                            # Crear fondo blanco para imágenes con transparencia
+                            rgb_image = Image.new('RGB', pil_image.size, (255, 255, 255))
+                            if pil_image.mode == 'P':
+                                pil_image = pil_image.convert('RGBA')
+                            rgb_image.paste(pil_image, mask=pil_image.split()[-1] if pil_image.mode == 'RGBA' else None)
+                            pil_image = rgb_image
+                        elif pil_image.mode != 'RGB':
+                            pil_image = pil_image.convert('RGB')
+                        
+                        # Convertir a bytes JPEG
+                        output = io.BytesIO()
+                        pil_image.save(output, format='JPEG', quality=95)
+                        image_file = output.getvalue()
+                        mime_type = 'image/jpeg'
+                        safe_filename = safe_filename.rsplit('.', 1)[0] + '.jpg'
+                        logger.info(f"✅ Imagen convertida a JPEG: {safe_filename}")
+                    
+                    # Manejar caso cuando project es None
+                    if project:
+                        gcs_destination = f"veo_reference_images/project_{project.id}/{timestamp}_{i+1}_{safe_filename}"
+                    else:
+                        gcs_destination = f"veo_reference_images/standalone/{timestamp}_{i+1}_{safe_filename}"
+                    
+                    logger.info(f"Subiendo imagen de referencia {i+1} ({ref_type}): {safe_filename} ({mime_type})")
+                    
+                    # Subir imagen convertida
+                    gcs_path = gcs_storage.upload_from_bytes(
+                        file_content=image_file,
+                        destination_path=gcs_destination,
+                        content_type=mime_type
+                    )
                     
                     reference_images.append({
                         'gcs_uri': gcs_path,
                         'reference_type': ref_type,
-                        'mime_type': image.content_type or 'image/jpeg'
+                        'mime_type': mime_type
                     })
                     
                     logger.info(f"✅ Imagen de referencia {i+1} subida: {gcs_path}")
                 except Exception as e:
                     logger.error(f"Error al subir imagen de referencia {i+1}: {str(e)}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     # No bloqueamos la creación si falla una imagen de referencia
         
         return reference_images
@@ -722,6 +800,10 @@ class VideoService:
                 external_id = self._generate_veo_video(video)
             elif video.type == 'sora':
                 external_id = self._generate_sora_video(video)
+            elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                external_id = self._generate_higgsfield_video(video)
+            elif video.type.startswith('kling_'):
+                external_id = self._generate_kling_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -808,7 +890,19 @@ class VideoService:
     
     def _generate_veo_video(self, video: Video) -> str:
         """Genera video con Gemini Veo"""
-        model_name = video.config.get('veo_model', 'veo-2.0-generate-001')
+        # Obtener el modelo desde config, con fallback a model_id si existe
+        model_name = video.config.get('veo_model') or video.config.get('model_id', 'veo-2.0-generate-001')
+        
+        # Validar que el modelo soporte imágenes de referencia si las hay
+        if video.config.get('reference_images'):
+            from .ai_services.gemini_veo import VEO_MODELS
+            if model_name in VEO_MODELS:
+                if not VEO_MODELS[model_name].get('supports_reference_images', False):
+                    raise ValidationException(
+                        f'El modelo {model_name} no soporta imágenes de referencia. '
+                        f'Usa veo-2.0-generate-exp o veo-3.1-*'
+                    )
+        
         client = self._get_veo_client(model_name)
         
         # Preparar storage URI
@@ -820,10 +914,20 @@ class VideoService:
             storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/standalone/videos/{video.id}/"
         
         # Parámetros
+        # Asegurar que duration sea un int válido
+        duration = video.config.get('duration')
+        if duration is None:
+            duration = 8
+        else:
+            try:
+                duration = int(duration)
+            except (ValueError, TypeError):
+                duration = 8
+        
         params = {
             'prompt': video.script,
             'title': video.title,
-            'duration': video.config.get('duration', 8),
+            'duration': duration,
             'aspect_ratio': video.config.get('aspect_ratio', '16:9'),
             'sample_count': video.config.get('sample_count', 1),
             'negative_prompt': video.config.get('negative_prompt'),
@@ -916,6 +1020,108 @@ class VideoService:
         
         return response.get('video_id')
     
+    def _generate_higgsfield_video(self, video: Video) -> str:
+        """Genera video con Higgsfield"""
+        client = self._get_higgsfield_client()
+        
+        # Mapear tipo de video a model_id de Higgsfield
+        model_map = {
+            'higgsfield_dop_standard': 'higgsfield-ai/dop/standard',
+            'higgsfield_dop_preview': 'higgsfield-ai/dop/preview',
+            'higgsfield_seedance_v1_pro': 'bytedance/seedance/v1/pro/image-to-video',
+            'higgsfield_kling_v2_1_pro': 'kling-video/v2.1/pro/image-to-video',
+        }
+        
+        model_id = model_map.get(video.type)
+        if not model_id:
+            raise ValidationException(f'Tipo de video Higgsfield no válido: {video.type}')
+        
+        # Obtener configuración
+        prompt = video.script
+        
+        # Obtener URL de imagen si existe (requerido para image-to-video)
+        image_url = None
+        if video.config.get('input_image_gcs_path'):
+            # Obtener URL firmada de GCS
+            gcs_path = video.config['input_image_gcs_path']
+            image_url = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de GCS: {gcs_path}")
+        elif video.config.get('image_url'):
+            image_url = video.config['image_url']
+        
+        if not image_url:
+            raise ValidationException(f'El modelo {model_id} requiere una imagen de entrada (image_url o input_image_gcs_path)')
+        
+        # Preparar parámetros opcionales (solo si están en config)
+        kwargs = {}
+        if 'aspect_ratio' in video.config:
+            kwargs['aspect_ratio'] = video.config['aspect_ratio']
+        if 'resolution' in video.config:
+            kwargs['resolution'] = video.config['resolution']
+        if 'duration' in video.config:
+            kwargs['duration'] = video.config['duration']
+        
+        # Generar video
+        response = client.generate_video(
+            model_id=model_id,
+            prompt=prompt,
+            image_url=image_url,
+            **kwargs
+        )
+        
+        return response.get('request_id')
+    
+    def _generate_kling_video(self, video: Video) -> str:
+        """Genera video con Kling"""
+        client = self._get_kling_client()
+        
+        # Mapear tipo de video a model_name de Kling
+        model_map = {
+            'kling_v1': 'kling-v1',
+            'kling_v1_5': 'kling-v1-5',
+            'kling_v1_6': 'kling-v1-6',
+            'kling_v2_master': 'kling-v2-master',
+            'kling_v2_1': 'kling-v2-1',
+            'kling_v2_5_turbo': 'kling-v2-5-turbo',
+        }
+        
+        model_name = model_map.get(video.type)
+        if not model_name:
+            raise ValidationException(f'Tipo de video Kling no válido: {video.type}')
+        
+        # Obtener configuración
+        prompt = video.script
+        mode = video.config.get('mode', 'std')  # 'std' o 'pro'
+        duration = int(video.config.get('duration', 5))
+        aspect_ratio = video.config.get('aspect_ratio', '16:9')
+        
+        # Validar duración (Kling solo soporta 5 o 10 segundos)
+        if duration not in [5, 10]:
+            logger.warning(f"Duración {duration}s ajustada a 5s (Kling solo soporta 5 o 10 segundos)")
+            duration = 5
+        
+        # Obtener URL de imagen si existe (para image-to-video)
+        image_url = None
+        if video.config.get('input_image_gcs_path'):
+            # Obtener URL firmada de GCS
+            gcs_path = video.config['input_image_gcs_path']
+            image_url = gcs_storage.get_signed_url(gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de GCS: {gcs_path}")
+        elif video.config.get('image_url'):
+            image_url = video.config['image_url']
+        
+        # Generar video
+        response = client.generate_video(
+            model_name=model_name,
+            prompt=prompt,
+            image_url=image_url,
+            mode=mode,
+            duration=duration,
+            aspect_ratio=aspect_ratio
+        )
+        
+        return response.get('task_id')
+    
     # ----------------
     # CONSULTAR ESTADO
     # ----------------
@@ -958,6 +1164,10 @@ class VideoService:
                 status_data = self._check_veo_status(video)
             elif video.type == 'sora':
                 status_data = self._check_sora_status(video)
+            elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                status_data = self._check_higgsfield_status(video)
+            elif video.type.startswith('kling_'):
+                status_data = self._check_kling_status(video)
             else:
                 status_data = {'status': video.status}
             
@@ -1020,13 +1230,32 @@ class VideoService:
     
     def _check_veo_status(self, video: Video) -> Dict:
         """Consulta estado en Gemini Veo"""
-        client = self._get_veo_client()
+        # Obtener el modelo correcto desde el config del video
+        model_name = video.config.get('veo_model') or video.config.get('model_id', 'veo-2.0-generate-001')
+        client = self._get_veo_client(model_name)
         status_data = client.get_video_status(video.external_id)
         
         api_status = status_data.get('status')
         
         if api_status == 'completed':
             all_video_urls = status_data.get('all_video_urls', [])
+            rai_filtered_count = status_data.get('rai_filtered_count', 0)
+            
+            # Si todos los videos fueron filtrados por RAI, marcar como error
+            if not all_video_urls and rai_filtered_count > 0:
+                rai_reasons = status_data.get('rai_filtered_reasons', [])
+                reason_text = rai_reasons[0] if rai_reasons else 'Violación de políticas de uso de Vertex AI'
+                error_message = (
+                    f"El video fue filtrado por las políticas de uso de Vertex AI. "
+                    f"{rai_filtered_count} video(s) bloqueado(s). "
+                    f"Razón: {reason_text}. "
+                    f"Intenta reformular el prompt evitando contenido violento, sexual o controversial."
+                )
+                logger.warning(f"Video {video.id} filtrado por RAI: {error_message}")
+                video.mark_as_error(error_message)
+                return status_data
+            
+            # Si hay videos disponibles, procesarlos
             if all_video_urls:
                 # Procesar todos los videos
                 all_gcs_paths = []
@@ -1061,7 +1290,7 @@ class VideoService:
                 metadata = {
                     'sample_count': len(all_gcs_paths),
                     'all_videos': all_gcs_paths,
-                    'rai_filtered_count': status_data.get('rai_filtered_count', 0),
+                    'rai_filtered_count': rai_filtered_count,
                     'videos_raw': status_data.get('videos', []),
                     'operation_data': status_data.get('operation_data', {}),
                     # Agregar duración desde la configuración del video
@@ -1072,6 +1301,11 @@ class VideoService:
                     gcs_path=all_gcs_paths[0]['gcs_path'],
                     metadata=metadata
                 )
+            elif not all_video_urls:
+                # Caso edge: completed pero sin videos y sin filtros RAI (no debería pasar)
+                error_message = "Video completado pero sin videos disponibles"
+                logger.warning(f"Video {video.id}: {error_message}")
+                video.mark_as_error(error_message)
         
         elif api_status in ['failed', 'error']:
             error_msg = status_data.get('error', 'Video generation failed')
@@ -1165,6 +1399,100 @@ class VideoService:
         elif api_status == 'failed':
             error_msg = status_data.get('error', 'Video generation failed')
             video.mark_as_error(error_msg)
+        
+        return status_data
+    
+    def _check_higgsfield_status(self, video: Video) -> Dict:
+        """Consulta estado en Higgsfield API"""
+        client = self._get_higgsfield_client()
+        status_data = client.get_request_status(video.external_id)
+        
+        api_status = status_data.get('status')
+        
+        if api_status == 'completed':
+            video_url = status_data.get('video_url')
+            if video_url:
+                # Determinar ruta GCS según contexto
+                if video.project:
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                elif video.created_by:
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                else:
+                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                
+                try:
+                    # Descargar video desde URL y subir a GCS
+                    gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                    
+                    # Preparar metadata
+                    metadata = {
+                        'video_url_original': video_url,
+                        'request_id': video.external_id,
+                        'image_urls': status_data.get('image_urls', []),
+                        'raw_response': status_data.get('raw_response', {}),
+                    }
+                    
+                    video.mark_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"Video Higgsfield {video.id} completado: {gcs_full_path}")
+                except Exception as e:
+                    logger.error(f"Error al descargar/subir video de Higgsfield {video.id}: {e}")
+                    video.mark_as_error(f"Error al procesar video: {str(e)}")
+            else:
+                logger.warning(f"Video Higgsfield {video.id} completado pero sin URL de video")
+                video.mark_as_error("Video completado pero sin URL disponible")
+        
+        elif api_status in ['failed', 'error', 'nsfw']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            if api_status == 'nsfw':
+                error_msg = 'Content failed moderation checks (NSFW)'
+            video.mark_as_error(error_msg)
+            logger.error(f"Video Higgsfield {video.id} falló: {error_msg}")
+        
+        return status_data
+    
+    def _check_kling_status(self, video: Video) -> Dict:
+        """Consulta estado en Kling API"""
+        client = self._get_kling_client()
+        status_data = client.get_video_status(video.external_id)
+        
+        api_status = status_data.get('status')
+        
+        # Kling puede usar 'completed' o 'success' como estado de completado
+        if api_status in ['completed', 'success']:
+            video_url = status_data.get('video_url')
+            if video_url:
+                # Determinar ruta GCS según contexto
+                if video.project:
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                elif video.created_by:
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                else:
+                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                
+                try:
+                    # Descargar video desde URL y subir a GCS
+                    gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                    
+                    # Preparar metadata
+                    metadata = {
+                        'video_url_original': video_url,
+                        'task_id': video.external_id,
+                        'raw_response': status_data.get('raw_response', {}),
+                    }
+                    
+                    video.mark_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"Video Kling {video.id} completado: {gcs_full_path}")
+                except Exception as e:
+                    logger.error(f"Error al descargar/subir video de Kling {video.id}: {e}")
+                    video.mark_as_error(f"Error al procesar video: {str(e)}")
+            else:
+                logger.warning(f"Video Kling {video.id} completado pero sin URL de video")
+                video.mark_as_error("Video completado pero sin URL disponible")
+        
+        elif api_status in ['failed', 'error']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            video.mark_as_error(error_msg)
+            logger.error(f"Video Kling {video.id} falló: {error_msg}")
         
         return status_data
     
@@ -1453,6 +1781,7 @@ class ImageService:
     
     def __init__(self):
         self.gemini_client = None
+        self.higgsfield_client = None
     
     def _get_gemini_client(self) -> GeminiImageClient:
         """Lazy initialization de Gemini Image client"""
@@ -1461,6 +1790,18 @@ class ImageService:
                 raise ValidationException('GEMINI_API_KEY no está configurada')
             self.gemini_client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
         return self.gemini_client
+    
+    def _get_higgsfield_client(self):
+        """Lazy initialization de Higgsfield client"""
+        if not self.higgsfield_client:
+            from .ai_services.higgsfield import HiggsfieldClient
+            if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
+                raise ValidationException('HIGGSFIELD_API_KEY_ID y HIGGSFIELD_API_KEY deben estar configuradas')
+            self.higgsfield_client = HiggsfieldClient(
+                api_key_id=settings.HIGGSFIELD_API_KEY_ID,
+                api_key_secret=settings.HIGGSFIELD_API_KEY
+            )
+        return self.higgsfield_client
     
     # ----------------
     # CREAR IMAGEN
@@ -1581,7 +1922,7 @@ class ImageService:
     
     def generate_image(self, image: Image) -> str:
         """
-        Genera una imagen usando Gemini Image API
+        Genera una imagen usando el servicio apropiado según model_id
         
         Args:
             image: Objeto Image a generar
@@ -1598,11 +1939,24 @@ class ImageService:
         if image.status in ['processing', 'completed']:
             raise ValidationException(f'La imagen ya está en estado: {image.get_status_display()}')
         
+        # Obtener model_id del config
+        model_id = image.config.get('model_id')
+        
+        # Determinar qué servicio usar según model_id
+        from core.ai_services.model_config import get_model_capabilities
+        capabilities = get_model_capabilities(model_id) if model_id else None
+        service = capabilities.get('service') if capabilities else None
+        
         # Validar créditos ANTES de generar
         if image.created_by:
             from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
             
-            estimated_cost = CreditService.estimate_image_cost()
+            # Calcular costo según el servicio
+            if service == 'higgsfield':
+                # Para Higgsfield, usar el costo específico del modelo
+                estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            else:
+                estimated_cost = CreditService.estimate_image_cost()
             
             if not CreditService.has_enough_credits(image.created_by, estimated_cost):
                 raise InsufficientCreditsException(
@@ -1619,57 +1973,62 @@ class ImageService:
         image.mark_as_processing()
         
         try:
-            client = self._get_gemini_client()
-            
             # Obtener configuración
             aspect_ratio = image.config.get('aspect_ratio', '1:1')
             response_modalities = image.config.get('response_modalities')
             
-            # Generar según el tipo
-            if image.type == 'text_to_image':
-                result = client.generate_image_from_text(
-                    prompt=image.prompt,
-                    aspect_ratio=aspect_ratio,
-                    response_modalities=response_modalities
-                )
-            
-            elif image.type == 'image_to_image':
-                # Obtener imagen de entrada desde GCS
-                input_gcs_path = image.config.get('input_image_gcs_path')
-                if not input_gcs_path:
-                    raise ValidationException('Imagen de entrada es requerida para image-to-image')
-                
-                # Descargar imagen desde GCS
-                input_image_data = self._download_image_from_gcs(input_gcs_path)
-                
-                result = client.generate_image_from_image(
-                    prompt=image.prompt,
-                    input_image_data=input_image_data,
-                    aspect_ratio=aspect_ratio,
-                    response_modalities=response_modalities
-                )
-            
-            elif image.type == 'multi_image':
-                # Obtener imágenes de entrada desde GCS
-                input_images_config = image.config.get('input_images', [])
-                if not input_images_config:
-                    raise ValidationException('Imágenes de entrada son requeridas para multi_image')
-                
-                # Descargar imágenes desde GCS
-                input_images_data = []
-                for img_config in input_images_config:
-                    img_data = self._download_image_from_gcs(img_config['gcs_path'])
-                    input_images_data.append(img_data)
-                
-                result = client.generate_image_from_multiple_images(
-                    prompt=image.prompt,
-                    input_images_data=input_images_data,
-                    aspect_ratio=aspect_ratio,
-                    response_modalities=response_modalities
-                )
-            
+            # Usar el servicio apropiado según model_id
+            if service == 'higgsfield':
+                result = self._generate_higgsfield_image(image, model_id, aspect_ratio)
             else:
-                raise ValidationException(f'Tipo de imagen no soportado: {image.type}')
+                # Por defecto, usar Gemini
+                client = self._get_gemini_client()
+                
+                # Generar según el tipo
+                if image.type == 'text_to_image':
+                    result = client.generate_image_from_text(
+                        prompt=image.prompt,
+                        aspect_ratio=aspect_ratio,
+                        response_modalities=response_modalities
+                    )
+                
+                elif image.type == 'image_to_image':
+                    # Obtener imagen de entrada desde GCS
+                    input_gcs_path = image.config.get('input_image_gcs_path')
+                    if not input_gcs_path:
+                        raise ValidationException('Imagen de entrada es requerida para image-to-image')
+                    
+                    # Descargar imagen desde GCS
+                    input_image_data = self._download_image_from_gcs(input_gcs_path)
+                    
+                    result = client.generate_image_from_image(
+                        prompt=image.prompt,
+                        input_image_data=input_image_data,
+                        aspect_ratio=aspect_ratio,
+                        response_modalities=response_modalities
+                    )
+                
+                elif image.type == 'multi_image':
+                    # Obtener imágenes de entrada desde GCS
+                    input_images_config = image.config.get('input_images', [])
+                    if not input_images_config:
+                        raise ValidationException('Imágenes de entrada son requeridas para multi_image')
+                    
+                    # Descargar imágenes desde GCS
+                    input_images_data = []
+                    for img_config in input_images_config:
+                        img_data = self._download_image_from_gcs(img_config['gcs_path'])
+                        input_images_data.append(img_data)
+                    
+                    result = client.generate_image_from_multiple_images(
+                        prompt=image.prompt,
+                        input_images_data=input_images_data,
+                        aspect_ratio=aspect_ratio,
+                        response_modalities=response_modalities
+                    )
+                
+                else:
+                    raise ValidationException(f'Tipo de imagen no soportado: {image.type}')
             
             # Subir imagen generada a GCS
             gcs_path = self._save_generated_image(
@@ -1699,6 +2058,100 @@ class ImageService:
             logger.error(f"Error al generar imagen {image.id}: {e}")
             image.mark_as_error(str(e))
             raise ImageGenerationException(str(e))
+    
+    def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str) -> dict:
+        """
+        Genera una imagen usando Higgsfield API
+        
+        Args:
+            image: Objeto Image a generar
+            model_id: ID del modelo de Higgsfield
+            aspect_ratio: Relación de aspecto
+        
+        Returns:
+            dict con image_data, width, height, aspect_ratio
+        """
+        from .storage.gcs import gcs_storage
+        import requests
+        import time
+        
+        client = self._get_higgsfield_client()
+        
+        # Para modelos text-to-image, usar generate_video sin image_url
+        # (Higgsfield usa el mismo endpoint para imágenes y videos)
+        logger.info(f"Generando imagen con Higgsfield: {model_id}")
+        
+        # Generar usando el método generate_video sin image_url (para text-to-image)
+        response = client.generate_video(
+            model_id=model_id,
+            prompt=image.prompt,
+            image_url=None,  # Sin imagen de entrada para text-to-image
+            aspect_ratio=aspect_ratio,
+            resolution=None,
+            duration=None
+        )
+        
+        request_id = response.get('request_id')
+        if not request_id:
+            raise ImageGenerationException("No se recibió request_id de Higgsfield")
+        
+        # Guardar request_id en external_id para poder consultar el estado
+        image.external_id = request_id
+        image.save(update_fields=['external_id'])
+        
+        # Consultar estado hasta que esté completo
+        max_attempts = 60  # 5 minutos máximo (5 segundos por intento)
+        attempt = 0
+        
+        while attempt < max_attempts:
+            time.sleep(5)  # Esperar 5 segundos entre consultas
+            attempt += 1
+            
+            status_data = client.get_request_status(request_id)
+            status = status_data.get('status')
+            
+            logger.info(f"Estado de imagen Higgsfield (intento {attempt}/{max_attempts}): {status}")
+            
+            if status == 'completed':
+                # Obtener URL de la imagen generada
+                image_url = None
+                if 'images' in status_data.get('raw_response', {}) and status_data['raw_response']['images']:
+                    image_url = status_data['raw_response']['images'][0].get('url')
+                
+                if not image_url:
+                    raise ImageGenerationException("No se encontró URL de imagen en la respuesta de Higgsfield")
+                
+                # Descargar imagen desde la URL
+                img_response = requests.get(image_url, timeout=30)
+                img_response.raise_for_status()
+                image_data = img_response.content
+                
+                # Determinar dimensiones (asumir según aspect_ratio)
+                width, height = self._get_dimensions_from_aspect_ratio(aspect_ratio)
+                
+                return {
+                    'image_data': image_data,
+                    'width': width,
+                    'height': height,
+                    'aspect_ratio': aspect_ratio,
+                }
+            
+            elif status in ['failed', 'error', 'cancelled']:
+                error_msg = status_data.get('raw_response', {}).get('error', 'Error desconocido')
+                raise ImageGenerationException(f"Error al generar imagen con Higgsfield: {error_msg}")
+        
+        raise ImageGenerationException("Timeout esperando respuesta de Higgsfield")
+    
+    def _get_dimensions_from_aspect_ratio(self, aspect_ratio: str) -> tuple:
+        """Obtiene dimensiones aproximadas según aspect_ratio"""
+        ratios = {
+            '1:1': (1024, 1024),
+            '16:9': (1344, 768),
+            '9:16': (768, 1344),
+            '4:3': (1184, 864),
+            '3:4': (864, 1184),
+        }
+        return ratios.get(aspect_ratio, (1024, 1024))
     
     def _download_image_from_gcs(self, gcs_path: str) -> bytes:
         """Descarga imagen desde GCS y retorna bytes"""
@@ -2431,6 +2884,10 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 external_id = self._generate_sora_scene_video(scene)
             elif scene.ai_service == 'vuela_ai':
                 external_id = self._generate_vuela_ai_scene_video(scene)
+            elif scene.ai_service in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+                external_id = self._generate_higgsfield_scene_video(scene)
+            elif scene.ai_service.startswith('kling_'):
+                external_id = self._generate_kling_scene_video(scene)
             else:
                 raise ValidationException(f"Servicio de IA no soportado: {scene.ai_service}")
             
@@ -2672,6 +3129,140 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             raise ValidationException('Vuela.ai no devolvió video_id')
         
         return video_id
+    
+    def _generate_higgsfield_scene_video(self, scene):
+        """Genera video de escena con Higgsfield"""
+        from .ai_services.higgsfield import HiggsfieldClient
+        
+        if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
+            raise ValidationException('HIGGSFIELD_API_KEY_ID y HIGGSFIELD_API_KEY deben estar configuradas')
+        
+        client = HiggsfieldClient(
+            api_key_id=settings.HIGGSFIELD_API_KEY_ID,
+            api_key_secret=settings.HIGGSFIELD_API_KEY
+        )
+        
+        # Mapear ai_service a model_id
+        model_map = {
+            'higgsfield_dop_standard': 'higgsfield-ai/dop/standard',
+            'higgsfield_dop_preview': 'higgsfield-ai/dop/preview',
+            'higgsfield_seedance_v1_pro': 'bytedance/seedance/v1/pro/image-to-video',
+            'higgsfield_kling_v2_1_pro': 'kling-video/v2.1/pro/image-to-video',
+        }
+        
+        model_id = model_map.get(scene.ai_service)
+        if not model_id:
+            raise ValidationException(f'Servicio de IA Higgsfield no válido: {scene.ai_service}')
+        
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        
+        # Obtener configuración
+        config = scene.ai_config
+        
+        # Obtener URL de imagen (requerido para image-to-video)
+        image_url = None
+        if scene.preview_image_gcs_path:
+            # Obtener URL firmada de GCS
+            image_url = gcs_storage.get_signed_url(scene.preview_image_gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de preview desde GCS: {scene.preview_image_gcs_path}")
+        elif config.get('image_url'):
+            image_url = config['image_url']
+        
+        if not image_url:
+            raise ValidationException(f'El modelo {model_id} requiere una imagen de entrada (preview_image_gcs_path o image_url en ai_config)')
+        
+        # Preparar parámetros opcionales (solo si están en config)
+        kwargs = {}
+        if 'aspect_ratio' in config:
+            kwargs['aspect_ratio'] = config['aspect_ratio']
+        if 'resolution' in config:
+            kwargs['resolution'] = config['resolution']
+        if 'duration' in config:
+            kwargs['duration'] = config['duration']
+        elif scene.duration_sec:
+            kwargs['duration'] = scene.duration_sec
+        
+        # Generar video
+        response = client.generate_video(
+            model_id=model_id,
+            prompt=prompt,
+            image_url=image_url,
+            **kwargs
+        )
+        
+        return response.get('request_id')
+    
+    def _generate_kling_scene_video(self, scene):
+        """Genera video de escena con Kling"""
+        from .ai_services.kling import KlingClient
+        
+        if not settings.KLING_ACCESS_KEY or not settings.KLING_SECRET_KEY:
+            raise ValidationException('KLING_ACCESS_KEY y KLING_SECRET_KEY deben estar configuradas')
+        
+        client = KlingClient(
+            access_key=settings.KLING_ACCESS_KEY,
+            secret_key=settings.KLING_SECRET_KEY
+        )
+        
+        # Mapear ai_service a model_name
+        model_map = {
+            'kling_v1': 'kling-v1',
+            'kling_v1_5': 'kling-v1-5',
+            'kling_v1_6': 'kling-v1-6',
+            'kling_v2_master': 'kling-v2-master',
+            'kling_v2_1': 'kling-v2-1',
+            'kling_v2_5_turbo': 'kling-v2-5-turbo',
+        }
+        
+        model_name = model_map.get(scene.ai_service)
+        if not model_name:
+            raise ValidationException(f'Servicio de IA Kling no válido: {scene.ai_service}')
+        
+        # Usar visual_prompt si existe, sino fallback a script_text + broll
+        if scene.visual_prompt:
+            prompt = scene.visual_prompt
+        else:
+            prompt = scene.script_text
+            if scene.broll:
+                prompt += f"\n\nVisual elements: {', '.join(scene.broll[:3])}"
+        
+        # Obtener configuración
+        config = scene.ai_config
+        mode = config.get('mode', 'std')  # 'std' o 'pro'
+        duration = int(config.get('duration', scene.duration_sec or 5))
+        aspect_ratio = config.get('aspect_ratio', '16:9')
+        
+        # Validar duración (Kling solo soporta 5 o 10 segundos)
+        if duration not in [5, 10]:
+            logger.warning(f"Duración {duration}s ajustada a 5s (Kling solo soporta 5 o 10 segundos)")
+            duration = 5
+        
+        # Obtener URL de imagen si existe (para image-to-video)
+        image_url = None
+        if scene.preview_image_gcs_path:
+            # Obtener URL firmada de GCS
+            image_url = gcs_storage.get_signed_url(scene.preview_image_gcs_path, expiration=3600)
+            logger.info(f"Usando imagen de preview desde GCS: {scene.preview_image_gcs_path}")
+        elif config.get('image_url'):
+            image_url = config['image_url']
+        
+        # Generar video
+        response = client.generate_video(
+            model_name=model_name,
+            prompt=prompt,
+            image_url=image_url,
+            mode=mode,
+            duration=duration,
+            aspect_ratio=aspect_ratio
+        )
+        
+        return response.get('task_id')
     
     def check_scene_video_status(self, scene) -> Dict:
         """

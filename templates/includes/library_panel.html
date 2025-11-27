@@ -1,0 +1,887 @@
+{% load static %}
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('libraryPanel', () => ({
+        // Estado de la biblioteca
+        items: [],
+        loading: true,
+        activeTab: '{{ active_tab|default:"video" }}',
+        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        
+        // Item inicial (si venimos de una URL directa como /images/20/)
+        initialItemType: '{{ initial_item_type|default:"" }}',
+        initialItemId: {{ initial_item_id|default:"null" }},
+        
+        // Estado del detalle
+        selectedItem: null,
+        loadingDetail: false,
+        navigation: null,
+        
+        // Modal de eliminar
+        deleteModal: { open: false, item: null },
+        
+        // Modal de mover
+        moveModal: { open: false, item: null },
+        projects: [{% for p in projects %}{ id: {{ p.id }}, name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
+        
+        init() {
+            this.loadItems();
+            
+            // Si hay un item inicial, abrirlo directamente
+            if (this.initialItemId && this.initialItemType) {
+                this.openItem({ type: this.initialItemType, id: this.initialItemId });
+            }
+            
+            // Guardar referencias a handlers para poder removerlos después
+            this._handlers = {
+                libraryTabChanged: (e) => {
+                    // Limpiar polling de items anteriores antes de cambiar de tab
+                    this._cleanupAllPolling();
+                    this.activeTab = e.detail.tab;
+                    this.selectedItem = null;
+                    this.loadItems();
+                },
+                itemCreated: () => {
+                    this.loadItems();
+                },
+                videoStatusChanged: (e) => {
+                    if (this.activeTab === 'video') {
+                        // Pequeño delay para asegurar que el estado se guardó en BD
+                        setTimeout(() => {
+                            this.loadItems();
+                        }, 500);
+                    }
+                },
+                popstate: () => {
+                    this.selectedItem = null;
+                }
+            };
+            
+            // Agregar listeners
+            window.addEventListener('library-tab-changed', this._handlers.libraryTabChanged);
+            window.addEventListener('item-created', this._handlers.itemCreated);
+            window.addEventListener('video-status-changed', this._handlers.videoStatusChanged);
+            window.addEventListener('popstate', this._handlers.popstate);
+        },
+        
+        _cleanupAllPolling() {
+            // Limpiar todos los polling intervals de los items
+            this.items.forEach(item => {
+                // Buscar el componente Alpine del item y limpiar su polling
+                // Nota: Esto requiere que cada item tenga acceso a su pollingInterval
+                // Se maneja en el componente x-data de cada item card
+            });
+        },
+        
+        destroy() {
+            // Remover listeners
+            if (this._handlers) {
+                window.removeEventListener('library-tab-changed', this._handlers.libraryTabChanged);
+                window.removeEventListener('item-created', this._handlers.itemCreated);
+                window.removeEventListener('video-status-changed', this._handlers.videoStatusChanged);
+                window.removeEventListener('popstate', this._handlers.popstate);
+            }
+            
+            // Limpiar polling
+            this._cleanupAllPolling();
+        },
+        
+        async loadItems() {
+            this.loading = true;
+            try {
+                const params = new URLSearchParams({ type: this.activeTab });
+                if (this.projectId) {
+                    params.append('project_id', this.projectId);
+                }
+                const response = await fetch('/api/library/items/?' + params);
+                const data = await response.json();
+                if (data.items && Array.isArray(data.items)) {
+                    this.items = data.items.filter(item => item && item.id);
+                } else {
+                    this.items = [];
+                }
+                // Emitir evento cuando cambien los items
+                window.dispatchEvent(new CustomEvent('library-items-updated', {
+                    detail: { items: this.items, activeTab: this.activeTab }
+                }));
+            } catch (error) {
+                console.error('Error loading items:', error);
+                this.items = [];
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        async openItem(item) {
+            if (!item || !item.id) return;
+            
+            this.loadingDetail = true;
+            this.selectedItem = null;
+            
+            try {
+                // Pasar project_id a la API para filtrar navegación correctamente
+                let apiUrl = '/api/items/' + item.type + '/' + item.id + '/';
+                if (this.projectId) {
+                    apiUrl += '?project_id=' + this.projectId;
+                }
+                
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('HTTP error');
+                const data = await response.json();
+                
+                if (data.item) {
+                    this.selectedItem = data.item;
+                    this.navigation = data.navigation || null;
+                    // Actualizar URL manteniendo contexto del proyecto
+                    const detailUrl = this.projectId 
+                        ? '/projects/' + this.projectId + '/' + item.type + 's/' + item.id + '/'
+                        : '/' + item.type + 's/' + item.id + '/';
+                    history.pushState({ itemId: item.id }, '', detailUrl);
+                    // Actualizar breadcrumbs
+                    this.updateBreadcrumbs(data.item);
+                }
+            } catch (error) {
+                console.error('Error loading item:', error);
+            } finally {
+                this.loadingDetail = false;
+            }
+        },
+        
+        updateBreadcrumbs(item) {
+            // Buscar el contenedor de breadcrumbs
+            const breadcrumbsNav = document.querySelector('#breadcrumbs-nav');
+            const breadcrumbsContainer = document.querySelector('#breadcrumbs-list');
+            if (!breadcrumbsContainer) return;
+            
+            // Mostrar el nav si estaba oculto
+            if (breadcrumbsNav) {
+                breadcrumbsNav.classList.remove('hidden');
+            }
+            
+            // Determinar el tipo para el label
+            const typeLabels = { 'video': 'Videos', 'image': 'Imágenes', 'audio': 'Audios' };
+            const typeLabel = typeLabels[item.type] || item.type;
+            
+            // Construir los breadcrumbs (empezando con home)
+            let html = `
+                <li class="flex-shrink-0">
+                    <a href="/" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                        </svg>
+                    </a>
+                </li>
+            `;
+            
+            // Si hay proyecto
+            if (this.projectId && item.project && item.project.name) {
+                html += `
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <a href="/projects/${this.projectId}/" class="text-gray-500 hover:text-gray-700 text-sm">${this.escapeHtml(item.project.name)}</a>
+                    </li>
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <a href="/projects/${this.projectId}/${item.type}s/" class="text-gray-500 hover:text-gray-700 text-sm">${typeLabel}</a>
+                    </li>
+                `;
+            } else {
+                html += `
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <a href="/${item.type}s/" class="text-gray-500 hover:text-gray-700 text-sm">${typeLabel}</a>
+                    </li>
+                `;
+            }
+            
+            // Título del item (truncado y escapado)
+            const title = (item.title || 'Sin título').substring(0, 40) + ((item.title || '').length > 40 ? '...' : '');
+            html += `
+                <li class="flex items-center gap-2 flex-shrink-0">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                    <span class="text-gray-900 font-medium">${this.escapeHtml(title)}</span>
+                </li>
+            `;
+            
+            breadcrumbsContainer.innerHTML = html;
+        },
+        
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+        
+        closeDetail() {
+            // Limpiar polling antes de cerrar
+            this._cleanupAllPolling();
+            
+            this.selectedItem = null;
+            this.navigation = null;
+            // Restaurar breadcrumbs originales
+            this.restoreBreadcrumbs();
+            // Si venimos de una URL directa, ir a la biblioteca
+            if (this.initialItemId) {
+                const baseUrl = this.projectId 
+                    ? '/projects/' + this.projectId + '/' + this.activeTab + 's/'
+                    : '/' + this.activeTab + 's/';
+                window.location.href = baseUrl;
+            } else {
+                history.back();
+            }
+        },
+        
+        restoreBreadcrumbs() {
+            const breadcrumbsContainer = document.querySelector('#breadcrumbs-list');
+            if (!breadcrumbsContainer) return;
+            
+            const typeLabels = { 'video': 'Videos', 'image': 'Imágenes', 'audio': 'Audios' };
+            const typeLabel = typeLabels[this.activeTab] || this.activeTab;
+            
+            let html = `
+                <li class="flex-shrink-0">
+                    <a href="/" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                        </svg>
+                    </a>
+                </li>
+            `;
+            
+            if (this.projectId) {
+                // Buscar el nombre del proyecto en la lista de proyectos
+                const project = this.projects.find(p => p.id === this.projectId);
+                const projectName = project ? project.name : 'Proyecto';
+                
+                html += `
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <a href="/projects/${this.projectId}/" class="text-gray-500 hover:text-gray-700 text-sm">${this.escapeHtml(projectName)}</a>
+                    </li>
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <span class="text-gray-900 font-medium">${typeLabel}</span>
+                    </li>
+                `;
+            } else {
+                html += `
+                    <li class="flex items-center gap-2 flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                        <span class="text-gray-900 font-medium">${typeLabel}</span>
+                    </li>
+                `;
+            }
+            
+            breadcrumbsContainer.innerHTML = html;
+        },
+        
+        async navigateTo(direction) {
+            if (!this.navigation || !this.navigation[direction]) return;
+            const nav = this.navigation[direction];
+            await this.openItem({ type: this.selectedItem.type, id: nav.id });
+        },
+        
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = now - date;
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            if (days === 0) return 'hoy';
+            if (days === 1) return 'ayer';
+            if (days < 7) return 'hace ' + days + ' días';
+            return date.toLocaleDateString('es-ES');
+        },
+        
+        // Acciones del menú
+        openDeleteModal(item, e) {
+            e.stopPropagation();
+            this.deleteModal = { open: true, item: item };
+        },
+        
+        async deleteItem() {
+            if (!this.deleteModal.item) return;
+            const item = this.deleteModal.item;
+            try {
+                const token = document.querySelector('[name=csrfmiddlewaretoken]');
+                const response = await fetch(item.delete_url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': token ? token.value : ''
+                    }
+                });
+                if (response.ok) {
+                    this.deleteModal = { open: false, item: null };
+                    this.loadItems();
+                }
+            } catch (error) {
+                console.error('Error deleting item:', error);
+            }
+        },
+        
+        downloadItem(item, e) {
+            e.stopPropagation();
+            if (item.signed_url) {
+                const a = document.createElement('a');
+                a.href = item.signed_url;
+                a.download = item.title || 'download';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        },
+        
+        openMoveModal(item, e) {
+            e.stopPropagation();
+            this.moveModal = { open: true, item: item };
+        },
+        
+        async moveItem(projectId) {
+            if (!this.moveModal.item) return;
+            const item = this.moveModal.item;
+            try {
+                const token = document.querySelector('[name=csrfmiddlewaretoken]');
+                const response = await fetch('/items/' + item.id + '/move/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': token ? token.value : ''
+                    },
+                    body: JSON.stringify({ project_id: projectId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.moveModal = { open: false, item: null };
+                    this.loadItems();
+                } else {
+                    alert(data.error || 'Error al mover el item');
+                }
+            } catch (error) {
+                console.error('Error moving item:', error);
+                alert('Error al mover el item');
+            }
+        }
+    }));
+});
+</script>
+
+<div x-data="libraryPanel()" class="h-full flex flex-col bg-white">
+    
+    <!-- ========== VISTA: GRID DE ITEMS ========== -->
+    <template x-if="!selectedItem && !loadingDetail">
+        <div class="h-full flex flex-col">
+            <!-- Contenido -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <!-- Loading -->
+                <div x-show="loading" class="text-center py-16">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+                    <p class="mt-4 text-sm text-gray-500">Cargando...</p>
+                </div>
+                
+                <!-- Grid -->
+                <div x-show="!loading && items.length > 0" 
+                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <template x-for="item in items" :key="item.id">
+                        <div x-data="{ 
+                                menuOpen: false, 
+                                videoPlaying: false,
+                                pollingInterval: null,
+                                init() {
+                                    // Iniciar polling si el video está procesando
+                                    if (item.type === 'video' && item.status === 'processing') {
+                                        this.startPolling(item.id);
+                                    }
+                                },
+                                startPolling(videoId) {
+                                    // Limpiar intervalo anterior si existe
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                    }
+                                    // Hacer polling cada 5 segundos
+                                    this.pollingInterval = setInterval(async () => {
+                                        try {
+                                            const response = await fetch(`/videos/${videoId}/status-partial/?template=badge`);
+                                            const html = await response.text();
+                                            // Si el estado cambió, disparar evento para recargar items
+                                            if (html.includes('completed') || html.includes('error')) {
+                                                clearInterval(this.pollingInterval);
+                                                // Disparar evento global para que el componente padre recargue items
+                                                window.dispatchEvent(new CustomEvent('video-status-changed', {
+                                                    detail: { videoId, status: html.includes('completed') ? 'completed' : 'error' }
+                                                }));
+                                            }
+                                        } catch (error) {
+                                            console.error('Error polling video status:', error);
+                                        }
+                                    }, 5000);
+                                },
+                                destroy() {
+                                    // Limpiar polling cuando el componente se destruye
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                        this.pollingInterval = null;
+                                    }
+                                },
+                                
+                                // Método adicional para limpiar manualmente si es necesario
+                                stopPolling() {
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                        this.pollingInterval = null;
+                                    }
+                                }
+                            }"
+                             class="group rounded-lg overflow-hidden hover:shadow-lg transition-all cursor-pointer relative bg-white border border-gray-200">
+                            
+                            <!-- Thumbnail -->
+                            <div class="relative aspect-square bg-gray-100 overflow-hidden"
+                                 @click="if (!videoPlaying) openItem(item)">
+                                
+                                <!-- Video con preview en hover -->
+                                <template x-if="item.type === 'video' && item.signed_url">
+                                    <div class="w-full h-full relative">
+                                        <video :src="item.signed_url" 
+                                               class="w-full h-full object-cover" 
+                                               preload="metadata"
+                                               x-ref="videoEl"
+                                               @mouseenter="if ($refs.videoEl) { $refs.videoEl.play(); videoPlaying = true; }"
+                                               @mouseleave="if ($refs.videoEl) { $refs.videoEl.pause(); $refs.videoEl.currentTime = 0; videoPlaying = false; }"
+                                               muted
+                                               loop></video>
+                                        <!-- Overlay con botón play (solo visible cuando no está reproduciendo) -->
+                                        <div x-show="!videoPlaying" 
+                                             class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                                            <div class="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
+                                                <svg class="w-6 h-6 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M8 5v14l11-7z"></path>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Imagen -->
+                                <img x-show="item.type === 'image' && item.signed_url"
+                                     :src="item.signed_url" 
+                                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                                
+                                <!-- Audio -->
+                                <div x-show="item.type === 'audio'" 
+                                     class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100">
+                                    <svg class="w-16 h-16 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <!-- Procesando -->
+                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
+                                    <div class="text-center">
+                                        <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
+                                        <p class="text-xs text-gray-500">Procesando...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Placeholder -->
+                                <div x-show="!item.signed_url && item.status !== 'processing'" 
+                                     class="w-full h-full flex items-center justify-center bg-gray-100">
+                                    <svg class="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <!-- Menú de 3 puntos -->
+                                <div class="absolute top-2 right-2 z-20">
+                                    <button @click.stop="menuOpen = !menuOpen" 
+                                            class="p-1.5 bg-white/90 rounded-md hover:bg-white transition-all opacity-0 group-hover:opacity-100"
+                                            :class="{ 'opacity-100': menuOpen }">
+                                        <svg class="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+                                        </svg>
+                                    </button>
+                                    
+                                    <!-- Dropdown menú -->
+                                    <div x-show="menuOpen" 
+                                         @click.away="menuOpen = false" 
+                                         x-cloak
+                                         class="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+                                        
+                                        <!-- Descargar -->
+                                        <button @click="downloadItem(item, $event); menuOpen = false" 
+                                                x-show="item.signed_url"
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Descargar
+                                        </button>
+                                        
+                                        <!-- Mover -->
+                                        <button @click="openMoveModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                            </svg>
+                                            Mover
+                                        </button>
+                                        
+                                        <!-- Eliminar -->
+                                        <button @click="openDeleteModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Empty State -->
+                <div x-show="!loading && items.length === 0" class="text-center py-16">
+                    <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Aún no has creado nada</h3>
+                    <p class="text-sm text-gray-500">Comienza usando el panel izquierdo</p>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <!-- ========== LOADING DETAIL ========== -->
+    <div x-show="loadingDetail" class="h-full flex items-center justify-center">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+            <p class="mt-4 text-sm text-gray-500">Cargando...</p>
+        </div>
+    </div>
+    
+    <!-- ========== VISTA: DETALLE DEL ITEM ========== -->
+    <template x-if="selectedItem && !loadingDetail">
+        <div class="h-full flex">
+            <!-- Panel Izquierdo: Media -->
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative">
+                <!-- Botón volver -->
+                <button @click="closeDetail()" 
+                        class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </button>
+                
+                <!-- Navegación -->
+                <button x-show="navigation && navigation.prev"
+                        @click="navigateTo('prev')"
+                        class="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </button>
+                
+                <button x-show="navigation && navigation.next"
+                        @click="navigateTo('next')"
+                        class="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+                
+                <!-- Video -->
+                <video x-show="selectedItem.type === 'video' && selectedItem.signed_url" 
+                       :src="selectedItem.signed_url" 
+                       controls 
+                       class="max-w-full max-h-full rounded-lg shadow-lg"></video>
+                
+                <!-- Imagen -->
+                <img x-show="selectedItem.type === 'image' && selectedItem.signed_url"
+                     :src="selectedItem.signed_url" 
+                     class="max-w-full max-h-full rounded-lg shadow-lg object-contain">
+                
+                <!-- Audio -->
+                <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">
+                    <div class="bg-white rounded-lg p-8 shadow-lg text-center">
+                        <svg class="w-24 h-24 mx-auto text-purple-500 mb-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                        </svg>
+                        <audio x-show="selectedItem.signed_url" :src="selectedItem.signed_url" controls class="w-full"></audio>
+                    </div>
+                </div>
+                
+                <!-- Placeholder -->
+                <div x-show="!selectedItem.signed_url" class="text-center text-gray-400">
+                    <svg class="w-24 h-24 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <p class="text-lg" x-text="selectedItem.status === 'processing' ? 'Procesando...' : 'Vista previa no disponible'"></p>
+                </div>
+            </div>
+            
+            <!-- Panel Derecho: Info -->
+            <div class="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
+                <!-- Header -->
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <span class="text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
+                    <div class="flex items-center gap-1">
+                        <a :href="selectedItem.signed_url" download class="p-2 hover:bg-gray-100 rounded-lg" title="Descargar">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                        </a>
+                        <button @click="closeDetail()" class="p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Content -->
+                <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                    <!-- MODELO -->
+                    <div x-show="selectedItem.model">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">MODELO</h3>
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                            <img x-show="selectedItem.model?.logo" 
+                                 :src="selectedItem.model?.logo" 
+                                 :alt="selectedItem.model?.service || 'Modelo'"
+                                 class="w-8 h-8 object-contain rounded flex-shrink-0"
+                                 onerror="this.style.display='none'">
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-sm text-gray-900" x-text="selectedItem.model?.name || 'Modelo'"></p>
+                                <p class="text-xs text-gray-500" x-text="selectedItem.model?.service || ''"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PROMPT -->
+                    <div>
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROMPT</h3>
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap" x-text="selectedItem.prompt || selectedItem.script || selectedItem.text || 'Sin prompt'"></p>
+                    </div>
+                    
+                    <!-- SETTINGS -->
+                    <div x-show="selectedItem.aspect_ratio || selectedItem.video_type || selectedItem.image_type || selectedItem.duration || selectedItem.resolution || selectedItem.voice_name">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">CONFIGURACIÓN</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <span x-show="selectedItem.video_type || selectedItem.image_type" 
+                                  class="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-700"
+                                  x-text="selectedItem.video_type || selectedItem.image_type"></span>
+                            <span x-show="selectedItem.aspect_ratio" 
+                                  class="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-700"
+                                  x-text="selectedItem.aspect_ratio"></span>
+                            <span x-show="selectedItem.duration" 
+                                  class="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-700"
+                                  x-text="selectedItem.duration + 's'"></span>
+                            <span x-show="selectedItem.resolution" 
+                                  class="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-700"
+                                  x-text="selectedItem.resolution"></span>
+                            <span x-show="selectedItem.voice_name" 
+                                  class="px-3 py-1 bg-purple-100 rounded-full text-xs text-purple-700"
+                                  x-text="'🎤 ' + selectedItem.voice_name"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- DIMENSIONES (para imágenes) -->
+                    <div x-show="selectedItem.width && selectedItem.height">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">DIMENSIONES</h3>
+                        <p class="text-sm text-gray-800" x-text="selectedItem.width + ' × ' + selectedItem.height + ' px'"></p>
+                    </div>
+                    
+                    <!-- PROYECTO -->
+                    <div x-show="selectedItem.project && selectedItem.project.name">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROYECTO</h3>
+                        <p class="text-sm text-gray-800" x-text="selectedItem.project?.name"></p>
+                    </div>
+                    
+                    <!-- FECHA -->
+                    <div>
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">CREADO</h3>
+                        <p class="text-sm text-gray-800" x-text="selectedItem.created_at ? new Date(selectedItem.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''"></p>
+                    </div>
+                    
+                    <!-- ESTADO -->
+                    <div x-show="selectedItem.status !== 'completed'">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">ESTADO</h3>
+                        <span :class="{
+                            'bg-yellow-100 text-yellow-800': selectedItem.status === 'processing',
+                            'bg-red-100 text-red-800': selectedItem.status === 'error',
+                            'bg-gray-100 text-gray-800': selectedItem.status === 'pending'
+                        }" class="px-3 py-1 rounded-full text-xs font-medium" x-text="selectedItem.status_display"></span>
+                        <p x-show="selectedItem.error_message" class="mt-2 text-sm text-red-600" x-text="selectedItem.error_message"></p>
+                    </div>
+                    
+                    <!-- Acciones -->
+                    <div class="space-y-1 pt-2">
+                        <button class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Recrear
+                        </button>
+                        <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                            </svg>
+                            Escalar
+                        </button>
+                        <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Crear video
+                        </button>
+                        <button class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                            </svg>
+                            Variaciones
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div class="p-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + '×' + selectedItem.height + ' px' : ''"></span>
+                    <button x-show="selectedItem.type === 'image'" 
+                            class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                        </svg>
+                        Editar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <!-- ========== MODAL DE ELIMINAR ========== -->
+    <div x-show="deleteModal.open" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         aria-labelledby="modal-title"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="deleteModal = { open: false, item: null }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
+                                Eliminar <span x-text="deleteModal.item?.type === 'video' ? 'Video' : (deleteModal.item?.type === 'image' ? 'Imagen' : 'Audio')"></span>
+                            </h3>
+                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + escapeHtml(deleteModal.item?.title || 'Sin título') + '\"'"></p>
+                            <p class="mt-1 text-xs text-gray-500">
+                                Esta acción no se puede deshacer. El item y sus archivos asociados se eliminarán permanentemente.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="px-6 py-4 bg-white flex gap-3 justify-end">
+                    <button type="button"
+                            @click="deleteModal = { open: false, item: null }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="deleteItem()"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">
+                        Eliminar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== MODAL DE MOVER ========== -->
+    <div x-show="moveModal.open" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="moveModal = { open: false, item: null }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Mover a otro proyecto</h3>
+                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + escapeHtml(moveModal.item?.title || '') + '\"'"></p>
+                </div>
+                
+                <!-- Lista de proyectos -->
+                <div class="max-h-64 overflow-y-auto p-4 space-y-2">
+                    <!-- Sin proyecto -->
+                    <button @click="moveItem(null)" 
+                            class="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between transition-colors">
+                        <span class="text-gray-700">Sin proyecto</span>
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Proyectos -->
+                    <template x-for="project in projects" :key="project.id">
+                        <button @click="moveItem(project.id)" 
+                                class="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between transition-colors">
+                            <span class="text-gray-700" x-text="project.name"></span>
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                    </template>
+                    
+                    <div x-show="projects.length === 0" class="text-center py-4 text-gray-500 text-sm">
+                        No hay otros proyectos disponibles
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                    <button type="button"
+                            @click="moveModal = { open: false, item: null }"
+                            class="w-full px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,302 @@
+{% load static %}
+
+{# Campos dinámicos según capacidades del modelo #}
+
+{# Contenedor para botones de configuración horizontal #}
+{% if supports.duration or supports.aspect_ratio or supports.resolution or supports.audio %}
+<div class="mb-4">
+    <div class="flex flex-nowrap gap-1.5">
+        {# Duración #}
+        {% if supports.duration %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }">
+            <button type="button" @click="open = !open" @click.away="open = false"
+                    class="flex items-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" id="duration-display">
+                    {% if supports.duration.fixed %}
+                        {{ supports.duration.fixed }}s
+                    {% elif supports.duration.options %}
+                        {{ supports.duration.options.0 }}"
+                    {% elif supports.duration.min and supports.duration.max %}
+                        {{ supports.duration.min }}-{{ supports.duration.max }}"
+                    {% endif %}
+                </span>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[200px] py-1">
+                {% if supports.duration.fixed %}
+                    <div class="px-4 py-2 text-sm text-gray-500">
+                        Duración fija: {{ supports.duration.fixed }}s
+                    </div>
+                {% elif supports.duration.options %}
+                    {% for opt in supports.duration.options %}
+                    <button type="button" @click="document.getElementById('duration-input').value = '{{ opt }}'; document.getElementById('duration-display').textContent = '{{ opt }}s'; open = false;"
+                            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center justify-between">
+                        <span>{{ opt }}s</span>
+                        <span class="text-xs text-gray-500">{% if opt <= 6 %}Short{% else %}Long{% endif %}</span>
+                    </button>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {% if supports.duration.fixed %}
+                <input type="hidden" name="duration" value="{{ supports.duration.fixed }}">
+            {% else %}
+                <input type="hidden" name="duration" id="duration-input" value="{% if supports.duration.options %}{{ supports.duration.options.0 }}{% elif supports.duration.min %}{{ supports.duration.min }}{% endif %}">
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# Aspect Ratio #}
+        {% if supports.aspect_ratio %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }">
+            <button type="button" @click="open = !open" @click.away="open = false"
+                    class="flex items-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" id="aspect-display">
+                    {% for ar in supports.aspect_ratio %}
+                        {% if forloop.first %}{{ ar }}{% endif %}
+                    {% endfor %}
+                </span>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[200px] py-1">
+                {% for ar in supports.aspect_ratio %}
+                <button type="button" @click="document.getElementById('aspect-input').value = '{{ ar }}'; document.getElementById('aspect-display').textContent = '{{ ar }}'; open = false;"
+                        class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-3">
+                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {% if ar == "1:1" %}
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                        {% elif ar == "16:9" or ar == "4:3" or ar == "3:2" or ar == "5:4" %}
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                        {% else %}
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                        {% endif %}
+                    </svg>
+                    <span>{{ ar }}{% if ar == "1:1" %} Square{% elif ar == "16:9" %} Widescreen{% elif ar == "4:3" %} Classic{% elif ar == "9:16" %} Social story{% endif %}</span>
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="aspect_ratio" id="aspect-input" value="{% for ar in supports.aspect_ratio %}{% if forloop.first %}{{ ar }}{% endif %}{% endfor %}">
+        </div>
+        {% endif %}
+
+        {# Resolución #}
+        {% if supports.resolution and supports.resolution != False %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }">
+            <button type="button" @click="open = !open" @click.away="open = false"
+                    class="flex items-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" id="resolution-display">
+                    {% for res in supports.resolution %}
+                        {% if forloop.first %}{{ res|upper }}{% endif %}
+                    {% endfor %}
+                </span>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[150px] py-1">
+                {% for res in supports.resolution %}
+                <button type="button" @click="document.getElementById('resolution-input').value = '{{ res }}'; document.getElementById('resolution-display').textContent = '{{ res|upper }}'; open = false;"
+                        class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100">
+                    {{ res|upper }}
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="resolution" id="resolution-input" value="{% for res in supports.resolution %}{% if forloop.first %}{{ res }}{% endif %}{% endfor %}">
+        </div>
+        {% endif %}
+
+        {# Audio #}
+        {% if supports.audio %}
+        <div class="flex-shrink-0" x-data="{ audioOn: false }">
+            <button type="button" @click="audioOn = !audioOn; document.getElementById('audio-input').value = audioOn ? 'true' : '';"
+                    :class="audioOn ? 'bg-gray-100 border-gray-300' : 'bg-gray-50 border-gray-200'"
+                    class="flex items-center gap-1 px-2 py-1.5 border rounded-lg hover:bg-gray-200 transition-colors text-xs whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" x-text="audioOn ? 'ON' : 'OFF'"></span>
+            </button>
+            <input type="hidden" name="generate_audio" id="audio-input" value="">
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{# Imágenes de Referencia - Diseño mejorado con tarjetas #}
+{% if has_references %}
+<div class="mb-4">
+    <label class="block text-xs font-semibold text-gray-700 uppercase mb-3">REFERENCIAS</label>
+    <div class="grid grid-cols-2 gap-2">
+        {% if supports.references.start_image == True or supports.references.start_image %}
+        <label class="relative group cursor-pointer">
+            <input type="file" name="start_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'start-preview')">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="2" width="10" height="10" rx="0.5" fill="none"/>
+                            <rect x="6" y="6" width="10" height="10" rx="0.5" fill="none"/>
+                            <path d="M9.5 7.5l3 2.5-3 2.5V7.5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">Start image</span>
+                    <img id="start-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        {% endif %}
+        
+        {% if supports.references.end_image == True or supports.references.end_image %}
+        <label class="relative group cursor-pointer">
+            <input type="file" name="end_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'end-preview')">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="2" width="10" height="10" rx="0.5" fill="none"/>
+                            <rect x="6" y="6" width="10" height="10" rx="0.5" fill="none"/>
+                            <path d="M9.5 7.5l3 2.5-3 2.5V7.5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">End image</span>
+                    <img id="end-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        {% endif %}
+        
+        {% if supports.references.style_image == True or supports.references.style_image %}
+        <label class="relative group cursor-pointer">
+            <input type="file" name="style_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'style-preview')">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.648 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">Style</span>
+                    <img id="style-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        {% endif %}
+        
+        {% if supports.references.asset_image == True or supports.references.asset_image %}
+        <label class="relative group cursor-pointer">
+            <input type="file" name="asset_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'asset-preview')">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25h2.25A2.25 2.25 0 0121 10.5v8.25a2.25 2.25 0 01-2.25 2.25H16.5m-9-8.25h8.25m0 0V12m0-3.75v3.75m0 0v3.75m0-3.75h8.25"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">Asset</span>
+                    <img id="asset-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{# Negative Prompt - Opcional, solo si el modelo lo permite #}
+{% if supports.negative_prompt %}
+<div class="mb-4">
+    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">PROMPT NEGATIVO <span class="text-gray-400 font-normal">(Opcional)</span></label>
+    <textarea name="negative_prompt" rows="3"
+              placeholder="Elementos a evitar en el video..."
+              class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black resize-none transition-all"></textarea>
+</div>
+{% endif %}
+
+{# Seed #}
+{% if supports.seed %}
+<div class="mb-4">
+    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">SEED</label>
+    <input type="number" name="seed" min="0" max="4294967295"
+           placeholder="Opcional: número para reproducibilidad"
+           class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+</div>
+{% endif %}
+
+{# Modo (para Kling) #}
+{% if supports.modes %}
+<div class="mb-4">
+    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">MODO</label>
+    <select name="mode"
+            class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+        {% for mode in supports.modes %}
+            <option value="{{ mode }}" {% if forloop.first %}selected{% endif %}>{{ mode|upper }}</option>
+        {% endfor %}
+    </select>
+</div>
+{% endif %}
+
+{# Campos específicos del modelo (avatares, voces, etc.) #}
+{% for field in model_specific_fields %}
+    {{ field.html|safe }}
+{% endfor %}
+
+{# Script para preview de imágenes y ajuste automático de duración #}
+<script>
+function updateImagePreview(input, previewId) {
+    const preview = document.getElementById(previewId);
+    const label = input.closest('label');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+            // Ocultar el icono y el texto cuando hay preview
+            const icon = label.querySelector('.absolute.top-2');
+            const text = label.querySelector('span.text-xs');
+            if (icon) icon.style.display = 'none';
+            if (text) text.style.display = 'none';
+        };
+        reader.readAsDataURL(input.files[0]);
+        
+        // IMPORTANTE: Si se selecciona una imagen de referencia (style_image o asset_image),
+        // ajustar automáticamente la duración a 8s (requerido por Veo)
+        const inputName = input.name;
+        if (inputName === 'style_image' || inputName === 'asset_image') {
+            const durationInput = document.getElementById('duration-input');
+            const durationDisplay = document.getElementById('duration-display');
+            if (durationInput && durationDisplay) {
+                durationInput.value = '8';
+                durationDisplay.textContent = '8s';
+                console.log('Duración ajustada automáticamente a 8s por imagen de referencia');
+            }
+        }
+    } else {
+        // Si se elimina la imagen, restaurar preview
+        preview.classList.add('hidden');
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = '';
+        if (text) text.style.display = '';
+    }
+}
+</script>
+
+{# Costo Estimado - se actualiza dentro del botón Generar #}
+{% if estimated_cost > 0 %}
+<script>
+// Actualizar el contenedor de costo estimado dentro del botón cuando se cargan los campos
+(function() {
+    const costContainer = document.getElementById('estimated-cost-container');
+    if (costContainer) {
+        costContainer.innerHTML = '{{ estimated_cost|floatformat:0 }}';
+    }
+})();
+</script>
+{% endif %}

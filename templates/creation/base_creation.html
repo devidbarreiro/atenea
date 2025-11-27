@@ -1,0 +1,87 @@
+{% extends 'base_fullscreen.html' %}
+{% load static %}
+
+{% block title %}{% block creation_title %}{% endblock %}{% endblock %}
+
+{% block body %}
+<div x-data="{ 
+        sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+        sidebarWidth: 256,
+        creationSidebarWidth: 320
+     }"
+     x-init="
+        sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        sidebarWidth = sidebarCollapsed ? 64 : 256;
+        window.addEventListener('sidebar-toggled', (e) => { 
+            sidebarCollapsed = e.detail.collapsed;
+            sidebarWidth = sidebarCollapsed ? 64 : 256;
+        });
+     "
+     class="h-screen w-screen overflow-hidden flex">
+    
+    <!-- Sidebar General (sin sidebar de proyecto en páginas de creación) -->
+    {% include 'includes/sidebar.html' %}
+    
+    <!-- Sidebar de Creación (fijo) -->
+    <aside class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-30 flex flex-col"
+           :style="'left: ' + sidebarWidth + 'px'">
+        <div class="flex-1 overflow-y-auto">
+            {% include 'includes/creation_sidebar.html' %}
+        </div>
+    </aside>
+    
+    <!-- Panel Principal: Breadcrumbs + Biblioteca + Detalle -->
+    <main class="flex-1 h-screen overflow-hidden bg-white flex flex-col"
+          :style="'margin-left: ' + (sidebarWidth + creationSidebarWidth) + 'px'">
+        
+        <!-- Breadcrumbs -->
+        {% if breadcrumbs %}
+        <div class="bg-white border-b border-gray-200 px-6 py-3 flex-shrink-0">
+            <div class="flex items-center justify-between">
+                <nav class="flex items-center text-sm">
+                    <a href="{% url 'core:dashboard' %}" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+                        </svg>
+                    </a>
+                    {% for crumb in breadcrumbs %}
+                    <svg class="w-4 h-4 mx-2 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% if crumb.url %}
+                    <a href="{{ crumb.url }}" class="text-gray-500 hover:text-gray-700">{{ crumb.label }}</a>
+                    {% else %}
+                    <span class="text-gray-900 font-medium">{{ crumb.label }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </nav>
+                <!-- Contador de items -->
+                <div class="text-sm text-gray-500">
+                    {% if items_count %}
+                        {{ items_count }}
+                    {% else %}
+                        0
+                    {% endif %}
+                    {% if active_tab == 'video' %}
+                        videos
+                    {% elif active_tab == 'image' %}
+                        imágenes
+                    {% elif active_tab == 'audio' %}
+                        audios
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Biblioteca + Detalle -->
+        <div class="flex-1 overflow-hidden">
+            {% include 'includes/library_panel.html' %}
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% block creation_extra_js %}{% endblock %}
+{% endblock %}

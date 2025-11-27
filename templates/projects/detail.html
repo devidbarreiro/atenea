@@ -96,30 +96,21 @@
                          x-cloak
                          x-transition
                          class="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2">
-                        <button hx-get="{% url 'core:video_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:video_create' project.id %}"
-                                @click="open = false"
-                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <a href="{% url 'core:project_videos_library' project.id %}"
+                           @click="open = false"
+                           class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎬</span> Video
-                        </button>
-                        <button hx-get="{% url 'core:image_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:image_create' project.id %}"
-                                @click="open = false"
-                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        </a>
+                        <a href="{% url 'core:project_images_library' project.id %}"
+                           @click="open = false"
+                           class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🖼️</span> Imagen
-                        </button>
-                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:audio_create' project.id %}"
-                                @click="open = false"
-                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        </a>
+                        <a href="{% url 'core:project_audios_library' project.id %}"
+                           @click="open = false"
+                           class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎙️</span> Audio
-                        </button>
+                        </a>
                         <a href="{% url 'core:music_create' project.id %}" 
                            class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎵</span> Música
@@ -296,13 +287,10 @@
                                     ☰
                                 </button>
                             </div>
-                            <button hx-get="{% url 'core:video_create_partial' project.id %}"
-                                    hx-target="#project-dynamic-content"
-                                    hx-swap="innerHTML"
-                                    hx-push-url="{% url 'core:video_create' project.id %}"
-                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                            <a href="{% url 'core:project_videos_library' project.id %}"
+                               class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Video
-                            </button>
+                            </a>
                         </div>
                     </div>
                     
@@ -322,13 +310,10 @@
                         <div class="text-5xl mb-4 opacity-30">🎬</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay videos</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer video</p>
-                        <button hx-get="{% url 'core:video_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:video_create' project.id %}"
-                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <a href="{% url 'core:project_videos_library' project.id %}"
+                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Video
-                        </button>
+                        </a>
                     </div>
                     {% endif %}
                 </div>
@@ -351,13 +336,10 @@
                                     ☰
                                 </button>
                             </div>
-                            <button hx-get="{% url 'core:image_create_partial' project.id %}"
-                                    hx-target="#project-dynamic-content"
-                                    hx-swap="innerHTML"
-                                    hx-push-url="{% url 'core:image_create' project.id %}"
-                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                            <a href="{% url 'core:project_images_library' project.id %}"
+                               class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Imagen
-                            </button>
+                            </a>
                         </div>
                     </div>
                     
@@ -377,13 +359,10 @@
                         <div class="text-5xl mb-4 opacity-30">🖼️</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay imágenes</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primera imagen</p>
-                        <button hx-get="{% url 'core:image_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:image_create' project.id %}"
-                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <a href="{% url 'core:project_images_library' project.id %}"
+                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Imagen
-                        </button>
+                        </a>
                     </div>
                     {% endif %}
                 </div>
@@ -393,13 +372,10 @@
                     {% if audios %}
                     <div class="mb-4 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-gray-900">Audios del Proyecto</h2>
-                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:audio_create' project.id %}"
-                                class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                        <a href="{% url 'core:project_audios_library' project.id %}"
+                           class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                             + Audio
-                        </button>
+                        </a>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {% for item in audios_items %}
@@ -411,13 +387,10 @@
                         <div class="text-5xl mb-4 opacity-30">🎙️</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay audios</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer audio</p>
-                        <button hx-get="{% url 'core:audio_create_partial' project.id %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:audio_create' project.id %}"
-                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <a href="{% url 'core:project_audios_library' project.id %}"
+                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Audio
-                        </button>
+                        </a>
                     </div>
                     {% endif %}
                 </div>

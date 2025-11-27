@@ -1,0 +1,11 @@
+# CodeRabbit Configuration
+# Configuración para habilitar revisiones automáticas en ramas dev y main
+
+reviews:
+  # Habilitar revisiones en múltiples ramas base
+  base_branches:
+    - main
+    - dev
+  # Mostrar estado de revisión
+  review_status: true
+

@@ -52,6 +52,86 @@ class CreditService:
         'elevenlabs': {
             'per_character': Decimal('0.017'),  # por carácter
         },
+        # Higgsfield (precios según documentación oficial)
+        'higgsfield_dop_standard': {
+            'video': 44,  # 7 créditos Higgsfield → ~$0.44 → 44 créditos Atenea
+        },
+        'higgsfield_dop_preview': {
+            'video': 19,  # 3 créditos Higgsfield → ~$0.19 → 19 créditos Atenea
+        },
+        'higgsfield_seedance_v1_pro': {
+            'video': 74,  # 400 créditos Higgsfield → ~$0.74 → 74 créditos Atenea
+        },
+        'higgsfield_kling_v2_1_pro': {
+            'video': 45,  # 35 créditos Higgsfield → ~$0.45 → 45 créditos Atenea
+        },
+        # Higgsfield Text-to-Image (precios según documentación)
+        'higgsfield_soul_standard': {
+            'image': 2,  # 0.25 créditos Higgsfield → ~$0.023 → ~2 créditos Atenea
+        },
+        'reve_text_to_image': {
+            'image': 1,  # 1 crédito Reve → ~$0.01 → ~1 crédito Atenea
+        },
+        # Kling (precios según documentación oficial de Kling AI)
+        # Fuente: https://docs.klingai.com (Prepaid Resource Packs - Video Generation)
+        'kling_v1': {
+            # 【Video V1.0】Standard mode, 5-second → Deduct 1 count ($0.14)
+            # 【Video V1.0】Standard mode, 10-second → Deduct 2 counts ($0.28)
+            # 【Video V1.0】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.0】Professional mode, 10-second → Deduct 7 counts ($0.98)
+            'std_5s': 14,   # $0.14
+            'std_10s': 28,  # $0.28
+            'pro_5s': 49,   # $0.49
+            'pro_10s': 98,  # $0.98
+        },
+        'kling_v1_5': {
+            # 【Video V1.5】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V1.5】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V1.5】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.5】Professional mode, 10-second → Deduct 7 counts ($0.98)
+            'std_5s': 28,   # $0.28
+            'std_10s': 56,  # $0.56
+            'pro_5s': 49,   # $0.49
+            'pro_10s': 98,  # $0.98
+        },
+        'kling_v1_6': {
+            # 【Video V1.6】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V1.6】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V1.6】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.6】Professional mode, 10-second → Deduct 7 counts ($0.98)
+            'std_5s': 28,   # $0.28
+            'std_10s': 56,  # $0.56
+            'pro_5s': 49,   # $0.49
+            'pro_10s': 98,  # $0.98
+        },
+        'kling_v2_master': {
+            # 【Video V2.0 Master】5-second → Deduct 10 counts ($1.40)
+            # 【Video V2.0 Master】10-second → Deduct 20 counts ($2.80)
+            '5s': 140,   # $1.40
+            '10s': 280,  # $2.80
+        },
+        'kling_v2_1': {
+            # 【Video V2.1】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V2.1】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V2.1】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V2.1】Professional mode, 10-second → Deduct 7 counts ($0.98)
+            # NOTA: 【Video V2.1 Master】 existe en la documentación pero no está implementado como modelo separado
+            # Si se implementa, usar: 5s = 140 ($1.40), 10s = 280 ($2.80)
+            'std_5s': 28,   # $0.28
+            'std_10s': 56,  # $0.56
+            'pro_5s': 49,   # $0.49
+            'pro_10s': 98,  # $0.98
+        },
+        'kling_v2_5_turbo': {
+            # 【Video V2.5 Turbo】Standard mode, 5-second → Deduct 1.5 units ($0.21)
+            # 【Video V2.5 Turbo】Standard mode, 10-second → Deduct 3 units ($0.42)
+            # 【Video V2.5 Turbo】Professional mode, 5-second → Deduct 2.5 units ($0.35)
+            # 【Video V2.5 Turbo】Professional mode, 10-second → Deduct 5 units ($0.70)
+            'std_5s': 21,   # $0.21
+            'std_10s': 42,  # $0.42
+            'pro_5s': 35,   # $0.35
+            'pro_10s': 70,  # $0.70
+        },
     }
     
     @staticmethod
@@ -223,6 +303,42 @@ class CreditService:
             cost = Decimal(str(duration * price_per_second))
             logger.info(f"Cálculo costo Sora: duración={duration}s, modelo={model}, precio/seg={price_per_second}, costo={cost}")
             return cost
+        elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+            # Higgsfield: precio fijo por video
+            service_key = video.type
+            if service_key not in CreditService.PRICING:
+                logger.error(f"Servicio '{service_key}' no encontrado en PRICING")
+                return Decimal('0')
+            cost = Decimal(str(CreditService.PRICING[service_key]['video']))
+            logger.info(f"Cálculo costo Higgsfield: servicio={service_key}, costo={cost}")
+            return cost
+        elif video.type.startswith('kling_'):
+            # Kling: precio según modelo, modo y duración
+            model_name = video.type  # ej: 'kling_v1', 'kling_v2_master'
+            if model_name not in CreditService.PRICING:
+                logger.error(f"Modelo Kling '{model_name}' no encontrado en PRICING")
+                return Decimal('0')
+            
+            model_pricing = CreditService.PRICING[model_name]
+            mode = video.config.get('mode', 'std')  # 'std' o 'pro'
+            
+            # Para v2-master no hay modo, solo duración
+            if model_name == 'kling_v2_master':
+                duration_key = f"{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Duración {duration}s no válida para {model_name}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                cost = Decimal(str(model_pricing[duration_key]))
+            else:
+                # Para otros modelos: modo + duración
+                duration_key = f"{mode}_{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Combinación '{duration_key}' no válida para {model_name}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                cost = Decimal(str(model_pricing[duration_key]))
+            
+            logger.info(f"Cálculo costo Kling: modelo={model_name}, modo={mode}, duración={duration}s, costo={cost}")
+            return cost
         
         return Decimal('0')
     
@@ -257,6 +373,37 @@ class CreditService:
             quality = scene.ai_config.get('quality_tier', 'premium')
             quality_key = 'premium' if quality == 'premium' else 'basic'
             return Decimal(str(duration * CreditService.PRICING['vuela_ai'][quality_key]))
+        elif scene.ai_service in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+            # Higgsfield: precio fijo por video
+            service_key = scene.ai_service
+            if service_key not in CreditService.PRICING:
+                logger.error(f"Servicio '{service_key}' no encontrado en PRICING")
+                return Decimal('0')
+            return Decimal(str(CreditService.PRICING[service_key]['video']))
+        elif scene.ai_service.startswith('kling_'):
+            # Kling: precio según modelo, modo y duración
+            model_name = scene.ai_service
+            if model_name not in CreditService.PRICING:
+                logger.error(f"Modelo Kling '{model_name}' no encontrado en PRICING")
+                return Decimal('0')
+            
+            model_pricing = CreditService.PRICING[model_name]
+            mode = scene.ai_config.get('mode', 'std')
+            
+            # Para v2-master no hay modo, solo duración
+            if model_name == 'kling_v2_master':
+                duration_key = f"{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Duración {duration}s no válida para {model_name}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                return Decimal(str(model_pricing[duration_key]))
+            else:
+                # Para otros modelos: modo + duración
+                duration_key = f"{mode}_{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Combinación '{duration_key}' no válida para {model_name}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                return Decimal(str(model_pricing[duration_key]))
         
         return Decimal('0')
     
@@ -293,6 +440,16 @@ class CreditService:
             'heygen_avatar_iv': 'heygen_avatar_iv',
             'gemini_veo': 'gemini_veo',
             'sora': 'sora',
+            'higgsfield_dop_standard': 'higgsfield_dop_standard',
+            'higgsfield_dop_preview': 'higgsfield_dop_preview',
+            'higgsfield_seedance_v1_pro': 'higgsfield_seedance_v1_pro',
+            'higgsfield_kling_v2_1_pro': 'higgsfield_kling_v2_1_pro',
+            'kling_v1': 'kling_v1',
+            'kling_v1_5': 'kling_v1_5',
+            'kling_v1_6': 'kling_v1_6',
+            'kling_v2_master': 'kling_v2_master',
+            'kling_v2_1': 'kling_v2_1',
+            'kling_v2_5_turbo': 'kling_v2_5_turbo',
         }
         service_name = service_name_map.get(video.type, video.type)
         
@@ -429,9 +586,99 @@ class CreditService:
         logger.info(f"✓ Créditos cobrados y marcados en metadata para escena {scene.scene_id} (ID: {scene.id})")
     
     @staticmethod
-    def estimate_video_cost(video_type, duration, config=None):
-        """Estima costo antes de generar (para mostrar al usuario)"""
+    def _map_model_id_to_video_type(model_id: str) -> str:
+        """
+        Mapea model_id a video_type de forma centralizada
+        
+        Args:
+            model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
+        
+        Returns:
+            video_type o None si no se puede mapear
+        """
+        from core.ai_services.model_config import VIDEO_TYPE_TO_MODEL_ID
+        
+        if not model_id:
+            return None
+        
+        # 1. Buscar en mapeo explícito
+        for vtype, mid in VIDEO_TYPE_TO_MODEL_ID.items():
+            if mid == model_id:
+                return vtype
+        
+        # 2. Fallback basado en strings en model_id
+        model_id_lower = model_id.lower()
+        
+        if 'veo' in model_id_lower:
+            return 'gemini_veo'
+        elif 'sora' in model_id_lower:
+            return 'sora'
+        elif 'heygen-avatar-v2' in model_id_lower or 'heygen_avatar_v2' in model_id_lower:
+            return 'heygen_avatar_v2'
+        elif 'heygen-avatar-iv' in model_id_lower or 'heygen_avatar_iv' in model_id_lower:
+            return 'heygen_avatar_iv'
+        elif 'kling-v' in model_id_lower:
+            # Mapear kling-v1 -> kling_v1, etc.
+            return model_id.replace('-', '_')
+        elif 'higgsfield-ai/dop/standard' in model_id_lower:
+            return 'higgsfield_dop_standard'
+        elif 'higgsfield-ai/dop/preview' in model_id_lower:
+            return 'higgsfield_dop_preview'
+        elif 'seedance' in model_id_lower:
+            return 'higgsfield_seedance_v1_pro'
+        elif 'kling-video/v2.1/pro' in model_id_lower:
+            return 'higgsfield_kling_v2_1_pro'
+        elif 'vuela-ai' in model_id_lower or 'vuela_ai' in model_id_lower:
+            return 'vuela_ai'
+        
+        return None
+    
+    @staticmethod
+    def _validate_pricing_key(service_key: str, price_key: str = None) -> bool:
+        """
+        Valida que una clave de pricing existe
+        
+        Args:
+            service_key: Clave del servicio (ej: 'gemini_veo')
+            price_key: Clave de precio opcional (ej: 'video', 'video_audio')
+        
+        Returns:
+            True si existe, False si no
+        """
+        if service_key not in CreditService.PRICING:
+            logger.error(f"Servicio '{service_key}' no encontrado en PRICING")
+            return False
+        
+        if price_key and price_key not in CreditService.PRICING[service_key]:
+            logger.error(f"Clave de precio '{price_key}' no encontrada en PRICING para {service_key}")
+            return False
+        
+        return True
+    
+    @staticmethod
+    def estimate_video_cost(video_type=None, duration=None, config=None, model_id=None):
+        """
+        Estima costo antes de generar (para mostrar al usuario)
+        
+        Args:
+            video_type: Tipo de video (ej: 'gemini_veo', 'sora') - DEPRECATED, usar model_id
+            duration: Duración en segundos
+            config: Configuración del video
+            model_id: ID del modelo (ej: 'veo-3.1-generate-preview', 'sora-2')
+        """
         duration = duration or 8
+        
+        # Si se proporciona model_id, intentar mapear a video_type
+        if model_id and not video_type:
+            video_type = CreditService._map_model_id_to_video_type(model_id)
+        
+        if not video_type:
+            logger.warning(f"No se pudo determinar video_type para model_id: {model_id}")
+            return Decimal('0')
+        
+        # Validar que el servicio existe en PRICING
+        if not CreditService._validate_pricing_key(video_type):
+            return Decimal('0')
         
         if video_type == 'heygen_avatar_v2':
             return Decimal(str(duration * CreditService.PRICING['heygen_avatar_v2']['video']))
@@ -440,16 +687,54 @@ class CreditService:
         elif video_type == 'gemini_veo':
             has_audio = config and config.get('generate_audio', False)
             price_key = 'video_audio' if has_audio else 'video'
+            if not CreditService._validate_pricing_key('gemini_veo', price_key):
+                price_key = 'video'  # Fallback
             return Decimal(str(duration * CreditService.PRICING['gemini_veo'][price_key]))
         elif video_type == 'sora':
             model = (config and config.get('sora_model')) or 'sora-2'
+            if not CreditService._validate_pricing_key('sora', model):
+                model = 'sora-2'  # Fallback
             return Decimal(str(duration * CreditService.PRICING['sora'][model]))
+        elif video_type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
+            # Higgsfield: precio fijo por video
+            return Decimal(str(CreditService.PRICING[video_type]['video']))
+        elif video_type.startswith('kling_'):
+            # Kling: precio según modelo, modo y duración
+            model_pricing = CreditService.PRICING[video_type]
+            mode = (config and config.get('mode')) or 'std'
+            
+            # Para v2-master no hay modo, solo duración
+            if video_type == 'kling_v2_master':
+                duration_key = f"{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Duración {duration}s no válida para {video_type}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                return Decimal(str(model_pricing[duration_key]))
+            else:
+                # Para otros modelos: modo + duración
+                duration_key = f"{mode}_{duration}s"
+                if duration_key not in model_pricing:
+                    logger.error(f"Combinación '{duration_key}' no válida para {video_type}. Opciones: {list(model_pricing.keys())}")
+                    return Decimal('0')
+                return Decimal(str(model_pricing[duration_key]))
         
         return Decimal('0')
     
     @staticmethod
-    def estimate_image_cost():
-        """Estima costo de una imagen"""
+    def estimate_image_cost(model_id=None):
+        """Estima costo de una imagen según el modelo"""
+        if model_id:
+            # Mapear model_id a clave de pricing
+            model_pricing_map = {
+                'higgsfield-ai/soul/standard': 'higgsfield_soul_standard',
+                'reve/text-to-image': 'reve_text_to_image',
+            }
+            
+            pricing_key = model_pricing_map.get(model_id)
+            if pricing_key and pricing_key in CreditService.PRICING:
+                return Decimal(str(CreditService.PRICING[pricing_key]['image']))
+        
+        # Por defecto, usar Gemini
         return Decimal(str(CreditService.PRICING['gemini_image']['image']))
     
     @staticmethod

@@ -1,0 +1,491 @@
+{% load static %}
+
+<!-- Definir el componente Alpine de forma global -->
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('creationSidebar', () => ({
+        activeTab: '{{ active_tab|default:"video" }}',
+        selectedModel: null,
+        selectedModelData: null,
+        models: {},
+        allModels: {},
+        loading: false,
+        submitting: false,
+        prompt: '',
+        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        
+        init() {
+            this.loadModels(this.activeTab);
+        },
+        
+        async loadModels(type) {
+            this.loading = true;
+            try {
+                const response = await fetch('/api/models/config/?type=' + type + '&grouped=true');
+                const data = await response.json();
+                if (data.models) {
+                    this.models = data.models;
+                    const allResponse = await fetch('/api/models/config/?type=' + type);
+                    const allData = await allResponse.json();
+                    if (allData.models) {
+                        this.allModels = {};
+                        allData.models.forEach(model => {
+                            this.allModels[model.id] = model;
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+                this.models = {};
+                this.allModels = {};
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        onModelChange() {
+            if (this.selectedModel && this.allModels[this.selectedModel]) {
+                this.selectedModelData = this.allModels[this.selectedModel];
+                
+                // Mostrar loader mientras se cargan los campos
+                const container = document.getElementById('dynamic-fields-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-3"></div>
+                            <p class="text-xs text-gray-500">Cargando opciones del modelo...</p>
+                        </div>
+                    `;
+                }
+                
+                // Cargar campos dinámicos vía HTMX
+                if (typeof htmx !== 'undefined') {
+                    htmx.ajax('GET', '/videos/form-fields/?model_id=' + this.selectedModel, {
+                        target: '#dynamic-fields-container',
+                        swap: 'innerHTML'
+                    });
+                }
+            } else {
+                this.selectedModelData = null;
+                // Limpiar campos dinámicos
+                const container = document.getElementById('dynamic-fields-container');
+                if (container) {
+                    container.innerHTML = '<div class="text-center py-4 text-gray-400 text-xs"><p>Selecciona un modelo para ver opciones</p></div>';
+                }
+            }
+        },
+        
+        switchTab(tab) {
+            // Navegar a la URL correspondiente
+            const projectId = this.projectId;
+            let url = '';
+            if (projectId) {
+                url = '/projects/' + projectId + '/' + tab + 's/';
+            } else {
+                url = '/' + tab + 's/';
+            }
+            window.location.href = url;
+        },
+        
+        validateFiles() {
+            // Validar archivos antes de enviar
+            const fileInputs = [
+                document.querySelector('input[name="start_image"]'),
+                document.querySelector('input[name="end_image"]'),
+                document.querySelector('input[name="style_image"]'),
+                document.querySelector('input[name="asset_image"]')
+            ].filter(input => input && input.files && input.files[0]);
+            
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+            
+            for (const fileInput of fileInputs) {
+                const file = fileInput.files[0];
+                if (file.size > maxSize) {
+                    return {
+                        valid: false,
+                        error: `El archivo "${file.name}" es demasiado grande (máx: 10MB)`
+                    };
+                }
+                if (!allowedTypes.includes(file.type)) {
+                    return {
+                        valid: false,
+                        error: `El archivo "${file.name}" tiene un formato no soportado. Use: JPG, PNG o WEBP`
+                    };
+                }
+            }
+            
+            return { valid: true };
+        },
+        
+        showError(message) {
+            // Mostrar error en UI en lugar de alert
+            // Por ahora usar alert pero se puede mejorar con un componente de notificación
+            alert('Error: ' + message);
+        },
+        
+        showSuccess(message) {
+            // Mostrar éxito en UI
+            alert(message);
+        },
+        
+        async submitForm() {
+            if (!this.selectedModel || !this.prompt) {
+                this.showError('Por favor selecciona un modelo y escribe un prompt');
+                return;
+            }
+            
+            // Validar archivos si hay
+            const fileValidation = this.validateFiles();
+            if (!fileValidation.valid) {
+                this.showError(fileValidation.error);
+                return;
+            }
+            
+            // Verificar CSRF token
+            const token = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (!token || !token.value) {
+                console.error('CSRF token no encontrado');
+                this.showError('Error de seguridad. Por favor recarga la página.');
+                return;
+            }
+            
+            this.submitting = true;
+            
+            try {
+                // Recoger todos los valores del formulario dinámico
+                const settings = {};
+                
+                // Duración
+                const durationInput = document.getElementById('duration-input');
+                if (durationInput) {
+                    const duration = durationInput.value;
+                    if (duration) settings.duration = parseInt(duration);
+                }
+                
+                // Aspect Ratio
+                const aspectInput = document.getElementById('aspect-input');
+                if (aspectInput) {
+                    const aspectRatio = aspectInput.value;
+                    if (aspectRatio) settings.aspect_ratio = aspectRatio;
+                }
+                
+                // Resolución
+                const resolutionInput = document.getElementById('resolution-input');
+                if (resolutionInput) {
+                    const resolution = resolutionInput.value;
+                    if (resolution) settings.resolution = resolution;
+                }
+                
+                // Audio
+                const audioInput = document.getElementById('audio-input');
+                if (audioInput) {
+                    const audio = audioInput.value;
+                    if (audio) settings.generate_audio = audio === 'true';
+                }
+                
+                // Negative Prompt
+                const negativePrompt = document.querySelector('textarea[name="negative_prompt"]');
+                if (negativePrompt && negativePrompt.value) {
+                    settings.negative_prompt = negativePrompt.value;
+                }
+                
+                // Seed
+                const seedInput = document.querySelector('input[name="seed"]');
+                if (seedInput && seedInput.value) {
+                    settings.seed = parseInt(seedInput.value);
+                }
+                
+                // Mode (para Kling)
+                const modeInput = document.querySelector('select[name="mode"]');
+                if (modeInput && modeInput.value) {
+                    settings.mode = modeInput.value;
+                }
+                
+                // Campos específicos del modelo (HeyGen) - soportar tanto select como input text
+                const avatarIdSelect = document.querySelector('select[name="avatar_id"]');
+                const avatarIdInput = document.querySelector('input[name="avatar_id"]');
+                const avatarId = avatarIdSelect ? avatarIdSelect.value : (avatarIdInput ? avatarIdInput.value : null);
+                if (avatarId) {
+                    settings.avatar_id = avatarId;
+                }
+                
+                const voiceIdSelect = document.querySelector('select[name="voice_id"]');
+                const voiceIdInput = document.querySelector('input[name="voice_id"]');
+                const voiceId = voiceIdSelect ? voiceIdSelect.value : (voiceIdInput ? voiceIdInput.value : null);
+                if (voiceId) {
+                    settings.voice_id = voiceId;
+                }
+                
+                const avatarImageIdSelect = document.querySelector('select[name="avatar_image_id"]');
+                const avatarImageIdInput = document.querySelector('input[name="avatar_image_id"]');
+                const avatarImageId = avatarImageIdSelect ? avatarImageIdSelect.value : (avatarImageIdInput ? avatarImageIdInput.value : null);
+                if (avatarImageId) {
+                    settings.avatar_image_id = avatarImageId;
+                }
+                
+                // Verificar si hay imágenes de referencia para enviar como FormData
+                const startImage = document.querySelector('input[name="start_image"]');
+                const endImage = document.querySelector('input[name="end_image"]');
+                const styleImage = document.querySelector('input[name="style_image"]');
+                const assetImage = document.querySelector('input[name="asset_image"]');
+                
+                const hasReferenceImages = (startImage && startImage.files && startImage.files[0]) ||
+                                          (endImage && endImage.files && endImage.files[0]) ||
+                                          (styleImage && styleImage.files && styleImage.files[0]) ||
+                                          (assetImage && assetImage.files && assetImage.files[0]);
+                
+                let response;
+                
+                if (hasReferenceImages) {
+                    // Usar FormData para enviar archivos
+                    const formData = new FormData();
+                    formData.append('type', this.activeTab);
+                    formData.append('model_id', this.selectedModel);
+                    formData.append('title', 'New ' + this.activeTab);
+                    formData.append('prompt', this.prompt);
+                    formData.append('script', this.prompt);
+                    formData.append('text', this.prompt);
+                    if (this.projectId) {
+                        formData.append('project_id', this.projectId);
+                    }
+                    formData.append('settings', JSON.stringify(settings));
+                    
+                    // Agregar imágenes de referencia
+                    if (startImage && startImage.files && startImage.files[0]) {
+                        formData.append('start_image', startImage.files[0]);
+                    }
+                    if (endImage && endImage.files && endImage.files[0]) {
+                        formData.append('end_image', endImage.files[0]);
+                    }
+                    if (styleImage && styleImage.files && styleImage.files[0]) {
+                        formData.append('style_image', styleImage.files[0]);
+                    }
+                    if (assetImage && assetImage.files && assetImage.files[0]) {
+                        formData.append('asset_image', assetImage.files[0]);
+                    }
+                    
+                    response = await fetch('/api/items/create/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': token.value
+                        },
+                        body: formData
+                    });
+                } else {
+                    // Usar JSON si no hay imágenes
+                    const requestData = {
+                        type: this.activeTab,
+                        model_id: this.selectedModel,
+                        title: 'New ' + this.activeTab,
+                        prompt: this.prompt,
+                        script: this.prompt,
+                        text: this.prompt,
+                        project_id: this.projectId,
+                        settings: settings
+                    };
+                    
+                    response = await fetch('/api/items/create/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': token.value
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                }
+                
+                // Verificar respuesta HTTP
+                if (!response.ok) {
+                    let errorMessage = `Error ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorData.message || errorMessage;
+                    } catch (e) {
+                        // Si no se puede parsear JSON, usar el texto de respuesta
+                        const text = await response.text();
+                        if (text) {
+                            errorMessage = text.substring(0, 200);
+                        }
+                    }
+                    this.showError(errorMessage);
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.dispatchEvent(new CustomEvent('item-created', { detail: data.item }));
+                    window.dispatchEvent(new CustomEvent('library-tab-changed', { detail: { tab: this.activeTab } }));
+                    this.prompt = '';
+                    this.selectedModel = null;
+                    this.selectedModelData = null;
+                    this.showSuccess('¡Creado exitosamente!');
+                } else {
+                    this.showError(data.error || 'Error desconocido');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                this.showError('Error al crear. Por favor intenta de nuevo. ' + (error.message || ''));
+            } finally {
+                this.submitting = false;
+            }
+        }
+    }));
+});
+</script>
+
+<div x-data="creationSidebar()">
+    
+    <!-- Tabs: Image / Video / Audio -->
+    <div class="border-b border-gray-200 bg-white sticky top-0 z-10 pt-2 pb-3 px-3">
+        <div class="flex items-center justify-center">
+            <div class="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+                <button @click="switchTab('image')"
+                        :class="activeTab === 'image' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                    Image
+                </button>
+                <button @click="switchTab('video')"
+                        :class="activeTab === 'video' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                    Video
+                </button>
+                <button @click="switchTab('audio')"
+                        :class="activeTab === 'audio' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                    Audio
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contenido del Sidebar -->
+    <div class="p-6 space-y-5">
+        
+        <!-- Sección MODEL -->
+        <div>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">MODEL</label>
+            
+            <!-- Dropdown personalizado -->
+            <div x-data="{ dropdownOpen: false, searchQuery: '' }" class="relative">
+                <!-- Botón de selección -->
+                <button type="button"
+                        @click="dropdownOpen = !dropdownOpen"
+                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm text-left flex items-center gap-2 hover:bg-gray-50 transition-colors">
+                    <img x-show="selectedModel && allModels[selectedModel] && allModels[selectedModel].logo" 
+                         :src="selectedModel && allModels[selectedModel] ? allModels[selectedModel].logo : ''" 
+                         :alt="selectedModel && allModels[selectedModel] ? allModels[selectedModel].service : ''"
+                         class="w-5 h-5 rounded flex-shrink-0 object-contain"
+                         onerror="this.style.display='none'">
+                    <div x-show="selectedModel && allModels[selectedModel] && !allModels[selectedModel].logo" class="w-5 h-5 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xs font-semibold text-gray-500" x-text="selectedModel && allModels[selectedModel] ? (allModels[selectedModel].service || allModels[selectedModel].name).charAt(0).toUpperCase() : ''"></span>
+                    </div>
+                    <span class="truncate flex-1" x-text="selectedModel && allModels[selectedModel] ? allModels[selectedModel].name : 'Seleccionar modelo...'"></span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0" 
+                         :class="dropdownOpen ? 'transform rotate-180' : ''"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                
+                <!-- Dropdown -->
+                <div x-show="dropdownOpen"
+                     @click.away="dropdownOpen = false"
+                     x-cloak
+                     class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-[350px] overflow-hidden flex flex-col">
+                    <!-- Búsqueda -->
+                    <div class="p-3 border-b border-gray-200 bg-white">
+                        <input type="text"
+                               x-model="searchQuery"
+                               @click.stop
+                               placeholder="Buscar modelo..."
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                    
+                    <!-- Lista de modelos -->
+                    <div class="overflow-y-auto max-h-[280px]">
+                        <div x-show="loading" class="p-4 text-center text-sm text-gray-500">
+                            Cargando modelos...
+                        </div>
+                        
+                        <template x-for="[serviceName, serviceModels] in Object.entries(models)" :key="serviceName">
+                            <div>
+                                <!-- Service Header -->
+                                <div class="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                                    <span class="text-xs font-semibold text-gray-700 uppercase" x-text="serviceName"></span>
+                                </div>
+                                
+                                <!-- Models -->
+                                <template x-for="model in serviceModels.filter(m => !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase()))" :key="model.id">
+                                    <button @click="selectedModel = model.id; onModelChange(); dropdownOpen = false; searchQuery = '';"
+                                            :class="selectedModel === model.id ? 'bg-gray-100' : 'hover:bg-gray-50'"
+                                            class="w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors border-b border-gray-100">
+                                        <!-- Logo del servicio -->
+                                        <img x-show="model.logo" 
+                                             :src="model.logo" 
+                                             :alt="serviceName"
+                                             class="w-6 h-6 rounded object-contain flex-shrink-0"
+                                             onerror="this.style.display='none'">
+                                        <div x-show="!model.logo" class="w-6 h-6 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                            <span class="text-xs font-bold text-gray-500" x-text="serviceName.charAt(0).toUpperCase()"></span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium text-sm text-gray-900" x-text="model.name"></div>
+                                            <div class="text-xs text-gray-500 truncate" x-text="model.description || ''"></div>
+                                        </div>
+                                        <svg x-show="selectedModel === model.id" class="w-5 h-5 text-black flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <div x-show="!loading && Object.keys(models).length === 0" class="p-4 text-center text-sm text-gray-500">
+                            No hay modelos disponibles
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sección PROMPT -->
+        <div>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">PROMPT</label>
+            <textarea x-model="prompt"
+                      :placeholder="'Describe tu ' + activeTab + '...'"
+                      class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black resize-none transition-all"
+                      rows="6"></textarea>
+        </div>
+        
+        <!-- Sección SETTINGS (cargada dinámicamente vía HTMX) -->
+        <div id="dynamic-fields-container" 
+             x-show="selectedModel"
+             x-transition>
+            <div x-show="!selectedModel" class="text-center py-6 text-gray-400 text-xs">
+                <p>Selecciona un modelo para ver opciones</p>
+            </div>
+        </div>
+        
+        
+        <!-- Botón Generar con Costo Estimado -->
+        <div class="pt-4 border-t border-gray-200">
+            <button @click="submitForm()"
+                    :disabled="!selectedModel || !prompt || submitting"
+                    :class="(!selectedModel || !prompt || submitting) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'"
+                    class="w-full bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                <span x-show="!submitting">Generar</span>
+                <span x-show="submitting">Generando...</span>
+                <svg x-show="!submitting" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <!-- Costo estimado (se carga dinámicamente vía HTMX) -->
+                <span id="estimated-cost-container" x-show="!submitting" class="text-xs opacity-75">
+                    <!-- Se carga vía HTMX junto con los campos dinámicos -->
+                </span>
+            </button>
+        </div>
+        
+    </div>
+</div>

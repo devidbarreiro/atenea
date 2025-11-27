@@ -189,6 +189,12 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
 VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
 ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
+# Higgsfield
+HIGGSFIELD_API_KEY_ID = config('HIGGSFIELD_API_KEY_ID', default='')
+HIGGSFIELD_API_KEY = config('HIGGSFIELD_API_KEY', default='')
+# Kling
+KLING_ACCESS_KEY = config('KLING_ACCESS_KEY', default='')
+KLING_SECRET_KEY = config('KLING_SECRET_KEY', default='')
 
 # Stock Content APIs
 PEXELS_API_KEY = config('PEXELS_API_KEY', default='')
