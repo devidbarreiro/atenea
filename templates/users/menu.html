@@ -426,15 +426,16 @@
 <!-- Administrar Créditos Form -->
 {% if has_credits_access %}
 <div id="user-credits-form" 
+    x-data="creditManager()"
     class="hidden w-full bg-white p-6 rounded-md shadow overflow-y-auto"
-    style="max-height: calc(100vh - 200px);"
-    x-data="userCredits()">
+    style="max-height: calc(100vh - 200px);">
 
   <div>
     <div class="mb-4 flex items-center" x-data="{open: false}">
         <input type="text" 
              placeholder="Buscar usuario..." 
              x-model="search"
+             @input="applySearch()"
              class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
     </div>
 
@@ -498,7 +499,7 @@
             </button>
         </div>
         <p>Contenido detallado del historial de transacciones.</p>
-        </div>
+    </div>
 </div>
 
 <div id="user-credits-asigment" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
@@ -1217,6 +1218,26 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => alert('❌ Error de red: ' + err.message));
     });
 });
+
+function creditManager() {
+    return {
+        search: "",
+
+        applySearch() {
+            const term = this.search.toLowerCase();
+            const rows = document.querySelectorAll('#tabla-usuarios-credits tbody tr');
+
+            rows.forEach(row => {
+                const username = row.querySelector('.username input').value.toLowerCase();
+                const email = row.querySelector('.email input').value.toLowerCase();
+
+                row.style.display = (
+                    username.includes(term) || email.includes(term)
+                ) ? "" : "none";
+            });
+        }
+    }
+}
 
 // MODAL DE AJUSTE DE CRÉDITOS (Para el botón "+/- Créditos")
 window.openCreditAdjustmentModal = function(userId, username) {
