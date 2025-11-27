@@ -150,8 +150,23 @@ jobs:
         ENV_DIR="$HOME/$ENV"
         echo "📂 Cambiando a directorio: $ENV_DIR"
         cd $ENV_DIR
+        echo "🛑 Deteniendo y eliminando contenedores existentes"
+        # Detener y eliminar contenedores, redes y volúmenes huérfanos
+        # Usar --remove-orphans para eliminar contenedores huérfanos
+        docker compose down --remove-orphans || true
+        # Eliminar contenedores que puedan estar detenidos pero aún existan
+        docker compose rm -f || true
+        # Forzar eliminación de contenedores por nombre si aún existen
+        # Los contenedores de docker-compose se nombran como: {project}-{service}-{number}
+        # Buscar y eliminar contenedores que empiecen con el nombre del entorno
+        for container in $(docker ps -a --filter "name=${ENV}-" --format "{{.Names}}" 2>/dev/null || true); do
+          [ ! -z "$container" ] && docker rm -f "$container" || true
+        done
+        # También buscar contenedores con el patrón exacto del error
+        for container in $(docker ps -a --filter "name=^${ENV}" --format "{{.Names}}" 2>/dev/null || true); do
+          [ ! -z "$container" ] && docker rm -f "$container" || true
+        done
         echo "🔨 Construyendo y reiniciando contenedores"
-        docker compose down || true
         docker compose build --no-cache
         docker compose up -d
         echo "⏳ Esperando a que los servicios estén listos..."
