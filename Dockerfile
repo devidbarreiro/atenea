@@ -13,6 +13,13 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     postgresql-client \
     libpq-dev \
+    pkg-config \
+    python3-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libpangocairo-1.0-0 \
+    libgirepository1.0-dev \
+    gir1.2-pango-1.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
