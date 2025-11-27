@@ -1167,9 +1167,7 @@ class VideoService:
             elif video.type in ['higgsfield_dop_standard', 'higgsfield_dop_preview', 'higgsfield_seedance_v1_pro', 'higgsfield_kling_v2_1_pro']:
                 status_data = self._check_higgsfield_status(video)
             elif video.type.startswith('kling_'):
-                # Kling tiene su propio método de verificación si se implementa
-                # Por ahora, usar el estado del modelo
-                status_data = {'status': video.status}
+                status_data = self._check_kling_status(video)
             else:
                 status_data = {'status': video.status}
             
@@ -1427,6 +1425,52 @@ class VideoService:
                 error_msg = 'Content failed moderation checks (NSFW)'
             video.mark_as_error(error_msg)
             logger.error(f"Video Higgsfield {video.id} falló: {error_msg}")
+        
+        return status_data
+    
+    def _check_kling_status(self, video: Video) -> Dict:
+        """Consulta estado en Kling API"""
+        client = self._get_kling_client()
+        status_data = client.get_video_status(video.external_id)
+        
+        api_status = status_data.get('status')
+        
+        # Kling puede usar 'completed' o 'success' como estado de completado
+        if api_status in ['completed', 'success']:
+            video_url = status_data.get('video_url')
+            if video_url:
+                # Determinar ruta GCS según contexto
+                if video.project:
+                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                elif video.created_by:
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                else:
+                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                
+                try:
+                    # Descargar video desde URL y subir a GCS
+                    gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
+                    
+                    # Preparar metadata
+                    metadata = {
+                        'video_url_original': video_url,
+                        'task_id': video.external_id,
+                        'raw_response': status_data.get('raw_response', {}),
+                    }
+                    
+                    video.mark_as_completed(gcs_path=gcs_full_path, metadata=metadata)
+                    logger.info(f"Video Kling {video.id} completado: {gcs_full_path}")
+                except Exception as e:
+                    logger.error(f"Error al descargar/subir video de Kling {video.id}: {e}")
+                    video.mark_as_error(f"Error al procesar video: {str(e)}")
+            else:
+                logger.warning(f"Video Kling {video.id} completado pero sin URL de video")
+                video.mark_as_error("Video completado pero sin URL disponible")
+        
+        elif api_status in ['failed', 'error']:
+            error_msg = status_data.get('error', 'Video generation failed')
+            video.mark_as_error(error_msg)
+            logger.error(f"Video Kling {video.id} falló: {error_msg}")
         
         return status_data
     

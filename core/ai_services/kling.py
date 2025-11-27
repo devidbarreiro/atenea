@@ -54,7 +54,7 @@ KLING_MODELS = {
         'durations': [5, 10],
         'resolutions': {'std': '720p', 'pro': '1080p'},
         'fps': 24,
-        'supports_text_to_video': False,
+        'supports_text_to_video': True,  # Corregido: Kling v2.1 sí soporta text-to-video
         'supports_image_to_video': True,
     },
     'kling-v2-5-turbo': {
@@ -191,16 +191,33 @@ class KlingClient:
         if model_info['modes'] and mode not in model_info['modes']:
             raise ValueError(f"Modo '{mode}' no válido. Opciones: {model_info['modes']}")
         
-        # Validar que haya prompt o image_url según el tipo
-        if not prompt and not image_url:
-            raise ValueError("Se requiere 'prompt' para text-to-video o 'image_url' para image-to-video")
+        # Validar parámetros según capacidades del modelo
+        supports_text_to_video = model_info['supports_text_to_video']
+        supports_image_to_video = model_info['supports_image_to_video']
         
-        if model_info['supports_text_to_video'] and not prompt:
-            raise ValueError(f"El modelo {model_name} requiere 'prompt' para text-to-video")
+        # Si el modelo NO soporta text-to-video, image_url es REQUERIDO
+        if not supports_text_to_video and not image_url:
+            raise ValueError(
+                f"El modelo {model_name} solo soporta image-to-video. "
+                f"Se requiere 'image_url' para generar el video."
+            )
         
-        if model_info['supports_image_to_video'] and image_url and not prompt:
-            # Para image-to-video, el prompt describe el movimiento
-            raise ValueError("Se requiere 'prompt' para describir el movimiento deseado")
+        # Si el modelo NO soporta image-to-video, prompt es REQUERIDO
+        if not supports_image_to_video and not prompt:
+            raise ValueError(
+                f"El modelo {model_name} solo soporta text-to-video. "
+                f"Se requiere 'prompt' para generar el video."
+            )
+        
+        # Si el modelo soporta text-to-video y se intenta usar sin prompt
+        if supports_text_to_video and not image_url and not prompt:
+            raise ValueError("Se requiere 'prompt' para text-to-video")
+        
+        # Si se usa image-to-video, el prompt es requerido para describir el movimiento
+        if image_url and not prompt:
+            raise ValueError(
+                "Se requiere 'prompt' para describir el movimiento deseado cuando se usa image-to-video"
+            )
         
         logger.info(f"🎬 Generando video con Kling")
         logger.info(f"   Modelo: {model_name} - {model_info['name']}")

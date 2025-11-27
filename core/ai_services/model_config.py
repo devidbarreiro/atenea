@@ -517,10 +517,10 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     'kling-v2-1': {
         'service': 'kling',
         'name': 'Kling V2.1',
-        'description': 'Versión 2.1 mejorada',
+        'description': 'Versión 2.1 mejorada con soporte para text-to-video e image-to-video',
         'type': 'video',
         'supports': {
-            'text_to_video': False,
+            'text_to_video': True,  # Corregido: Kling v2.1 sí soporta text-to-video
             'image_to_video': True,
             'duration': {'min': 5, 'max': 10, 'options': [5, 10]},
             'aspect_ratio': ['16:9', '9:16'],

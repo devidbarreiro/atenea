@@ -72,36 +72,61 @@ class CreditService:
         'reve_text_to_image': {
             'image': 1,  # 1 crédito Reve → ~$0.01 → ~1 crédito Atenea
         },
-        # Kling (precios según tabla proporcionada)
+        # Kling (precios según documentación oficial de Kling AI)
+        # Fuente: https://docs.klingai.com (Prepaid Resource Packs - Video Generation)
         'kling_v1': {
+            # 【Video V1.0】Standard mode, 5-second → Deduct 1 count ($0.14)
+            # 【Video V1.0】Standard mode, 10-second → Deduct 2 counts ($0.28)
+            # 【Video V1.0】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.0】Professional mode, 10-second → Deduct 7 counts ($0.98)
             'std_5s': 14,   # $0.14
             'std_10s': 28,  # $0.28
             'pro_5s': 49,   # $0.49
             'pro_10s': 98,  # $0.98
         },
         'kling_v1_5': {
+            # 【Video V1.5】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V1.5】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V1.5】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.5】Professional mode, 10-second → Deduct 7 counts ($0.98)
             'std_5s': 28,   # $0.28
             'std_10s': 56,  # $0.56
             'pro_5s': 49,   # $0.49
             'pro_10s': 98,  # $0.98
         },
         'kling_v1_6': {
+            # 【Video V1.6】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V1.6】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V1.6】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V1.6】Professional mode, 10-second → Deduct 7 counts ($0.98)
             'std_5s': 28,   # $0.28
             'std_10s': 56,  # $0.56
             'pro_5s': 49,   # $0.49
             'pro_10s': 98,  # $0.98
         },
         'kling_v2_master': {
+            # 【Video V2.0 Master】5-second → Deduct 10 counts ($1.40)
+            # 【Video V2.0 Master】10-second → Deduct 20 counts ($2.80)
             '5s': 140,   # $1.40
             '10s': 280,  # $2.80
         },
         'kling_v2_1': {
+            # 【Video V2.1】Standard mode, 5-second → Deduct 2 counts ($0.28)
+            # 【Video V2.1】Standard mode, 10-second → Deduct 4 counts ($0.56)
+            # 【Video V2.1】Professional mode, 5-second → Deduct 3.5 counts ($0.49)
+            # 【Video V2.1】Professional mode, 10-second → Deduct 7 counts ($0.98)
+            # NOTA: 【Video V2.1 Master】 existe en la documentación pero no está implementado como modelo separado
+            # Si se implementa, usar: 5s = 140 ($1.40), 10s = 280 ($2.80)
             'std_5s': 28,   # $0.28
             'std_10s': 56,  # $0.56
             'pro_5s': 49,   # $0.49
             'pro_10s': 98,  # $0.98
         },
         'kling_v2_5_turbo': {
+            # 【Video V2.5 Turbo】Standard mode, 5-second → Deduct 1.5 units ($0.21)
+            # 【Video V2.5 Turbo】Standard mode, 10-second → Deduct 3 units ($0.42)
+            # 【Video V2.5 Turbo】Professional mode, 5-second → Deduct 2.5 units ($0.35)
+            # 【Video V2.5 Turbo】Professional mode, 10-second → Deduct 5 units ($0.70)
             'std_5s': 21,   # $0.21
             'std_10s': 42,  # $0.42
             'pro_5s': 35,   # $0.35
