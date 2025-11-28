@@ -1142,6 +1142,7 @@ class VideoService:
         font_family = video.config.get('font_family')  # Tipo de fuente
         
         # Generar video localmente
+        # Usar video.id como unique_id para evitar colisiones entre renders simultáneos
         result = client.generate_quote_video(
             quote=quote,
             author=author,
@@ -1149,7 +1150,8 @@ class VideoService:
             quality=quality,
             container_color=container_color,
             text_color=text_color,
-            font_family=font_family
+            font_family=font_family,
+            unique_id=str(video.id)  # ID único por video para evitar colisiones
         )
         
         video_path = result['video_path']

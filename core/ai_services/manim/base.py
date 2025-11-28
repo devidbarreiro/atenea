@@ -27,7 +27,21 @@ class BaseManimAnimation(Scene, ABC):
     Todas las animaciones deben heredar de esta clase e implementar:
     - construct(): Método principal que define la animación
     - get_animation_type(): Retorna el tipo de animación (ej: 'quote', 'bar_chart')
+    
+    Los parámetros se pasan al constructor para evitar problemas de concurrencia
+    con variables de entorno compartidas.
     """
+    
+    def __init__(self, config: dict = None, **kwargs):
+        """
+        Inicializa la animación con configuración
+        
+        Args:
+            config: Dict con la configuración de la animación
+            **kwargs: Argumentos adicionales para Scene
+        """
+        super().__init__(**kwargs)
+        self._config = config or {}
     
     def _fix_encoding(self, text):
         """Repara caracteres mal codificados comunes"""
@@ -52,22 +66,46 @@ class BaseManimAnimation(Scene, ABC):
         
         return result
     
-    def _get_env_var(self, key: str, default=None, decode_base64: bool = False):
+    def _get_config_value(self, key: str, default=None):
         """
-        Obtiene una variable de entorno, opcionalmente decodificando desde base64
+        Obtiene un valor de configuración desde self._config
         
         Args:
-            key: Nombre de la variable de entorno
+            key: Clave de configuración
             default: Valor por defecto si no existe
-            decode_base64: Si True, intenta decodificar desde base64
         
         Returns:
-            Valor de la variable de entorno o default
+            Valor de configuración o default
         """
-        value = os.environ.get(key, default)
+        return self._config.get(key, default)
+    
+    def _get_config(self) -> dict:
+        """
+        Obtiene toda la configuración de la animación
+        
+        Returns:
+            Dict con la configuración
+        """
+        return self._config.copy()
+    
+    # Métodos legacy para compatibilidad (deprecated)
+    def _get_env_var(self, key: str, default=None, decode_base64: bool = False):
+        """
+        DEPRECATED: Usa _get_config_value() en su lugar.
+        
+        Mantenido para compatibilidad temporal. Lee desde self._config
+        en lugar de variables de entorno para evitar problemas de concurrencia.
+        """
+        # Mapear nombres de variables de entorno a claves de config
+        config_key = key.replace('QUOTE_ANIMATION_', '').lower()
+        
+        # Si no está en config, intentar desde env (fallback legacy)
+        value = self._config.get(config_key, os.environ.get(key, default))
         
         if decode_base64 and value and value != "None":
-            is_encoded = os.environ.get(f'{key}_ENCODED', '0') == '1'
+            # Verificar si está codificado
+            encoded_key = f'{key}_ENCODED'
+            is_encoded = self._config.get(f'{config_key}_encoded', False) or os.environ.get(encoded_key, '0') == '1'
             if is_encoded:
                 try:
                     value = base64.b64decode(value.encode('ascii')).decode('utf-8')
@@ -78,26 +116,6 @@ class BaseManimAnimation(Scene, ABC):
             return None
         
         return value
-    
-    def _get_config(self) -> dict:
-        """
-        Obtiene la configuración de la animación desde variables de entorno
-        
-        Returns:
-            Dict con la configuración
-        """
-        animation_type = self.get_animation_type()
-        prefix = f'{animation_type.upper()}_ANIMATION'
-        
-        config = {}
-        
-        # Leer todas las variables de entorno con el prefijo
-        for key, value in os.environ.items():
-            if key.startswith(prefix):
-                config_key = key.replace(f'{prefix}_', '').lower()
-                config[config_key] = value
-        
-        return config
     
     @abstractmethod
     def construct(self):

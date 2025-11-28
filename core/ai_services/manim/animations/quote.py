@@ -15,34 +15,64 @@ class QuoteAnimation(BaseManimAnimation):
         return 'quote'
     
     def construct(self):
-        # Obtener datos desde variables de entorno
-        quote = self._get_env_var('QUOTE_ANIMATION_TEXT', '', decode_base64=True)
-        author = self._get_env_var('QUOTE_ANIMATION_AUTHOR', None, decode_base64=True)
-        duration_str = self._get_env_var('QUOTE_ANIMATION_DURATION', None)
+        # Obtener datos desde configuración (pasada al constructor)
+        quote = self._get_config_value('text', '')
+        author = self._get_config_value('author')
+        duration = self._get_config_value('duration')
         
-        # Reparar encoding si es necesario
-        quote = self._fix_encoding(quote) if quote else "Texto de ejemplo"
+        # Validar y reparar encoding si es necesario
+        if not quote or not quote.strip():
+            raise ValueError("El texto de la cita no puede estar vacío")
+        
+        quote = self._fix_encoding(quote)
         if author:
             author = self._fix_encoding(author)
         
-        # Parsear duración
-        duration = None
-        if duration_str and duration_str != "None":
-            try:
-                duration = float(duration_str)
-            except:
-                duration = None
+        # Validar duración si se proporciona
+        if duration is not None:
+            if isinstance(duration, str):
+                try:
+                    duration = float(duration)
+                except ValueError:
+                    duration = None
+            if duration is not None and duration <= 0:
+                raise ValueError(f"Duración debe ser positiva, recibido: {duration}")
         
-        # Si author es "None" como string, convertirlo
-        if author == "None" or author == "":
+        # Si author es None o string vacío, convertirlo
+        if author == "None" or author == "" or not author:
             author = None
         
         has_author = author is not None and author.strip() != ""
         
-        # Leer parámetros de personalización desde variables de entorno
-        container_color = self._get_env_var('QUOTE_ANIMATION_CONTAINER_COLOR', '#0066CC')
-        text_color = self._get_env_var('QUOTE_ANIMATION_TEXT_COLOR', '#FFFFFF')
-        font_family = self._get_env_var('QUOTE_ANIMATION_FONT_FAMILY', 'normal')
+        # Leer parámetros de personalización desde configuración
+        container_color = self._get_config_value('container_color', '#0066CC')
+        text_color = self._get_config_value('text_color', '#FFFFFF')
+        font_family = self._get_config_value('font_family', 'normal')
+        
+        # Validar colores hex
+        def _is_valid_hex_color(color: str) -> bool:
+            """Valida formato de color hex (#RRGGBB)"""
+            if not color or not color.startswith('#'):
+                return False
+            if len(color) != 7:
+                return False
+            try:
+                int(color[1:], 16)
+                return True
+            except ValueError:
+                return False
+        
+        if not _is_valid_hex_color(container_color):
+            raise ValueError(f"Color de contenedor inválido: '{container_color}'. Debe ser formato hex (#RRGGBB)")
+        
+        if not _is_valid_hex_color(text_color):
+            raise ValueError(f"Color de texto inválido: '{text_color}'. Debe ser formato hex (#RRGGBB)")
+        
+        # Validar font_family
+        valid_fonts = ['normal', 'bold', 'italic', 'bold_italic']
+        if font_family not in valid_fonts:
+            # Usar 'normal' como fallback seguro
+            font_family = 'normal'
         
         background_color = "#D3D3D3"
         card_width = 13
@@ -244,21 +274,33 @@ class QuoteAnimation(BaseManimAnimation):
         margin_x = 0.5
         margin_y = 0.5
         
+        # Validar que los objetos existen y tienen dimensiones válidas
+        if not quote_text or not author_text:
+            return quote_text, author_text
+        
+        # Escalar horizontalmente si es necesario
         if quote_text.width > card_width - margin_x * 2:
             scale_factor = (card_width - margin_x * 2) / quote_text.width
-            quote_text.scale(scale_factor * 0.95)
+            # Limitar el factor de escala para evitar texto demasiado pequeño
+            scale_factor = max(0.3, scale_factor * 0.95)
+            quote_text.scale(scale_factor)
         
-        text_height = quote_text.get_top()[1] - quote_text.get_bottom()[1]
+        # Calcular altura disponible
+        text_height = abs(quote_text.get_top()[1] - quote_text.get_bottom()[1])
         card_top = card.get_top()[1]
         card_bottom = card.get_bottom()[1]
-        available_height = card_top - card_bottom
+        available_height = abs(card_top - card_bottom)
         
-        author_height = author_text.height
+        # Verificar si cabe verticalmente
+        author_height = abs(author_text.height) if hasattr(author_text, 'height') else 0.5
         needed_height = text_height + author_height + margin_y * 3
         
-        if needed_height > available_height:
+        if needed_height > available_height and text_height > 0:
+            # Escalar para que quepa verticalmente
             scale_factor = (available_height - margin_y * 3 - author_height) / text_height
-            quote_text.scale(min(scale_factor * 0.95, 1.0))
+            # Limitar el factor de escala para evitar texto demasiado pequeño
+            scale_factor = max(0.3, min(scale_factor * 0.95, 1.0))
+            quote_text.scale(scale_factor)
         
         quote_text.move_to(card.get_center() + UP * 0.4)
         
@@ -287,16 +329,25 @@ class QuoteAnimation(BaseManimAnimation):
         """Asegura que solo el texto quepa en el container"""
         margin = 0.6
         
+        if not quote_text:
+            return quote_text
+        
+        # Escalar horizontalmente si es necesario
         if quote_text.width > card_width - margin * 2:
             scale_factor = (card_width - margin * 2) / quote_text.width
-            quote_text.scale(scale_factor * 0.95)
+            # Limitar el factor de escala para evitar texto demasiado pequeño
+            scale_factor = max(0.3, scale_factor * 0.95)
+            quote_text.scale(scale_factor)
         
-        text_height = quote_text.get_top()[1] - quote_text.get_bottom()[1]
+        # Escalar verticalmente si es necesario
+        text_height = abs(quote_text.get_top()[1] - quote_text.get_bottom()[1])
         available_height = card_height - margin * 2
         
-        if text_height > available_height:
+        if text_height > available_height and text_height > 0:
             scale_factor = available_height / text_height
-            quote_text.scale(scale_factor * 0.95)
+            # Limitar el factor de escala para evitar texto demasiado pequeño
+            scale_factor = max(0.3, min(scale_factor * 0.95, 1.0))
+            quote_text.scale(scale_factor)
         
         quote_text.move_to(card.get_center())
         return quote_text
