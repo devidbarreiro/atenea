@@ -4345,6 +4345,10 @@ class ScriptRetryView(ServiceMixin, View):
 # AGENT VIDEO FLOW
 # ====================
 
+def redirect_to_agent_create(request, project_id):
+    """Redirigir /projects/<id>/agent/ a /projects/<id>/agent/create/"""
+    return redirect('core:agent_create', project_id=project_id)
+
 class AgentCreateView(SidebarProjectsMixin, BreadcrumbMixin, View):
     """Paso 1: Crear contenido (script o PDF)"""
     template_name = 'agent/create.html'

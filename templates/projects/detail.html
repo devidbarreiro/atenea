@@ -217,21 +217,21 @@
          :style="'left: ' + (window.innerWidth >= 1024 ? ((sidebarCollapsed ? 64 : 256) + 320) + 'px' : '0')"
          class="fixed top-0 right-0 bg-white border-b border-gray-200 z-20 shadow-sm transition-all duration-300">
         <nav class="flex -mb-px px-6 overflow-x-auto" aria-label="Tabs">
-            <a href="{% url 'core:project_videos' project.id %}"
+            <a href="{% url 'core:project_videos_library' project.id %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'videos' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Videos
                 {% if videos %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ videos|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_images' project.id %}"
+            <a href="{% url 'core:project_images_library' project.id %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'images' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Imágenes
                 {% if images %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ images|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_audios' project.id %}"
+            <a href="{% url 'core:project_audios_library' project.id %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'audios' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Audios
                 {% if audios %}
