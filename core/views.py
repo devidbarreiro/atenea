@@ -55,33 +55,99 @@ def docs_home(request):
     return render(request, 'docs/docs_template.html')
 
 # Vista para devolver la estructura de la documentación
+# Solo muestra documentación pública (docs/public/)
 def docs_structure(request):
-    base_dir = os.path.join(settings.BASE_DIR, 'docs', 'api', 'services')
+    base_dir = os.path.join(settings.BASE_DIR, 'docs', 'public')
 
-    def build_tree(path):
+    def build_tree(path, relative_path=''):
         tree = {}
-        for item in os.listdir(path):
+        if not os.path.exists(path):
+            return tree
+        for item in sorted(os.listdir(path)):
             item_path = os.path.join(path, item)
+            # Ignorar archivos ocultos y __pycache__
+            if item.startswith('.') or item == '__pycache__':
+                continue
             if os.path.isdir(item_path):
-                tree[item] = build_tree(item_path)
+                subtree = build_tree(item_path, os.path.join(relative_path, item))
+                if subtree:  # Solo agregar si tiene contenido
+                    tree[item] = subtree
             elif item.endswith('.md'):
-                tree[item] = item_path  # Guardamos ruta completa temporalmente
+                # Guardar ruta relativa desde docs/public/
+                rel_path = os.path.join(relative_path, item).replace('\\', '/')
+                tree[item] = rel_path
         return tree
 
     structure = build_tree(base_dir)
     return JsonResponse(structure)
 
 # Vista para devolver el contenido de un archivo markdown
+# Solo accede a documentación pública (docs/public/)
 def docs_md_view(request, path):
-    md_file_path = os.path.join(settings.BASE_DIR, 'docs', 'api', 'services', path + '.md')
+    # path puede ser: "api/services/google/video/text_to_video" o "app/GUIA_USUARIO"
+    # Eliminar trailing slash si existe
+    path = path.rstrip('/')
     
-    if not os.path.exists(md_file_path):
-        raise Http404("Documento no encontrado")
+    try:
+        # Construir ruta completa desde docs/public/
+        md_file_path = os.path.join(settings.BASE_DIR, 'docs', 'public', path + '.md')
+        
+        # Normalizar la ruta para evitar problemas de seguridad
+        md_file_path = os.path.normpath(md_file_path)
+        base_dir = os.path.normpath(os.path.join(settings.BASE_DIR, 'docs', 'public'))
+        
+        # Debug logging (solo en desarrollo)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"docs_md_view - path recibido: {path}")
+        logger.debug(f"docs_md_view - md_file_path: {md_file_path}")
+        logger.debug(f"docs_md_view - base_dir: {base_dir}")
+        logger.debug(f"docs_md_view - existe: {os.path.exists(md_file_path)}")
+        
+        # Verificar que el archivo esté dentro del directorio permitido
+        if not md_file_path.startswith(base_dir):
+            logger.warning(f"Ruta no permitida: {md_file_path} no está en {base_dir}")
+            return JsonResponse({
+                'error': 'Ruta no permitida',
+                'content': ''
+            }, status=400)
+        
+        if not os.path.exists(md_file_path):
+            logger.warning(f"Archivo no encontrado: {md_file_path}")
+            # Listar archivos en el directorio para debug
+            parent_dir = os.path.dirname(md_file_path)
+            if os.path.exists(parent_dir):
+                files = os.listdir(parent_dir)
+                logger.debug(f"Archivos en {parent_dir}: {files}")
+            return JsonResponse({
+                'error': f'Documento no encontrado: {path}',
+                'content': ''
+            }, status=404)
+        
+        # Leer el archivo
+        try:
+            with open(md_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            # Intentar con otra codificación si UTF-8 falla
+            with open(md_file_path, 'r', encoding='latin-1') as f:
+                content = f.read()
+        except Exception as e:
+            return JsonResponse({
+                'error': f'Error al leer el archivo: {str(e)}',
+                'content': ''
+            }, status=500)
+        
+        return JsonResponse({'content': content})
     
-    with open(md_file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    return JsonResponse({'content': content})
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error en docs_md_view: {e}", exc_info=True)
+        return JsonResponse({
+            'error': f'Error del servidor: {str(e)}',
+            'content': ''
+        }, status=500)
 
 # ====================
 # HELPER FUNCTIONS
