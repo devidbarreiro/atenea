@@ -53,7 +53,7 @@
                 {% with active_tab|default:'videos' as current_tab %}
                 {% for project_item in projects %}
                     {% if current_tab == 'videos' %}
-                        {% url 'core:project_videos' project_item.id as project_switch_url %}
+                        {% url 'core:project_videos_library' project_item.id as project_switch_url %}
                     {% elif current_tab == 'images' %}
                         {% url 'core:project_images_library' project_item.id as project_switch_url %}
                     {% elif current_tab == 'audios' %}

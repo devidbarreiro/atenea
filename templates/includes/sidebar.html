@@ -121,7 +121,7 @@ x-init="
             </a>
 
             <!-- Agente de Video -->
-            <a href="#"
+            <a href="{% url 'core:projects_list' %}"
                class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
                :class="{ 'justify-center': sidebarCollapsed }"
                :title="sidebarCollapsed ? 'Agente de Video' : ''">

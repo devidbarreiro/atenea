@@ -26,7 +26,8 @@ urlpatterns = [
     # path('projects/<int:project_id>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
     path('projects/<int:project_id>/music/', views.ProjectDetailView.as_view(), {'tab': 'music'}, name='project_music'),
     path('projects/<int:project_id>/scripts/', views.ProjectDetailView.as_view(), {'tab': 'scripts'}, name='project_scripts'),
-    path('projects/<int:project_id>/agent/', views.ProjectDetailView.as_view(), {'tab': 'agent'}, name='project_agent'),
+    # Redirigir /agent/ a /agent/create/
+    path('projects/<int:project_id>/agent/', views.redirect_to_agent_create, name='project_agent'),
     path('projects/<int:project_id>/update-name/', views.ProjectUpdateNameView.as_view(), name='project_update_name'),
     path('projects/<int:project_id>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
     path('items/<int:item_id>/move/', views.ProjectItemsManagementView.move_item, name='move_item'),
