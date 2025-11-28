@@ -1722,14 +1722,18 @@ class VideoCreatePartialView(ServiceMixin, FormView):
         config = {
             'author': request.POST.get('author'),
             'quality': request.POST.get('quality', 'k'),
+            'container_color': request.POST.get('container_color') or request.POST.get('container_color_text'),
+            'text_color': request.POST.get('text_color') or request.POST.get('text_color_text'),
+            'font_family': request.POST.get('font_family', 'normal'),
         }
         
-        # Duración opcional
+        # Duración opcional - siempre intentar parsearla si existe
         duration = request.POST.get('duration')
         if duration:
             try:
                 config['duration'] = float(duration)
-            except ValueError:
+            except (ValueError, TypeError):
+                # Si no se puede parsear, dejar que la animación calcule automáticamente
                 pass
         
         return config
@@ -2913,6 +2917,35 @@ class CreateItemAPIView(ServiceMixin, View):
                     config['duration'] = duration
                 except (ValueError, TypeError):
                     pass
+        
+        # Para HeyGen Avatar V2, añadir campos específicos
+        if video_type == 'heygen_avatar_v2':
+            # Obtener avatar_id y voice_id (requeridos)
+            config['avatar_id'] = settings.get('avatar_id') if 'avatar_id' in settings else data.get('avatar_id')
+            config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
+            # Convertir has_background a boolean correctamente
+            has_bg_setting = settings.get('has_background', False)
+            has_bg_data = data.get('has_background', False)
+            has_background = has_bg_setting if 'has_background' in settings else has_bg_data
+            if isinstance(has_background, str):
+                config['has_background'] = has_background.lower() in ('true', '1', 'yes', 'on')
+            else:
+                config['has_background'] = bool(has_background)
+            config['background_url'] = settings.get('background_url') if 'background_url' in settings else data.get('background_url')
+            config['voice_speed'] = settings.get('voice_speed') if 'voice_speed' in settings else data.get('voice_speed', 1.0)
+            config['voice_pitch'] = settings.get('voice_pitch') if 'voice_pitch' in settings else data.get('voice_pitch', 50)
+            config['voice_emotion'] = settings.get('voice_emotion') if 'voice_emotion' in settings else data.get('voice_emotion', 'Excited')
+            # Convertir valores numéricos si vienen como string
+            try:
+                if isinstance(config['voice_speed'], str):
+                    config['voice_speed'] = float(config['voice_speed'])
+            except (ValueError, TypeError):
+                config['voice_speed'] = 1.0
+            try:
+                if isinstance(config['voice_pitch'], str):
+                    config['voice_pitch'] = int(config['voice_pitch'])
+            except (ValueError, TypeError):
+                config['voice_pitch'] = 50
         
         # Procesar imágenes de referencia desde request.FILES
         # Nota: Veo solo acepta "asset" o "style" como referenceType

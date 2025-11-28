@@ -6,6 +6,8 @@ import logging
 import json
 import redis
 import requests
+import shutil
+from pathlib import Path
 from typing import Dict, Optional, List
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
@@ -1172,6 +1174,23 @@ class VideoService:
         }
         
         video.mark_as_completed(gcs_path=gcs_path, metadata=metadata)
+        
+        # Limpiar archivos locales después de subir a GCS
+        try:
+            video_path_obj = Path(video_path)
+            if video_path_obj.exists():
+                video_path_obj.unlink()
+                logger.info(f"✅ Archivo local eliminado: {video_path}")
+            
+            # También limpiar archivos parciales si existen
+            partial_dir = video_path_obj.parent / "partial_movie_files" / "QuoteAnimation"
+            if partial_dir.exists():
+                import shutil
+                shutil.rmtree(partial_dir)
+                logger.info(f"✅ Archivos parciales eliminados: {partial_dir}")
+        except Exception as e:
+            logger.warning(f"No se pudo eliminar archivo local {video_path}: {e}")
+            # No fallar si no se puede eliminar
         
         # Usar el ID del video como external_id (Manim no tiene external_id)
         return f"manim_{video.id}"
