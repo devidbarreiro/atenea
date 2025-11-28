@@ -10,7 +10,7 @@
 </div>
 
 <!-- ----------- Content Options ----------- -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
     <!-- Create Users Card -->
     <div id="user-create-card"
         {% if has_create_access %}
@@ -63,6 +63,33 @@
                 Consulta una lista con todos los usuarios, elimina o modifica su información y permisos.
                 {% else %}
                 No tienes permisos para administrar usuarios.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    <!-- User Credits Card -->
+    <div id="user-credits-card"
+        {% if has_credits_access %}
+        onclick="selectContentType('user-credits')"
+        class="content-card cursor-pointer bg-white rounded-lg border-2 border-gray-300 p-6 hover:border-blue-600 hover:shadow-xl transition-all duration-300"
+        {% else %}
+        class="content-card bg-gray-200 rounded-lg border-2 border-gray-400 p-6 opacity-70 cursor-not-allowed transition-all duration-300"
+        data-disabled="true"
+        {% endif %}>
+        <div class="flex flex-col items-center text-center">
+            <div class="w-16 h-16 {% if has_credits_access %}bg-gray-100{% else %}bg-gray-300{% endif %} rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+                </svg>          
+            </div>
+            <h3 class="text-xl font-semibold {% if has_credits_access %}text-gray-900{% else %}text-gray-600{% endif %} mb-2">
+                Administrar Créditos
+            </h3>
+            <p class="{% if has_credits_access %}text-gray-600{% else %}text-gray-500{% endif %} text-sm">
+                {% if has_credits_access %}
+                Administra Los creditos de los usuarios y observa su consumo.
+                {% else %}
+                No tienes permisos para administrar créditos.
                 {% endif %}
             </p>
         </div>
@@ -131,21 +158,43 @@
              class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black focus:text-black outline-none rounded-sm transition-colors font-medium"
              {% if not has_create_access %}disabled{% endif %}>
         </div>
-        <div class="grid grid-cols-1 mb-6" id="permisions">
-            <p class="text-sm text-gray-600 text-justify">El usuario se creará en estado "Pendiente" y recibirá un correo para activar su cuenta y establecer una contraseña.</p>
+
+        <!-- Créditos iniciales -->
+        <div class="relative mb-6">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>                            
+            </span>
+            <input type="number" name="initial_credits" placeholder="Créditos iniciales" min="0" step="100"
+                class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black outline-none rounded-sm transition-colors font-medium"
+                {% if not has_create_access %}disabled{% endif %}>
+        </div>
+
+        <!-- Límite mensual -->
+        <div class="relative mb-6">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" />
+                </svg>  
+            </span>
+            <input type="number" name="monthly_limit" placeholder="Límite mensual" min="0" step="500"
+                class="w-full pl-10 pr-3 py-2 border-b-2 border-gray-300 text-gray-700 focus:border-black focus:ring-1 focus:ring-black outline-none rounded-sm transition-colors font-medium"
+                {% if not has_create_access %}disabled{% endif %}>
         </div>
 
         <!-- Roles (Groups) -->
         {% if groups %}
         <div class="grid grid-cols-1 mb-6">
-            <p class="font-semibold mb-2">Roles</p>
+            <p class="font-semibold text-center">Roles</p>
+            <hr class="mb-2 bg-gray-200 h-0.5">
             <div class="grid grid-cols-3 gap-3">
                 {% for g in groups %}
                 <label class="items-center mr-4">
                     <input type="checkbox" 
                            name="groups" 
                            value="{{ g.id }}" 
-                           class="group-checkbox scale-125 accent-blue-600 mr-2" 
+                           class="group-checkbox scale-125 accent-blue-600" 
                            data-group-name="{{ g.name }}"
                            {% if not has_create_access %}disabled{% endif %}>
                     <span class="{% if not has_create_access %}text-gray-500{% endif %}">{{ g.name }}</span>
@@ -154,6 +203,10 @@
             </div>
         </div>
         {% endif %}
+
+        <div class="grid grid-cols-1 mb-6" id="permisions">
+            <p class="text-sm text-gray-600 text-justify">El usuario se creará en estado "Pendiente" y recibirá un correo para activar su cuenta y establecer una contraseña.</p>
+        </div>
 
         <!-- Botón -->
         <button type="submit" class="w-full py-2 rounded-lg font-semibold text-lg
@@ -226,21 +279,21 @@
         </div>
     </div>
 
-    <table id="tabla-usuarios" class="min-w-full bg-white border border-gray-200">
+    <table id="tabla-usuarios-admin" class="min-w-full bg-white border border-gray-200">
       <thead class="bg-gray-100">
         <tr>
           <th class="px-4 py-1 text-left border-b border-gray-200 w-2">
             <input type="checkbox" x-model="selectAll" @change="toggleAll" class="accent-blue-600 h-4 w-4 mt-2">
           </th>
-            <th class="px-4 py-2 text-left border-b border-gray-200">Username</th>
-            <th class="px-4 py-2 text-left border-b border-gray-200">Email</th>
+            <th class="py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
             {# One column per role/group #}
             {% for g in groups %}
-            <th class="px-1 py-2 text-center text-sm border-b border-gray-200">{{ g.name }}</th>
+            <th class="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase">{{ g.name }}</th>
             {% endfor %}
-            <th class="px-4 py-2 text-left border-b border-gray-200">Staff</th>
-            <th class="px-4 py-2 text-left border-b border-gray-200">Active</th>
-            <th class="px-4 py-2 text-left border-b border-gray-200 w-1">
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Active</th>
+            <th class="py-2 text-left text-xs font-medium text-gray-500 uppercase w-1">
           </th>
         </tr>
       </thead>
@@ -261,7 +314,7 @@
                 <input type="text" value="{{ user.username }}" class="editable w-full bg-transparent  py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
             </td>
             <td class="email border-b border-gray-200">
-                <input type="text" value="{{ user.email }}" class="editable w-full bg-transparent  py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                <input type="text" value="{{ user.email }}" class="editable w-full bg-transparent  px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
             </td>
 
             {# Role columns: one checkbox per group. Checkbox value is group id and has class role-checkbox. #}
@@ -279,7 +332,7 @@
             {% endfor %}
 
             <td class="is_staff w-16 border-b border-gray-200">
-                <select class="editable w-16 text-sm bg-transparent py-1 px-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                <select class="editable w-14 text-sm bg-transparent py-1 px-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
                     <option value="True" {% if user.is_staff %}selected{% endif %}>Si</option>
                     <option value="False" {% if not user.is_staff %}selected{% endif %}>No</option>
                 </select>
@@ -396,6 +449,116 @@
     </form>
 </div>
 
+<!-- Administrar Créditos Form -->
+{% if has_credits_access %}
+<div id="user-credits-form" 
+    x-data="creditManager()"
+    class="hidden w-full bg-white p-6 rounded-md shadow overflow-y-auto"
+    style="max-height: calc(100vh - 200px);">
+
+  <div>
+    <div class="mb-4 flex items-center" x-data="{open: false}">
+        <input type="text" 
+             placeholder="Buscar usuario..." 
+             x-model="search"
+             @input="applySearch()"
+             class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
+    </div>
+
+    <table id="tabla-usuarios-credits" class="min-w-full bg-white border border-gray-200">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                <th class="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-28">Saldo Actual</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-28">Límite Mensual</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-28">Uso Mensual</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr class="hover:bg-gray-50"
+                data-id="{{ user.id }}"
+            >                
+                <td class="username px-2 py-2 border-b border-gray-200">
+                    <input type="text" value="{{ user.username }}" class="editable w-full bg-transparent py-1 text-gray-700 focus:outline-none">
+                </td>
+                <td class="email px-1 py-2 border-b border-gray-200">
+                    <input type="text" value="{{ user.email }}" class="editable w-full bg-transparent py-1 text-gray-700 focus:outline-none">
+                </td>
+                
+                <td class="px-2 py-2 border-b border-gray-200 text-center font-bold text-green-600 w-24">
+                    {{ user.credits.credits|default:'0' |floatformat:0 }}
+                </td>
+
+                <td class="px-4 py-2 border-b border-gray-200 text-center text-gray-700">
+                    {{ user.credits.monthly_limit|default:'0' |floatformat:0 }}
+                </td>
+                
+                <td class="px-4 py-2 border-b border-gray-200 text-center text-gray-700">
+                    {{ user.credits.current_month_usage|default:'0' |floatformat:0 }}
+                </td>
+
+                <td class="px-4 py-2 border-b border-gray-200 text-center whitespace-nowrap">
+                    <button onclick="openCreditAdjustmentModal({{ user.id }}, '{{ user.username }}')"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded text-xs mr-2 transition duration-150">
+                        Créditos
+                    </button>
+                    <button onclick="viewUserCreditsDetails({{ user.id }}, '{{ user.username }}')"
+                            class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-1 px-3 rounded text-xs transition duration-150">
+                        Historial
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal de historial de créditos -->
+<div id="user-credits-history" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white p-6 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center border-b pb-3 mb-3">
+            <h1 class="text-xl font-bold text-center text-gray-600" id="credits-history-title">Historial de Créditos</h1>
+            <button onclick="closeCreditModals()" class="text-gray-500 hover:text-gray-700 font-bold text-2xl">&times;</button>
+        </div>
+
+        <div id="credits-history-content" class="space-y-2 max-h-[50vh] overflow-y-auto">
+            <p class="text-gray-500 text-center py-8">Cargando...</p>
+        </div>
+    </div>
+</div>
+
+<div id="user-credits-asigment" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <div class="flex justify-between items-center border-b pb-3 mb-3">
+            <h1 class="text-xl font-bold"></h1>
+            <button onclick="closeCreditModals()" class="text-gray-500 hover:text-gray-700 font-bold text-2xl">
+                &times;
+            </button>
+        </div>
+
+        <p class="mb-3">Formulario para sumar o restar créditos.</p>
+
+        <input type="hidden" id="credit-user-id">
+
+        <label class="block font-semibold mb-1">Cantidad (positivo o negativo):</label>
+        <input id="credit-amount" type="number" step="100" class="w-full border rounded px-3 py-2 mb-3">
+        
+        <label class="block font-semibold mb-1">Nuevo límite mensual:</label>
+        <input id="credit-new-limit" type="number" step="500" class="w-full border rounded px-3 py-2 mb-3">
+
+        <label class="block font-semibold mb-1">Descripción:</label>
+        <input id="credit-description" type="text" class="w-full border rounded px-3 py-2 mb-3">
+
+        <div class="flex justify-end gap-3 mt-4">
+            <button onclick="closeCreditModals()" class="bg-gray-300 px-4 py-2 rounded">Cancelar</button>
+            <button onclick="submitCreditAdjustment()" class="bg-blue-600 text-white px-4 py-2 rounded">Guardar</button>
+        </div>
+    </div>
+</div>
+{%endif%}
 
 <script>
 function popupMenu() {
@@ -446,8 +609,8 @@ function selectContentType(type) {
         return;
     }
 
-    const cards = ['user-create-card', 'user-admin-card'];
-    const forms = ['user-create-form', 'user-admin-form'];
+    const cards = ['user-create-card', 'user-admin-card', 'user-credits-card'];
+    const forms = ['user-create-form', 'user-admin-form', 'user-credits-form'];
     const botonesAcciones = document.getElementById('botones-acciones');
     const botonGuardar = document.getElementById('guardar');
     const botonCancelar = document.getElementById('cancelar');
@@ -468,7 +631,9 @@ function selectContentType(type) {
         document.getElementById('user-create-form').classList.remove('hidden');
         document.getElementById('user-create-form').scrollIntoView({ behavior: 'smooth' });
         botonesAcciones.classList.add('hidden');
-    } else if (type === 'user-admin') {
+    } 
+    
+    else if (type === 'user-admin') {
         // Prevent opening admin if card is disabled
         const adminCard = document.getElementById('user-admin-card');
         if (adminCard && adminCard.dataset && adminCard.dataset.disabled === 'true') {
@@ -492,6 +657,27 @@ function selectContentType(type) {
         botonGuardar.classList.add('opacity-50', 'cursor-not-allowed');
         botonCancelar.classList.add('opacity-50', 'cursor-not-allowed');
     }
+
+    else if (type === 'user-credits') {
+        const creditsCard = document.getElementById('user-credits-card');
+        
+        // Prevención de acción si la tarjeta está deshabilitada
+        if (creditsCard && creditsCard.dataset.disabled === 'true') {
+            alert('No tienes permisos para administrar créditos');
+            return;
+        }
+
+        // Marcar tarjeta como seleccionada
+        creditsCard.classList.replace('border-gray-300', 'border-blue-600');
+        
+        // Mostrar el contenido/formulario de créditos
+        const creditsForm = document.getElementById('user-credits-form');
+        if (creditsForm) creditsForm.classList.remove('hidden');
+        if (creditsForm) creditsForm.scrollIntoView({ behavior: 'smooth' });
+        
+        // Esconder los botones de acciones (Guardar/Cancelar/Editar) si no aplican a esta vista
+        if (botonesAcciones) botonesAcciones.classList.add('hidden');
+    }
 }
 
 // Handle dependencies and admin toggling for role checkboxes inside a table row
@@ -506,32 +692,33 @@ function handleRoleChangeInRow(changed) {
     const edit = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'editar');
     const del = all.find(cb => (cb.dataset.groupName || '').toLowerCase() === 'borrar');
 
-    // If admin toggled -> set/unset all others
+    // Si se marca admin → marcar/desmarcar todos
     if (roleName === 'admin') {
         const checked = !!changed.checked;
         all.forEach(cb => cb.checked = checked);
-        // If enabling admin, ensure dependencies
+        // Dependencias normales
         if (checked && view) view.checked = true;
         return;
     }
 
-    // If edit or delete checked -> ensure view is checked
+    // Si edit o delete se marca → asegurar que view esté marcado
     if ((roleName === 'editar' || roleName === 'borrar') && changed.checked) {
         if (view && !view.checked) view.checked = true;
     }
 
-    // If view unchecked -> unset edit and delete
+    // Si view se desmarca → desmarcar edit y delete
     if (roleName === 'ver' && !changed.checked) {
         if (edit) edit.checked = false;
         if (del) del.checked = false;
     }
 
-    // After any change, update admin checkbox: admin is checked only if all non-admin are checked
+    // Actualizar admin → incluir **todos menos admin** (créditos sí se cuenta)
     if (admin) {
         const nonAdmin = all.filter(cb => (cb.dataset.groupName || '').toLowerCase() !== 'admin');
         admin.checked = nonAdmin.length > 0 && nonAdmin.every(cb => cb.checked);
     }
 }
+
 
 function userAdmin() {
   return {
@@ -541,7 +728,7 @@ function userAdmin() {
     filter: "todos", //filtro todos por defecto
 
     filteredRows() {
-        const rows = [...document.querySelectorAll('#tabla-usuarios tbody tr')];
+        const rows = [...document.querySelectorAll('#tabla-usuarios-admin tbody tr')];
         return rows.filter(row => {
             const username = row.querySelector('.username input').value.toLowerCase();
             const matchesSearch = username.includes(this.search.toLowerCase());
@@ -567,7 +754,7 @@ function userAdmin() {
         this.selectAll = this.selected.length === visibleRows.length;
 
         //Mostrar/ocultar filas segun el filtro
-        const rows = document.querySelectorAll('#tabla-usuarios tbody tr');
+        const rows = document.querySelectorAll('#tabla-usuarios-admin tbody tr');
         rows.forEach(row => {
             const isActive = row.querySelector('.is_active select').value === 'True';
             const isStaff = row.querySelector('.is_staff select').value === 'True';
@@ -616,7 +803,7 @@ function userAdmin() {
       if (this.selected.length === 0) return;
       if (confirm(`¿Eliminar ${this.selected.length} usuarios seleccionados?`)) {
         this.selected.forEach(id => {
-          const row = document.querySelector(`#tabla-usuarios tr[data-id="${id}"]`);
+          const row = document.querySelector(`#tabla-usuarios-admin tr[data-id="${id}"]`);
           if (row) row.remove();
         });
         this.selected = [];
@@ -714,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const filas = document.querySelectorAll('#tabla-usuarios tr[data-id]');
+    const filas = document.querySelectorAll('#tabla-usuarios-admin tr[data-id]');
     const botonGuardar = document.getElementById('guardar');
     const botonCancelar = document.getElementById('cancelar');
     const botonEditar = document.getElementById('edit-table');
@@ -795,7 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Attach change listeners to role-checkboxes inside the admin table rows
-    const rowRoleCheckboxes = document.querySelectorAll('#tabla-usuarios .role-checkbox');
+    const rowRoleCheckboxes = document.querySelectorAll('#tabla-usuarios-admin .role-checkbox');
     rowRoleCheckboxes.forEach(cb => {
         cb.addEventListener('change', function() {
             try {
@@ -957,7 +1144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             if (data.success) {
                 alert(`✅ Usuario "${username}" eliminado correctamente`);
-                const row = document.querySelector(`#tabla-usuarios tr[data-id="${userId}"]`);
+                const row = document.querySelector(`#tabla-usuarios-admin tr[data-id="${userId}"]`);
                 if (row) row.remove();
             } else {
                 alert('❌ Error al eliminar: ' + data.error);
@@ -971,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteSelectedBtn = document.getElementById('delete-selected');
     if (deleteSelectedBtn) {
         deleteSelectedBtn.addEventListener('click', () => {
-            const filasSeleccionadas = Array.from(document.querySelectorAll('#tabla-usuarios tbody tr'))
+            const filasSeleccionadas = Array.from(document.querySelectorAll('#tabla-usuarios-admin tbody tr'))
                 .filter(row => row.querySelector('input[type="checkbox"]').checked);
 
         if (filasSeleccionadas.length === 0) {
@@ -1059,6 +1246,187 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => alert('❌ Error de red: ' + err.message));
     });
 });
+
+function creditManager() {
+    return {
+        search: "",
+
+        applySearch() {
+            const term = this.search.toLowerCase();
+            const rows = document.querySelectorAll('#tabla-usuarios-credits tbody tr');
+
+            rows.forEach(row => {
+                const username = row.querySelector('.username input').value.toLowerCase();
+                const email = row.querySelector('.email input').value.toLowerCase();
+
+                row.style.display = (
+                    username.includes(term) || email.includes(term)
+                ) ? "" : "none";
+            });
+        }
+    }
+}
+
+// MODAL DE AJUSTE DE CRÉDITOS (Para el botón "+/- Créditos")
+window.openCreditAdjustmentModal = function(userId, username) {
+    // Ocultar otros modales
+    document.getElementById('user-credits-history').classList.add('hidden');
+    document.getElementById('user-credits-asigment').classList.remove('hidden');
+
+    // Guardar ID en el hidden
+    document.getElementById('credit-user-id').value = userId;
+
+    // Actualizar el título
+    document.querySelector('#user-credits-asigment h1').textContent =
+        `Asignar/Ajustar Créditos a ${username}`;
+
+    // Reset inputs
+    document.getElementById('credit-amount').value = "";
+    document.getElementById('credit-description').value = "";
+};
+
+// MODAL DE HISTORIAL DE CRÉDITOS (Para el botón "Historial")
+window.viewUserCreditsDetails = function(userId, username) {
+    // 1. Ocultar todos los modales/secciones relacionadas
+    document.getElementById('user-credits-asigment').classList.add('hidden');
+    document.getElementById('user-credits-history').classList.add('hidden');
+    
+    // 2. Mostrar el modal de historial
+    const historyModal = document.getElementById('user-credits-history');
+    historyModal.classList.remove('hidden');
+
+    // Opcional: Actualizar el título/contenido del modal
+    historyModal.querySelector('h1').textContent = `Historial de Créditos de ${username}`;
+    
+    // Aquí es donde harías una llamada AJAX para cargar el historial real del usuario.
+    // fetch(`/api/credits/history/${userId}/`)
+};
+
+// Función para ocultar ambos modales
+window.closeCreditModals = function() {
+    document.getElementById('user-credits-history').classList.add('hidden');
+    document.getElementById('user-credits-asigment').classList.add('hidden');
+}
+
+function submitCreditAdjustment() {
+    const userId = document.getElementById('credit-user-id').value;
+    const amount = parseFloat(document.getElementById('credit-amount').value);
+    const newLimit = parseInt(document.getElementById('credit-new-limit').value);
+    const description = document.getElementById('credit-description').value.trim();
+
+    const row = document.querySelector(`#tabla-usuarios-admin tr[data-id="${userId}"]`);
+    if (!row) {
+        alert("Usuario no encontrado");
+        return;
+    }
+    const username = row.querySelector('.username input').value;
+
+    // Si hay cantidad para sumar/restar créditos
+    if (!isNaN(amount) && amount !== 0) {
+        const formData = new FormData();
+        formData.append("user_id", userId);
+        formData.append("amount", amount);
+        if (description) formData.append("description", description);
+
+        fetch("{% url 'core:add_credits' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Créditos ajustados para ${username}: ${data.saldo_anterior} → ${data.saldo_actual}`);
+                const creditCell = row.querySelector('.current-credits');
+                window.location.reload();
+                if (creditCell) creditCell.textContent = data.saldo_actual;
+            } else {
+                alert(`❌ Error al ajustar créditos: ${data.error}`);
+            }
+        })
+        .catch(err => alert("❌ Error de red: " + err.message));
+    }
+
+    // Si hay nuevo límite mensual
+    if (!isNaN(newLimit)) {
+        const formData = new FormData();
+        formData.append("username", username);
+        formData.append("limit", newLimit);
+        if (description) formData.append("description", description);
+
+        fetch("{% url 'core:set_monthly_limit' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Límite mensual actualizado para ${username}: ${data.old_limit} → ${data.new_limit}`);
+                const limitCell = row.querySelector('.monthly-limit');
+                if (limitCell) limitCell.textContent = data.new_limit;
+                closeCreditModals();
+                window.location.reload();
+            } else {
+                alert(`❌ Error al actualizar límite: ${data.error}`);
+            }
+        })
+        .catch(err => alert("❌ Error de red: " + err.message));
+    }
+}
+
+window.viewUserCreditsDetails = function(userId, username) {
+    const modal = document.getElementById('user-credits-history');
+    const content = document.getElementById('credits-history-content');
+    const title = document.getElementById('credits-history-title');
+
+    // Actualizar título
+    title.textContent = `Historial de Créditos de ${username}`;
+
+    // Vaciar contenido previo
+    content.innerHTML = '<p class="text-gray-500 text-center py-8">Cargando...</p>';
+
+    // Mostrar modal
+    modal.classList.remove('hidden');
+
+    // Hacer fetch al endpoint que devuelve todas las transacciones
+    fetch(`/users/credits/history/${userId}/`)  // debes crear esta URL en tu view
+        .then(res => res.json())
+        .then(data => {
+            if (!data.transactions || data.transactions.length === 0) {
+                content.innerHTML = '<p class="text-gray-500 text-center py-8">No hay transacciones registradas</p>';
+                return;
+            }
+
+            // Construir HTML de transacciones
+            let html = '';
+            data.transactions.forEach(tr => {
+                html += `
+                <div class="p-2 border-b last:border-b-0 flex justify-between items-center">
+                    <div>
+                        <div class="font-medium text-gray-900">${tr.type}</div>
+                        <div class="text-sm text-gray-500">${tr.created_at}</div>
+                        ${tr.service_name ? `<div class="text-xs text-gray-400">${tr.service_name}</div>` : ''}
+                        ${tr.description ? `<div class="text-xs text-gray-500 mt-1">${tr.description}</div>` : ''}
+                    </div>
+                    <div class="font-semibold ${tr.amount > 0 ? 'text-green-600' : 'text-red-600'}">
+                        ${tr.amount > 0 ? '+' : ''}${tr.amount}
+                    </div>
+                </div>`;
+            });
+            content.innerHTML = html;
+        })
+        .catch(err => {
+            content.innerHTML = `<p class="text-red-500 text-center py-8">Error al cargar transacciones</p>`;
+            console.error(err);
+        });
+};
 </script>
 
 {% endblock %}

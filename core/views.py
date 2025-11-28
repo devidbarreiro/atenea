@@ -6007,7 +6007,6 @@ class VuelaAIVideoDetailsView(View):
 # ====================
 # MANAGEMENT USERS
 # ====================
-
 class UserMenuView(View):
     """
     User management view with permission-based access control.
@@ -6030,11 +6029,13 @@ class UserMenuView(View):
         has_delete = request.user.has_perm('auth.delete_user')
         has_view = request.user.has_perm('auth.view_user')
         has_add = request.user.has_perm('auth.add_user')
+        has_credits_access = request.user.has_perm('core.view_credittransaction')
 
         # Superuser shortcut
         if request.user.is_superuser:
             has_admin_access = True
             has_create_access = True
+            has_credits_access = True
         else:
             # Admin access if change or delete
             if has_change or has_delete:
@@ -6047,10 +6048,14 @@ class UserMenuView(View):
             has_create_access = has_add
         
         # If user has neither admin nor create permissions, deny access
-        if not (has_admin_access or has_create_access):
+        if not (has_admin_access or has_create_access or has_credits_access):
             messages.error(request, 'No tienes permiso para acceder a esta página.')
             return redirect(self.login_url)
-        
+
+        # Set access flags for template and data loading
+        request.has_credits_access = has_credits_access
+        request.has_admin_access = has_admin_access
+        request.has_create_access = has_create_access
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request):
@@ -6059,10 +6064,12 @@ class UserMenuView(View):
         has_delete = request.user.has_perm('auth.delete_user')
         has_view = request.user.has_perm('auth.view_user')
         has_add = request.user.has_perm('auth.add_user')
+        has_credits_access = request.user.has_perm('core.view_credittransaction')
 
         if request.user.is_superuser:
             has_admin_access = True
             has_create_access = True
+            has_credits_access = True
         else:
             if has_change or has_delete:
                 has_admin_access = True
@@ -6077,13 +6084,8 @@ class UserMenuView(View):
         # Load groups always (needed for the create form). Only load the
         # full users list when the user has admin access.
         groups = Group.objects.all()
-        if has_admin_access:
-            # Prefetch groups para evitar N+1 queries
-            users = User.objects.prefetch_related('groups').all()
-        else:
-            # For create-only users, don't load the admin list
-            users = []
-
+        users = User.objects.prefetch_related('groups').all() if has_admin_access else []
+        
         # Determine whether the current user belongs to an "editar" role or has change_user
         can_reset_password = (
             request.user.is_superuser or
@@ -6098,6 +6100,7 @@ class UserMenuView(View):
             'can_reset_password': can_reset_password,
             'has_admin_access': has_admin_access,
             'has_create_access': has_create_access,
+            'has_credits_access': has_credits_access,
         })
 
     # ------------------------------
@@ -6277,6 +6280,52 @@ class UserMenuView(View):
                 token = default_token_generator.make_token(user)
                 activation_url = request.build_absolute_uri(reverse('core:activate_account', args=[uid, token]))
 
+                # =========================
+                # Créditos iniciales
+                # =========================
+                initial_credits = request.POST.get('initial_credits', 0)
+                monthly_limit = request.POST.get('monthly_limit', 0)
+
+                credits = CreditService.get_or_create_user_credits(user)
+
+                try:
+                    initial_credits = int(initial_credits)
+                    if initial_credits > 0:
+                        credits.credits = initial_credits
+                except (TypeError, ValueError):
+                    initial_credits = 0
+
+                try:
+                    monthly_limit = int(monthly_limit)
+                    if monthly_limit >= 0:
+                        credits.monthly_limit = monthly_limit
+                except (TypeError, ValueError):
+                    monthly_limit = 0
+
+                credits.save()
+
+                # Registrar transacción de créditos iniciales
+                if initial_credits > 0:
+                    CreditTransaction.objects.create(
+                        user=user,
+                        transaction_type='add',
+                        amount=initial_credits,
+                        balance_before=0,
+                        balance_after=initial_credits,
+                        description='Créditos iniciales al crear usuario'
+                    )
+
+                # Registrar límite mensual inicial
+                if monthly_limit > 0:
+                    CreditTransaction.objects.create(
+                        user=user,
+                        transaction_type='limit_change',
+                        amount=0,
+                        balance_before=credits.credits,
+                        balance_after=credits.credits,
+                        description=f'Límite mensual inicial: {monthly_limit}'
+                    )
+
                 # Send activation email
                 try:
                     context = {'user': user, 'activation_url': activation_url}
@@ -6377,8 +6426,114 @@ def activate_account(request, uidb64, token):
 
     return render(request, 'users/activate_account.html', {'form': form, 'user': user})
 
+class AddCreditsView(View):
+    def post(self, request):
+        user_id = request.POST.get("user_id")
+        amount = request.POST.get("amount")
+        description = request.POST.get("description") or ""
 
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "Usuario no encontrado"}, status=404)
 
+        try:
+            amount = float(amount)
+        except:
+            return JsonResponse({"error": "Cantidad inválida"}, status=400)
+
+        if amount == 0:
+            return JsonResponse({"error": "La cantidad no puede ser 0"}, status=400)
+
+        description = description or f"Ajuste de créditos: {amount}"
+
+        try:
+            credits_before = CreditService.get_or_create_user_credits(user).credits
+
+            credits = CreditService.add_credits(
+                user=user,
+                amount=amount,
+                description=description,
+                transaction_type="adjustment"
+            )
+
+            return JsonResponse({
+                "success": True,
+                "saldo_anterior": credits_before,
+                "saldo_actual": credits.credits
+            })
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+class SetMonthlyLimitView(View):
+    """
+    View para actualizar el límite mensual de créditos de un usuario.
+    Espera POST con:
+        - username
+        - limit
+        - description (opcional)
+    """
+
+    @method_decorator(csrf_exempt)  # si usas AJAX desde JS
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def post(self, request):
+        username = request.POST.get('username')
+        limit = request.POST.get('limit')
+        description = request.POST.get('description', '')
+
+        # Validaciones básicas
+        if not username or limit is None:
+            return JsonResponse({'success': False, 'error': 'Faltan parámetros'}, status=400)
+
+        try:
+            limit = int(limit)
+            if limit < 0:
+                return JsonResponse({'success': False, 'error': 'El límite debe ser >= 0'}, status=400)
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'El límite debe ser un número entero'}, status=400)
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'error': f'Usuario "{username}" no encontrado'}, status=404)
+
+        try:
+            credits = CreditService.get_or_create_user_credits(user)
+            old_limit = credits.monthly_limit
+
+            credits.monthly_limit = limit
+            credits.save(update_fields=['monthly_limit', 'updated_at'])
+
+            # ============================
+            # Registrar en el historial
+            # ============================
+            CreditTransaction.objects.create(
+                user=user,
+                transaction_type='limit_change',  # Debe estar definido en choices
+                amount=0,  # No afecta saldo
+                balance_before=credits.credits,
+                balance_after=credits.credits,
+                description=f"Límite mensual cambiado: {old_limit} → {limit}. {description}",
+            )
+
+            response = {
+                'success': True,
+                'username': username,
+                'old_limit': old_limit,
+                'new_limit': limit,
+                'current_usage': credits.current_month_usage,
+                'remaining': credits.credits_remaining
+            }
+            if description:
+                response['description'] = description
+
+            return JsonResponse(response)
+
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Error al actualizar límite mensual: {str(e)}'}, status=500)
 # ====================
 # MUSIC VIEWS
 # ====================
@@ -7190,7 +7345,6 @@ class CreditsDashboardView(ServiceMixin, View):
         # Obtener uso por servicio (últimos 30 días)
         from datetime import timedelta
         thirty_days_ago = timezone.now() - timedelta(days=30)
-        
         usage_by_service = ServiceUsage.objects.filter(
             user=user,
             created_at__gte=thirty_days_ago
@@ -7208,6 +7362,29 @@ class CreditsDashboardView(ServiceMixin, View):
         
         return render(request, self.template_name, context)
 
+# ====================
+# CREDITS HISTORIAL
+# ====================
+class UserCreditsHistoryAPI(View):
+    """Devuelve todas las transacciones de un usuario en JSON, incluyendo cambios de límite mensual"""
+    
+    def get(self, request, user_id):
+        # Obtener todas las transacciones del usuario, ordenadas de más reciente a más antigua
+        transactions = CreditTransaction.objects.filter(user_id=user_id).order_by('-created_at')
+
+        # Preparar lista de transacciones para JSON
+        data = []
+        for t in transactions:
+            data.append({
+                'id': t.id,
+                'type': t.get_transaction_type_display(),   # muestra "Créditos sumados", "Créditos restados", "Cambio de límite mensual", etc.
+                'amount': float(t.amount),
+                'service_name': t.service_name or '',
+                'description': t.description or '',
+                'created_at': timezone.localtime(t.created_at).strftime("%d/%m/%Y %H:%M"),  # hora local
+            })
+
+        return JsonResponse({'transactions': data})
 
 # ====================
 # STOCK SEARCH API
