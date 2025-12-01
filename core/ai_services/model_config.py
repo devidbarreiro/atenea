@@ -413,7 +413,26 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/higgsfield.png',
     },
-    
+
+
+    # ==================== Black Forest Labs (Flux) ====================
+    'flux-pro/kontext/max/text-to-image': {
+        'service': 'Black Forest Labs',
+        'name': 'Flux Pro Kontext Max',
+        'description': 'Generación de imágenes de alta calidad a partir de texto (Flux Pro Kontext Max)',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['16:9', '4:3', '1:1', '3:4', '9:16'],
+            'safety_tolerance': [1, 2, 3, 4, 5, 6],
+            'seed': 'string',
+        },
+        'logo': '/static/img/logos/flux-ai.png',
+    },
+
+
     # ==================== KLING ====================
     'kling-v1': {
         'service': 'kling',
@@ -682,7 +701,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     
     # ==================== GEMINI IMAGE ====================
     'gemini-2.5-flash-image': {
-        'service': 'gemini_image',
+        'service': 'gemini image',
         'name': 'Gemini 2.5 Flash Image',
         'description': 'Generación de imágenes con Gemini',
         'type': 'image',
@@ -695,7 +714,19 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/google.png',
     },
-    
+    'Nano Banana Pro': {
+        'service': 'gemini image',
+        'name': 'Nano Banana Pro',
+        'description': 'Generación de imágenes con Nano Banana Pro',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_video': False,
+            'text_to_video': False,
+        },
+        'logo': '/static/img/logos/google.png',
+    },
+
     # ==================== ELEVENLABS ====================
     'elevenlabs': {
         'service': 'elevenlabs',
