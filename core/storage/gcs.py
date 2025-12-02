@@ -182,9 +182,14 @@ class GCSStorageManager:
                 bucket_name = parts[0]
                 blob_name = parts[1] if len(parts) > 1 else ''
             else:
-                # Si no empieza con gs://, asumir que es del bucket por defecto
+                # Si no empieza con gs://, verificar si contiene bucket name
+                if gcs_path.startswith(f"{settings.GCS_BUCKET_NAME}/"):
+                    # Path contiene bucket name al inicio, extraerlo
+                    blob_name = gcs_path.replace(f"{settings.GCS_BUCKET_NAME}/", "", 1)
+                else:
+                    # Path relativo sin bucket name
+                    blob_name = gcs_path
                 bucket_name = settings.GCS_BUCKET_NAME
-                blob_name = gcs_path.replace(f"{settings.GCS_BUCKET_NAME}/", "")
             
             # Obtener el bucket (puede ser diferente al bucket por defecto)
             if bucket_name == settings.GCS_BUCKET_NAME:
