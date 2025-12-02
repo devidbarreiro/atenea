@@ -27,7 +27,7 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
-from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask
+from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 from .services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
@@ -1228,12 +1228,31 @@ class VideoLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View
             base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
             video_count = Video.objects.filter(base_filter).count()
         
+        # Obtener template "General" por defecto (sin servicio específico)
+        default_template = None
+        default_template_id = None
+        try:
+            from core.utils.prompt_templates import get_default_template
+            # Intentar obtener un template "General" genérico (sin servicio específico)
+            default_template = PromptTemplate.objects.filter(
+                name='General',
+                template_type='video',
+                is_public=True,
+                is_active=True
+            ).order_by('-usage_count').first()
+            
+            if default_template:
+                default_template_id = str(default_template.uuid)
+        except Exception as e:
+            logger.error(f"Error obteniendo template por defecto: {e}")
+        
         context = {
             'project': project,
             'active_tab': 'video',
             'breadcrumbs': self.get_breadcrumbs(),
             'projects': ProjectService.get_user_projects(request.user),
             'items_count': video_count,
+            'default_template_id': default_template_id,  # Template "General" por defecto
         }
         
         if project:
@@ -2324,6 +2343,26 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
         logger.info(f"[DynamicFormFields] style_image: {references.get('style_image')} (tipo: {type(references.get('style_image')).__name__})")
         logger.info(f"[DynamicFormFields] asset_image: {references.get('asset_image')} (tipo: {type(references.get('asset_image')).__name__})")
         
+        # Obtener template "General" por defecto según el servicio
+        default_template = None
+        default_template_id = None
+        recommended_service_for_template = service
+        
+        if capabilities.get('type') == 'video':
+            from core.utils.prompt_templates import get_default_template
+            template_type = 'video'
+            # Mapear servicio del modelo al servicio esperado por templates
+            service_mapping = {
+                'openai': 'sora',  # Sora usa 'openai' en model_config pero 'sora' en templates
+                'gemini_veo': 'gemini_veo',
+                'higgsfield': 'higgsfield',
+                'kling': 'kling',
+            }
+            recommended_service_for_template = service_mapping.get(service, service)
+            default_template = get_default_template(template_type, recommended_service_for_template)
+            if default_template:
+                default_template_id = str(default_template.uuid)
+        
         # Renderizar template con los campos
         context = {
             'model_id': model_id,
@@ -2334,6 +2373,8 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             'estimated_cost': float(estimated_cost),
             'estimated_cost_formatted': estimated_cost_formatted,
             'has_references': has_references,
+            'recommended_service': recommended_service_for_template,  # Para el selector de templates
+            'default_template_id': default_template_id,  # Template "General" por defecto
         }
         
         logger.debug(f"DynamicFormFieldsView: Contexto para {model_id}: supports.references = {supports.get('references')}")
@@ -2951,6 +2992,7 @@ class CreateItemAPIView(ServiceMixin, View):
             'mode': settings.get('mode'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
+            'prompt_template_id': data.get('prompt_template_id'),  # Template de prompt seleccionado
         }
         
         # Para Veo, también guardar veo_model (nombre del modelo de Veo)
@@ -3140,6 +3182,7 @@ class CreateItemAPIView(ServiceMixin, View):
             'aspect_ratio': settings.get('aspect_ratio', '1:1'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
+            'prompt_template_id': data.get('prompt_template_id'),  # Template de prompt seleccionado
         }
         
         # Crear imagen
@@ -3330,12 +3373,28 @@ class ImageLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View
             base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
             image_count = Image.objects.filter(base_filter).count()
         
+        # Obtener template "General" por defecto para imágenes
+        default_template_id = None
+        try:
+            default_template = PromptTemplate.objects.filter(
+                name='General',
+                template_type='image',
+                is_public=True,
+                is_active=True
+            ).order_by('-usage_count').first()
+            
+            if default_template:
+                default_template_id = str(default_template.uuid)
+        except Exception as e:
+            logger.error(f"Error obteniendo template por defecto para imágenes: {e}")
+        
         context = {
             'project': project,
             'active_tab': 'image',
             'breadcrumbs': self.get_breadcrumbs(),
             'projects': ProjectService.get_user_projects(request.user),
             'items_count': image_count,
+            'default_template_id': default_template_id,  # Template "General" por defecto
         }
         
         if project:
@@ -8411,3 +8470,348 @@ class CancelTaskView(LoginRequiredMixin, View):
             return JsonResponse({'success': True})
         except GenerationTask.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Tarea no encontrada'}, status=404)
+
+
+# ====================
+# PROMPT TEMPLATES API
+# ====================
+
+class PromptTemplatesAPIView(LoginRequiredMixin, View):
+    """API endpoint para listar templates de prompts"""
+    
+    def get(self, request):
+        """
+        Lista templates de prompts con filtros
+        
+        Query params:
+            type: Filtrar por tipo ('video', 'image', 'agent')
+            service: Filtrar por servicio recomendado ('sora', 'gemini_veo', etc.)
+            tab: 'my' (mis templates), 'public' (públicos), 'favorites' (favoritos)
+            search: Buscar por nombre
+        """
+        from .models import PromptTemplate, UserPromptFavorite
+        
+        template_type = request.GET.get('type')
+        recommended_service = request.GET.get('service')
+        tab = request.GET.get('tab', 'public')  # my, public, favorites
+        search = request.GET.get('search', '').strip()
+        
+        try:
+            # Base queryset
+            if tab == 'my':
+                # Mis templates
+                queryset = PromptTemplate.objects.filter(
+                    created_by=request.user,
+                    is_active=True
+                )
+            elif tab == 'favorites':
+                # Templates favoritos del usuario
+                favorite_ids = UserPromptFavorite.objects.filter(
+                    user=request.user
+                ).values_list('template_id', flat=True)
+                queryset = PromptTemplate.objects.filter(
+                    uuid__in=favorite_ids,
+                    is_active=True
+                )
+            else:
+                # Templates públicos
+                queryset = PromptTemplate.objects.filter(
+                    is_public=True,
+                    is_active=True
+                )
+            
+            # Aplicar filtros
+            if template_type:
+                queryset = queryset.filter(template_type=template_type)
+            
+            if recommended_service:
+                queryset = queryset.filter(recommended_service=recommended_service)
+            
+            if search:
+                queryset = queryset.filter(name__icontains=search)
+            
+            # Ordenar por popularidad
+            templates = queryset.order_by('-usage_count', '-upvotes', '-created_at')[:50]
+            
+            # Serializar templates
+            templates_data = []
+            user_favorites = set()
+            user_votes = {}
+            
+            if request.user.is_authenticated:
+                # Obtener favoritos del usuario
+                user_favorites = set(
+                    UserPromptFavorite.objects.filter(
+                        user=request.user,
+                        template__in=templates
+                    ).values_list('template_id', flat=True)
+                )
+                
+                # Obtener votos del usuario
+                from .models import UserPromptVote
+                votes = UserPromptVote.objects.filter(
+                    user=request.user,
+                    template__in=templates
+                ).select_related('template')
+                
+                for vote in votes:
+                    user_votes[str(vote.template.uuid)] = vote.vote_type
+            
+            for template in templates:
+                # Generar URL firmada si es un gcs_path
+                preview_url = template.preview_url
+                if preview_url and preview_url.startswith('gs://'):
+                    try:
+                        from core.storage.gcs import gcs_storage
+                        preview_url = gcs_storage.get_signed_url(preview_url, expiration=3600)
+                    except Exception as e:
+                        logger.warning(f"Error al generar URL firmada para template {template.uuid}: {e}")
+                        preview_url = None
+                
+                template_dict = {
+                    'uuid': str(template.uuid),
+                    'name': template.name,
+                    'description': template.description,
+                    'template_type': template.template_type,
+                    'recommended_service': template.recommended_service,
+                    'preview_url': preview_url,
+                    'is_public': template.is_public,
+                    'usage_count': template.usage_count,
+                    'upvotes': template.upvotes,
+                    'downvotes': template.downvotes,
+                    'rating': template.get_rating(),
+                    'created_at': template.created_at.isoformat(),
+                    'is_favorite': str(template.uuid) in user_favorites,
+                    'user_vote': user_votes.get(str(template.uuid)),
+                    'created_by': template.created_by.username if template.created_by else None,
+                }
+                templates_data.append(template_dict)
+            
+            return JsonResponse({
+                'templates': templates_data,
+                'count': len(templates_data),
+                'tab': tab
+            })
+        
+        except Exception as e:
+            logger.error(f"Error al obtener templates: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al cargar templates',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class PromptTemplateDetailAPIView(LoginRequiredMixin, View):
+    """API endpoint para obtener detalles de un template"""
+    
+    def get(self, request, template_uuid):
+        """Obtiene detalles de un template específico"""
+        from .models import PromptTemplate
+        
+        try:
+            template = PromptTemplate.objects.get(uuid=template_uuid, is_active=True)
+            
+            # Verificar acceso
+            if not template.is_public and template.created_by != request.user:
+                return JsonResponse({
+                    'error': 'No tienes acceso a este template'
+                }, status=403)
+            
+            # Verificar si es favorito
+            is_favorite = False
+            user_vote = None
+            
+            if request.user.is_authenticated:
+                from .models import UserPromptFavorite, UserPromptVote
+                is_favorite = UserPromptFavorite.objects.filter(
+                    user=request.user,
+                    template=template
+                ).exists()
+                
+                try:
+                    vote = UserPromptVote.objects.get(user=request.user, template=template)
+                    user_vote = vote.vote_type
+                except UserPromptVote.DoesNotExist:
+                    pass
+            
+            # Generar URL firmada si es un gcs_path
+            preview_url = template.preview_url
+            if preview_url and preview_url.startswith('gs://'):
+                try:
+                    from core.storage.gcs import gcs_storage
+                    preview_url = gcs_storage.get_signed_url(preview_url, expiration=3600)
+                except Exception as e:
+                    logger.warning(f"Error al generar URL firmada para template {template.uuid}: {e}")
+                    preview_url = None
+            
+            return JsonResponse({
+                'uuid': str(template.uuid),
+                'name': template.name,
+                'description': template.description,
+                'template_type': template.template_type,
+                'recommended_service': template.recommended_service,
+                'preview_url': preview_url,
+                'is_public': template.is_public,
+                'usage_count': template.usage_count,
+                'upvotes': template.upvotes,
+                'downvotes': template.downvotes,
+                'rating': template.get_rating(),
+                'created_at': template.created_at.isoformat(),
+                'is_favorite': is_favorite,
+                'user_vote': user_vote,
+                'created_by': template.created_by.username if template.created_by else None,
+                # NO incluir prompt_text por seguridad (el usuario no debe verlo)
+            })
+        
+        except PromptTemplate.DoesNotExist:
+            return JsonResponse({
+                'error': 'Template no encontrado'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error al obtener template: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al cargar template',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class PromptTemplateVoteAPIView(LoginRequiredMixin, View):
+    """API endpoint para votar templates"""
+    
+    def post(self, request, template_uuid):
+        """
+        Vota un template (upvote o downvote)
+        
+        Body JSON:
+        {
+            "vote_type": "upvote" | "downvote" | null (para quitar voto)
+        }
+        """
+        from .models import PromptTemplate, UserPromptVote
+        import json
+        
+        try:
+            data = json.loads(request.body)
+            vote_type = data.get('vote_type')  # 'upvote', 'downvote', o null
+            
+            template = PromptTemplate.objects.get(uuid=template_uuid, is_active=True)
+            
+            # Verificar acceso
+            if not template.is_public and template.created_by != request.user:
+                return JsonResponse({
+                    'error': 'No tienes acceso a este template'
+                }, status=403)
+            
+            # Obtener o crear voto
+            vote, created = UserPromptVote.objects.get_or_create(
+                user=request.user,
+                template=template,
+                defaults={'vote_type': vote_type} if vote_type else {}
+            )
+            
+            if vote_type:
+                # Actualizar o crear voto
+                old_vote_type = vote.vote_type
+                vote.vote_type = vote_type
+                vote.save()
+                
+                # Actualizar contadores del template
+                if old_vote_type == 'upvote':
+                    template.upvotes = max(0, template.upvotes - 1)
+                elif old_vote_type == 'downvote':
+                    template.downvotes = max(0, template.downvotes - 1)
+                
+                if vote_type == 'upvote':
+                    template.upvotes += 1
+                elif vote_type == 'downvote':
+                    template.downvotes += 1
+                
+                template.save(update_fields=['upvotes', 'downvotes'])
+            else:
+                # Eliminar voto
+                old_vote_type = vote.vote_type
+                vote.delete()
+                
+                # Actualizar contadores
+                if old_vote_type == 'upvote':
+                    template.upvotes = max(0, template.upvotes - 1)
+                elif old_vote_type == 'downvote':
+                    template.downvotes = max(0, template.downvotes - 1)
+                
+                template.save(update_fields=['upvotes', 'downvotes'])
+            
+            return JsonResponse({
+                'success': True,
+                'upvotes': template.upvotes,
+                'downvotes': template.downvotes,
+                'rating': template.get_rating(),
+                'user_vote': vote_type if vote_type else None
+            })
+        
+        except PromptTemplate.DoesNotExist:
+            return JsonResponse({
+                'error': 'Template no encontrado'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error al votar template: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al votar template',
+                'error_detail': str(e)
+            }, status=500)
+
+
+class PromptTemplateFavoriteAPIView(LoginRequiredMixin, View):
+    """API endpoint para marcar/desmarcar templates como favoritos"""
+    
+    def post(self, request, template_uuid):
+        """
+        Marca o desmarca un template como favorito
+        
+        Body JSON:
+        {
+            "is_favorite": true | false
+        }
+        """
+        from .models import PromptTemplate, UserPromptFavorite
+        import json
+        
+        try:
+            data = json.loads(request.body)
+            is_favorite = data.get('is_favorite', True)
+            
+            template = PromptTemplate.objects.get(uuid=template_uuid, is_active=True)
+            
+            # Verificar acceso
+            if not template.is_public and template.created_by != request.user:
+                return JsonResponse({
+                    'error': 'No tienes acceso a este template'
+                }, status=403)
+            
+            if is_favorite:
+                # Marcar como favorito
+                UserPromptFavorite.objects.get_or_create(
+                    user=request.user,
+                    template=template
+                )
+            else:
+                # Desmarcar favorito
+                UserPromptFavorite.objects.filter(
+                    user=request.user,
+                    template=template
+                ).delete()
+            
+            return JsonResponse({
+                'success': True,
+                'is_favorite': is_favorite
+            })
+        
+        except PromptTemplate.DoesNotExist:
+            return JsonResponse({
+                'error': 'Template no encontrado'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error al marcar favorito: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al marcar favorito',
+                'error_detail': str(e)
+            }, status=500)

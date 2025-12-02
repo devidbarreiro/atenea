@@ -1972,3 +1972,237 @@ class Notification(models.Model):
             logger.warning(f"Error enviando notificación vía WebSocket: {e}")
         
         return notification
+
+
+class PromptTemplate(models.Model):
+    """Plantillas de prompts reutilizables para generación de contenido"""
+    
+    TEMPLATE_TYPES = [
+        ('video', 'Video'),
+        ('image', 'Imagen'),
+        ('agent', 'Agente'),
+    ]
+    
+    RECOMMENDED_SERVICES = [
+        ('sora', 'Sora'),
+        ('higgsfield', 'Higgsfield'),
+        ('gemini_veo', 'Gemini Veo'),
+        ('agent', 'Agente'),
+    ]
+    
+    # Identificación
+    uuid = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text='UUID único de la plantilla'
+    )
+    
+    # Información básica
+    name = models.CharField(
+        max_length=200,
+        help_text='Nombre de la plantilla (ej: "Raven Transition")'
+    )
+    description = models.TextField(
+        blank=True,
+        help_text='Descripción detallada de la plantilla'
+    )
+    
+    # Tipo de contenido
+    template_type = models.CharField(
+        max_length=20,
+        choices=TEMPLATE_TYPES,
+        default='video',
+        help_text='Tipo de contenido que genera',
+        db_index=True
+    )
+    
+    # Contenido del prompt
+    prompt_text = models.TextField(
+        max_length=800,
+        help_text='Texto del prompt que se enviará al servicio de IA (máximo 800 caracteres)'
+    )
+    
+    # Servicio recomendado
+    recommended_service = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        choices=RECOMMENDED_SERVICES,
+        help_text='Servicio recomendado para usar este template',
+        db_index=True
+    )
+    
+    # Preview
+    preview_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='URL del video/imagen de ejemplo'
+    )
+    
+    # Sistema de permisos
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_prompt_templates',
+        help_text='Usuario que creó la plantilla (None para templates del sistema)',
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    is_public = models.BooleanField(
+        default=False,
+        help_text='Si la plantilla es visible para todos los usuarios',
+        db_index=True
+    )
+    
+    # Sistema de votación
+    upvotes = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de votos positivos'
+    )
+    downvotes = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de votos negativos'
+    )
+    
+    # Estadísticas
+    usage_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de veces que se ha usado'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha de creación'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Fecha de última modificación'
+    )
+    
+    # Control de estado
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Si la plantilla está activa y disponible',
+        db_index=True
+    )
+    
+    class Meta:
+        verbose_name = 'Plantilla de Prompt'
+        verbose_name_plural = 'Plantillas de Prompts'
+        ordering = ['-usage_count', '-created_at']
+        # Permitir mismo nombre si created_by es diferente o None
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'created_by'],
+                name='unique_template_per_user',
+                condition=models.Q(created_by__isnull=False)
+            ),
+            # Para templates del sistema (created_by=None), único por nombre, tipo y servicio recomendado
+            models.UniqueConstraint(
+                fields=['name', 'template_type', 'recommended_service'],
+                name='unique_system_template',
+                condition=models.Q(created_by__isnull=True)
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['template_type', 'is_public', 'is_active']),
+            models.Index(fields=['recommended_service', 'is_public', 'is_active']),
+            models.Index(fields=['created_by', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_template_type_display()})"
+    
+    def get_rating(self):
+        """Calcula el rating basado en upvotes/downvotes (0-5)"""
+        total = self.upvotes + self.downvotes
+        if total == 0:
+            return 0.0
+        return (self.upvotes / total) * 5.0
+    
+    def increment_usage(self):
+        """Incrementa el contador de uso"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+    
+    def is_accessible_by(self, user):
+        """Verifica si un usuario puede acceder a esta plantilla"""
+        return self.is_public or self.created_by == user
+
+
+class UserPromptVote(models.Model):
+    """Votos de usuarios sobre templates"""
+    
+    VOTE_TYPES = [
+        ('upvote', 'Upvote'),
+        ('downvote', 'Downvote'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='prompt_votes',
+        help_text='Usuario que vota'
+    )
+    template = models.ForeignKey(
+        PromptTemplate,
+        on_delete=models.CASCADE,
+        related_name='votes',
+        help_text='Template votado'
+    )
+    vote_type = models.CharField(
+        max_length=10,
+        choices=VOTE_TYPES,
+        help_text='Tipo de voto'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha del voto'
+    )
+    
+    class Meta:
+        unique_together = [['user', 'template']]
+        verbose_name = 'Voto de Template'
+        verbose_name_plural = 'Votos de Templates'
+        indexes = [
+            models.Index(fields=['template', 'vote_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name} ({self.get_vote_type_display()})"
+
+
+class UserPromptFavorite(models.Model):
+    """Favoritos de usuarios sobre templates"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='favorite_prompts',
+        help_text='Usuario que marca como favorito'
+    )
+    template = models.ForeignKey(
+        PromptTemplate,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+        help_text='Template favorito'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha en que se marcó como favorito'
+    )
+    
+    class Meta:
+        unique_together = [['user', 'template']]
+        verbose_name = 'Template Favorito'
+        verbose_name_plural = 'Templates Favoritos'
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name}"
