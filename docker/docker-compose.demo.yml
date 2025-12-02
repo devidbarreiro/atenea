@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Docker Compose para ENTORNO DEMO
 # Puerto: 8081
 # URL: demo.atenea.nxhumans.com

@@ -136,11 +136,11 @@ jobs:
           --exclude='node_modules' \
           ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
         
-        # Copiar docker-compose al servidor
-        echo "📋 Copiando docker-compose.yml"
+        # Copiar docker-compose al servidor (dentro de html/)
+        echo "📋 Copiando docker-compose.yml a html/"
         scp -i $SSH_KEY -o StrictHostKeyChecking=no \
           docker/docker-compose.$ENV.yml \
-          $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/docker-compose.yml
+          $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/docker-compose.yml
         
         # Ejecutar despliegue en el servidor
         echo "🚀 Ejecutando despliegue en el servidor"
@@ -148,8 +148,8 @@ jobs:
           ENV="$ENV" bash -s << 'DEPLOY_SCRIPT'
         set -e
         ENV_DIR="$HOME/$ENV"
-        echo "📂 Cambiando a directorio: $ENV_DIR"
-        cd $ENV_DIR
+        echo "📂 Cambiando a directorio: $ENV_DIR/html"
+        cd $ENV_DIR/html || { echo "❌ Error: No se encuentra $ENV_DIR/html"; exit 1; }
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         # Detener y eliminar contenedores, redes y volúmenes huérfanos
         # Usar --remove-orphans para eliminar contenedores huérfanos
@@ -163,14 +163,14 @@ jobs:
         ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || true)
         if [ ! -z "$ALL_CONTAINERS" ]; then
           echo "$ALL_CONTAINERS" | while read container; do
-            if [ ! -z "$container" ] && [[ "$container" == "${ENV}-"* ]]; then
+            if [ ! -z "$container" ] && [[ "$container" == "${ENV}-"* ]] || [[ "$container" == "html-"* ]]; then
               echo "🗑️  Eliminando contenedor: $container"
               docker rm -f "$container" 2>/dev/null || true
             fi
           done
         fi
         # También intentar eliminar contenedores específicos comunes
-        docker rm -f "${ENV}-web-1" "${ENV}-db-1" "${ENV}-migrate-1" "${ENV}-collectstatic-1" 2>/dev/null || true
+        docker rm -f "${ENV}-web-1" "${ENV}-db-1" "${ENV}-migrate-1" "${ENV}-collectstatic-1" "html-web-1" "html-db-1" "html-migrate-1" "html-collectstatic-1" 2>/dev/null || true
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
