@@ -50,6 +50,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - atenea-dev-network
     restart: always
