@@ -31,6 +31,33 @@ Sigue las instrucciones de instalación abajo.
 
 - Python 3.8 o superior
 - pip
+- Redis (para Celery y WebSockets)
+
+### Instalar Redis
+
+**macOS:**
+```bash
+brew install redis
+brew services start redis
+```
+
+**Windows:**
+- Opción 1: Descargar desde [Microsoft Archive Redis](https://github.com/microsoftarchive/redis/releases)
+- Opción 2: Usar Docker: `docker run -d -p 6379:6379 redis`
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get update
+sudo apt-get install redis-server
+sudo systemctl start redis
+sudo systemctl enable redis  # Para iniciar automáticamente al arrancar
+```
+
+**Verificar que Redis está corriendo:**
+```bash
+redis-cli ping
+# Debe responder: PONG
+```
 
 ## Instalación
 
