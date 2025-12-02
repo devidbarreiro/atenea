@@ -1004,8 +1004,15 @@ class VideoService:
             except (ValueError, TypeError):
                 duration = 8
         
+        # Aplicar template de prompt si existe
+        from core.utils.prompt_templates import apply_prompt_template
+        final_prompt = apply_prompt_template(
+            video.script,
+            video.config.get('prompt_template_id')
+        )
+        
         params = {
-            'prompt': video.script,
+            'prompt': final_prompt,
             'title': video.title,
             'duration': duration,
             'aspect_ratio': video.config.get('aspect_ratio', '16:9'),
@@ -1041,6 +1048,13 @@ class VideoService:
     def _generate_sora_video(self, video: Video) -> str:
         """Genera video con OpenAI Sora"""
         client = self._get_sora_client()
+        
+        # Aplicar template de prompt si existe
+        from core.utils.prompt_templates import apply_prompt_template
+        final_prompt = apply_prompt_template(
+            video.script,
+            video.config.get('prompt_template_id')
+        )
         
         # Obtener configuración
         model = video.config.get('sora_model', 'sora-2')
@@ -1078,7 +1092,7 @@ class VideoService:
             
             try:
                 response = client.generate_video_with_image(
-                    prompt=video.script,
+                    prompt=final_prompt,
                     input_reference_path=tmp_path,
                     model=model,
                     seconds=duration,
@@ -1092,7 +1106,7 @@ class VideoService:
         else:
             # Generación text-to-video
             response = client.generate_video(
-                prompt=video.script,
+                prompt=final_prompt,
                 model=model,
                 seconds=duration,
                 size=size
@@ -1117,7 +1131,12 @@ class VideoService:
             raise ValidationException(f'Tipo de video Higgsfield no válido: {video.type}')
         
         # Obtener configuración
-        prompt = video.script
+        # Aplicar template de prompt si existe
+        from core.utils.prompt_templates import apply_prompt_template
+        prompt = apply_prompt_template(
+            video.script,
+            video.config.get('prompt_template_id')
+        )
         
         # Obtener URL de imagen si existe (requerido para image-to-video)
         image_url = None
@@ -1170,7 +1189,13 @@ class VideoService:
             raise ValidationException(f'Tipo de video Kling no válido: {video.type}')
         
         # Obtener configuración
-        prompt = video.script
+        # Aplicar template de prompt si existe
+        from core.utils.prompt_templates import apply_prompt_template
+        prompt = apply_prompt_template(
+            video.script,
+            video.config.get('prompt_template_id')
+        )
+        
         mode = video.config.get('mode', 'std')  # 'std' o 'pro'
         duration = int(video.config.get('duration', 5))
         aspect_ratio = video.config.get('aspect_ratio', '16:9')
@@ -2128,13 +2153,20 @@ class ImageService:
         image.mark_as_processing()
         
         try:
+            # Aplicar template de prompt si existe
+            from core.utils.prompt_templates import apply_prompt_template
+            final_prompt = apply_prompt_template(
+                image.prompt,
+                image.config.get('prompt_template_id')
+            )
+            
             # Obtener configuración
             aspect_ratio = image.config.get('aspect_ratio', '1:1')
             response_modalities = image.config.get('response_modalities')
             
             # Usar el servicio apropiado según model_id
             if service == 'higgsfield':
-                result = self._generate_higgsfield_image(image, model_id, aspect_ratio)
+                result = self._generate_higgsfield_image(image, model_id, aspect_ratio, final_prompt)
             else:
                 # Por defecto, usar Gemini
                 client = self._get_gemini_client()
@@ -2142,7 +2174,7 @@ class ImageService:
                 # Generar según el tipo
                 if image.type == 'text_to_image':
                     result = client.generate_image_from_text(
-                        prompt=image.prompt,
+                        prompt=final_prompt,
                         aspect_ratio=aspect_ratio,
                         response_modalities=response_modalities
                     )
@@ -2157,7 +2189,7 @@ class ImageService:
                     input_image_data = self._download_image_from_gcs(input_gcs_path)
                     
                     result = client.generate_image_from_image(
-                        prompt=image.prompt,
+                        prompt=final_prompt,
                         input_image_data=input_image_data,
                         aspect_ratio=aspect_ratio,
                         response_modalities=response_modalities
@@ -2176,7 +2208,7 @@ class ImageService:
                         input_images_data.append(img_data)
                     
                     result = client.generate_image_from_multiple_images(
-                        prompt=image.prompt,
+                        prompt=final_prompt,
                         input_images_data=input_images_data,
                         aspect_ratio=aspect_ratio,
                         response_modalities=response_modalities
@@ -2287,7 +2319,7 @@ class ImageService:
         logger.info(f"Imagen {image.id} encolada. Task UUID: {task.uuid}")
         return task
     
-    def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str) -> dict:
+    def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str = None) -> dict:
         """
         Genera una imagen usando Higgsfield API
         
@@ -2295,6 +2327,7 @@ class ImageService:
             image: Objeto Image a generar
             model_id: ID del modelo de Higgsfield
             aspect_ratio: Relación de aspecto
+            final_prompt: Prompt final con template aplicado (si None, usa image.prompt)
         
         Returns:
             dict con image_data, width, height, aspect_ratio
@@ -2309,10 +2342,12 @@ class ImageService:
         # (Higgsfield usa el mismo endpoint para imágenes y videos)
         logger.info(f"Generando imagen con Higgsfield: {model_id}")
         
-        # Generar usando el método generate_video sin image_url (para text-to-image)
+        # Usar prompt final si se proporciona, sino usar el original
+        prompt = final_prompt if final_prompt else image.prompt
+        
         response = client.generate_video(
             model_id=model_id,
-            prompt=image.prompt,
+            prompt=prompt,
             image_url=None,  # Sin imagen de entrada para text-to-image
             aspect_ratio=aspect_ratio,
             resolution=None,

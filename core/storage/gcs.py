@@ -164,10 +164,35 @@ class GCSStorageManager:
             raise
     
     def get_signed_url(self, gcs_path: str, expiration: int = 3600) -> str:
-        """Genera URL firmada para acceder a un archivo"""
+        """
+        Genera URL firmada para acceder a un archivo
+        
+        Args:
+            gcs_path: Path en formato gs://bucket/path o path relativo
+            expiration: Tiempo de expiración en segundos (default: 3600)
+        
+        Returns:
+            URL firmada
+        """
         try:
-            blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
-            blob = self.bucket.blob(blob_name)
+            # Parsear gcs_path: gs://bucket_name/path/to/file
+            if gcs_path.startswith('gs://'):
+                gcs_path = gcs_path.replace('gs://', '')
+                parts = gcs_path.split('/', 1)
+                bucket_name = parts[0]
+                blob_name = parts[1] if len(parts) > 1 else ''
+            else:
+                # Si no empieza con gs://, asumir que es del bucket por defecto
+                bucket_name = settings.GCS_BUCKET_NAME
+                blob_name = gcs_path.replace(f"{settings.GCS_BUCKET_NAME}/", "")
+            
+            # Obtener el bucket (puede ser diferente al bucket por defecto)
+            if bucket_name == settings.GCS_BUCKET_NAME:
+                bucket = self.bucket
+            else:
+                bucket = self.client.bucket(bucket_name)
+            
+            blob = bucket.blob(blob_name)
             
             url = blob.generate_signed_url(
                 version="v4",

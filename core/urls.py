@@ -183,5 +183,11 @@ urlpatterns = [
     path('queues/active-dropdown/', views.ActiveQueuesDropdownView.as_view(), name='active_queues_dropdown'),
     path('queues/task/<uuid:task_uuid>/', views.QueueTaskDetailView.as_view(), name='queue_task_detail'),
     path('queues/task/<uuid:task_uuid>/cancel/', views.CancelTaskView.as_view(), name='cancel_task'),
+    
+    # Prompt Templates API
+    path('api/prompt-templates/', views.PromptTemplatesAPIView.as_view(), name='api_prompt_templates'),
+    path('api/prompt-templates/<uuid:template_uuid>/', views.PromptTemplateDetailAPIView.as_view(), name='api_prompt_template_detail'),
+    path('api/prompt-templates/<uuid:template_uuid>/vote/', views.PromptTemplateVoteAPIView.as_view(), name='api_prompt_template_vote'),
+    path('api/prompt-templates/<uuid:template_uuid>/favorite/', views.PromptTemplateFavoriteAPIView.as_view(), name='api_prompt_template_favorite'),
 ]
 
