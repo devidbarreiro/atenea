@@ -168,6 +168,23 @@ jobs:
           echo "✅ Archivo .env encontrado en $ENV_DIR/html/.env"
         fi
         
+        # Verificar que POSTGRES_PASSWORD está definido en .env
+        echo "🔍 Verificando variables críticas en .env..."
+        if grep -q "^POSTGRES_PASSWORD=" .env 2>/dev/null; then
+          echo "✅ POSTGRES_PASSWORD encontrado en .env"
+        else
+          echo "❌ Error: POSTGRES_PASSWORD no está definido en .env"
+          echo "❌ El despliegue no puede continuar sin POSTGRES_PASSWORD"
+          echo "💡 Por favor, asegúrate de que el archivo .env contiene: POSTGRES_PASSWORD=tu_password"
+          echo "📋 Contenido actual del .env (primeras 5 líneas):"
+          head -5 .env | sed 's/=.*/=***/' || echo "⚠️  No se pudo leer el archivo .env"
+          exit 1
+        fi
+        
+        # Mostrar información del .env (sin mostrar valores sensibles)
+        echo "📋 Variables definidas en .env (primeras 10):"
+        grep -E "^[A-Z_]+=" .env | sed 's/=.*/=***/' | head -10 || echo "⚠️  No se pudieron leer las variables del .env"
+        
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         # Detener y eliminar contenedores, redes y volúmenes huérfanos
         # Usar --remove-orphans para eliminar contenedores huérfanos
