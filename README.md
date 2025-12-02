@@ -169,8 +169,38 @@ python manage.py collectstatic
 daphne -b 0.0.0.0 -p 8000 atenea.asgi:application
 
 # Reiniciar Celery
+# ⚠️ IMPORTANTE: Antes de ejecutar Celery, asegúrate de que Redis esté corriendo
+
+# Instalar y ejecutar Redis localmente:
+# macOS:
+#   brew install redis
+#   brew services start redis
+# Windows:
+#   Descargar desde: https://github.com/microsoftarchive/redis/releases
+#   O usar Docker: docker run -d -p 6379:6379 redis
+# Linux:
+#   sudo apt-get install redis-server
+#   sudo systemctl start redis
+
+# Verificar que Redis está corriendo:
+#   redis-cli ping  (debe responder: PONG)
+
+# Linux/macOS:
 celery -A atenea worker --loglevel=info \
     --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks \
     --concurrency=4
+
+# Windows (PowerShell):
+celery -A atenea worker --loglevel=info `
+    --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks `
+    --concurrency=4
+
+# Windows (CMD):
+celery -A atenea worker --loglevel=info ^
+    --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks ^
+    --concurrency=4
+
+# Windows (una sola línea):
+celery -A atenea worker --loglevel=info --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks --concurrency=4
 ```# Test deployment
 
