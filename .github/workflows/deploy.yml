@@ -150,6 +150,24 @@ jobs:
         ENV_DIR="$HOME/$ENV"
         echo "📂 Cambiando a directorio: $ENV_DIR/html"
         cd $ENV_DIR/html || { echo "❌ Error: No se encuentra $ENV_DIR/html"; exit 1; }
+        
+        # Verificar que existe .env
+        if [ ! -f ".env" ]; then
+          echo "⚠️  Advertencia: No se encuentra .env en $ENV_DIR/html/.env"
+          echo "💡 El archivo .env debe existir en el servidor antes de ejecutar docker compose"
+          echo "💡 Puedes crearlo manualmente o copiarlo desde $ENV_DIR/.env si existe"
+          if [ -f "$ENV_DIR/.env" ]; then
+            echo "📋 Copiando .env desde $ENV_DIR/.env a $ENV_DIR/html/.env"
+            cp "$ENV_DIR/.env" "$ENV_DIR/html/.env"
+          else
+            echo "❌ Error: No se encuentra .env en $ENV_DIR/.env ni en $ENV_DIR/html/.env"
+            echo "❌ El despliegue no puede continuar sin el archivo .env"
+            exit 1
+          fi
+        else
+          echo "✅ Archivo .env encontrado en $ENV_DIR/html/.env"
+        fi
+        
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         # Detener y eliminar contenedores, redes y volúmenes huérfanos
         # Usar --remove-orphans para eliminar contenedores huérfanos
