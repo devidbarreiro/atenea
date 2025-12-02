@@ -194,23 +194,51 @@ jobs:
         # Detener y eliminar contenedores, redes y volúmenes huérfanos
         # Usar --remove-orphans para eliminar contenedores huérfanos
         docker compose down --remove-orphans || true
+        
+        # Esperar un momento para que los contenedores se detengan
+        sleep 2
+        
         # Eliminar contenedores que puedan estar detenidos pero aún existan
         docker compose rm -f || true
+        
         # Forzar eliminación de contenedores por nombre si aún existen
         # Los contenedores de docker-compose se nombran como: {project}-{service}-{number}
-        # Buscar TODOS los contenedores y eliminar los que coincidan con el patrón
-        echo "🔍 Buscando contenedores huérfanos..."
+        echo "🔍 Buscando y eliminando contenedores huérfanos..."
+        
+        # Lista de contenedores comunes que pueden existir
+        COMMON_CONTAINERS=(
+          "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
+          "html-migrate-1" "html-collectstatic-1"
+          "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1"
+          "${ENV}-migrate-1" "${ENV}-collectstatic-1"
+        )
+        
+        # Eliminar contenedores específicos comunes
+        for container in "${COMMON_CONTAINERS[@]}"; do
+          if docker ps -a --format "{{.Names}}" | grep -q "^${container}$" 2>/dev/null; then
+            echo "🗑️  Eliminando contenedor: $container"
+            docker rm -f "$container" 2>/dev/null || true
+          fi
+        done
+        
+        # Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-"
         ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || true)
         if [ ! -z "$ALL_CONTAINERS" ]; then
           echo "$ALL_CONTAINERS" | while read container; do
-            if [ ! -z "$container" ] && [[ "$container" == "${ENV}-"* ]] || [[ "$container" == "html-"* ]]; then
-              echo "🗑️  Eliminando contenedor: $container"
+            if [ ! -z "$container" ] && ([[ "$container" == "html-"* ]] || [[ "$container" == "${ENV}-"* ]]); then
+              echo "🗑️  Eliminando contenedor huérfano: $container"
               docker rm -f "$container" 2>/dev/null || true
             fi
           done
         fi
-        # También intentar eliminar contenedores específicos comunes
-        docker rm -f "${ENV}-web-1" "${ENV}-db-1" "${ENV}-migrate-1" "${ENV}-collectstatic-1" "html-web-1" "html-db-1" "html-migrate-1" "html-collectstatic-1" 2>/dev/null || true
+        
+        # Limpiar redes huérfanas también
+        echo "🧹 Limpiando redes huérfanas..."
+        docker network prune -f || true
+        
+        # Verificar que los contenedores se eliminaron
+        echo "✅ Verificación: contenedores restantes con prefijo 'html-' o '${ENV}-':"
+        docker ps -a --format "{{.Names}}" | grep -E "^(html-|${ENV}-)" || echo "  (ninguno)"
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
