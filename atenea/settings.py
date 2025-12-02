@@ -458,8 +458,9 @@ CELERY_BEAT_SCHEDULE = {
 ASGI_APPLICATION = 'atenea.asgi.application'
 
 # CHANNEL_LAYERS Configuration
-# Para desarrollo local, usar localhost. Para producción, usar CHANNEL_REDIS_URL o REDIS_URL.
-channel_redis_url = config('CHANNEL_REDIS_URL', default='redis://localhost:6379/1')
+# Para desarrollo local, usar localhost. Para producción/Docker, usar CHANNEL_REDIS_URL o REDIS_URL.
+# En Docker, usar el nombre del servicio: redis://redis:6379/1
+channel_redis_url = config('CHANNEL_REDIS_URL', default='redis://redis:6379/1')
 
 CHANNEL_LAYERS = {
     'default': {
