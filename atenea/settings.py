@@ -393,11 +393,26 @@ AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=in
 # CELERY CONFIGURATION
 # ====================================
 
+# Detectar automáticamente si estamos en Docker o desarrollo local
+# Intentamos resolver el hostname 'redis' (servicio Docker)
+# Si falla, usamos 'localhost' (desarrollo local)
+def get_redis_host():
+    """Detecta automáticamente el host de Redis según el entorno"""
+    import socket
+    try:
+        # Intentar resolver 'redis' (servicio Docker)
+        socket.gethostbyname('redis')
+        return 'redis'
+    except (socket.gaierror, OSError):
+        # Si falla, estamos en desarrollo local
+        return 'localhost'
+
 # Celery Configuration
 # En Docker, usar el nombre del servicio: redis://redis:6379/0
 # En desarrollo local, usar: redis://localhost:6379/0
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
+_redis_host = get_redis_host()
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f'redis://{_redis_host}:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f'redis://{_redis_host}:6379/0')
 
 # Serialización
 CELERY_ACCEPT_CONTENT = ['json']
@@ -463,7 +478,7 @@ ASGI_APPLICATION = 'atenea.asgi.application'
 # CHANNEL_LAYERS Configuration
 # Para desarrollo local, usar localhost. Para producción/Docker, usar CHANNEL_REDIS_URL o REDIS_URL.
 # En Docker, usar el nombre del servicio: redis://redis:6379/1
-channel_redis_url = config('CHANNEL_REDIS_URL', default='redis://redis:6379/1')
+channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
 
 CHANNEL_LAYERS = {
     'default': {
