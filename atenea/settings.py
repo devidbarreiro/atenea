@@ -480,11 +480,19 @@ ASGI_APPLICATION = 'atenea.asgi.application'
 # En Docker, usar el nombre del servicio: redis://redis:6379/1
 channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
 
+# Parsear URL de Redis para channels-redis
+# channels-redis acepta URLs directamente o tuplas (host, port)
+from urllib.parse import urlparse
+parsed_url = urlparse(channel_redis_url)
+redis_host = parsed_url.hostname or _redis_host
+redis_port = parsed_url.port or 6379
+redis_db = parsed_url.path.lstrip('/') if parsed_url.path else '1'
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [channel_redis_url],
+            "hosts": [(redis_host, redis_port)],
         },
     },
 }
