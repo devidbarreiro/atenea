@@ -1,7 +1,0 @@
-{% extends 'base.html' %}
-
-{% block title %}Eliminar {{ music.name }} - Atenea{% endblock %}
-
-{% block content %}
-{% include 'includes/delete_confirm_content.html' with object=music object_type='music' object_type_label='Música' delete_url=delete_url detail_url=detail_url %}
-{% endblock %}

@@ -155,7 +155,7 @@ def create_quote_tool(
                 'title': video.title,
                 'message': f'Video de cita "{video.title}" creado exitosamente',
                 'preview_url': preview_url,
-                'detail_url': f'/videos/{video.id}/',
+                'detail_url': f'/videos/{video.uuid}/',
                 'status_current': video.status  # 'pending', 'processing', 'completed', 'error'
             }
             
@@ -166,7 +166,7 @@ def create_quote_tool(
                 'video_id': video.id,
                 'title': video.title,
                 'message': f'Video creado pero hubo un error al generarlo: {str(e)}',
-                'detail_url': f'/videos/{video.id}/',
+                'detail_url': f'/videos/{video.uuid}/',
                 'status_current': video.status
             }
     

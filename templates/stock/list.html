@@ -721,9 +721,9 @@
         <div @click.stop class="bg-white rounded-lg shadow-lg w-96 max-w-full p-6">
             <h3 class="text-lg font-semibold mb-4">Mover a proyecto</h3>
             <div class="space-y-2 max-h-64 overflow-y-auto">
-                <template x-for="(project, index) in projects" :key="`project-${project.id}-${index}`">
+                <template x-for="(project, index) in projects" :key="`project-${project.uuid}-${index}`">
                     <button 
-                        @click="confirmMoveToProject(project.id)"
+                        @click="confirmMoveToProject(project.uuid)"
                         class="w-full text-left px-4 py-2 border rounded hover:bg-gray-50 flex items-center justify-between">
                         <span x-text="project.name"></span>
                         <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -830,9 +830,9 @@ function stockSearch() {
                 // Eliminar duplicados por ID
                 const seenIds = new Set();
                 this.projects = projectsArray.filter(project => {
-                    if (!project || !project.id) return false;
-                    if (seenIds.has(project.id)) return false;
-                    seenIds.add(project.id);
+                    if (!project || !project.uuid) return false;
+                    if (seenIds.has(project.uuid)) return false;
+                    seenIds.add(project.uuid);
                     return true;
                 });
             } catch (e) {

@@ -222,7 +222,7 @@
 
         <!-- Actions -->
         <div class="flex justify-between items-center">
-            <a href="{% url 'core:project_detail' project.id %}" 
+            <a href="{% url 'core:project_detail' project.uuid %}" 
                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
                 Cancelar
             </a>
@@ -230,7 +230,7 @@
                 <p class="text-xs text-gray-500">
                     💡 Tip: Las configuraciones se guardan automáticamente
                 </p>
-                <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+                <a href="{% url 'core:agent_scenes' project.uuid %}?script_id={{ script.id }}" 
                    class="px-8 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
                     Continuar a Escenas →
                 </a>
@@ -2194,7 +2194,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const agentContent = JSON.parse(sessionStorage.getItem('agentContent'));
     
     if (!agentContent) {
-        window.location.href = "{% url 'core:agent_create' project.id %}";
+        window.location.href = "{% url 'core:agent_create' project.uuid %}";
         return;
     }
     
@@ -2202,7 +2202,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateProcessingStatus('Enviando guión a procesamiento...');
     
     // Enviar a backend
-    fetch("{% url 'core:agent_configure' project.id %}", {
+    fetch("{% url 'core:agent_configure' project.uuid %}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -2228,13 +2228,13 @@ document.addEventListener('DOMContentLoaded', function() {
             pollScriptStatus(data.script_id);
         } else {
             alert('Error: ' + data.message);
-            window.location.href = "{% url 'core:agent_create' project.id %}";
+            window.location.href = "{% url 'core:agent_create' project.uuid %}";
         }
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error al enviar script');
-        window.location.href = "{% url 'core:agent_create' project.id %}";
+        window.location.href = "{% url 'core:agent_create' project.uuid %}";
     });
 });
 
@@ -2259,7 +2259,7 @@ function pollScriptStatus(scriptId) {
             clearInterval(interval);
             updateProcessingStatus('⚠️ Timeout: El procesamiento está tardando más de lo esperado.');
             alert('El procesamiento está tardando más de lo esperado. Por favor, verifica el estado del script en el proyecto.');
-            window.location.href = "{% url 'core:project_detail' project.id %}";
+            window.location.href = "{% url 'core:project_detail' project.uuid %}";
             return;
         }
         
@@ -2281,14 +2281,14 @@ function pollScriptStatus(scriptId) {
                 // Esperar 2 segundos para que terminen de generarse las preview images
                 setTimeout(() => {
                     // Redirigir a la misma página con script_id para mostrar escenas
-                    window.location.href = "{% url 'core:agent_configure' project.id %}?script_id=" + scriptId;
+                    window.location.href = "{% url 'core:agent_configure' project.uuid %}?script_id=" + scriptId;
                 }, 2000);
                 
             } else if (html.includes('Error') || html.includes('bg-red-500')) {
                 clearInterval(interval);
                 updateProcessingStatus('✗ Error al procesar guión');
                 alert('Error al procesar el guión. Por favor, intenta nuevamente.');
-                window.location.href = "{% url 'core:agent_create' project.id %}";
+                window.location.href = "{% url 'core:agent_create' project.uuid %}";
             } else {
                 // Actualizar mensaje de progreso
                 if (pollCount % 5 === 0) { // Cada 15 segundos

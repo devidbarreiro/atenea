@@ -23,7 +23,7 @@
             </div>
             <div class="flex gap-2">
                 {% if video.status == 'pending' or video.status == 'error' %}
-                <form method="post" action="{% url 'core:video_generate' video.id %}" style="display: inline;">
+                <form method="post" action="{% url 'core:video_generate' video.uuid %}" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit" class="bg-green-500 text-white hover:bg-green-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                         {% if video.status == 'error' %}Reintentar{% else %}Generar{% endif %}
@@ -31,11 +31,11 @@
                 </form>
                 {% endif %}
                 {% include 'partials/move_to_project_button.html' with item=video item_type='video' %}
-                <a href="{% url 'core:video_delete' video.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                <a href="{% url 'core:video_delete' video.uuid %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Eliminar
                 </a>
                 {% if video.project %}
-                <a href="{% url 'core:project_detail' video.project.id %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                <a href="{% url 'core:project_detail' video.project.uuid %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Volver
                 </a>
                 {% else %}
@@ -107,8 +107,8 @@
                 <h3 class="text-lg font-bold text-gray-900 mb-4">Información General</h3>
                 <div class="space-y-3 text-sm">
                     <div>
-                        <div class="text-gray-600 mb-1">ID</div>
-                        <div class="font-mono text-gray-900">{{ video.id }}</div>
+                        <div class="text-gray-600 mb-1">UUID</div>
+                        <div class="font-mono text-gray-900 text-xs">{{ video.uuid }}</div>
                     </div>
                     <div>
                         <div class="text-gray-600 mb-1">Estado</div>

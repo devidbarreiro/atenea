@@ -12,7 +12,7 @@ document.addEventListener('alpine:init', () => {
         loading: false,
         submitting: false,
         prompt: '',
-        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        projectId: {% if project %}'{{ project.uuid }}'{% else %}null{% endif %},
         
         init() {
             this.loadModels(this.activeTab);
@@ -23,6 +23,13 @@ document.addEventListener('alpine:init', () => {
             try {
                 const response = await fetch('/api/models/config/?type=' + type + '&grouped=true');
                 const data = await response.json();
+                
+                // Mostrar toast si viene en el response
+                if (data.toast) {
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: data.toast
+                    }));
+                }
                 if (data.models) {
                     this.models = data.models;
                     const allResponse = await fetch('/api/models/config/?type=' + type);
@@ -358,14 +365,47 @@ document.addEventListener('alpine:init', () => {
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Mostrar toast si viene en el response (reemplaza el showSuccess)
+                    if (data.toast) {
+                        console.log('Dispatching toast event:', data.toast);
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: data.toast
+                        }));
+                        // Verificar que el evento se disparó correctamente
+                        setTimeout(() => {
+                            const container = document.getElementById('toast-container');
+                            if (container && container._x_dataStack) {
+                                const toastData = container._x_dataStack[0];
+                                console.log('Toast container state:', toastData?.toasts?.length || 0, 'toasts');
+                            }
+                        }, 100);
+                    } else {
+                        // Fallback: usar toast en lugar de alert nativo
+                        console.warn('No toast in response, using fallback toast');
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: {
+                                type: 'success',
+                                title: 'Creado exitosamente',
+                                message: 'El elemento se ha creado correctamente',
+                                auto_close: 5
+                            }
+                        }));
+                    }
+                    
                     window.dispatchEvent(new CustomEvent('item-created', { detail: data.item }));
                     window.dispatchEvent(new CustomEvent('library-tab-changed', { detail: { tab: this.activeTab } }));
                     this.prompt = '';
                     this.selectedModel = null;
                     this.selectedModelData = null;
-                    this.showSuccess('¡Creado exitosamente!');
                 } else {
-                    this.showError(data.error || 'Error desconocido');
+                    // Mostrar toast de error si viene en el response
+                    if (data.toast) {
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: data.toast
+                        }));
+                    } else {
+                        this.showError(data.error || 'Error desconocido');
+                    }
                 }
             } catch (error) {
                 console.error('Error:', error);

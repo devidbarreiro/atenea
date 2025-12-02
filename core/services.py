@@ -248,6 +248,16 @@ class ProjectService:
             raise ValidationException(f'Proyecto {project_id} no encontrado')
     
     @staticmethod
+    def get_project_with_videos_by_uuid(project_uuid) -> Project:
+        """Obtiene proyecto con sus videos optimizado usando UUID"""
+        try:
+            return Project.objects.prefetch_related(
+                'videos'
+            ).get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            raise ValidationException(f'Proyecto {project_uuid} no encontrado')
+    
+    @staticmethod
     def delete_project(project: Project) -> None:
         """
         Elimina un proyecto y todos sus videos
@@ -823,6 +833,72 @@ class VideoService:
             video.mark_as_error(str(e))
             raise VideoGenerationException(str(e))
     
+    def generate_video_async(self, video: Video, metadata: Dict = None) -> 'GenerationTask':
+        """
+        Encola la generación de un video usando el sistema de colas
+        
+        Args:
+            video: Objeto Video a generar
+            metadata: Metadata adicional (prompt, parámetros, etc.)
+        
+        Returns:
+            GenerationTask creada
+        
+        Raises:
+            ValidationException: Si hay error de validación
+            ValueError: Si se alcanza el límite de tareas simultáneas
+        """
+        from core.services.queue import QueueService
+        
+        # Validar estado
+        if video.status in ['processing', 'completed']:
+            raise ValidationException(f'El video ya está en estado: {video.get_status_display()}')
+        
+        # Validar créditos ANTES de encolar
+        if video.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            estimated_cost = CreditService.estimate_video_cost(
+                video_type=video.type,
+                duration=video.config.get('duration', 8),
+                config=video.config
+            )
+            
+            if estimated_cost > 0:
+                if not CreditService.has_enough_credits(video.created_by, estimated_cost):
+                    raise InsufficientCreditsException(
+                        f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
+                        f"Créditos disponibles: {CreditService.get_or_create_user_credits(video.created_by).credits}"
+                    )
+                
+                try:
+                    CreditService.check_rate_limit(video.created_by, estimated_cost)
+                except RateLimitExceededException as e:
+                    raise ValidationException(str(e))
+        
+        # Preparar metadata
+        task_metadata = metadata or {}
+        task_metadata.update({
+            'prompt': video.script,
+            'video_type': video.type,
+            'title': video.title,
+        })
+        
+        # Encolar tarea
+        task = QueueService.enqueue_generation(
+            item=video,
+            user=video.created_by,
+            task_type='video',
+            metadata=task_metadata
+        )
+        
+        # Marcar video como pending (no processing todavía)
+        video.status = 'pending'
+        video.save(update_fields=['status', 'updated_at'])
+        
+        logger.info(f"Video {video.id} encolado. Task UUID: {task.uuid}")
+        return task
+    
     def _generate_heygen_video(self, video: Video) -> str:
         """Genera video con HeyGen"""
         client = self._get_heygen_client()
@@ -911,11 +987,11 @@ class VideoService:
         
         # Preparar storage URI
         if video.project:
-            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.id}/"
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/projects/{video.project.id}/videos/{video.uuid}/"
         elif video.created_by:
-            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/users/{video.created_by.id}/videos/{video.id}/"
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/users/{video.created_by.id}/videos/{video.uuid}/"
         else:
-            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/standalone/videos/{video.id}/"
+            storage_uri = f"gs://{settings.GCS_BUCKET_NAME}/standalone/videos/{video.uuid}/"
         
         # Parámetros
         # Asegurar que duration sea un int válido
@@ -1158,11 +1234,11 @@ class VideoService:
         
         # Subir video a GCS
         if video.project:
-            gcs_destination = f"projects/{video.project.id}/videos/{video.id}/manim_quote.mp4"
+            gcs_destination = f"projects/{video.project.id}/videos/{video.uuid}/manim_quote.mp4"
         elif video.created_by:
-            gcs_destination = f"users/{video.created_by.id}/videos/{video.id}/manim_quote.mp4"
+            gcs_destination = f"users/{video.created_by.id}/videos/{video.uuid}/manim_quote.mp4"
         else:
-            gcs_destination = f"standalone/videos/{video.id}/manim_quote.mp4"
+            gcs_destination = f"standalone/videos/{video.uuid}/manim_quote.mp4"
         
         logger.info(f"Subiendo video de Manim a GCS: {gcs_destination}")
         gcs_path = gcs_storage.upload_file(video_path, gcs_destination)
@@ -1283,11 +1359,11 @@ class VideoService:
             video_url = status_data.get('video_url')
             if video_url:
                 if video.project:
-                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/final_video.mp4"
+                    gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/final_video.mp4"
                 elif video.created_by:
-                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/final_video.mp4"
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/final_video.mp4"
                 else:
-                    gcs_path = f"standalone/videos/{video.id}/final_video.mp4"
+                    gcs_path = f"standalone/videos/{video.uuid}/final_video.mp4"
                 gcs_full_path = gcs_storage.upload_from_url(video_url, gcs_path)
                 
                 metadata = {
@@ -1341,11 +1417,11 @@ class VideoService:
                     url = video_data['url']
                     filename = f"video_{idx + 1}.mp4" if len(all_video_urls) > 1 else "video.mp4"
                     if video.project:
-                        gcs_path = f"projects/{video.project.id}/videos/{video.id}/{filename}"
+                        gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/{filename}"
                     elif video.created_by:
-                        gcs_path = f"users/{video.created_by.id}/videos/{video.id}/{filename}"
+                        gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/{filename}"
                     else:
-                        gcs_path = f"standalone/videos/{video.id}/{filename}"
+                        gcs_path = f"standalone/videos/{video.uuid}/{filename}"
                     
                     if url.startswith('gs://'):
                         if url.startswith(f"gs://{settings.GCS_BUCKET_NAME}/"):
@@ -1413,11 +1489,11 @@ class VideoService:
                 if success:
                     # Subir a GCS
                     if video.project:
-                        gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                        gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/video.mp4"
                     elif video.created_by:
-                        gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                        gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/video.mp4"
                     else:
-                        gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                        gcs_path = f"standalone/videos/{video.uuid}/video.mp4"
                     
                     with open(tmp_path, 'rb') as video_file:
                         gcs_full_path = gcs_storage.upload_from_bytes(
@@ -1444,11 +1520,11 @@ class VideoService:
                         
                         if client.download_thumbnail(video.external_id, thumb_path):
                             if video.project:
-                                thumb_gcs_path = f"projects/{video.project.id}/videos/{video.id}/thumbnail.webp"
+                                thumb_gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/thumbnail.webp"
                             elif video.created_by:
-                                thumb_gcs_path = f"users/{video.created_by.id}/videos/{video.id}/thumbnail.webp"
+                                thumb_gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/thumbnail.webp"
                             else:
-                                thumb_gcs_path = f"standalone/videos/{video.id}/thumbnail.webp"
+                                thumb_gcs_path = f"standalone/videos/{video.uuid}/thumbnail.webp"
                             
                             with open(thumb_path, 'rb') as thumb:
                                 thumb_gcs_full = gcs_storage.upload_from_bytes(
@@ -1492,11 +1568,11 @@ class VideoService:
             if video_url:
                 # Determinar ruta GCS según contexto
                 if video.project:
-                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                    gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/video.mp4"
                 elif video.created_by:
-                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/video.mp4"
                 else:
-                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                    gcs_path = f"standalone/videos/{video.uuid}/video.mp4"
                 
                 try:
                     # Descargar video desde URL y subir a GCS
@@ -1541,11 +1617,11 @@ class VideoService:
             if video_url:
                 # Determinar ruta GCS según contexto
                 if video.project:
-                    gcs_path = f"projects/{video.project.id}/videos/{video.id}/video.mp4"
+                    gcs_path = f"projects/{video.project.id}/videos/{video.uuid}/video.mp4"
                 elif video.created_by:
-                    gcs_path = f"users/{video.created_by.id}/videos/{video.id}/video.mp4"
+                    gcs_path = f"users/{video.created_by.id}/videos/{video.uuid}/video.mp4"
                 else:
-                    gcs_path = f"standalone/videos/{video.id}/video.mp4"
+                    gcs_path = f"standalone/videos/{video.uuid}/video.mp4"
                 
                 try:
                     # Descargar video desde URL y subir a GCS
@@ -1998,12 +2074,13 @@ class ImageService:
     # GENERAR IMAGEN
     # ----------------
     
-    def generate_image(self, image: Image) -> str:
+    def generate_image(self, image: Image, skip_status_check: bool = False) -> str:
         """
         Genera una imagen usando el servicio apropiado según model_id
         
         Args:
             image: Objeto Image a generar
+            skip_status_check: Si True, omite la validación de estado (útil cuando ya se validó antes)
         
         Returns:
             Path de GCS de la imagen generada
@@ -2013,8 +2090,8 @@ class ImageService:
             InsufficientCreditsException: Si no hay suficientes créditos
             RateLimitExceededException: Si se excede el límite mensual
         """
-        # Validar estado
-        if image.status in ['processing', 'completed']:
+        # Validar estado (solo si no se omite)
+        if not skip_status_check and image.status in ['processing', 'completed']:
             raise ValidationException(f'La imagen ya está en estado: {image.get_status_display()}')
         
         # Obtener model_id del config
@@ -2112,7 +2189,7 @@ class ImageService:
             gcs_path = self._save_generated_image(
                 image_data=result['image_data'],
                 project=image.project,
-                image_id=image.id
+                image_uuid=str(image.uuid)
             )
             
             # Preparar metadata
@@ -2136,6 +2213,79 @@ class ImageService:
             logger.error(f"Error al generar imagen {image.id}: {e}")
             image.mark_as_error(str(e))
             raise ImageGenerationException(str(e))
+    
+    def generate_image_async(self, image: Image, metadata: Dict = None) -> 'GenerationTask':
+        """
+        Encola la generación de una imagen usando el sistema de colas
+        
+        Args:
+            image: Objeto Image a generar
+            metadata: Metadata adicional (prompt, parámetros, etc.)
+        
+        Returns:
+            GenerationTask creada
+        
+        Raises:
+            ValidationException: Si hay error de validación
+            ValueError: Si se alcanza el límite de tareas simultáneas
+        """
+        from core.services.queue import QueueService
+        
+        # Validar estado
+        if image.status in ['processing', 'completed']:
+            raise ValidationException(f'La imagen ya está en estado: {image.get_status_display()}')
+        
+        # Validar créditos ANTES de encolar
+        if image.created_by:
+            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            
+            model_id = image.config.get('model_id')
+            from core.ai_services.model_config import get_model_capabilities
+            capabilities = get_model_capabilities(model_id) if model_id else None
+            service = capabilities.get('service') if capabilities else None
+            
+            if service == 'higgsfield':
+                estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            else:
+                estimated_cost = CreditService.estimate_image_cost()
+            
+            # Solo verificar créditos si el costo es > 0 (algunos modelos son gratis)
+            if estimated_cost > 0:
+                if not CreditService.has_enough_credits(image.created_by, estimated_cost):
+                    raise InsufficientCreditsException(
+                        f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
+                        f"Créditos disponibles: {CreditService.get_or_create_user_credits(image.created_by).credits}"
+                    )
+                
+                try:
+                    CreditService.check_rate_limit(image.created_by, estimated_cost)
+                except RateLimitExceededException as e:
+                    raise ValidationException(str(e))
+        
+        # Preparar metadata
+        task_metadata = metadata or {}
+        task_metadata.update({
+            'prompt': image.prompt,
+            'image_type': image.type,
+            'model_id': image.config.get('model_id'),
+            'title': image.title,
+            'item_id': image.id,  # Guardar id para búsqueda en tareas
+        })
+        
+        # Encolar tarea
+        task = QueueService.enqueue_generation(
+            item=image,
+            user=image.created_by,
+            task_type='image',
+            metadata=task_metadata
+        )
+        
+        # Marcar imagen como pending (no processing todavía, se marcará cuando Celery la procese)
+        image.status = 'pending'
+        image.save(update_fields=['status', 'updated_at'])
+        
+        logger.info(f"Imagen {image.id} encolada. Task UUID: {task.uuid}")
+        return task
     
     def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str) -> dict:
         """
@@ -2251,17 +2401,17 @@ class ImageService:
         self,
         image_data: bytes,
         project: Project = None,
-        image_id: int = None
+        image_uuid: str = None
     ) -> str:
         """Guarda imagen generada en GCS"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
-            # Construir path según si hay proyecto o no
+            # Construir path usando UUID (no project.id para consistencia)
             if project:
-                gcs_destination = f"images/project_{project.id}/image_{image_id}/{timestamp}_generated.png"
+                gcs_destination = f"projects/{project.id}/images/{image_uuid}/{timestamp}_generated.png"
             else:
-                gcs_destination = f"images/no_project/image_{image_id}/{timestamp}_generated.png"
+                gcs_destination = f"images/{image_uuid}/{timestamp}_generated.png"
             
             logger.info(f"Guardando imagen generada en GCS: {gcs_destination}")
             gcs_path = gcs_storage.upload_from_bytes(
@@ -2416,8 +2566,8 @@ class AudioService:
         Genera el audio usando ElevenLabs API
         
         Args:
-            audio: Objeto Audio a generar
-            with_timestamps: Si True, genera con timestamps carácter por carácter
+            audio: Objeto Audio a generar (tipo 'tts' o 'music')
+            with_timestamps: Si True, genera con timestamps carácter por carácter (solo TTS)
             
         Returns:
             GCS path del audio generado
@@ -2434,6 +2584,19 @@ class AudioService:
         if audio.status in ['processing', 'completed']:
             raise ValidationException(f'El audio ya está en estado: {audio.get_status_display()}')
         
+        # Verificar tipo de audio
+        audio_type = getattr(audio, 'type', 'tts') or 'tts'
+        
+        if audio_type == 'music':
+            # La generación de música requiere implementación separada
+            raise ValidationException('La generación de música aún no está implementada en este flujo')
+        
+        # Para TTS, validar campos requeridos
+        if not audio.text:
+            raise ValidationException('El texto es requerido para audio TTS')
+        if not audio.voice_id:
+            raise ValidationException('La voz es requerida para audio TTS')
+        
         # Marcar como procesando
         audio.mark_as_processing()
         
@@ -2443,10 +2606,11 @@ class AudioService:
             # Obtener configuración de voz
             voice_settings = audio.voice_settings or AudioService._get_default_voice_settings()
             
-            logger.info(f"Generando audio para: {audio.title}")
+            logger.info(f"Generando audio TTS para: {audio.title}")
             logger.info(f"  Voz: {audio.voice_name} ({audio.voice_id})")
             logger.info(f"  Modelo: {audio.model_id}")
-            logger.info(f"  Texto: {audio.text[:100]}{'...' if len(audio.text) > 100 else ''}")
+            text_preview = audio.text[:100] if audio.text else ''
+            logger.info(f"  Texto: {text_preview}{'...' if len(audio.text or '') > 100 else ''}")
             
             if with_timestamps:
                 # Generar con timestamps
@@ -2483,7 +2647,11 @@ class AudioService:
                 # Subir a GCS
                 from datetime import datetime
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                gcs_path = f"projects/{audio.project.id}/audios/{audio.id}/{timestamp}_{audio.title.replace(' ', '_')}.mp3"
+                safe_title = audio.title.replace(' ', '_').replace('/', '_')
+                if audio.project:
+                    gcs_path = f"projects/{audio.project.id}/audios/{audio.uuid}/{timestamp}_{safe_title}.mp3"
+                else:
+                    gcs_path = f"audios/{audio.uuid}/{timestamp}_{safe_title}.mp3"
                 
                 with open(tmp_path, 'rb') as f:
                     gcs_full_path = gcs_storage.upload_from_bytes(
@@ -2525,6 +2693,68 @@ class AudioService:
             logger.error(f"Error al generar audio: {e}")
             audio.mark_as_error(str(e))
             raise ServiceException(f"Error al generar audio: {str(e)}")
+    
+    @staticmethod
+    def generate_audio_async(audio, metadata: Dict = None, with_timestamps: bool = False) -> 'GenerationTask':
+        """
+        Encola la generación de un audio usando el sistema de colas
+        
+        Args:
+            audio: Objeto Audio a generar
+            metadata: Metadata adicional (prompt, parámetros, etc.)
+            with_timestamps: Si True, genera con timestamps carácter por carácter
+        
+        Returns:
+            GenerationTask creada
+        
+        Raises:
+            ValidationException: Si hay error de validación
+            ValueError: Si se alcanza el límite de tareas simultáneas
+        """
+        from core.services.queue import QueueService
+        
+        # Validar estado
+        if audio.status in ['processing', 'completed']:
+            raise ValidationException(f'El audio ya está en estado: {audio.get_status_display()}')
+        
+        # Preparar metadata según tipo de audio
+        task_metadata = metadata or {}
+        audio_type = getattr(audio, 'type', 'tts') or 'tts'
+        
+        task_metadata.update({
+            'title': audio.title,
+            'audio_type': audio_type,
+            'with_timestamps': with_timestamps,
+        })
+        
+        # Campos específicos según tipo
+        if audio_type == 'tts':
+            task_metadata.update({
+                'text': audio.text,
+                'voice_id': audio.voice_id,
+                'voice_name': audio.voice_name,
+                'model_id': audio.model_id,
+            })
+        elif audio_type == 'music':
+            task_metadata.update({
+                'prompt': audio.prompt,
+                'duration_ms': audio.duration_ms,
+            })
+        
+        # Encolar tarea
+        task = QueueService.enqueue_generation(
+            item=audio,
+            user=audio.created_by,
+            task_type='audio',
+            metadata=task_metadata
+        )
+        
+        # Marcar audio como pending
+        audio.status = 'pending'
+        audio.save(update_fields=['status', 'updated_at'])
+        
+        logger.info(f"Audio {audio.id} encolado. Task UUID: {task.uuid}")
+        return task
     
     @staticmethod
     def _get_audio_duration(audio_path: str) -> float:
@@ -4737,145 +4967,6 @@ Bienvenidos al mundo del marketing digital. Hoy vamos a explorar las estrategias
 
 
 # ====================
-# ELEVENLABS MUSIC SERVICE
+# ELEVENLABS MUSIC SERVICE - ELIMINADO
+# La funcionalidad de música ahora está integrada en el modelo Audio con type='music'
 # ====================
-
-class ElevenLabsMusicService:
-    """Servicio para generar música con ElevenLabs Music API"""
-    
-    def __init__(self):
-        from elevenlabs.client import ElevenLabs
-        self.client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
-        
-    def generate_music(self, music_obj):
-        """
-        Genera música usando ElevenLabs Music API
-        
-        Args:
-            music_obj: Objeto Music de Django
-            
-        Returns:
-            dict con 'gcs_path' y 'song_metadata'
-            
-        Raises:
-            ServiceException: Si falla la generación
-        """
-        try:
-            # Marcar como generando
-            music_obj.mark_as_generating()
-            
-            logger.info(f"Generando música con ElevenLabs: {music_obj.name}")
-            
-            # Generar música con composición detallada
-            if music_obj.composition_plan:
-                # Usar composition_plan si existe
-                track_details = self.client.music.compose_detailed(
-                    composition_plan=music_obj.composition_plan,
-                )
-            else:
-                # Generar desde prompt
-                track_details = self.client.music.compose_detailed(
-                    prompt=music_obj.prompt,
-                    music_length_ms=music_obj.duration_ms,
-                )
-            
-            # Obtener audio bytes
-            audio_bytes = track_details.audio
-            
-            # Obtener metadata
-            song_metadata = track_details.json.get('song_metadata', {}) if hasattr(track_details, 'json') else {}
-            composition_plan_used = track_details.json.get('composition_plan', {}) if hasattr(track_details, 'json') else {}
-            
-            # Guardar composition_plan si no existía
-            if not music_obj.composition_plan and composition_plan_used:
-                music_obj.composition_plan = composition_plan_used
-                music_obj.save(update_fields=['composition_plan'])
-            
-            # Subir a GCS
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            gcs_destination = f"music/project_{music_obj.project.id}/{timestamp}_{music_obj.name.replace(' ', '_')}.mp3"
-            
-            logger.info(f"Subiendo música a GCS: {gcs_destination}")
-            gcs_path = gcs_storage.upload_from_bytes(
-                file_content=audio_bytes,
-                destination_path=gcs_destination,
-                content_type='audio/mpeg'
-            )
-            
-            # Marcar como completado
-            music_obj.mark_as_completed(gcs_path, song_metadata)
-            
-            logger.info(f"✓ Música generada exitosamente: {gcs_path}")
-            
-            return {
-                'gcs_path': gcs_path,
-                'song_metadata': song_metadata,
-                'composition_plan': composition_plan_used
-            }
-            
-        except Exception as e:
-            error_msg = str(e)
-            
-            # Manejar errores específicos de ElevenLabs
-            if hasattr(e, 'body') and isinstance(e.body, dict):
-                detail = e.body.get('detail', {})
-                
-                # Error de acceso limitado (requiere aceptar términos adicionales)
-                if detail.get('status') == 'limited_access':
-                    error_msg = (
-                        "⚠️ ElevenLabs Music requiere acceso especial. "
-                        "Debes aceptar términos adicionales en https://elevenlabs.io/music-terms "
-                        "y contactar a tu equipo de cuenta de ElevenLabs para habilitar esta funcionalidad."
-                    )
-                
-                # Error de prompt con material protegido por copyright
-                elif detail.get('status') == 'bad_prompt':
-                    prompt_suggestion = detail.get('data', {}).get('prompt_suggestion', '')
-                    error_msg = f"Prompt contiene material protegido. Sugerencia: {prompt_suggestion}"
-                
-                # Error de composition_plan con material protegido
-                elif detail.get('status') == 'bad_composition_plan':
-                    plan_suggestion = detail.get('data', {}).get('composition_plan_suggestion', {})
-                    error_msg = f"Composition plan contiene material protegido. Se sugiere un plan alternativo."
-            
-            logger.error(f"✗ Error al generar música: {error_msg}")
-            music_obj.mark_as_error(error_msg)
-            raise ServiceException(error_msg)
-    
-    def create_composition_plan(self, prompt: str, duration_ms: int):
-        """
-        Crea un composition plan desde un prompt
-        
-        Args:
-            prompt: Descripción de la música deseada
-            duration_ms: Duración en milisegundos
-            
-        Returns:
-            dict con el composition plan
-            
-        Raises:
-            ServiceException: Si falla la creación
-        """
-        try:
-            logger.info(f"Creando composition plan con ElevenLabs")
-            
-            composition_plan = self.client.music.composition_plan.create(
-                prompt=prompt,
-                music_length_ms=duration_ms,
-            )
-            
-            logger.info(f"✓ Composition plan creado exitosamente")
-            return composition_plan
-            
-        except Exception as e:
-            error_msg = str(e)
-            
-            # Manejar errores de material protegido
-            if hasattr(e, 'body') and isinstance(e.body, dict):
-                detail = e.body.get('detail', {})
-                if detail.get('status') == 'bad_prompt':
-                    prompt_suggestion = detail.get('data', {}).get('prompt_suggestion', '')
-                    error_msg = f"Prompt contiene material protegido. Sugerencia: {prompt_suggestion}"
-            
-            logger.error(f"✗ Error al crear composition plan: {error_msg}")
-            raise ServiceException(error_msg)
