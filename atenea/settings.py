@@ -393,8 +393,11 @@ AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=in
 # CELERY CONFIGURATION
 # ====================================
 
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+# Celery Configuration
+# En Docker, usar el nombre del servicio: redis://redis:6379/0
+# En desarrollo local, usar: redis://localhost:6379/0
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
 
 # Serialización
 CELERY_ACCEPT_CONTENT = ['json']
