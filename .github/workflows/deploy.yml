@@ -191,21 +191,26 @@ jobs:
         grep -E "^[A-Z_]+=" .env | sed 's/=.*/=***/' | head -10 || echo "⚠️  No se pudieron leer las variables del .env"
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
-        # Detener y eliminar contenedores, redes y volúmenes huérfanos
-        # Usar --remove-orphans para eliminar contenedores huérfanos
-        docker compose down --remove-orphans || true
         
-        # Esperar un momento para que los contenedores se detengan
-        sleep 2
+        # Primero, detener todos los contenedores que puedan estar corriendo
+        echo "⏸️  Deteniendo contenedores..."
+        docker compose stop || true
+        
+        # Detener contenedores específicos por nombre (por si acaso)
+        docker stop html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 2>/dev/null || true
+        docker stop ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 2>/dev/null || true
+        
+        # Esperar un momento para que los contenedores se detengan completamente
+        sleep 3
+        
+        # Eliminar contenedores con docker compose down
+        echo "🗑️  Eliminando contenedores con docker compose down..."
+        docker compose down --remove-orphans -v || true
         
         # Eliminar contenedores que puedan estar detenidos pero aún existan
         docker compose rm -f || true
         
-        # Forzar eliminación de contenedores por nombre si aún existen
-        # Los contenedores de docker-compose se nombran como: {project}-{service}-{number}
-        echo "🔍 Buscando y eliminando contenedores huérfanos..."
-        
-        # Lista de contenedores comunes que pueden existir
+        # Lista de contenedores comunes que pueden existir (incluyendo variaciones)
         COMMON_CONTAINERS=(
           "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
           "html-migrate-1" "html-collectstatic-1"
@@ -213,18 +218,20 @@ jobs:
           "${ENV}-migrate-1" "${ENV}-collectstatic-1"
         )
         
-        # Eliminar contenedores específicos comunes
+        # Forzar eliminación de contenedores específicos comunes
+        echo "🔍 Eliminando contenedores específicos..."
         for container in "${COMMON_CONTAINERS[@]}"; do
-          if docker ps -a --format "{{.Names}}" | grep -q "^${container}$" 2>/dev/null; then
+          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
             echo "🗑️  Eliminando contenedor: $container"
             docker rm -f "$container" 2>/dev/null || true
           fi
         done
         
-        # Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-"
-        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || true)
+        # Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-" y eliminarlos
+        echo "🔍 Buscando contenedores huérfanos adicionales..."
+        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
         if [ ! -z "$ALL_CONTAINERS" ]; then
-          echo "$ALL_CONTAINERS" | while read container; do
+          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
             if [ ! -z "$container" ] && ([[ "$container" == "html-"* ]] || [[ "$container" == "${ENV}-"* ]]); then
               echo "🗑️  Eliminando contenedor huérfano: $container"
               docker rm -f "$container" 2>/dev/null || true
@@ -236,9 +243,22 @@ jobs:
         echo "🧹 Limpiando redes huérfanas..."
         docker network prune -f || true
         
+        # Esperar un momento más para asegurar que todo esté limpio
+        sleep 2
+        
         # Verificar que los contenedores se eliminaron
         echo "✅ Verificación: contenedores restantes con prefijo 'html-' o '${ENV}-':"
-        docker ps -a --format "{{.Names}}" | grep -E "^(html-|${ENV}-)" || echo "  (ninguno)"
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$REMAINING" ]; then
+          echo "⚠️  Advertencia: Aún quedan contenedores:"
+          echo "$REMAINING"
+          echo "🔄 Intentando eliminarlos nuevamente..."
+          echo "$REMAINING" | while IFS= read -r container; do
+            docker rm -f "$container" 2>/dev/null || true
+          done
+        else
+          echo "  ✅ Todos los contenedores eliminados correctamente"
+        fi
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
