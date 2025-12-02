@@ -40,7 +40,7 @@ services:
     ports:
       - "8080:8000"
     env_file:
-      - .env
+      - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
@@ -67,7 +67,7 @@ services:
       - .:/app
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - .env
+      - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
@@ -89,7 +89,7 @@ services:
       - .:/app
       - dev_static_volume:/app/staticfiles
     env_file:
-      - .env
+      - ../.env
     networks:
       - atenea-dev-network
     profiles:
@@ -107,7 +107,7 @@ services:
       - dev_logs_volume:/app/logs
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - .env
+      - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
@@ -131,7 +131,7 @@ services:
       - dev_logs_volume:/app/logs
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - .env
+      - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
