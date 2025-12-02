@@ -36,21 +36,29 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # ALLOWED_HOSTS: dominios permitidos para la aplicación
 # Se puede configurar via variable de entorno o usar los conocidos
 allowed_hosts_env = config('ALLOWED_HOSTS', default='')
+
+# Dominios de producción conocidos (siempre incluidos)
+production_hosts = [
+    'dev.atenea.nxhumans.com',
+    'demo.atenea.nxhumans.com',
+    'atenea.nxhumans.com',
+    'dev.atenea.ailumtech.com',
+    'demo.atenea.ailumtech.com',
+    'test.atenea.ailumtech.com',
+    'npm.atenea.ailumtech.com',
+]
+
 if allowed_hosts_env:
-    ALLOWED_HOSTS = allowed_hosts_env.split(',')
+    # Si hay variable de entorno, usar esos valores y añadir los de producción
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
+    # Añadir dominios de producción conocidos (sin duplicados)
+    for host in production_hosts:
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
 else:
     # Dominios por defecto (desarrollo)
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
     # Añadir dominios de producción conocidos
-    production_hosts = [
-        'dev.atenea.nxhumans.com',
-        'demo.atenea.nxhumans.com',
-        'atenea.nxhumans.com',
-        'dev.atenea.ailumtech.com',
-        'demo.atenea.ailumtech.com',
-        'test.atenea.ailumtech.com',
-        'npm.atenea.ailumtech.com',
-    ]
     ALLOWED_HOSTS.extend(production_hosts)
 
 # CSRF Trusted Origins
