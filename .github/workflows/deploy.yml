@@ -173,12 +173,17 @@ jobs:
         if grep -q "^POSTGRES_PASSWORD=" .env 2>/dev/null; then
           echo "✅ POSTGRES_PASSWORD encontrado en .env"
         else
-          echo "❌ Error: POSTGRES_PASSWORD no está definido en .env"
-          echo "❌ El despliegue no puede continuar sin POSTGRES_PASSWORD"
-          echo "💡 Por favor, asegúrate de que el archivo .env contiene: POSTGRES_PASSWORD=tu_password"
-          echo "📋 Contenido actual del .env (primeras 5 líneas):"
-          head -5 .env | sed 's/=.*/=***/' || echo "⚠️  No se pudo leer el archivo .env"
-          exit 1
+          echo "⚠️  POSTGRES_PASSWORD no está definido en .env"
+          echo "🔑 Generando contraseña automáticamente..."
+          # Generar contraseña segura (25 caracteres alfanuméricos)
+          POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+          echo "" >> .env
+          echo "# PostgreSQL password (generado automáticamente)" >> .env
+          echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> .env
+          echo "✅ POSTGRES_PASSWORD generado y agregado al .env"
+          echo "⚠️  IMPORTANTE: Guarda esta contraseña en un lugar seguro"
+          echo "🔑 POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+          echo "💡 Si ya existe una base de datos con otra contraseña, actualiza manualmente el .env"
         fi
         
         # Mostrar información del .env (sin mostrar valores sensibles)
