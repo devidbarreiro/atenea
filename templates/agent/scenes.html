@@ -275,7 +275,7 @@
 
     <!-- Actions -->
     <div class="flex justify-between items-center">
-        <a href="{% url 'core:agent_configure' project.id %}?script_id={{ script.id }}" 
+        <a href="{% url 'core:agent_configure' project.uuid %}?script_id={{ script.id }}" 
            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
             ← Atrás
         </a>
@@ -723,10 +723,46 @@ function regenerateScene(sceneId) {
 function startPolling() {
     console.log('Iniciando polling de escenas...');
     
+    // Detener cualquier polling anterior
+    if (pollInterval) {
+        clearInterval(pollInterval);
+    }
+    
     pollInterval = setInterval(() => {
+        // Verificar si la página sigue visible
+        if (document.hidden) {
+            console.log('Página oculta - pausando polling');
+            return;
+        }
         checkAllScenesStatus();
     }, 5000); // Poll cada 5 segundos
 }
+
+// Detener polling cuando el usuario navega fuera de la página
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && pollInterval) {
+        console.log('Página oculta - deteniendo polling');
+        clearInterval(pollInterval);
+        pollInterval = null;
+    } else if (!document.hidden && !pollInterval) {
+        // Reiniciar polling si hay escenas activas
+        const activeScenes = sceneIds.filter(sceneId => {
+            const status = sceneStatuses[sceneId]?.videoStatus;
+            return status !== 'completed' && status !== 'error';
+        });
+        if (activeScenes.length > 0) {
+            startPolling();
+        }
+    }
+});
+
+// Detener polling cuando se sale de la página
+window.addEventListener('beforeunload', () => {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
+});
 
 async function checkAllScenesStatus() {
     let completedCount = 0;
@@ -821,7 +857,7 @@ async function checkAllScenesStatus() {
 }
 
 function continueToFinal() {
-    window.location.href = "{% url 'core:agent_final' project.id %}?script_id=" + scriptId;
+    window.location.href = "{% url 'core:agent_final' project.uuid %}?script_id=" + scriptId;
 }
 
 function updateSceneUI() {

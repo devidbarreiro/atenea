@@ -10,6 +10,8 @@ services:
     image: postgres:15-alpine
     volumes:
       - dev_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"  # Solo accesible desde localhost del servidor (seguro para SSH tunnel)
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-atenea_dev}
       - POSTGRES_USER=${POSTGRES_USER:-atenea}
@@ -88,6 +90,71 @@ services:
     profiles:
       - tools
 
+  # Celery Worker para procesamiento asíncrono
+  celery_worker:
+    build:
+      context: ./html
+      dockerfile: Dockerfile
+    command: celery -A atenea worker --loglevel=info --concurrency=4 --queues=video_generation,image_generation,audio_generation,scene_processing,default
+    volumes:
+      - ./html:/app
+      - dev_media_volume:/app/media
+      - dev_logs_volume:/app/logs
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      - db
+      - redis
+    networks:
+      - atenea-dev-network
+    restart: always
+
+  # Celery Beat para tareas periódicas
+  celery_beat:
+    build:
+      context: ./html
+      dockerfile: Dockerfile
+    command: celery -A atenea beat --loglevel=info
+    volumes:
+      - ./html:/app
+      - dev_logs_volume:/app/logs
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      - db
+      - redis
+    networks:
+      - atenea-dev-network
+    restart: always
+
+  # Redis como broker y backend de resultados para Celery
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - dev_redis_data:/data
+    networks:
+      - atenea-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
 networks:
   atenea-dev-network:
     driver: bridge
@@ -97,4 +164,5 @@ volumes:
   dev_static_volume:
   dev_media_volume:
   dev_logs_volume:
+  dev_redis_data:
 

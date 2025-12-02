@@ -1,0 +1,108 @@
+{% load static %}
+
+<div class="p-4 hover:bg-gray-50 transition-colors">
+    <div class="flex items-start justify-between gap-4">
+        <!-- Información principal -->
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-2">
+                <!-- Icono según tipo -->
+                <div class="flex-shrink-0">
+                    {% if task.task_type == 'video' %}
+                        <div class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                    {% elif task.task_type == 'image' %}
+                        <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                    {% elif task.task_type == 'audio' %}
+                        <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                            </svg>
+                        </div>
+                    {% else %}
+                        <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Tipo y estado -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-sm font-semibold text-gray-900 capitalize">
+                            {{ task.get_task_type_display }}
+                        </span>
+                        <span class="px-2 py-0.5 rounded-md text-xs font-semibold
+                            {% if task.status == 'queued' %}bg-yellow-100 text-yellow-800
+                            {% elif task.status == 'processing' %}bg-blue-100 text-blue-800
+                            {% elif task.status == 'completed' %}bg-green-100 text-green-800
+                            {% elif task.status == 'failed' %}bg-red-100 text-red-800
+                            {% elif task.status == 'cancelled' %}bg-gray-100 text-gray-800
+                            {% endif %}">
+                            {{ task.get_status_display }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        Creada {{ task.created_at|timesince }} atrás
+                        {% if task.started_at %}
+                            • Iniciada {{ task.started_at|timesince }} atrás
+                        {% endif %}
+                        {% if task.completed_at %}
+                            • Completada {{ task.completed_at|timesince }} atrás
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Prompt o información adicional -->
+            {% if task.metadata.prompt %}
+                <p class="text-sm text-gray-700 mt-2 truncate" title="{{ task.metadata.prompt }}">
+                    <span class="font-medium">Prompt:</span> {{ task.metadata.prompt }}
+                </p>
+            {% elif task.metadata.text %}
+                <p class="text-sm text-gray-700 mt-2 truncate" title="{{ task.metadata.text }}">
+                    <span class="font-medium">Texto:</span> {{ task.metadata.text }}
+                </p>
+            {% endif %}
+            
+            <!-- Error message si hay -->
+            {% if task.status == 'failed' and task.error_message %}
+                <div class="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                    <span class="font-medium">Error:</span> {{ task.error_message|truncatewords:20 }}
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Acciones -->
+        <div class="flex items-center gap-2">
+            <!-- Ver detalles -->
+            <a href="{% url 'core:queue_task_detail' task.uuid %}" 
+               class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                Ver detalles
+            </a>
+            
+            <!-- Cancelar (solo si está en cola o procesando) -->
+            {% if task.status == 'queued' or task.status == 'processing' %}
+                <button 
+                    hx-post="{% url 'core:cancel_task' task.uuid %}"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-confirm="¿Estás seguro de que quieres cancelar esta tarea?"
+                    hx-target="closest div"
+                    hx-swap="outerHTML"
+                    hx-get="{% url 'core:queues_panel' %}?status={{ status_filter }}"
+                    class="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors">
+                    Cancelar
+                </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+

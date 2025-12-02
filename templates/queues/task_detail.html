@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Detalle de Tarea - Atenea{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-6">
+        <a href="{% url 'core:queues_panel' %}" class="text-blue-600 hover:text-blue-800 text-sm mb-4 inline-flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Volver a Colas
+        </a>
+        <h1 class="text-4xl font-bold mb-2">Detalle de Tarea</h1>
+        <p class="text-gray-600">UUID: {{ task.uuid }}</p>
+    </div>
+    
+    <!-- Información principal -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Tipo y Estado -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Tipo</h3>
+                <p class="text-lg font-semibold text-gray-900 capitalize">{{ task.get_task_type_display }}</p>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Estado</h3>
+                <span class="px-3 py-1 rounded-md text-sm font-semibold inline-block
+                    {% if task.status == 'queued' %}bg-yellow-100 text-yellow-800
+                    {% elif task.status == 'processing' %}bg-blue-100 text-blue-800
+                    {% elif task.status == 'completed' %}bg-green-100 text-green-800
+                    {% elif task.status == 'failed' %}bg-red-100 text-red-800
+                    {% elif task.status == 'cancelled' %}bg-gray-100 text-gray-800
+                    {% endif %}">
+                    {{ task.get_status_display }}
+                </span>
+            </div>
+            
+            <!-- Cola y Prioridad -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Cola</h3>
+                <p class="text-lg text-gray-900">{{ task.queue_name }}</p>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Prioridad</h3>
+                <p class="text-lg text-gray-900">{{ task.priority }}/10</p>
+            </div>
+            
+            <!-- Fechas -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Creada</h3>
+                <p class="text-lg text-gray-900">{{ task.created_at|date:"d/m/Y H:i:s" }}</p>
+            </div>
+            {% if task.started_at %}
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Iniciada</h3>
+                <p class="text-lg text-gray-900">{{ task.started_at|date:"d/m/Y H:i:s" }}</p>
+            </div>
+            {% endif %}
+            {% if task.completed_at %}
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Completada</h3>
+                <p class="text-lg text-gray-900">{{ task.completed_at|date:"d/m/Y H:i:s" }}</p>
+            </div>
+            {% endif %}
+            
+            <!-- Task ID de Celery -->
+            {% if task.task_id %}
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Task ID (Celery)</h3>
+                <p class="text-sm text-gray-600 font-mono break-all">{{ task.task_id }}</p>
+            </div>
+            {% endif %}
+            
+            <!-- Reintentos -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-500 mb-2">Reintentos</h3>
+                <p class="text-lg text-gray-900">{{ task.retry_count }} / {{ task.max_retries }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Error si hay -->
+    {% if task.status == 'failed' and task.error_message %}
+    <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold text-red-900 mb-2">Error</h3>
+        <p class="text-sm text-red-800 whitespace-pre-wrap">{{ task.error_message }}</p>
+    </div>
+    {% endif %}
+    
+    <!-- Metadata -->
+    {% if task.metadata %}
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Metadata</h3>
+        <div class="bg-gray-50 rounded p-4">
+            <pre class="text-xs text-gray-700 whitespace-pre-wrap overflow-x-auto">{{ task.metadata|pprint }}</pre>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Enlace al item si existe -->
+    {% if item_url %}
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="text-lg font-semibold text-blue-900 mb-2">Elemento Generado</h3>
+        <a href="{{ item_url }}" class="text-blue-600 hover:text-blue-800 underline">
+            Ver {{ task.get_task_type_display }}
+        </a>
+    </div>
+    {% endif %}
+    
+    <!-- Acciones -->
+    <div class="mt-6 flex gap-4">
+        {% if task.status in 'queued,processing' %}
+            <button 
+                hx-post="{% url 'core:cancel_task' task.uuid %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="¿Estás seguro de que quieres cancelar esta tarea?"
+                hx-target="body"
+                class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
+                Cancelar Tarea
+            </button>
+        {% endif %}
+        <a href="{% url 'core:queues_panel' %}" 
+           class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+            Volver a Colas
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+
+
+

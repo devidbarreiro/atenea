@@ -139,7 +139,7 @@
 
     <!-- Actions -->
     <div class="flex justify-between items-center">
-        <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+        <a href="{% url 'core:agent_scenes' project.uuid %}?script_id={{ script.id }}" 
            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
             ← Volver a Escenas
         </a>
@@ -172,7 +172,7 @@ function combineVideos() {
     combiningState.classList.remove('hidden');
     
     // Send request to combine videos
-    fetch("{% url 'core:agent_final' project.id %}", {
+    fetch("{% url 'core:agent_final' project.uuid %}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -205,7 +205,7 @@ function combineVideos() {
                 // No debería llegar aquí, pero por si acaso
                 console.warn('Video combinado pero sin video_id en respuesta');
                 alert('Video procesado. Redirigiendo al proyecto...');
-                window.location.href = "{% url 'core:project_detail' project.id %}";
+                window.location.href = "{% url 'core:project_detail' project.uuid %}";
             }
         } else {
             console.error('Error en la combinación:', data.message);

@@ -60,13 +60,6 @@
                         </div>
                         {% endif %}
                         
-                        {% if project.music_tracks.count > 0 %}
-                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 rounded-full text-xs font-medium">
-                            <span>🎵</span>
-                            <span>{{ project.music_tracks.count }} música</span>
-                        </div>
-                        {% endif %}
-                        
                         {% if project.script_count > 0 %}
                         <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 rounded-full text-xs font-medium">
                             <span>📝</span>
@@ -116,7 +109,7 @@
                 {% endif %}
                 
                 <div class="card-actions justify-end mt-4">
-                    <a href="{% url 'core:project_detail' project.id %}" 
+                    <a href="{% url 'core:project_detail' project.uuid %}" 
                        class="btn btn-primary btn-sm bg-black text-white hover:bg-gray-800 px-3 py-1 rounded-md text-sm">
                         Ver Proyecto
                     </a>

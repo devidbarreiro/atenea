@@ -8,7 +8,7 @@
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold">🎙️ {{ audio.title }}</h1>
         {% if audio.project %}
-        <a href="{% url 'core:project_detail' audio.project.id %}" class="text-gray-600 hover:text-gray-900">
+        <a href="{% url 'core:project_detail' audio.project.uuid %}" class="text-gray-600 hover:text-gray-900">
             ← Volver al proyecto
         </a>
         {% else %}
@@ -77,7 +77,7 @@
                 <h2 class="text-xl font-bold mb-4">Acciones</h2>
                 
                 {% if audio.status == 'pending' or audio.status == 'error' %}
-                <form method="post" action="{% url 'core:audio_generate' audio.id %}">
+                <form method="post" action="{% url 'core:audio_generate' audio.uuid %}">
                     {% csrf_token %}
                     <button type="submit" class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 mb-3">
                         🎙️ Generar Audio
@@ -92,7 +92,7 @@
                 </a>
                 {% endif %}
 
-                <a href="{% url 'core:audio_delete' audio.id %}" 
+                <a href="{% url 'core:audio_delete' audio.uuid %}" 
                    class="block w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-center">
                     🗑️ Eliminar
                 </a>

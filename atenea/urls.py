@@ -18,8 +18,24 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from pathlib import Path
+
+
+def serve_favicon(request):
+    """Sirve el favicon directamente (funciona con Daphne y runserver)"""
+    favicon_path = Path(settings.BASE_DIR) / 'static' / 'img' / 'logos' / 'favicon.ico'
+    if favicon_path.exists():
+        # Leer el archivo en memoria para evitar file descriptor leak
+        from django.http import HttpResponse
+        with open(favicon_path, 'rb') as f:
+            return HttpResponse(f.read(), content_type='image/x-icon')
+    from django.http import HttpResponseNotFound
+    return HttpResponseNotFound()
+
 
 urlpatterns = [
+    # Favicon en raíz (navegadores lo piden en /favicon.ico)
+    path('favicon.ico', serve_favicon),
     path('', include('core.urls')),
     path('admin/', admin.site.urls),
 ]

@@ -28,7 +28,7 @@
                             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent">
                         <option value="">Selecciona un proyecto...</option>
                         {% for project in projects %}
-                        <option value="{{ project.id }}">{{ project.name }}</option>
+                        <option value="{{ project.uuid }}">{{ project.name }}</option>
                         {% endfor %}
                     </select>
                     

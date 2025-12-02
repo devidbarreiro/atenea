@@ -1,0 +1,66 @@
+{% load static %}
+
+<div class="group px-4 py-4 {% if not notification.read %}bg-blue-50/50{% endif %} hover:bg-gray-50 transition-colors"
+     data-notification-uuid="{{ notification.uuid }}">
+    <div class="flex items-start gap-3">
+        <!-- Icono pequeño -->
+        <div class="flex-shrink-0 mt-0.5">
+            {% if notification.type == 'generation_completed' %}
+            <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            {% elif notification.type == 'generation_failed' %}
+            <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                <svg class="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            {% else %}
+            <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg class="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Contenido -->
+        <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-semibold text-gray-900 {% if not notification.read %}font-bold{% endif %} mb-1">
+                {{ notification.title }}
+            </h4>
+            <p class="text-sm text-gray-600 leading-relaxed">{{ notification.message }}</p>
+            <p class="text-xs text-gray-400 mt-2">
+                {{ notification.created_at|timesince }} atrás
+            </p>
+            
+            <!-- Acción si existe -->
+            {% if notification.action_url %}
+            <div class="mt-3">
+                <a href="{{ notification.action_url }}" 
+                   class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors">
+                    {{ notification.action_label|default:"Ver más" }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Botón marcar como leída (solo si no está leída) -->
+        {% if not notification.read %}
+        <button 
+            hx-post="{% url 'core:notification_mark_read' notification.uuid %}"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+            hx-swap="none"
+            @click="window.dispatchEvent(new CustomEvent('refreshNotifications')); window.dispatchEvent(new CustomEvent('notification-read'));"
+            class="flex-shrink-0 p-1 rounded hover:bg-gray-200 transition-colors opacity-0 group-hover:opacity-100"
+            title="Marcar como leída">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+        </button>
+        {% endif %}
+    </div>
+</div>
+

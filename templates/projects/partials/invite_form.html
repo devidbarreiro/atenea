@@ -10,7 +10,7 @@
     </div>
     {% endif %}
     
-    <form method="post" action="{% url 'core:project_invite_partial' project.id %}" onsubmit="event.preventDefault(); const form = event.target; const formData = new FormData(form); fetch(form.action, { method: 'POST', body: formData, headers: { 'X-CSRFToken': formData.get('csrfmiddlewaretoken') } }).then(r => { if (r.redirected) { return fetch(r.url).then(r => r.text()); } return r.text(); }).then(html => { const invContent = document.getElementById('invitations-content'); if (invContent) { invContent.innerHTML = html; } const tabContainer = document.querySelector('[x-data]'); if (tabContainer && tabContainer.__x) { tabContainer.__x.$data.activeTab = 'invitations'; } }).catch(err => { console.error('Error:', err); alert('Error al enviar invitación'); }); return false;">
+    <form method="post" action="{% url 'core:project_invite_partial' project.uuid %}" onsubmit="event.preventDefault(); const form = event.target; const formData = new FormData(form); fetch(form.action, { method: 'POST', body: formData, headers: { 'X-CSRFToken': formData.get('csrfmiddlewaretoken') } }).then(r => { if (r.redirected) { return fetch(r.url).then(r => r.text()); } return r.text(); }).then(html => { const invContent = document.getElementById('invitations-content'); if (invContent) { invContent.innerHTML = html; } const tabContainer = document.querySelector('[x-data]'); if (tabContainer && tabContainer.__x) { tabContainer.__x.$data.activeTab = 'invitations'; } }).catch(err => { console.error('Error:', err); alert('Error al enviar invitación'); }); return false;">
         {% csrf_token %}
         
         <div class="mb-6">

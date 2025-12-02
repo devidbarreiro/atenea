@@ -164,4 +164,13 @@ python manage.py test
 
 # Recopilar archivos estáticos
 python manage.py collectstatic
+
+# Reiniciar Daphne
+daphne -b 0.0.0.0 -p 8000 atenea.asgi:application
+
+# Reiniciar Celery
+celery -A atenea worker --loglevel=info \
+    --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks \
+    --concurrency=4
 ```# Test deployment
+
