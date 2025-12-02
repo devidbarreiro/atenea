@@ -11,6 +11,7 @@
   <link href="https://cdn.jsdelivr.net/npm/@tailwindcss/typography/dist/typography.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root {
@@ -48,6 +49,18 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: #6b7280;
+      border-left: 2px solid transparent;
+      transition: all 0.2s ease;
+      cursor: default;
+    }
+    
+    .sidebar-folder:hover {
+      color: #374151;
+    }
+    
+    .sidebar-folder img {
+      filter: grayscale(0.3);
+      opacity: 0.8;
     }
 
     /* Content */
@@ -340,9 +353,18 @@
 
       <!-- Navigation -->
       <div class="flex-1 overflow-y-auto p-4">
-        <div class="mb-4">
-          <h2 class="sidebar-folder mb-2">API Reference</h2>
+        <!-- User Guide destacado -->
+        <div class="mb-4 pb-4 border-b border-gray-200">
+          <a href="/docs/app/GUIA_USUARIO" 
+             class="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg hover:from-blue-100 hover:to-indigo-100 transition-all group">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+            <span class="text-sm font-semibold text-blue-900 group-hover:text-blue-950">Guía de Usuario</span>
+            <span class="ml-auto text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded">⭐</span>
+          </a>
         </div>
+        
         <ul id="sidebar-list" class="space-y-1"></ul>
       </div>
     </div>
@@ -356,8 +378,8 @@
             <i class="fas fa-bars text-xl"></i>
           </button>
           <div>
-            <h1 class="text-xl font-bold text-gray-900">Documentación API</h1>
-            <p class="text-sm text-gray-500 mt-1">Referencia técnica completa</p>
+            <h1 class="text-xl font-bold text-gray-900">Documentación de Atenea</h1>
+            <p class="text-sm text-gray-500 mt-1">Guías de usuario y referencia técnica</p>
           </div>
         </div>
       </div>
@@ -373,7 +395,15 @@
             <div class="text-center py-12">
               <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
               <h2 class="text-2xl font-semibold text-gray-700 mb-2">Bienvenido a la documentación</h2>
-              <p class="text-gray-500">Selecciona un documento en el sidebar para ver su contenido.</p>
+              <p class="text-gray-500 mb-6">Selecciona un documento en el sidebar para ver su contenido.</p>
+              <div class="flex gap-4 justify-center">
+                <a href="/docs/app/GUIA_USUARIO" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                  📖 Guía de Usuario
+                </a>
+                <a href="/docs/api/README" class="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium">
+                  🔌 API Reference
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -382,13 +412,17 @@
   </div>
 
 <script>
-// Configurar marked para mejor renderizado
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-  headerIds: true,
-  mangle: false
-});
+// Configurar marked para mejor renderizado (solo si está disponible)
+if (typeof marked !== 'undefined') {
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+    headerIds: true,
+    mangle: false
+  });
+} else {
+  console.warn('marked.js no está disponible. El renderizado de markdown puede fallar.');
+}
 
 // Utilidades
 function formatEndpointBadge(method) {
@@ -410,10 +444,19 @@ function formatPath(path) {
   });
 }
 
+function formatBreadcrumbName(name) {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace('README', 'Overview')
+    .replace('GUIA USUARIO', 'Guía de Usuario')
+    .replace('TTS', 'Text-to-Speech');
+}
+
 function updateBreadcrumbs(path) {
   const breadcrumbs = document.getElementById('breadcrumbs');
-  if (!path) {
-    breadcrumbs.innerHTML = '';
+  if (!path || path === 'README') {
+    breadcrumbs.innerHTML = '<a href="/docs">Documentación</a>';
     return;
   }
 
@@ -423,9 +466,7 @@ function updateBreadcrumbs(path) {
   let currentPath = '';
   parts.forEach((part, index) => {
     currentPath += '/' + part;
-    const formatted = part.split('-').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
+    const formatted = formatBreadcrumbName(part);
     
     if (index < parts.length - 1) {
       html += `<span class="breadcrumb-separator">/</span><a href="/docs${currentPath}">${formatted}</a>`;
@@ -445,44 +486,135 @@ async function loadSidebar() {
     const sidebarList = document.getElementById('sidebar-list');
     sidebarList.innerHTML = '';
 
+    // Logos disponibles
+    const logos = {
+      'google': '/static/img/logos/google.png',
+      'heygen': '/static/img/logos/heygen.png',
+      'openai': '/static/img/logos/openai.svg',
+      'elevenlabs': '/static/img/logos/elevenlabs.png',
+      'freepik': '/static/img/logos/freepik.png',
+      'vuela': '/static/img/logos/vuela.png',
+      'manim': '/static/img/logos/manim.png'
+    };
+
+    // Iconos por tipo de carpeta
+    const folderIcons = {
+      'app': '📖',
+      'api': '🔌',
+      'getting-started': '🚀',
+      'services': '⚙️',
+      'system': '⚙️',
+      'video': '🎬',
+      'image': '🖼️',
+      'tts': '🎙️',
+      'voices': '🎤',
+      'avatar': '👤',
+      'images': '🖼️',
+      'videos': '🎬',
+      'resources': '📦'
+    };
+
+    function getFolderIcon(key) {
+      return folderIcons[key.toLowerCase()] || '📁';
+    }
+
+    function getLogo(key) {
+      return logos[key.toLowerCase()] || null;
+    }
+
+    function formatName(name) {
+      return name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase())
+        .replace('README', 'Overview')
+        .replace('GUIA USUARIO', 'Guía de Usuario')
+        .replace('TTS', 'Text-to-Speech');
+    }
+
     function createList(obj, parentPath = '', level = 0) {
       const ul = document.createElement('ul');
       if (level === 0) {
-        ul.classList.add('space-y-2');
+        ul.classList.add('space-y-1');
+      } else if (level === 1) {
+        // Nivel de servicios (google, heygen, etc.)
+        ul.classList.add('ml-2', 'mt-1', 'space-y-0.5', 'border-l-2', 'border-gray-100', 'pl-2');
       } else {
-        ul.classList.add('ml-4', 'mt-1', 'space-y-1');
+        // Niveles más profundos
+        ul.classList.add('ml-4', 'mt-0.5', 'space-y-0.5');
       }
 
-      for (const key in obj) {
+      // Ordenar: primero READMEs, luego carpetas, luego archivos
+      const sortedKeys = Object.keys(obj).sort((a, b) => {
+        const aIsReadme = a === 'README.md';
+        const bIsReadme = b === 'README.md';
+        const aIsDir = typeof obj[a] === 'object';
+        const bIsDir = typeof obj[b] === 'object';
+        
+        if (aIsReadme && !bIsReadme) return -1;
+        if (!aIsReadme && bIsReadme) return 1;
+        if (aIsDir && !bIsDir) return -1;
+        if (!aIsDir && bIsDir) return 1;
+        return a.localeCompare(b);
+      });
+
+      for (const key of sortedKeys) {
         const li = document.createElement('li');
 
         if (typeof obj[key] === 'string') {
-          const urlPath = (parentPath + key).replaceAll('\\', '/').replace('.md', '');
+          // Es un archivo
+          // obj[key] es la ruta relativa desde docs/public/, ej: "app/GUIA_USUARIO.md"
+          const urlPath = obj[key].replace('.md', '').replace(/\/$/, '');
+          console.log('Creating sidebar link - key:', key, 'obj[key]:', obj[key], 'urlPath:', urlPath);
           const a = document.createElement('a');
           a.href = '#';
-          a.textContent = key.replace('.md', '').replace(/_/g, ' ');
-          a.classList.add('sidebar-link', 'block', 'px-3', 'py-2', 'rounded-md', 'text-sm');
+          
+          const name = formatName(key.replace('.md', ''));
+          a.textContent = name;
+          a.classList.add('sidebar-link', 'block', 'px-2', 'py-1.5', 'rounded-md', 'text-sm', 'hover:bg-gray-50', 'truncate');
           a.dataset.route = urlPath;
+          a.title = name; // Tooltip para texto truncado
 
           a.onclick = (e) => {
             e.preventDefault();
+            console.log('Sidebar link clicked - urlPath:', urlPath);
             setActiveLink(a);
             history.pushState({ path: urlPath }, '', `/docs/${urlPath}`);
             loadDoc(urlPath);
-            // Cerrar sidebar en móvil
             document.getElementById('sidebar').classList.remove('open');
           };
 
           li.appendChild(a);
         } else {
+          // Es una carpeta
           const folderDiv = document.createElement('div');
-          folderDiv.textContent = key.replace(/_/g, ' ');
-          folderDiv.classList.add('sidebar-folder', 'px-3', 'py-2', 'mt-4', 'mb-2');
-          if (level > 0) {
-            folderDiv.classList.add('ml-4');
+          const icon = getFolderIcon(key);
+          const logo = getLogo(key);
+          const name = formatName(key);
+          
+          // Estilos diferentes según nivel
+          if (level === 0) {
+            // Nivel raíz (app, api)
+            folderDiv.classList.add('sidebar-folder', 'px-2', 'py-2', 'mt-3', 'mb-1', 'flex', 'items-center', 'gap-2', 'text-xs', 'font-bold');
+          } else if (level === 1 && logo) {
+            // Nivel de servicios con logo
+            folderDiv.classList.add('sidebar-folder', 'px-2', 'py-1.5', 'mt-2', 'mb-1', 'flex', 'items-center', 'gap-2', 'text-xs', 'font-semibold');
+          } else {
+            // Niveles más profundos
+            folderDiv.classList.add('sidebar-folder', 'px-2', 'py-1', 'mt-1.5', 'mb-0.5', 'flex', 'items-center', 'gap-1.5', 'text-xs');
           }
+          
+          if (logo) {
+            folderDiv.innerHTML = `<img src="${logo}" alt="${name}" class="w-4 h-4 object-contain flex-shrink-0" onerror="this.style.display='none'"><span class="truncate">${name}</span>`;
+          } else {
+            folderDiv.innerHTML = `<span class="flex-shrink-0">${icon}</span><span class="truncate">${name}</span>`;
+          }
+          
           li.appendChild(folderDiv);
-          li.appendChild(createList(obj[key], parentPath + key + '/', level + 1));
+          
+          const subList = createList(obj[key], parentPath + key + '/', level + 1);
+          if (subList.children.length > 0) {
+            li.appendChild(subList);
+          }
         }
 
         ul.appendChild(li);
@@ -533,15 +665,34 @@ async function loadSidebar() {
     });
 
     // Cargar doc de la URL actual si existe
-    const pathFromUrl = window.location.pathname.replace(/^\/docs\//, '');
-    if (pathFromUrl) {
-      const activeLink = document.querySelector(`a[data-route="${pathFromUrl}"]`);
+    let pathFromUrl = window.location.pathname.replace(/^\/docs\/?/, '').replace(/\.md$/, '').replace(/\/$/, '');
+    console.log('Path from URL:', pathFromUrl, 'Full pathname:', window.location.pathname);
+    
+    if (pathFromUrl && pathFromUrl !== '') {
+      // Buscar el link en el sidebar
+      let activeLink = document.querySelector(`a[data-route="${pathFromUrl}"]`);
+      
+      // Si no se encuentra, intentar buscar todos los links y ver cuál coincide
+      if (!activeLink) {
+        console.log('No se encontró link exacto, buscando alternativas...');
+        const allLinks = document.querySelectorAll('a[data-route]');
+        allLinks.forEach(link => {
+          console.log('Link encontrado:', link.dataset.route);
+        });
+      }
+      
       if (activeLink) {
         setActiveLink(activeLink);
-        // Scroll al link activo
         activeLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        console.warn('No se encontró link activo para:', pathFromUrl);
       }
+      
       await loadDoc(pathFromUrl);
+    } else {
+      // Si no hay path, cargar el README principal
+      console.log('No hay path en URL, cargando README principal');
+      await loadDoc('README');
     }
 
   } catch (err) {
@@ -557,13 +708,120 @@ function setActiveLink(link) {
 
 async function loadDoc(servicePath) {
   try {
-    const res = await fetch(`/docs/api/services/${servicePath}/`);
-    if (!res.ok) throw new Error('Documento no encontrado');
-    const data = await res.json();
+    // servicePath puede ser: "app/GUIA_USUARIO" o "api/services/google/video/text_to_video"
+    // Eliminar trailing slash y .md si existe
+    servicePath = servicePath.replace(/\/$/, '').replace(/\.md$/, '');
+    
+    console.log('Loading doc with path:', servicePath);
+    
     const contentDiv = document.getElementById('doc-content');
+    if (!contentDiv) {
+      console.error('No se encontró el elemento doc-content');
+      return;
+    }
+    
+    // Mostrar loading
+    contentDiv.innerHTML = '<div class="flex items-center justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>';
+    
+    // Crear AbortController para timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+    
+    const fetchUrl = `/docs/${servicePath}/`;
+    console.log('Fetching URL:', fetchUrl);
+    
+    let res;
+    try {
+      res = await fetch(fetchUrl, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('La petición tardó demasiado. Por favor, intenta de nuevo.');
+      }
+      throw new Error(`Error de red: ${fetchError.message}`);
+    }
+    
+    clearTimeout(timeoutId);
+    
+    // Verificar Content-Type
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      console.error('Respuesta no es JSON:', text.substring(0, 200));
+      throw new Error(`Respuesta inválida del servidor. Content-Type: ${contentType}`);
+    }
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Error en respuesta:', errorText);
+      throw new Error(`Documento no encontrado: ${servicePath} (${res.status})`);
+    }
+    
+    let data;
+    try {
+      data = await res.json();
+    } catch (jsonError) {
+      const text = await res.text();
+      console.error('Error parseando JSON:', jsonError, 'Respuesta:', text.substring(0, 200));
+      throw new Error('Error al procesar la respuesta del servidor');
+    }
+    
+    // Validar que data tiene content
+    if (!data || typeof data !== 'object') {
+      console.error('Respuesta inválida:', data);
+      throw new Error('Formato de respuesta inválido');
+    }
+    
+    // Verificar si hay un error en la respuesta
+    if (data.error) {
+      throw new Error(data.error || 'Error desconocido del servidor');
+    }
+    
+    // Verificar que tiene content
+    if (!data.content && data.content !== '') {
+      console.error('Respuesta sin content:', data);
+      throw new Error('El documento no tiene contenido');
+    }
+    
+    // Preprocesar bloques Mermaid antes de parsear con marked
+    let content = data.content;
+    
+    // Validar que content es string
+    if (typeof content !== 'string') {
+      console.error('Content no es string:', typeof content, content);
+      throw new Error('El contenido del documento no es válido');
+    }
+    
+    // Detectar bloques de código mermaid y marcarlos
+    content = content.replace(/```mermaid\n([\s\S]*?)```/g, (match, diagram) => {
+      return `<div class="mermaid-diagram" data-mermaid="${encodeURIComponent(diagram.trim())}"></div>`;
+    });
+    
+    // Validar que marked esté disponible
+    if (typeof marked === 'undefined') {
+      throw new Error('La librería marked.js no está cargada. Por favor, recarga la página.');
+    }
     
     // Parsear markdown
-    let html = marked.parse(data.content);
+    let html = marked.parse(content);
+    
+    // Validar que el parseo fue exitoso
+    if (!html || typeof html !== 'string') {
+      console.error('Error parseando markdown:', html);
+      throw new Error('Error al procesar el contenido markdown');
+    }
+    
+    // Reemplazar marcadores de Mermaid con divs reales
+    html = html.replace(/<div class="mermaid-diagram" data-mermaid="([^"]+)"><\/div>/g, (match, encoded) => {
+      const diagram = decodeURIComponent(encoded);
+      return `<div class="mermaid my-8">${diagram}</div>`;
+    });
     
     // Mejorar formato de endpoints
     html = html.replace(/\*\*Endpoint:\*\*\s*`([A-Z]+)\s+([^`]+)`/g, (match, method, url) => {
@@ -581,7 +839,32 @@ async function loadDoc(servicePath) {
       </div>`;
     });
 
+    // Ocultar pantalla de bienvenida
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+      welcomeScreen.style.display = 'none';
+    }
+    
     contentDiv.innerHTML = html;
+
+    // Renderizar diagramas Mermaid después de insertar HTML
+    if (typeof mermaid !== 'undefined') {
+      mermaid.initialize({ 
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        flowchart: {
+          useMaxWidth: true,
+          htmlLabels: true
+        }
+      });
+      
+      // Renderizar todos los divs con clase mermaid
+      const mermaidElements = contentDiv.querySelectorAll('.mermaid');
+      if (mermaidElements.length > 0) {
+        mermaid.run({ nodes: mermaidElements });
+      }
+    }
 
     // Actualizar breadcrumbs
     updateBreadcrumbs(servicePath);
@@ -647,13 +930,36 @@ async function loadDoc(servicePath) {
 
   } catch (err) {
     console.error('Error cargando doc:', err);
-    document.getElementById('doc-content').innerHTML = `
-      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-        <div class="flex items-center gap-2 text-red-800">
-          <i class="fas fa-exclamation-circle"></i>
-          <span class="font-semibold">Error</span>
+    const contentDiv = document.getElementById('doc-content');
+    if (!contentDiv) {
+      console.error('No se encontró el elemento doc-content para mostrar el error');
+      return;
+    }
+    
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+      welcomeScreen.style.display = 'none';
+    }
+    
+    const errorMessage = err.message || 'Error desconocido al cargar el documento';
+    contentDiv.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 max-w-2xl mx-auto">
+        <div class="flex items-center gap-2 text-red-800 mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span class="font-semibold text-lg">Error al cargar el documento</span>
         </div>
-        <p class="text-red-600 mt-2">${err.message}</p>
+        <p class="text-red-600 mt-2 mb-4">${errorMessage}</p>
+        <div class="flex gap-3">
+          <a href="/docs" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+            ← Volver al inicio
+          </a>
+          <button onclick="location.reload()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition">
+            Recargar página
+          </button>
+        </div>
+        ${err.stack ? `<details class="mt-4"><summary class="text-sm text-gray-600 cursor-pointer">Detalles técnicos</summary><pre class="mt-2 text-xs text-gray-500 overflow-auto">${err.stack}</pre></details>` : ''}
       </div>
     `;
   }
@@ -662,17 +968,21 @@ async function loadDoc(servicePath) {
 // Manejo de back/forward
 window.addEventListener('popstate', (event) => {
   const path = (event.state && event.state.path) || window.location.pathname.replace(/^\/docs\//, '');
-  if (!path) {
-    updateBreadcrumbs('');
-    document.getElementById('doc-content').innerHTML = `
-      <div class="text-center py-12">
-        <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
-        <h2 class="text-2xl font-semibold text-gray-700 mb-2">Bienvenido a la documentación</h2>
-        <p class="text-gray-500">Selecciona un documento en el sidebar para ver su contenido.</p>
-      </div>
-    `;
-    return;
-  }
+    if (!path || path === '') {
+      updateBreadcrumbs('');
+      const welcomeScreen = document.getElementById('welcome-screen');
+      if (welcomeScreen) {
+        welcomeScreen.style.display = 'block';
+      }
+      const contentDiv = document.getElementById('doc-content');
+      // Limpiar contenido excepto welcome screen
+      Array.from(contentDiv.children).forEach(child => {
+        if (child.id !== 'welcome-screen') {
+          child.remove();
+        }
+      });
+      return;
+    }
   const activeLink = document.querySelector(`a[data-route="${path}"]`);
   setActiveLink(activeLink);
   loadDoc(path);

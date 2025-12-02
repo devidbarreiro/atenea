@@ -22,16 +22,64 @@
     <!-- Sidebar General (sin sidebar de proyecto en páginas de creación) -->
     {% include 'includes/sidebar.html' %}
     
-    <!-- Sidebar de Creación (fijo) -->
-    <aside class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-30 flex flex-col"
+    <!-- Sidebar de Creación O Panel de Notificaciones -->
+    <aside x-data="{ notificationSidebarOpen: false }"
+           x-init="
+               window.addEventListener('open-notifications-modal', () => { 
+                   notificationSidebarOpen = true; 
+                   $nextTick(() => htmx.trigger('#notification-panel-content-creation', 'load'));
+               });
+               window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });
+           "
+           class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-30 flex flex-col transition-all duration-300"
            :style="'left: ' + sidebarWidth + 'px'">
-        <div class="flex-1 overflow-y-auto">
+        
+        <!-- Sidebar de Creación -->
+        <div x-show="!notificationSidebarOpen" class="flex-1 overflow-y-auto">
             {% include 'includes/creation_sidebar.html' %}
+        </div>
+        
+        <!-- Panel de Notificaciones (reemplaza al sidebar de creación) -->
+        <div x-show="notificationSidebarOpen" 
+             x-cloak
+             class="flex-1 flex flex-col"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
+            <!-- Header -->
+            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white flex-shrink-0">
+                <h2 class="text-lg font-semibold text-gray-900">Notificaciones</h2>
+                <button @click="notificationSidebarOpen = false; window.dispatchEvent(new CustomEvent('notification-sidebar-closed'));" 
+                        class="p-1.5 rounded-md hover:bg-gray-100 transition-colors">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Contenido (cargado vía HTMX) -->
+            <div id="notification-panel-content-creation" 
+                 class="flex-1 overflow-y-auto bg-white"
+                 hx-get="{% url 'core:notifications_panel' %}"
+                 hx-trigger="load, refreshNotifications from:body"
+                 hx-swap="innerHTML">
+                <div class="p-8 text-center text-gray-500">
+                    <svg class="animate-spin h-6 w-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+            </div>
         </div>
     </aside>
     
     <!-- Panel Principal: Breadcrumbs + Biblioteca + Detalle -->
-    <main class="flex-1 h-screen overflow-hidden bg-white flex flex-col"
+    <main class="flex-1 h-screen overflow-hidden bg-white flex flex-col transition-all duration-300"
+          x-data="{ notificationSidebarOpen: false }"
+          x-init="
+              window.addEventListener('open-notifications-modal', () => { notificationSidebarOpen = true; });
+              window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });
+          "
           :style="'margin-left: ' + (sidebarWidth + creationSidebarWidth) + 'px'">
         
         <!-- Breadcrumbs -->

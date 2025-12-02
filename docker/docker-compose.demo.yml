@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Docker Compose para ENTORNO DEMO
 # Puerto: 8081
 # URL: demo.atenea.nxhumans.com
@@ -10,6 +8,8 @@ services:
     image: postgres:15-alpine
     volumes:
       - demo_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"  # Solo accesible desde localhost del servidor (seguro para SSH tunnel)
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-atenea_demo}
       - POSTGRES_USER=${POSTGRES_USER:-atenea}
