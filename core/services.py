@@ -1840,13 +1840,31 @@ class ImageService:
         self.gemini_client = None
         self.higgsfield_client = None
     
-    def _get_gemini_client(self) -> GeminiImageClient:
-        """Lazy initialization de Gemini Image client"""
-        if not self.gemini_client:
-            if not settings.GEMINI_API_KEY:
-                raise ValidationException('GEMINI_API_KEY no está configurada')
-            self.gemini_client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
-        return self.gemini_client
+    def _get_gemini_client(self, model_name: Optional[str] = None) -> GeminiImageClient:
+        """
+        Lazy initialization de Gemini Image client, permitiendo selección de modelo.
+        
+        Si model_name es proporcionado, inicializa un cliente nuevo temporal con ese modelo,
+        o reutiliza el cliente por defecto si coincide.
+        """
+        # 1. Determinar qué modelo usar (el seleccionado o el default)
+        model_to_use = model_name or "gemini-2.5-flash-image"
+        
+        # 2. Reutilizar si ya tenemos el cliente de ese modelo en la instancia
+        if self.gemini_client and self.gemini_client.model == model_to_use:
+            return self.gemini_client
+            
+        if not settings.GEMINI_API_KEY:
+            raise ValidationException('GEMINI_API_KEY no está configurada')
+            
+        # 3. Inicializar el cliente con el modelo correcto
+        client = GeminiImageClient(api_key=settings.GEMINI_API_KEY, model_name=model_to_use)
+        
+        # 4. Si es el cliente por defecto (Flash), lo guardamos en self.gemini_client
+        if model_name is None or model_name == "gemini-2.5-flash-image":
+            self.gemini_client = client
+            
+        return client
     
     def _get_higgsfield_client(self):
         """Lazy initialization de Higgsfield client"""
@@ -2039,14 +2057,14 @@ class ImageService:
                 result = self._generate_higgsfield_image(image, model_id, aspect_ratio)
             else:
                 # Por defecto, usar Gemini
-                client = self._get_gemini_client()
+                client = self._get_gemini_client(model_name=model_id) 
                 
                 # Generar según el tipo
                 if image.type == 'text_to_image':
                     result = client.generate_image_from_text(
                         prompt=image.prompt,
                         aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
+                        response_modalities=response_modalities,
                     )
                 
                 elif image.type == 'image_to_image':
@@ -2062,7 +2080,7 @@ class ImageService:
                         prompt=image.prompt,
                         input_image_data=input_image_data,
                         aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
+                        response_modalities=response_modalities,
                     )
                 
                 elif image.type == 'multi_image':
@@ -2081,7 +2099,7 @@ class ImageService:
                         prompt=image.prompt,
                         input_images_data=input_images_data,
                         aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
+                        response_modalities=response_modalities,
                     )
                 
                 else:
