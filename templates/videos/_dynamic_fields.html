@@ -496,20 +496,39 @@ function toggleReferenceFields(modelId) {
         }
     }
     
-    // Mostrar asset 2 si asset 1 tiene archivo
+    // Cascada de assets: Asset 2 solo visible si Asset 1 tiene archivo
     if (hasAsset1 && assetField2) {
         assetField2.classList.remove('hidden');
     } else if (!hasAsset1 && assetField2) {
         assetField2.classList.add('hidden');
-        if (assetImage2) assetImage2.value = '';
+        // Limpiar asset 2 y también ocultar asset 3 en cascada
+        if (assetImage2) {
+            assetImage2.value = '';
+            const preview2 = document.getElementById('asset-preview-2');
+            if (preview2) preview2.classList.add('hidden');
+        }
+        // Si asset 1 no tiene archivo, ocultar también asset 3
+        if (assetField3) {
+            assetField3.classList.add('hidden');
+            if (assetImage3) {
+                assetImage3.value = '';
+                const preview3 = document.getElementById('asset-preview-3');
+                if (preview3) preview3.classList.add('hidden');
+            }
+        }
     }
     
-    // Mostrar asset 3 si asset 2 tiene archivo
+    // Cascada de assets: Asset 3 solo visible si Asset 2 tiene archivo
     if (hasAsset2 && assetField3) {
         assetField3.classList.remove('hidden');
     } else if (!hasAsset2 && assetField3) {
         assetField3.classList.add('hidden');
-        if (assetImage3) assetImage3.value = '';
+        // Limpiar asset 3 cuando se elimina asset 2
+        if (assetImage3) {
+            assetImage3.value = '';
+            const preview3 = document.getElementById('asset-preview-3');
+            if (preview3) preview3.classList.add('hidden');
+        }
     }
 }
 
