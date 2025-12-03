@@ -3051,7 +3051,7 @@ class CreateItemAPIView(ServiceMixin, View):
         
         logger.info(f"[_create_video] request.FILES keys disponibles: {list(request.FILES.keys())}")
         
-        # Para Veo: solo style_image y asset_image son imágenes de referencia
+        # Para Veo: style_image y asset_image_1/2/3 son imágenes de referencia
         # start_image y end_image se manejan como input_image para image-to-video
         if 'style_image' in request.FILES:
             ref_file = request.FILES['style_image']
@@ -3061,13 +3061,21 @@ class CreateItemAPIView(ServiceMixin, View):
         else:
             logger.info(f"❌ style_image no encontrado en request.FILES")
         
-        if 'asset_image' in request.FILES:
+        # Múltiples assets (hasta 3)
+        for i in range(1, 4):
+            asset_key = f'asset_image_{i}'
+            if asset_key in request.FILES:
+                ref_file = request.FILES[asset_key]
+                reference_images.append(ref_file)
+                reference_types.append('asset')
+                logger.info(f"✅ Imagen de referencia encontrada: {asset_key} -> asset (tamaño: {ref_file.size} bytes)")
+        
+        # Mantener compatibilidad con el nombre antiguo asset_image (sin número)
+        if 'asset_image' in request.FILES and not any(f'asset_image_{i}' in request.FILES for i in range(1, 4)):
             ref_file = request.FILES['asset_image']
             reference_images.append(ref_file)
             reference_types.append('asset')
-            logger.info(f"✅ Imagen de referencia encontrada: asset_image -> asset (tamaño: {ref_file.size} bytes)")
-        else:
-            logger.info(f"❌ asset_image no encontrado en request.FILES")
+            logger.info(f"✅ Imagen de referencia encontrada: asset_image (legacy) -> asset (tamaño: {ref_file.size} bytes)")
         
         # Subir imágenes de referencia si hay alguna (solo para Veo)
         if reference_images and video_type == 'gemini_veo':
