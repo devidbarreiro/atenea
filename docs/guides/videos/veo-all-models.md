@@ -123,9 +123,17 @@ Esta guía documenta todos los modelos de Google Veo disponibles en el proyecto 
 #### `veo-3.1-fast-generate-preview` ⚡ (Rápido)
 - **Versión**: 3.1
 - **Duración**: 4, 6 u 8 segundos
-- **Características**: Igual que `veo-3.1-generate-preview` pero más rápido
+- **Características**:
+  - ✅ Text-to-video
+  - ✅ Image-to-video
+  - ✅ **Audio generado**
+  - ✅ **Resolución 720p/1080p**
+  - ✅ Last Frame (fill-in-the-blank)
+  - ✅ Resize mode
+  - ❌ **NO soporta Reference Images** (limitación de modelos "fast")
+  - ❌ No video extension
 
-**Uso recomendado**: Cuando necesites resultados rápidos con todas las características modernas.
+**Uso recomendado**: Cuando necesites resultados rápidos con audio y alta resolución, pero sin reference images.
 
 ---
 

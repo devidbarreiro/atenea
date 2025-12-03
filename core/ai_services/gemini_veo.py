@@ -118,12 +118,17 @@ VEO_MODELS = {
         'duration_options': [4, 6, 8],
         'supports_audio': True,
         'supports_resolution': True,
-        'supports_reference_images': True,  # Solo Asset (no Style)
+        'supports_reference_images': False,  # Los modelos "fast" NO soportan reference images
         'supports_last_frame': True,
         'supports_video_extension': False,
         'supports_mask': False,
         'supports_resize_mode': True,
-        'description': 'Veo 3.1 Fast Preview - Rápido con todas las características'
+        'description': 'Veo 3.1 Fast Preview - Rápido (sin reference images)',
+        # Limitaciones específicas del modelo
+        'limitations': {
+            'reference_images_with_audio': False,  # No soporta reference images + audio
+            'reference_images_with_1080p': False,  # No soporta reference images + 1080p
+        }
     }
 }
 
@@ -221,6 +226,25 @@ class GeminiVeoClient:
                             f"Veo 3.1 no soporta imágenes de estilo (style). "
                             f"Solo soporta 'asset'. Usa veo-2.0-generate-exp para imágenes de estilo."
                         )
+            
+            # Validar mezcla de tipos para Veo 2.0-exp
+            if self.model_config['version'] == '2.0' and 'exp' in self.model_name:
+                has_style = any(ref_img.get('reference_type') == 'style' for ref_img in reference_images)
+                has_asset = any(ref_img.get('reference_type') == 'asset' for ref_img in reference_images)
+                
+                if has_style and has_asset:
+                    raise ValueError(
+                        f"Veo 2.0-exp no permite mezclar imágenes de tipo 'style' y 'asset' en la misma generación. "
+                        f"Usa solo imágenes de tipo 'style' (máximo 1) O solo imágenes de tipo 'asset' (hasta 3), pero no ambos."
+                    )
+                
+                # Validar límites específicos
+                style_count = sum(1 for ref_img in reference_images if ref_img.get('reference_type') == 'style')
+                if style_count > 1:
+                    raise ValueError(
+                        f"Veo 2.0-exp solo permite máximo 1 imagen de tipo 'style'. "
+                        f"Se proporcionaron {style_count} imágenes de estilo."
+                    )
             
             # La duración debe ser 8 segundos con reference images
             if duration != 8:
@@ -459,12 +483,29 @@ class GeminiVeoClient:
             if self.model_config['version'] in ['3.0', '3.1']:
                 if generate_audio is None:
                     generate_audio = True  # Default para Veo 3
+                
+                # Aplicar limitaciones del modelo de forma escalable
+                limitations = self.model_config.get('limitations', {})
+                
+                # Validar combinación reference images + audio
+                if reference_images and limitations.get('reference_images_with_audio') is False:
+                    if generate_audio:
+                        logger.warning(f"⚠️ Modelo {self.model_name} no soporta audio con reference images. Desactivando audio automáticamente.")
+                        generate_audio = False
+                
                 parameters["generateAudio"] = generate_audio
                 logger.info(f"   🔊 Generate Audio: {generate_audio}")
                 
                 if self.model_config['supports_resolution']:
-                    parameters["resolution"] = resolution
-                    logger.info(f"   📺 Resolution: {resolution}")
+                    # Validar combinación reference images + 1080p
+                    final_resolution = resolution
+                    if reference_images and limitations.get('reference_images_with_1080p') is False:
+                        if resolution == '1080p':
+                            logger.warning(f"⚠️ Modelo {self.model_name} no soporta 1080p con reference images. Usando 720p.")
+                            final_resolution = "720p"
+                    
+                    parameters["resolution"] = final_resolution
+                    logger.info(f"   📺 Resolution: {final_resolution}")
                 
                 if self.model_config['supports_resize_mode'] and (input_image_gcs_uri or input_image_base64):
                     parameters["resizeMode"] = resize_mode
