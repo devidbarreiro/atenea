@@ -293,7 +293,8 @@ document.addEventListener('alpine:init', () => {
         async navigateTo(direction) {
             if (!this.navigation || !this.navigation[direction]) return;
             const nav = this.navigation[direction];
-            await this.openItem({ type: this.selectedItem.type, id: nav.id });
+            // La navegación devuelve 'uuid', no 'id'
+            await this.openItem({ type: nav.type, id: nav.uuid });
         },
         
         formatDate(dateStr) {
