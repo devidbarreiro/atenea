@@ -1917,6 +1917,108 @@ class VideoGenerateView(ServiceMixin, View):
         return redirect('core:video_detail', video_uuid=video.uuid)
 
 
+class VideoRecreateView(ServiceMixin, View):
+    """Recrear un video con los mismos parámetros"""
+    
+    def post(self, request, video_uuid):
+        from django.db.models import Q
+        
+        original_video = get_object_or_404(Video, uuid=video_uuid)
+        video_service = self.get_video_service()
+        
+        # Verificar permisos - validación robusta
+        if not request.user.is_authenticated:
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Debes estar autenticado para recrear videos')
+        
+        if original_video.project:
+            # Si tiene proyecto, verificar acceso al proyecto
+            if not ProjectService.user_has_access(original_video.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a este video')
+        else:
+            # Si no tiene proyecto, solo el creador puede recrearlo
+            if not original_video.created_by or original_video.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a este video')
+        
+        try:
+            # Calcular número de versión basado en UUID del item original
+            # Determinar el UUID del item original (puede ser el mismo si es el primero)
+            original_item_uuid = original_video.config.get('original_item_uuid')
+            if not original_item_uuid:
+                # Si no tiene original_item_uuid, este es el item original
+                original_item_uuid = str(original_video.uuid)
+            
+            # Contar todos los items que pertenecen a la misma "familia" de versiones
+            # (todos los que tienen el mismo original_item_uuid, o el original mismo)
+            version_filter = (
+                Q(config__original_item_uuid=original_item_uuid) |
+                Q(uuid=original_item_uuid)
+            )
+            if original_video.project:
+                version_filter &= Q(project=original_video.project)
+            else:
+                version_filter &= Q(project__isnull=True, created_by=request.user)
+            
+            # Contar items en la familia de versiones
+            version_count = Video.objects.filter(version_filter).count()
+            
+            # Calcular siguiente versión
+            next_version = version_count + 1
+            
+            # Extraer título base (sin sufijo de versión si existe)
+            base_title = original_video.title
+            import re
+            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
+            if match:
+                base_title = match.group(1)
+            
+            new_title = f"{base_title} - v{next_version}"
+            
+            # Crear nuevo video copiando la configuración
+            new_config = original_video.config.copy() if original_video.config else {}
+            # Marcar el UUID del item original para rastrear versiones
+            new_config['original_item_uuid'] = original_item_uuid
+            
+            new_video = video_service.create_video(
+                created_by=request.user,
+                project=original_video.project,
+                title=new_title,
+                video_type=original_video.type,
+                script=original_video.script,
+                config=new_config
+            )
+            
+            # Generar el video automáticamente
+            task = video_service.generate_video_async(new_video)
+            
+            messages.success(
+                request,
+                f'Video "{new_title}" creado y encolado para generación.'
+            )
+            
+            # Redirigir al nuevo video
+            if new_video.project:
+                return redirect('core:project_video_detail', project_uuid=new_video.project.uuid, video_uuid=new_video.uuid)
+            else:
+                return redirect('core:video_detail', video_uuid=new_video.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:video_detail', video_uuid=original_video.uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:video_detail', video_uuid=original_video.uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:video_detail', video_uuid=original_video.uuid)
+        except Exception as e:
+            logger.error(f'Error al recrear video: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:video_detail', video_uuid=original_video.uuid)
+
+
 class VideoStatusView(ServiceMixin, View):
     """API endpoint para consultar estado del video"""
     
@@ -2606,6 +2708,32 @@ class ItemDetailAPIView(ServiceMixin, View):
                 else:
                     model_info = get_model_info_for_item('video', video.type)
                 
+                # Obtener información del prompt template si existe
+                prompt_template_info = None
+                prompt_template_id = config.get('prompt_template_id')
+                if prompt_template_id:
+                    try:
+                        from core.models import PromptTemplate
+                        template = PromptTemplate.objects.filter(uuid=prompt_template_id, is_active=True).first()
+                        if template:
+                            preview_url = template.preview_url or ''
+                            # Si es una URL de GCS, convertir a URL firmada
+                            if preview_url and preview_url.startswith('gs://'):
+                                try:
+                                    from core.storage.gcs import gcs_storage
+                                    preview_url = gcs_storage.get_signed_url(preview_url, expiration=3600)
+                                except Exception as e:
+                                    logger.warning(f'Error obteniendo URL firmada para preview: {e}')
+                            
+                            prompt_template_info = {
+                                'uuid': str(template.uuid),
+                                'name': template.name,
+                                'description': template.description or '',
+                                'preview_url': preview_url,
+                            }
+                    except Exception as e:
+                        logger.warning(f'Error obteniendo prompt template {prompt_template_id}: {e}')
+                
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_uuid:
                     detail_url = reverse('core:project_video_detail', args=[nav_project_uuid, video.uuid])
@@ -2646,6 +2774,8 @@ class ItemDetailAPIView(ServiceMixin, View):
                         'duration': video.duration,
                         'resolution': video.resolution,
                         'aspect_ratio': config.get('aspect_ratio') or config.get('orientation'),
+                        # Información del prompt template
+                        'prompt_template': prompt_template_info,
                     },
                     'navigation': {
                         'prev': {
@@ -2700,6 +2830,36 @@ class ItemDetailAPIView(ServiceMixin, View):
                 else:
                     model_info = get_model_info_for_item('image', image.type)
                 
+                # Obtener información del prompt template si existe (optimizado para evitar N+1)
+                prompt_template_info = None
+                prompt_template_id = image.config.get('prompt_template_id')
+                if prompt_template_id:
+                    try:
+                        from core.models import PromptTemplate
+                        # Usar only() para limitar campos y optimizar query
+                        template = PromptTemplate.objects.filter(
+                            uuid=prompt_template_id, 
+                            is_active=True
+                        ).only('uuid', 'name', 'description', 'preview_url').first()
+                        if template:
+                            preview_url = template.preview_url or ''
+                            # Si es una URL de GCS, convertir a URL firmada
+                            if preview_url and preview_url.startswith('gs://'):
+                                try:
+                                    from core.storage.gcs import gcs_storage
+                                    preview_url = gcs_storage.get_signed_url(preview_url, expiration=3600)
+                                except Exception as e:
+                                    logger.warning(f'Error obteniendo URL firmada para preview: {e}')
+                            
+                            prompt_template_info = {
+                                'uuid': str(template.uuid),
+                                'name': template.name,
+                                'description': template.description or '',
+                                'preview_url': preview_url,
+                            }
+                    except Exception as e:
+                        logger.warning(f'Error obteniendo prompt template {prompt_template_id}: {e}')
+                
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_uuid:
                     detail_url = reverse('core:project_image_detail', args=[nav_project_uuid, image.uuid])
@@ -2739,6 +2899,8 @@ class ItemDetailAPIView(ServiceMixin, View):
                         'generate_url': reverse('core:image_generate', args=[image.uuid]),
                         # Información del modelo
                         'model': model_info,
+                        # Información del prompt template
+                        'prompt_template': prompt_template_info,
                     },
                     'navigation': {
                         'prev': {
@@ -3785,6 +3947,108 @@ class ImageGenerateView(ServiceMixin, View):
             messages.error(request, f'Error inesperado: {str(e)}')
         
         return redirect('core:image_detail', image_uuid=image.uuid)
+
+
+class ImageRecreateView(ServiceMixin, View):
+    """Recrear una imagen con los mismos parámetros"""
+    
+    def post(self, request, image_uuid):
+        from django.db.models import Q
+        
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        image_service = self.get_image_service()
+        
+        # Verificar permisos - validación robusta
+        if not request.user.is_authenticated:
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Debes estar autenticado para recrear imágenes')
+        
+        if original_image.project:
+            # Si tiene proyecto, verificar acceso al proyecto
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            # Si no tiene proyecto, solo el creador puede recrearlo
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        try:
+            # Calcular número de versión basado en UUID del item original
+            # Determinar el UUID del item original (puede ser el mismo si es el primero)
+            original_item_uuid = original_image.config.get('original_item_uuid')
+            if not original_item_uuid:
+                # Si no tiene original_item_uuid, este es el item original
+                original_item_uuid = str(original_image.uuid)
+            
+            # Contar todos los items que pertenecen a la misma "familia" de versiones
+            # (todos los que tienen el mismo original_item_uuid, o el original mismo)
+            version_filter = (
+                Q(config__original_item_uuid=original_item_uuid) |
+                Q(uuid=original_item_uuid)
+            )
+            if original_image.project:
+                version_filter &= Q(project=original_image.project)
+            else:
+                version_filter &= Q(project__isnull=True, created_by=request.user)
+            
+            # Contar items en la familia de versiones
+            version_count = Image.objects.filter(version_filter).count()
+            
+            # Calcular siguiente versión
+            next_version = version_count + 1
+            
+            # Extraer título base (sin sufijo de versión si existe)
+            base_title = original_image.title
+            import re
+            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
+            if match:
+                base_title = match.group(1)
+            
+            new_title = f"{base_title} - v{next_version}"
+            
+            # Crear nueva imagen copiando la configuración
+            new_config = original_image.config.copy() if original_image.config else {}
+            # Marcar el UUID del item original para rastrear versiones
+            new_config['original_item_uuid'] = original_item_uuid
+            
+            new_image = image_service.create_image(
+                title=new_title,
+                image_type=original_image.type,
+                prompt=original_image.prompt,
+                config=new_config,
+                created_by=request.user,
+                project=original_image.project
+            )
+            
+            # Generar la imagen automáticamente
+            task = image_service.generate_image_async(new_image)
+            
+            messages.success(
+                request,
+                f'Imagen "{new_title}" creada y encolada para generación.'
+            )
+            
+            # Redirigir a la nueva imagen
+            if new_image.project:
+                return redirect('core:project_image_detail', project_uuid=new_image.project.uuid, image_uuid=new_image.uuid)
+            else:
+                return redirect('core:image_detail', image_uuid=new_image.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=original_image.uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=original_image.uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=original_image.uuid)
+        except Exception as e:
+            logger.error(f'Error al recrear imagen: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:image_detail', image_uuid=original_image.uuid)
 
 
 # ====================
