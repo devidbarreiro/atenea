@@ -656,31 +656,8 @@ document.addEventListener('alpine:init', () => {
                 
                 <!-- Content -->
                 <div class="flex-1 overflow-y-auto p-4 space-y-5">
-                    <!-- MODELO -->
-                    <div x-show="selectedItem.model">
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">MODELO</h3>
-                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                            <img x-show="selectedItem.model?.logo" 
-                                 :src="selectedItem.model?.logo" 
-                                 :alt="selectedItem.model?.service || 'Modelo'"
-                                 class="w-8 h-8 object-contain rounded flex-shrink-0"
-                                 onerror="this.style.display='none'">
-                            <div class="flex-1 min-w-0">
-                                <p class="font-medium text-sm text-gray-900" x-text="selectedItem.model?.name || 'Modelo'"></p>
-                                <p class="text-xs text-gray-500" x-text="selectedItem.model?.service || ''"></p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- PROMPT -->
-                    <div>
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROMPT</h3>
-                        <p class="text-sm text-gray-800 whitespace-pre-wrap" x-text="selectedItem.prompt || selectedItem.script || selectedItem.text || 'Sin prompt'"></p>
-                    </div>
-                    
-                    <!-- PROMPT TEMPLATE -->
+                    <!-- PROMPT TEMPLATE (sin título, solo preview) -->
                     <div x-show="selectedItem.prompt_template">
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROMPT TEMPLATE</h3>
                         <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
                             <!-- Preview Area -->
                             <div class="aspect-video bg-gray-900 relative overflow-hidden rounded-lg">
@@ -724,6 +701,28 @@ document.addEventListener('alpine:init', () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- MODELO -->
+                    <div x-show="selectedItem.model">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">MODELO</h3>
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                            <img x-show="selectedItem.model?.logo" 
+                                 :src="selectedItem.model?.logo" 
+                                 :alt="selectedItem.model?.service || 'Modelo'"
+                                 class="w-8 h-8 object-contain rounded flex-shrink-0"
+                                 onerror="this.style.display='none'">
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-sm text-gray-900" x-text="selectedItem.model?.name || 'Modelo'"></p>
+                                <p class="text-xs text-gray-500" x-text="selectedItem.model?.service || ''"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PROMPT -->
+                    <div>
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROMPT</h3>
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap" x-text="selectedItem.prompt || selectedItem.script || selectedItem.text || 'Sin prompt'"></p>
                     </div>
                     
                     <!-- SETTINGS -->
