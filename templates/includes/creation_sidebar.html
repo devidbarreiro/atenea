@@ -167,7 +167,9 @@ document.addEventListener('alpine:init', () => {
                 document.querySelector('input[name="start_image"]'),
                 document.querySelector('input[name="end_image"]'),
                 document.querySelector('input[name="style_image"]'),
-                document.querySelector('input[name="asset_image"]')
+                document.querySelector('input[name="asset_image_1"]'),
+                document.querySelector('input[name="asset_image_2"]'),
+                document.querySelector('input[name="asset_image_3"]')
             ].filter(input => input && input.files && input.files[0]);
             
             const maxSize = 10 * 1024 * 1024; // 10MB
@@ -186,6 +188,37 @@ document.addEventListener('alpine:init', () => {
                         valid: false,
                         error: `El archivo "${file.name}" tiene un formato no soportado. Use: JPG, PNG o WEBP`
                     };
+                }
+            }
+            
+            // Validar restricciones de referencia para veo-2.0-generate-exp
+            if (this.selectedModel === 'veo-2.0-generate-exp') {
+                const styleImage = document.querySelector('input[name="style_image"]');
+                const assetImage1 = document.querySelector('input[name="asset_image_1"]');
+                const assetImage2 = document.querySelector('input[name="asset_image_2"]');
+                const assetImage3 = document.querySelector('input[name="asset_image_3"]');
+                
+                const hasStyle = styleImage && styleImage.files && styleImage.files[0];
+                const hasAsset = (assetImage1 && assetImage1.files && assetImage1.files[0]) ||
+                                (assetImage2 && assetImage2.files && assetImage2.files[0]) ||
+                                (assetImage3 && assetImage3.files && assetImage3.files[0]);
+                
+                if (hasStyle && hasAsset) {
+                    return {
+                        valid: false,
+                        error: 'Veo 2.0-exp no permite mezclar imágenes de tipo "Style" y "Asset" en la misma generación. Usa solo Style (máx. 1) O solo Asset (máx. 3).'
+                    };
+                }
+                
+                // Validar que solo haya 1 style image
+                if (hasStyle) {
+                    const styleCount = 1; // Solo hay un campo style_image
+                    if (styleCount > 1) {
+                        return {
+                            valid: false,
+                            error: 'Solo puedes usar 1 imagen de tipo "Style" en Veo 2.0-exp.'
+                        };
+                    }
                 }
             }
             
@@ -334,16 +367,24 @@ document.addEventListener('alpine:init', () => {
                     settings.avatar_image_id = avatarImageId;
                 }
                 
+                // Obtener prompt_template_id del campo oculto
+                const promptTemplateIdInput = document.querySelector('input[name="prompt_template_id"]');
+                const promptTemplateId = promptTemplateIdInput ? promptTemplateIdInput.value : null;
+                
                 // Verificar si hay imágenes de referencia para enviar como FormData
                 const startImage = document.querySelector('input[name="start_image"]');
                 const endImage = document.querySelector('input[name="end_image"]');
                 const styleImage = document.querySelector('input[name="style_image"]');
-                const assetImage = document.querySelector('input[name="asset_image"]');
+                const assetImage1 = document.querySelector('input[name="asset_image_1"]');
+                const assetImage2 = document.querySelector('input[name="asset_image_2"]');
+                const assetImage3 = document.querySelector('input[name="asset_image_3"]');
                 
                 const hasReferenceImages = (startImage && startImage.files && startImage.files[0]) ||
                                           (endImage && endImage.files && endImage.files[0]) ||
                                           (styleImage && styleImage.files && styleImage.files[0]) ||
-                                          (assetImage && assetImage.files && assetImage.files[0]);
+                                          (assetImage1 && assetImage1.files && assetImage1.files[0]) ||
+                                          (assetImage2 && assetImage2.files && assetImage2.files[0]) ||
+                                          (assetImage3 && assetImage3.files && assetImage3.files[0]);
                 
                 let response;
                 
@@ -358,6 +399,10 @@ document.addEventListener('alpine:init', () => {
                     formData.append('text', this.prompt);
                     if (this.projectId) {
                         formData.append('project_id', this.projectId);
+                    }
+                    // Añadir prompt_template_id si existe
+                    if (promptTemplateId) {
+                        formData.append('prompt_template_id', promptTemplateId);
                     }
                     // Añadir campos específicos de Manim directamente al FormData también
                     if (settings.author) {
@@ -378,8 +423,15 @@ document.addEventListener('alpine:init', () => {
                     if (styleImage && styleImage.files && styleImage.files[0]) {
                         formData.append('style_image', styleImage.files[0]);
                     }
-                    if (assetImage && assetImage.files && assetImage.files[0]) {
-                        formData.append('asset_image', assetImage.files[0]);
+                    // Múltiples assets (hasta 3)
+                    if (assetImage1 && assetImage1.files && assetImage1.files[0]) {
+                        formData.append('asset_image_1', assetImage1.files[0]);
+                    }
+                    if (assetImage2 && assetImage2.files && assetImage2.files[0]) {
+                        formData.append('asset_image_2', assetImage2.files[0]);
+                    }
+                    if (assetImage3 && assetImage3.files && assetImage3.files[0]) {
+                        formData.append('asset_image_3', assetImage3.files[0]);
                     }
                     
                     response = await fetch('/api/items/create/', {
@@ -401,6 +453,11 @@ document.addEventListener('alpine:init', () => {
                         project_id: this.projectId,
                         settings: settings
                     };
+                    
+                    // Añadir prompt_template_id si existe
+                    if (promptTemplateId) {
+                        requestData.prompt_template_id = promptTemplateId;
+                    }
                     
                     response = await fetch('/api/items/create/', {
                         method: 'POST',

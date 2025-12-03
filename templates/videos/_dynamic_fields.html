@@ -228,7 +228,7 @@
 {% if has_references %}
 <div class="mb-4">
     <label class="block text-xs font-semibold text-gray-700 uppercase mb-3">REFERENCIAS</label>
-    <div class="grid grid-cols-2 gap-2">
+    <div class="grid grid-cols-2 gap-2" id="reference-images-container">
         {% if supports.references.start_image == True or supports.references.start_image %}
         <label class="relative group cursor-pointer">
             <input type="file" name="start_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'start-preview')">
@@ -268,8 +268,8 @@
         {% endif %}
         
         {% if supports.references.style_image == True or supports.references.style_image %}
-        <label class="relative group cursor-pointer">
-            <input type="file" name="style_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'style-preview')">
+        <label class="relative group cursor-pointer ref-style-field" data-ref-type="style" id="style-field">
+            <input type="file" name="style_image" accept="image/*" class="hidden reference-image-input" data-type="style" onchange="updateImagePreview(this, 'style-preview'); toggleReferenceFields('{{ model_id }}');">
             <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
                 <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
                     <div class="absolute top-2 left-2">
@@ -285,8 +285,9 @@
         {% endif %}
         
         {% if supports.references.asset_image == True or supports.references.asset_image %}
-        <label class="relative group cursor-pointer">
-            <input type="file" name="asset_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'asset-preview')">
+        {# Asset 1 - Siempre visible #}
+        <label class="relative group cursor-pointer ref-asset-field" data-ref-type="asset" id="asset-field-1">
+            <input type="file" name="asset_image_1" accept="image/*" class="hidden reference-image-input" data-type="asset" onchange="updateImagePreview(this, 'asset-preview-1'); toggleReferenceFields('{{ model_id }}');">
             <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
                 <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
                     <div class="absolute top-2 left-2">
@@ -295,10 +296,55 @@
                         </svg>
                     </div>
                     <span class="text-xs font-medium text-gray-900 mt-auto">Asset</span>
-                    <img id="asset-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                    <img id="asset-preview-1" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
                 </div>
             </div>
         </label>
+        
+        {# Asset 2 - Oculto inicialmente #}
+        <label class="relative group cursor-pointer ref-asset-field hidden" data-ref-type="asset" id="asset-field-2">
+            <input type="file" name="asset_image_2" accept="image/*" class="hidden reference-image-input" data-type="asset" onchange="updateImagePreview(this, 'asset-preview-2'); toggleReferenceFields('{{ model_id }}');">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25h2.25A2.25 2.25 0 0121 10.5v8.25a2.25 2.25 0 01-2.25 2.25H16.5m-9-8.25h8.25m0 0V12m0-3.75v3.75m0 0v3.75m0-3.75h8.25"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">Asset</span>
+                    <img id="asset-preview-2" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        
+        {# Asset 3 - Oculto inicialmente #}
+        <label class="relative group cursor-pointer ref-asset-field hidden" data-ref-type="asset" id="asset-field-3">
+            <input type="file" name="asset_image_3" accept="image/*" class="hidden reference-image-input" data-type="asset" onchange="updateImagePreview(this, 'asset-preview-3'); toggleReferenceFields('{{ model_id }}');">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                    <div class="absolute top-2 left-2">
+                        <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25h2.25A2.25 2.25 0 0121 10.5v8.25a2.25 2.25 0 01-2.25 2.25H16.5m-9-8.25h8.25m0 0V12m0-3.75v3.75m0 0v3.75m0-3.75h8.25"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-gray-900 mt-auto">Asset</span>
+                    <img id="asset-preview-3" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                </div>
+            </div>
+        </label>
+        
+        {# Botón para añadir más assets #}
+        {% if model_id == 'veo-2.0-generate-exp' or 'veo-3.1' in model_id %}
+        <button type="button" id="add-asset-btn" class="hidden border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 hover:bg-gray-50 transition-colors h-24 flex items-center justify-center text-xs text-gray-600" onclick="addAssetField()">
+            <div class="flex flex-col items-center gap-1">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Añadir Asset</span>
+            </div>
+        </button>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -375,6 +421,114 @@
 
 {# Script para preview de imágenes y ajuste automático de duración #}
 <script>
+/**
+ * Alterna la visibilidad de campos de referencia según lo seleccionado
+ */
+function toggleReferenceFields(modelId) {
+    const styleImage = document.querySelector('input[name="style_image"]');
+    const assetImage1 = document.querySelector('input[name="asset_image_1"]');
+    const assetImage2 = document.querySelector('input[name="asset_image_2"]');
+    const assetImage3 = document.querySelector('input[name="asset_image_3"]');
+    const styleField = document.getElementById('style-field');
+    const assetField1 = document.getElementById('asset-field-1');
+    const assetField2 = document.getElementById('asset-field-2');
+    const assetField3 = document.getElementById('asset-field-3');
+    const addAssetBtn = document.getElementById('add-asset-btn');
+    
+    const hasStyle = styleImage && styleImage.files && styleImage.files[0];
+    const hasAsset1 = assetImage1 && assetImage1.files && assetImage1.files[0];
+    const hasAsset2 = assetImage2 && assetImage2.files && assetImage2.files[0];
+    const hasAsset3 = assetImage3 && assetImage3.files && assetImage3.files[0];
+    const hasAnyAsset = hasAsset1 || hasAsset2 || hasAsset3;
+    
+    // Solo aplicar lógica de exclusión para veo-2.0-generate-exp
+    if (modelId === 'veo-2.0-generate-exp') {
+        if (hasStyle) {
+            // Si hay style, ocultar todos los assets
+            if (assetField1) assetField1.classList.add('hidden');
+            if (assetField2) assetField2.classList.add('hidden');
+            if (assetField3) assetField3.classList.add('hidden');
+            if (addAssetBtn) addAssetBtn.classList.add('hidden');
+            // Limpiar assets si estaban seleccionados
+            if (assetImage1 && assetImage1.files && assetImage1.files[0]) {
+                assetImage1.value = '';
+                const preview = document.getElementById('asset-preview-1');
+                if (preview) preview.classList.add('hidden');
+            }
+            if (assetImage2 && assetImage2.files && assetImage2.files[0]) {
+                assetImage2.value = '';
+                const preview = document.getElementById('asset-preview-2');
+                if (preview) preview.classList.add('hidden');
+            }
+            if (assetImage3 && assetImage3.files && assetImage3.files[0]) {
+                assetImage3.value = '';
+                const preview = document.getElementById('asset-preview-3');
+                if (preview) preview.classList.add('hidden');
+            }
+        } else if (hasAnyAsset) {
+            // Si hay asset, ocultar style
+            if (styleField) styleField.classList.add('hidden');
+            if (styleImage && styleImage.files && styleImage.files[0]) {
+                styleImage.value = '';
+                const preview = document.getElementById('style-preview');
+                if (preview) preview.classList.add('hidden');
+            }
+            // Mostrar botón añadir si hay menos de 3 assets
+            if (addAssetBtn && !hasAsset3) {
+                addAssetBtn.classList.remove('hidden');
+            } else if (addAssetBtn && hasAsset3) {
+                addAssetBtn.classList.add('hidden');
+            }
+        } else {
+            // Si no hay nada, mostrar todo
+            if (styleField) styleField.classList.remove('hidden');
+            if (assetField1) assetField1.classList.remove('hidden');
+            if (addAssetBtn) addAssetBtn.classList.add('hidden');
+        }
+    } else {
+        // Para otros modelos (veo-3.1), solo mostrar assets y botón añadir
+        if (styleField) styleField.classList.add('hidden');
+        if (assetField1) assetField1.classList.remove('hidden');
+        if (addAssetBtn && !hasAsset3) {
+            addAssetBtn.classList.remove('hidden');
+        } else if (addAssetBtn && hasAsset3) {
+            addAssetBtn.classList.add('hidden');
+        }
+    }
+    
+    // Mostrar asset 2 si asset 1 tiene archivo
+    if (hasAsset1 && assetField2) {
+        assetField2.classList.remove('hidden');
+    } else if (!hasAsset1 && assetField2) {
+        assetField2.classList.add('hidden');
+        if (assetImage2) assetImage2.value = '';
+    }
+    
+    // Mostrar asset 3 si asset 2 tiene archivo
+    if (hasAsset2 && assetField3) {
+        assetField3.classList.remove('hidden');
+    } else if (!hasAsset2 && assetField3) {
+        assetField3.classList.add('hidden');
+        if (assetImage3) assetImage3.value = '';
+    }
+}
+
+/**
+ * Añade un campo de asset adicional
+ */
+function addAssetField() {
+    const assetField2 = document.getElementById('asset-field-2');
+    const assetField3 = document.getElementById('asset-field-3');
+    const addAssetBtn = document.getElementById('add-asset-btn');
+    
+    if (assetField2 && assetField2.classList.contains('hidden')) {
+        assetField2.classList.remove('hidden');
+    } else if (assetField3 && assetField3.classList.contains('hidden')) {
+        assetField3.classList.remove('hidden');
+        if (addAssetBtn) addAssetBtn.classList.add('hidden');
+    }
+}
+
 function updateImagePreview(input, previewId) {
     const preview = document.getElementById(previewId);
     const label = input.closest('label');
@@ -391,17 +545,19 @@ function updateImagePreview(input, previewId) {
         };
         reader.readAsDataURL(input.files[0]);
         
-        // IMPORTANTE: Si se selecciona una imagen de referencia (style_image o asset_image),
+        // IMPORTANTE: Si se selecciona una imagen de referencia (style_image o asset_image_*),
         // ajustar automáticamente la duración a 8s (requerido por Veo)
         const inputName = input.name;
-        if (inputName === 'style_image' || inputName === 'asset_image') {
+        if (inputName === 'style_image' || inputName.startsWith('asset_image_')) {
             const durationInput = document.getElementById('duration-input');
             const durationDisplay = document.getElementById('duration-display');
             if (durationInput && durationDisplay) {
                 durationInput.value = '8';
                 durationDisplay.textContent = '8s';
-                console.log('Duración ajustada automáticamente a 8s por imagen de referencia');
             }
+            // Obtener model_id del contexto del template y alternar campos
+            const modelId = '{{ model_id }}';
+            toggleReferenceFields(modelId);
         }
     } else {
         // Si se elimina la imagen, restaurar preview
@@ -410,8 +566,23 @@ function updateImagePreview(input, previewId) {
         const text = label.querySelector('span.text-xs');
         if (icon) icon.style.display = '';
         if (text) text.style.display = '';
+        
+        // Si se elimina una imagen de referencia, actualizar visibilidad de campos
+        const inputName = input.name;
+        if (inputName === 'style_image' || inputName.startsWith('asset_image_')) {
+            const modelId = '{{ model_id }}';
+            toggleReferenceFields(modelId);
+        }
     }
 }
+
+// Inicializar estado de campos al cargar
+document.addEventListener('DOMContentLoaded', function() {
+    const modelId = '{{ model_id }}';
+    if (modelId) {
+        toggleReferenceFields(modelId);
+    }
+});
 </script>
 
 {# Costo Estimado - se actualiza dentro del botón Generar #}
