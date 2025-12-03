@@ -417,7 +417,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
 
     # ==================== Black Forest Labs (Flux) ====================
     'flux-pro/kontext/max/text-to-image': {
-        'service': 'Black Forest Labs',
+        'service': 'higgsfield',
         'name': 'Flux Pro Kontext Max',
         'description': 'Generación de imágenes de alta calidad a partir de texto (Flux Pro Kontext Max)',
         'type': 'image',
@@ -727,6 +727,38 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'logo': '/static/img/logos/google.png',
     },
 
+    # ==================== SEEDREAM IMAGE ====================
+    'seedream-4-5-251128': {
+        'service': 'seedream',
+        'name': 'SeeDream 4.5 Advanced',
+        'description': 'Generación avanzada, edición y mezcla de imágenes (soporta multi-imagen).',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_image': True,     # Habilitado para edición avanzada (I2I)
+            'multi_image': True,        # Habilitado para Multi-Imagen (Blending)
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '2:3', '3:2', '16:9', '9:16', '4:3', '21:9'],
+        },
+        'logo': '/static/img/logos/seedream.png',
+    },
+    
+    'seedream-3-0-t2i-250415': {
+        'service': 'seedream',
+        'name': 'SeeDream 3.0 Standard',
+        'description': 'Modelo estándar de generación (Text-to-Image) simple.',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,      # <-- Activamos la generación simple (T2I)
+            'image_to_image': False,    # <-- Desactivamos edición simple (si es solo T2I)
+            'multi_image': False,
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '2:3', '3:2', '16:9', '9:16'],
+        },
+        'logo': '/static/img/logos/seedream.png',
+    },
     # ==================== ELEVENLABS ====================
     'elevenlabs': {
         'service': 'elevenlabs',

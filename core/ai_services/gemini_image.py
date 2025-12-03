@@ -63,10 +63,7 @@ class GeminiImageClient:
     def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash-image"):
         """
         Inicializa el cliente de Gemini Image
-        """
-        if model_name not in self.MODEL_CONFIGS:
-            raise ValueError(f"Modelo de imagen no soportado: {model_name}. Modelos disponibles: {list(self.MODEL_CONFIGS.keys())}")
-            
+        """ 
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
         self.model = model_name
