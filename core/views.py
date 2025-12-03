@@ -1926,39 +1926,60 @@ class VideoRecreateView(ServiceMixin, View):
         original_video = get_object_or_404(Video, uuid=video_uuid)
         video_service = self.get_video_service()
         
-        # Verificar permisos
+        # Verificar permisos - validación robusta
+        if not request.user.is_authenticated:
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Debes estar autenticado para recrear videos')
+        
         if original_video.project:
+            # Si tiene proyecto, verificar acceso al proyecto
             if not ProjectService.user_has_access(original_video.project, request.user):
                 from django.core.exceptions import PermissionDenied
                 raise PermissionDenied('No tienes acceso a este video')
-        elif original_video.created_by != request.user:
-            from django.core.exceptions import PermissionDenied
-            raise PermissionDenied('No tienes acceso a este video')
+        else:
+            # Si no tiene proyecto, solo el creador puede recrearlo
+            if not original_video.created_by or original_video.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a este video')
         
         try:
-            # Calcular número de versión
-            base_title = original_video.title
-            # Si el título ya tiene un sufijo "- vX", extraer el título base
-            import re
-            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
-            if match:
-                base_title = match.group(1)
+            # Calcular número de versión basado en UUID del item original
+            # Determinar el UUID del item original (puede ser el mismo si es el primero)
+            original_item_uuid = original_video.config.get('original_item_uuid')
+            if not original_item_uuid:
+                # Si no tiene original_item_uuid, este es el item original
+                original_item_uuid = str(original_video.uuid)
             
-            # Contar cuántos videos con el mismo título base existen (mismo proyecto o usuario)
-            version_filter = Q(title=base_title) | Q(title__startswith=f"{base_title} - v")
+            # Contar todos los items que pertenecen a la misma "familia" de versiones
+            # (todos los que tienen el mismo original_item_uuid, o el original mismo)
+            version_filter = (
+                Q(config__original_item_uuid=original_item_uuid) |
+                Q(uuid=original_item_uuid)
+            )
             if original_video.project:
                 version_filter &= Q(project=original_video.project)
             else:
                 version_filter &= Q(project__isnull=True, created_by=request.user)
             
+            # Contar items en la familia de versiones
             version_count = Video.objects.filter(version_filter).count()
             
             # Calcular siguiente versión
             next_version = version_count + 1
+            
+            # Extraer título base (sin sufijo de versión si existe)
+            base_title = original_video.title
+            import re
+            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
+            if match:
+                base_title = match.group(1)
+            
             new_title = f"{base_title} - v{next_version}"
             
             # Crear nuevo video copiando la configuración
             new_config = original_video.config.copy() if original_video.config else {}
+            # Marcar el UUID del item original para rastrear versiones
+            new_config['original_item_uuid'] = original_item_uuid
             
             new_video = video_service.create_video(
                 created_by=request.user,
@@ -2809,13 +2830,17 @@ class ItemDetailAPIView(ServiceMixin, View):
                 else:
                     model_info = get_model_info_for_item('image', image.type)
                 
-                # Obtener información del prompt template si existe
+                # Obtener información del prompt template si existe (optimizado para evitar N+1)
                 prompt_template_info = None
                 prompt_template_id = image.config.get('prompt_template_id')
                 if prompt_template_id:
                     try:
                         from core.models import PromptTemplate
-                        template = PromptTemplate.objects.filter(uuid=prompt_template_id, is_active=True).first()
+                        # Usar only() para limitar campos y optimizar query
+                        template = PromptTemplate.objects.filter(
+                            uuid=prompt_template_id, 
+                            is_active=True
+                        ).only('uuid', 'name', 'description', 'preview_url').first()
                         if template:
                             preview_url = template.preview_url or ''
                             # Si es una URL de GCS, convertir a URL firmada
@@ -3933,39 +3958,60 @@ class ImageRecreateView(ServiceMixin, View):
         original_image = get_object_or_404(Image, uuid=image_uuid)
         image_service = self.get_image_service()
         
-        # Verificar permisos
+        # Verificar permisos - validación robusta
+        if not request.user.is_authenticated:
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied('Debes estar autenticado para recrear imágenes')
+        
         if original_image.project:
+            # Si tiene proyecto, verificar acceso al proyecto
             if not ProjectService.user_has_access(original_image.project, request.user):
                 from django.core.exceptions import PermissionDenied
                 raise PermissionDenied('No tienes acceso a esta imagen')
-        elif original_image.created_by != request.user:
-            from django.core.exceptions import PermissionDenied
-            raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            # Si no tiene proyecto, solo el creador puede recrearlo
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
         
         try:
-            # Calcular número de versión
-            base_title = original_image.title
-            # Si el título ya tiene un sufijo "- vX", extraer el título base
-            import re
-            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
-            if match:
-                base_title = match.group(1)
+            # Calcular número de versión basado en UUID del item original
+            # Determinar el UUID del item original (puede ser el mismo si es el primero)
+            original_item_uuid = original_image.config.get('original_item_uuid')
+            if not original_item_uuid:
+                # Si no tiene original_item_uuid, este es el item original
+                original_item_uuid = str(original_image.uuid)
             
-            # Contar cuántas imágenes con el mismo título base existen (mismo proyecto o usuario)
-            version_filter = Q(title=base_title) | Q(title__startswith=f"{base_title} - v")
+            # Contar todos los items que pertenecen a la misma "familia" de versiones
+            # (todos los que tienen el mismo original_item_uuid, o el original mismo)
+            version_filter = (
+                Q(config__original_item_uuid=original_item_uuid) |
+                Q(uuid=original_item_uuid)
+            )
             if original_image.project:
                 version_filter &= Q(project=original_image.project)
             else:
                 version_filter &= Q(project__isnull=True, created_by=request.user)
             
+            # Contar items en la familia de versiones
             version_count = Image.objects.filter(version_filter).count()
             
             # Calcular siguiente versión
             next_version = version_count + 1
+            
+            # Extraer título base (sin sufijo de versión si existe)
+            base_title = original_image.title
+            import re
+            match = re.match(r'^(.+?)(\s+- v\d+)?$', base_title)
+            if match:
+                base_title = match.group(1)
+            
             new_title = f"{base_title} - v{next_version}"
             
             # Crear nueva imagen copiando la configuración
             new_config = original_image.config.copy() if original_image.config else {}
+            # Marcar el UUID del item original para rastrear versiones
+            new_config['original_item_uuid'] = original_item_uuid
             
             new_image = image_service.create_image(
                 title=new_title,

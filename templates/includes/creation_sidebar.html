@@ -92,13 +92,29 @@ document.addEventListener('alpine:init', () => {
                 const cached = localStorage.getItem(`template_cache_${cacheKey}`);
                 if (cached) {
                     const data = JSON.parse(cached);
-                    // Verificar que no haya expirado (1 hora)
-                    if (Date.now() - data.timestamp < 3600000) {
+                    // Validar estructura de datos
+                    if (!data || typeof data !== 'object' || !data.timestamp || !data.templates) {
+                        console.warn('Cache data structure invalid, clearing cache');
+                        localStorage.removeItem(`template_cache_${cacheKey}`);
+                        return null;
+                    }
+                    // Verificar que no haya expirado (1 hora = 3600000 ms)
+                    const cacheAge = Date.now() - data.timestamp;
+                    if (cacheAge >= 0 && cacheAge < 3600000) {
                         return data.templates;
+                    } else {
+                        // Cache expirado, limpiarlo
+                        localStorage.removeItem(`template_cache_${cacheKey}`);
                     }
                 }
             } catch (e) {
                 console.warn('Error reading template cache:', e);
+                // Limpiar cache corrupto
+                try {
+                    localStorage.removeItem(`template_cache_${cacheKey}`);
+                } catch (clearError) {
+                    console.error('Error clearing corrupted cache:', clearError);
+                }
             }
             return null;
         },
