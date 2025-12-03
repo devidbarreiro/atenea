@@ -2019,8 +2019,8 @@ class PromptTemplate(models.Model):
     
     # Contenido del prompt
     prompt_text = models.TextField(
-        max_length=1200,
-        help_text='Texto del prompt que se enviará al servicio de IA (máximo 1200 caracteres)'
+        max_length=2000,
+        help_text='Texto del prompt que se enviará al servicio de IA (máximo 2000 caracteres)'
     )
     
     # Servicio recomendado

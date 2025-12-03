@@ -1062,6 +1062,15 @@ class VideoService:
         size = video.config.get('size', '1280x720')
         use_input_reference = video.config.get('use_input_reference', False)
         
+        # Log de configuración antes de generar
+        logger.info(f"🎬 Configuración de generación Sora:")
+        logger.info(f"   Modelo: {model}")
+        logger.info(f"   Duración: {duration}s")
+        logger.info(f"   Tamaño: {size}")
+        logger.info(f"   Usa imagen de referencia: {use_input_reference}")
+        logger.info(f"   Longitud del prompt: {len(final_prompt)} caracteres")
+        logger.info(f"   Prompt: {final_prompt[:200]}...")
+        
         # Generar video
         if use_input_reference and video.config.get('input_reference_gcs_path'):
             # Descargar imagen desde GCS a un archivo temporal
@@ -1098,6 +1107,11 @@ class VideoService:
                     seconds=duration,
                     size=size
                 )
+            except Exception as e:
+                logger.error(f"❌ Error al generar video con imagen de referencia: {str(e)}")
+                logger.error(f"   Config: model={model}, duration={duration}, size={size}")
+                logger.error(f"   GCS path: {gcs_path}, MIME type: {mime_type}")
+                raise
             finally:
                 # Limpiar archivo temporal
                 if os.path.exists(tmp_path):
@@ -1105,14 +1119,22 @@ class VideoService:
                     logger.info(f"Archivo temporal eliminado: {tmp_path}")
         else:
             # Generación text-to-video
-            response = client.generate_video(
-                prompt=final_prompt,
-                model=model,
-                seconds=duration,
-                size=size
-            )
+            try:
+                response = client.generate_video(
+                    prompt=final_prompt,
+                    model=model,
+                    seconds=duration,
+                    size=size
+                )
+            except Exception as e:
+                logger.error(f"❌ Error al generar video: {str(e)}")
+                logger.error(f"   Config: model={model}, duration={duration}, size={size}")
+                logger.error(f"   Prompt length: {len(final_prompt)} caracteres")
+                raise
         
-        return response.get('video_id')
+        video_id = response.get('video_id')
+        logger.info(f"✅ Video creado con ID: {video_id}")
+        return video_id
     
     def _generate_higgsfield_video(self, video: Video) -> str:
         """Genera video con Higgsfield"""
@@ -1576,7 +1598,19 @@ class VideoService:
                     os.unlink(tmp_path)
         
         elif api_status == 'failed':
-            error_msg = status_data.get('error', 'Video generation failed')
+            error_obj = status_data.get('error')
+            
+            # El error puede ser un dict con 'code' y 'message' o un string
+            if isinstance(error_obj, dict):
+                error_code = error_obj.get('code', 'unknown_error')
+                error_message = error_obj.get('message', 'Video generation failed')
+                error_msg = f"[{error_code}] {error_message}"
+                logger.error(f"❌ Video Sora {video.id} falló: {error_msg}")
+                logger.error(f"   Error completo: {error_obj}")
+            else:
+                error_msg = str(error_obj) if error_obj else 'Video generation failed'
+                logger.error(f"❌ Video Sora {video.id} falló: {error_msg}")
+            
             video.mark_as_error(error_msg)
         
         return status_data
@@ -3787,7 +3821,19 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                     os.unlink(tmp_path)
         
         elif api_status == 'failed':
-            error_msg = status_data.get('error', 'Video generation failed')
+            error_obj = status_data.get('error')
+            
+            # El error puede ser un dict con 'code' y 'message' o un string
+            if isinstance(error_obj, dict):
+                error_code = error_obj.get('code', 'unknown_error')
+                error_message = error_obj.get('message', 'Video generation failed')
+                error_msg = f"[{error_code}] {error_message}"
+                logger.error(f"❌ Escena Sora {scene.id} falló: {error_msg}")
+                logger.error(f"   Error completo: {error_obj}")
+            else:
+                error_msg = str(error_obj) if error_obj else 'Video generation failed'
+                logger.error(f"❌ Escena Sora {scene.id} falló: {error_msg}")
+            
             scene.mark_video_as_error(error_msg)
         
         return status_data
