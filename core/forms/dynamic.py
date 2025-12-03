@@ -686,6 +686,103 @@ def get_model_specific_fields(model_id, service):
                 '''
             })
     
+    # ElevenLabs TTS (para audios)
+    elif model_id == 'elevenlabs' or model_id == 'elevenlabs-tts':
+        try:
+            api_key = getattr(settings, 'ELEVENLABS_API_KEY', None)
+            if not api_key:
+                raise ValueError('ELEVENLABS_API_KEY no está configurada en settings')
+            client = ElevenLabsClient(api_key=api_key)
+            voices = client.list_voices()
+            
+            logger.info(f"ElevenLabs: Cargadas {len(voices)} voces")
+            
+            data['voices'] = voices
+            
+            # Generar HTML para voice select
+            voice_options = '<option value="">Selecciona una voz</option>'
+            for voice in voices:
+                voice_id = voice.get('voice_id') or voice.get('id')
+                voice_name = voice.get('name', voice_id)
+                voice_category = voice.get('category', '')
+                labels = voice.get('labels', {})
+                accent = labels.get('accent', '')
+                gender = labels.get('gender', '')
+                
+                label = f"{voice_name}"
+                details = []
+                if accent:
+                    details.append(accent)
+                if gender:
+                    details.append(gender)
+                if voice_category:
+                    details.append(voice_category)
+                if details:
+                    label += f" ({', '.join(details)})"
+                    
+                voice_options += f'<option value="{voice_id}">{label}</option>'
+            
+            fields.append({
+                'name': 'voice_id',
+                'label': 'Voz',
+                'required': True,
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            VOZ <span class="text-red-500">*</span>
+                        </label>
+                        <select name="voice_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+                            {voice_options}
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">Selecciona la voz para el audio</p>
+                    </div>
+                '''
+            })
+        except Exception as e:
+            logger.error(f"Error cargando voces de ElevenLabs: {e}", exc_info=True)
+            # Mostrar advertencia y permitir entrada manual
+            error_msg = str(e)
+            if 'API_KEY' in error_msg:
+                error_msg = 'API Key no configurada'
+            elif 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                error_msg = 'Error de conexión con ElevenLabs API'
+            else:
+                error_msg = 'No se pudieron cargar las voces automáticamente'
+            
+            fields.append({
+                'name': 'elevenlabs_warning',
+                'label': 'Advertencia',
+                'required': False,
+                'html': f'''
+                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p class="text-sm text-yellow-800 font-semibold mb-2">
+                            ⚠️ {error_msg}
+                        </p>
+                        <p class="text-xs text-yellow-700 mb-3">
+                            Se usará la voz por defecto o puedes ingresar un ID de voz manualmente:
+                        </p>
+                    </div>
+                '''
+            })
+            
+            fields.append({
+                'name': 'voice_id',
+                'label': 'Voice ID',
+                'required': False,
+                'html': f'''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            VOZ ID <span class="text-yellow-600">(opcional)</span>
+                        </label>
+                        <input type="text" 
+                               name="voice_id" 
+                               placeholder="Ej: 21m00Tcm4TlvDq8ikWAM" 
+                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID de la voz si lo conoces, o deja vacío para usar la voz por defecto</p>
+                    </div>
+                '''
+            })
+    
     return {
         'fields': fields,
         'data': data

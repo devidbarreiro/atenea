@@ -142,7 +142,7 @@ Ejemplo de uso:
             <h3 class="text-lg font-semibold mb-4">Mover item a otro proyecto</h3>
             {% for project in projects %}
             <button 
-                @click="moveItem(selectedItemId, '{{ project.id }}').then(() => { modalOpen = false; })" 
+                @click="moveItem(selectedItemId, '{{ project.uuid }}').then(() => { modalOpen = false; })" 
                 class="w-full text-left px-4 py-2 mb-2 border rounded hover:bg-gray-50 flex items-center justify-between"
             >
                 <span>{{ project.name }}</span>

@@ -53,13 +53,11 @@
                 {% with active_tab|default:'videos' as current_tab %}
                 {% for project_item in projects %}
                     {% if current_tab == 'videos' %}
-                        {% url 'core:project_videos' project_item.id as project_switch_url %}
+                        {% url 'core:project_videos_library' project_item.id as project_switch_url %}
                     {% elif current_tab == 'images' %}
                         {% url 'core:project_images_library' project_item.id as project_switch_url %}
                     {% elif current_tab == 'audios' %}
                         {% url 'core:project_audios_library' project_item.id as project_switch_url %}
-                    {% elif current_tab == 'music' %}
-                        {% url 'core:project_music' project_item.id as project_switch_url %}
                     {% elif current_tab == 'scripts' %}
                         {% url 'core:project_scripts' project_item.id as project_switch_url %}
                     {% elif current_tab == 'agent' %}
@@ -69,13 +67,13 @@
                     {% endif %}
                     <a 
                         href="{{ project_switch_url }}"
-                        class="flex items-center justify-between px-4 py-2 text-sm transition-colors {% if project_item.id == project.id %}bg-gray-100 text-gray-900{% else %}text-gray-700 hover:bg-gray-50{% endif %}"
+                        class="flex items-center justify-between px-4 py-2 text-sm transition-colors {% if project_item.id == project.uuid %}bg-gray-100 text-gray-900{% else %}text-gray-700 hover:bg-gray-50{% endif %}"
                         x-show="!search || '{{ project_item.name|lower|escapejs }}'.includes(search.toLowerCase())"
                         x-cloak
                         data-dropdown-project
                     >
                         <span class="truncate">{{ project_item.name }}</span>
-                        {% if project_item.id == project.id %}
+                        {% if project_item.id == project.uuid %}
                         <span class="ml-2 text-xs font-semibold text-blue-600">Actual</span>
                         {% endif %}
                     </a>
@@ -152,7 +150,7 @@ function editProjectName() {
                               document.querySelector('meta[name=csrf-token]')?.content ||
                               getCookie('csrftoken');
             
-            fetch(`{% url 'core:project_update_name' project.id %}`, {
+            fetch(`{% url 'core:project_update_name' project.uuid %}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',

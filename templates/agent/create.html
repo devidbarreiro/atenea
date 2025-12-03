@@ -259,7 +259,7 @@
 
             <!-- Actions -->
             <div class="flex justify-between items-center">
-                <a href="{% url 'core:project_agent' project.id %}" 
+                <a href="{% url 'core:project_agent' project.uuid %}" 
                    class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
                     Cancelar
                 </a>
@@ -277,7 +277,7 @@
         <h2 class="text-2xl font-bold text-gray-900 mb-2">Escritura Asistida con IA</h2>
         <p class="text-gray-600 mb-6">Configura tu video antes de comenzar con el asistente</p>
 
-        <form id="agentCreateFormAI" action="{% url 'core:agent_ai_assistant' project.id %}" method="get">
+        <form id="agentCreateFormAI" action="{% url 'core:agent_ai_assistant' project.uuid %}" method="get">
             <!-- Video Type and Orientation -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
@@ -412,7 +412,7 @@ document.getElementById('agentCreateFormManual').addEventListener('submit', func
     }));
     
     // Redirigir a configure
-    window.location.href = "{% url 'core:agent_configure' project.id %}";
+    window.location.href = "{% url 'core:agent_configure' project.uuid %}";
 });
 
 // ==================

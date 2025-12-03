@@ -136,11 +136,11 @@ jobs:
           --exclude='node_modules' \
           ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
         
-        # Copiar docker-compose al servidor
-        echo "📋 Copiando docker-compose.yml"
+        # Copiar docker-compose al servidor (dentro de html/)
+        echo "📋 Copiando docker-compose.yml a html/"
         scp -i $SSH_KEY -o StrictHostKeyChecking=no \
           docker/docker-compose.$ENV.yml \
-          $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/docker-compose.yml
+          $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/docker-compose.yml
         
         # Ejecutar despliegue en el servidor
         echo "🚀 Ejecutando despliegue en el servidor"
@@ -148,29 +148,117 @@ jobs:
           ENV="$ENV" bash -s << 'DEPLOY_SCRIPT'
         set -e
         ENV_DIR="$HOME/$ENV"
-        echo "📂 Cambiando a directorio: $ENV_DIR"
-        cd $ENV_DIR
+        echo "📂 Cambiando a directorio: $ENV_DIR/html"
+        cd $ENV_DIR/html || { echo "❌ Error: No se encuentra $ENV_DIR/html"; exit 1; }
+        
+        # Verificar que existe .env
+        if [ ! -f ".env" ]; then
+          echo "⚠️  Advertencia: No se encuentra .env en $ENV_DIR/html/.env"
+          echo "💡 El archivo .env debe existir en el servidor antes de ejecutar docker compose"
+          echo "💡 Puedes crearlo manualmente o copiarlo desde $ENV_DIR/.env si existe"
+          if [ -f "$ENV_DIR/.env" ]; then
+            echo "📋 Copiando .env desde $ENV_DIR/.env a $ENV_DIR/html/.env"
+            cp "$ENV_DIR/.env" "$ENV_DIR/html/.env"
+          else
+            echo "❌ Error: No se encuentra .env en $ENV_DIR/.env ni en $ENV_DIR/html/.env"
+            echo "❌ El despliegue no puede continuar sin el archivo .env"
+            exit 1
+          fi
+        else
+          echo "✅ Archivo .env encontrado en $ENV_DIR/html/.env"
+        fi
+        
+        # Verificar que POSTGRES_PASSWORD está definido en .env
+        echo "🔍 Verificando variables críticas en .env..."
+        if grep -q "^POSTGRES_PASSWORD=" .env 2>/dev/null; then
+          echo "✅ POSTGRES_PASSWORD encontrado en .env"
+        else
+          echo "⚠️  POSTGRES_PASSWORD no está definido en .env"
+          echo "🔑 Generando contraseña automáticamente..."
+          # Generar contraseña segura (25 caracteres alfanuméricos)
+          POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+          echo "" >> .env
+          echo "# PostgreSQL password (generado automáticamente)" >> .env
+          echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> .env
+          echo "✅ POSTGRES_PASSWORD generado y agregado al .env"
+          echo "⚠️  IMPORTANTE: Guarda esta contraseña en un lugar seguro"
+          echo "🔑 POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+          echo "💡 Si ya existe una base de datos con otra contraseña, actualiza manualmente el .env"
+        fi
+        
+        # Mostrar información del .env (sin mostrar valores sensibles)
+        echo "📋 Variables definidas en .env (primeras 10):"
+        grep -E "^[A-Z_]+=" .env | sed 's/=.*/=***/' | head -10 || echo "⚠️  No se pudieron leer las variables del .env"
+        
         echo "🛑 Deteniendo y eliminando contenedores existentes"
-        # Detener y eliminar contenedores, redes y volúmenes huérfanos
-        # Usar --remove-orphans para eliminar contenedores huérfanos
-        docker compose down --remove-orphans || true
+        
+        # Primero, detener todos los contenedores que puedan estar corriendo
+        echo "⏸️  Deteniendo contenedores..."
+        docker compose stop || true
+        
+        # Detener contenedores específicos por nombre (por si acaso)
+        docker stop html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 2>/dev/null || true
+        docker stop ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 2>/dev/null || true
+        
+        # Esperar un momento para que los contenedores se detengan completamente
+        sleep 3
+        
+        # Eliminar contenedores con docker compose down
+        echo "🗑️  Eliminando contenedores con docker compose down..."
+        docker compose down --remove-orphans -v || true
+        
         # Eliminar contenedores que puedan estar detenidos pero aún existan
         docker compose rm -f || true
-        # Forzar eliminación de contenedores por nombre si aún existen
-        # Los contenedores de docker-compose se nombran como: {project}-{service}-{number}
-        # Buscar TODOS los contenedores y eliminar los que coincidan con el patrón
-        echo "🔍 Buscando contenedores huérfanos..."
-        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || true)
+        
+        # Lista de contenedores comunes que pueden existir (incluyendo variaciones)
+        COMMON_CONTAINERS=(
+          "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
+          "html-migrate-1" "html-collectstatic-1"
+          "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1"
+          "${ENV}-migrate-1" "${ENV}-collectstatic-1"
+        )
+        
+        # Forzar eliminación de contenedores específicos comunes
+        echo "🔍 Eliminando contenedores específicos..."
+        for container in "${COMMON_CONTAINERS[@]}"; do
+          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
+            echo "🗑️  Eliminando contenedor: $container"
+            docker rm -f "$container" 2>/dev/null || true
+          fi
+        done
+        
+        # Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-" y eliminarlos
+        echo "🔍 Buscando contenedores huérfanos adicionales..."
+        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
         if [ ! -z "$ALL_CONTAINERS" ]; then
-          echo "$ALL_CONTAINERS" | while read container; do
-            if [ ! -z "$container" ] && [[ "$container" == "${ENV}-"* ]]; then
-              echo "🗑️  Eliminando contenedor: $container"
+          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
+            if [ ! -z "$container" ] && ([[ "$container" == "html-"* ]] || [[ "$container" == "${ENV}-"* ]]); then
+              echo "🗑️  Eliminando contenedor huérfano: $container"
               docker rm -f "$container" 2>/dev/null || true
             fi
           done
         fi
-        # También intentar eliminar contenedores específicos comunes
-        docker rm -f "${ENV}-web-1" "${ENV}-db-1" "${ENV}-migrate-1" "${ENV}-collectstatic-1" 2>/dev/null || true
+        
+        # Limpiar redes huérfanas también
+        echo "🧹 Limpiando redes huérfanas..."
+        docker network prune -f || true
+        
+        # Esperar un momento más para asegurar que todo esté limpio
+        sleep 2
+        
+        # Verificar que los contenedores se eliminaron
+        echo "✅ Verificación: contenedores restantes con prefijo 'html-' o '${ENV}-':"
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$REMAINING" ]; then
+          echo "⚠️  Advertencia: Aún quedan contenedores:"
+          echo "$REMAINING"
+          echo "🔄 Intentando eliminarlos nuevamente..."
+          echo "$REMAINING" | while IFS= read -r container; do
+            docker rm -f "$container" 2>/dev/null || true
+          done
+        else
+          echo "  ✅ Todos los contenedores eliminados correctamente"
+        fi
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d

@@ -19,6 +19,12 @@
         <!-- Alpine.js -->
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
         
+        <!-- Toast System -->
+        <script src="{% static 'js/toast.js' %}"></script>
+        
+        <!-- Notifications WebSocket -->
+        <script src="{% static 'js/notifications.js' %}"></script>
+        
         <!-- Marked.js -->
         <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
         
@@ -27,7 +33,27 @@
             {% block extra_css %}{% endblock %}
         </style>
     </head>
-    <body class="bg-gray-50 overflow-hidden">
+    <body class="bg-gray-50 overflow-hidden" {% if request.user.is_authenticated %}data-user-authenticated="true" data-user-id="{{ request.user.id }}"{% endif %}>
+        
+        <!-- Toast Container -->
+        {% include 'partials/toast_container.html' %}
+        
+        <!-- Mensajes Flash → Toasts automáticos -->
+        {% if messages %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                {% for message in messages %}
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        type: '{% if message.tags == "success" %}success{% elif message.tags == "error" %}error{% elif message.tags == "warning" %}warning{% else %}info{% endif %}',
+                        message: '{{ message|escapejs }}'
+                    }
+                }));
+                {% endfor %}
+            });
+        </script>
+        {% endif %}
+        
         {% block body %}{% endblock %}
         
         {% block extra_js %}{% endblock %}
@@ -39,9 +65,19 @@
                     toggle() {
                         this.collapsed = !this.collapsed;
                         localStorage.setItem('sidebarCollapsed', this.collapsed);
+                        window.dispatchEvent(new CustomEvent('sidebar-toggled', { detail: { collapsed: this.collapsed } }));
                     }
                 });
             });
+            
+            // Variable global para autenticación
+            window.user_is_authenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
+            
+            // Preferencias de notificación (desde localStorage)
+            window.notificationPreferences = {
+                soundEnabled: () => localStorage.getItem('notificationSoundEnabled') !== 'false',
+                toastsEnabled: () => localStorage.getItem('notificationToastsEnabled') !== 'false'
+            };
         </script>
     </body>
 </html>

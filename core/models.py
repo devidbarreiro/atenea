@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from decimal import Decimal
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ SCENE_AI_SERVICES = [
 
 class Project(models.Model):
     """Modelo para proyectos que agrupan videos"""
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(
         User,
@@ -193,6 +195,13 @@ class Project(models.Model):
 class Video(models.Model):
     """Modelo para videos generados por IA"""
     
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        help_text='UUID público para URLs y storage'
+    )
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -349,6 +358,13 @@ class Video(models.Model):
 class Image(models.Model):
     """Modelo para imágenes generadas por IA (Gemini)"""
     
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        help_text='UUID público para URLs y storage'
+    )
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -484,8 +500,20 @@ class Image(models.Model):
 
 
 class Audio(models.Model):
-    """Modelo para audios generados por ElevenLabs TTS"""
+    """Modelo unificado para audios (TTS y música generada)"""
     
+    AUDIO_TYPE_CHOICES = [
+        ('tts', 'Text-to-Speech'),
+        ('music', 'Música Generada'),
+    ]
+    
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        help_text='UUID público para URLs y storage'
+    )
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -509,13 +537,54 @@ class Audio(models.Model):
         default='pending'
     )
     
-    # Contenido
-    text = models.TextField(help_text='Texto para convertir a voz')
+    # Tipo de audio (TTS o música)
+    type = models.CharField(
+        max_length=20,
+        choices=AUDIO_TYPE_CHOICES,
+        default='tts',
+        db_index=True,
+        help_text='Tipo de audio: TTS o música generada'
+    )
     
-    # Configuración de voz
+    # Campos TTS (nullable si type='music')
+    text = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Texto para convertir a voz (TTS)'
+    )
     voice_id = models.CharField(
         max_length=100,
-        help_text='ID de la voz en ElevenLabs'
+        null=True,
+        blank=True,
+        help_text='ID de la voz en ElevenLabs (TTS)'
+    )
+    
+    # Campos Music (nullable si type='tts')
+    prompt = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Prompt usado para generar la música'
+    )
+    composition_plan = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Plan de composición detallado (JSON)'
+    )
+    song_metadata = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Metadatos de la canción (tempo, key, mood, etc.)'
+    )
+    duration_ms = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Duración de la música en milisegundos'
+    )
+    elevenlabs_track_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='ID del track en ElevenLabs Music'
     )
     voice_name = models.CharField(
         max_length=100,
@@ -1235,138 +1304,6 @@ class Scene(models.Model):
         )
 
 
-class Music(models.Model):
-    """
-    Modelo para almacenar pistas de música generadas con ElevenLabs Music
-    """
-    project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        related_name='music_tracks',
-        null=True,
-        blank=True,
-        help_text='Proyecto al que pertenece (opcional)'
-    )
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='music_tracks',
-        null=True,
-        blank=True,
-        help_text='Usuario que creó esta música'
-    )
-    name = models.CharField(
-        max_length=255,
-        help_text='Nombre descriptivo de la pista musical'
-    )
-    prompt = models.TextField(
-        help_text='Prompt usado para generar la música'
-    )
-    duration_ms = models.IntegerField(
-        help_text='Duración de la música en milisegundos'
-    )
-    
-    # Composition Plan (opcional, si se usó)
-    composition_plan = models.JSONField(
-        null=True,
-        blank=True,
-        help_text='Plan de composición detallado (JSON) usado para generar la música'
-    )
-    
-    # Metadata de la canción generada
-    song_metadata = models.JSONField(
-        null=True,
-        blank=True,
-        help_text='Metadatos de la canción generada (tempo, key, mood, etc.)'
-    )
-    
-    # Almacenamiento en GCS
-    gcs_path = models.CharField(
-        max_length=500,
-        null=True,
-        blank=True,
-        help_text='Path en GCS donde está almacenada la música'
-    )
-    
-    # Estado de generación
-    STATUS_CHOICES = [
-        ('pending', 'Pendiente'),
-        ('generating', 'Generando'),
-        ('completed', 'Completado'),
-        ('error', 'Error'),
-    ]
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending'
-    )
-    error_message = models.TextField(
-        null=True,
-        blank=True
-    )
-    
-    # Campos de ElevenLabs
-    elevenlabs_track_id = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        help_text='ID del track en ElevenLabs (si aplica)'
-    )
-    
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    generated_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='Fecha y hora en que se generó la música'
-    )
-    
-    class Meta:
-        db_table = 'music'
-        ordering = ['-created_at']
-        verbose_name = 'Música'
-        verbose_name_plural = 'Músicas'
-    
-    def __str__(self):
-        return f"{self.name} - {self.project.name}"
-    
-    @property
-    def duration_sec(self):
-        """Retorna la duración en segundos"""
-        if self.duration_ms:
-            return self.duration_ms / 1000.0
-        return None
-    
-    def mark_as_generating(self):
-        """Marca la música como en proceso de generación"""
-        self.status = 'generating'
-        self.error_message = None
-        self.save(update_fields=['status', 'error_message', 'updated_at'])
-    
-    def mark_as_completed(self, gcs_path: str, song_metadata: dict = None):
-        """Marca la música como completada"""
-        from django.utils import timezone
-        self.status = 'completed'
-        self.gcs_path = gcs_path
-        if song_metadata:
-            self.song_metadata = song_metadata
-        self.generated_at = timezone.now()
-        self.save(update_fields=['status', 'gcs_path', 'song_metadata', 'generated_at', 'updated_at'])
-    
-    def mark_as_error(self, error_message: str):
-        """Marca la música como error"""
-        self.status = 'error'
-        self.error_message = error_message
-        self.save(update_fields=['status', 'error_message', 'updated_at'])
-    
-    def duration_seconds(self):
-        """Retorna la duración en segundos de forma segura"""
-        if self.duration_ms is None:
-            return 0
-        return round(self.duration_ms / 1000.0, 2)
-
-
 # Constantes para roles de proyecto
 PROJECT_ROLES = [
     ('owner', 'Propietario'),
@@ -1732,3 +1669,540 @@ class ServiceUsage(models.Model):
     
     def __str__(self):
         return f"{self.user.username}: {self.service_name} - {self.credits_spent} créditos"
+
+
+class GenerationTask(models.Model):
+    """Tracking de tareas de generación en cola"""
+    
+    TASK_STATUS = [
+        ('queued', 'En Cola'),
+        ('processing', 'Procesando'),
+        ('completed', 'Completado'),
+        ('failed', 'Fallido'),
+        ('cancelled', 'Cancelado'),
+    ]
+    
+    TASK_TYPES = [
+        ('video', 'Video'),
+        ('image', 'Imagen'),
+        ('audio', 'Audio'),
+        ('scene', 'Escena'),
+    ]
+    
+    uuid = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text='UUID único de la tarea'
+    )
+    task_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Celery task ID (puede ser null antes de que Celery procese la tarea)'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='generation_tasks',
+        help_text='Usuario que creó la tarea'
+    )
+    task_type = models.CharField(
+        max_length=20,
+        choices=TASK_TYPES,
+        help_text='Tipo de generación'
+    )
+    item_uuid = models.UUIDField(
+        db_index=True,
+        help_text='UUID del item generado (no ID numérico)'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TASK_STATUS,
+        default='queued',
+        db_index=True,
+        help_text='Estado de la tarea'
+    )
+    queue_name = models.CharField(
+        max_length=50,
+        help_text='Nombre de la cola de Celery'
+    )
+    priority = models.IntegerField(
+        default=5,
+        help_text='Prioridad (1-10, mayor = más prioridad, por tipo de generación)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Error handling
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Mensaje de error o razón de cancelación'
+    )
+    retry_count = models.IntegerField(
+        default=0,
+        help_text='Número de reintentos realizados'
+    )
+    max_retries = models.IntegerField(
+        default=3,
+        help_text='Máximo número de reintentos permitidos'
+    )
+    
+    # Metadata para regeneración y tracking
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Metadata adicional (prompt, parámetros, etc.)'
+    )
+    
+    class Meta:
+        db_table = 'generation_task'
+        verbose_name = 'Tarea de Generación'
+        verbose_name_plural = 'Tareas de Generación'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['task_type', 'item_uuid']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['queue_name', 'priority', 'created_at']),
+        ]
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.task_type} task {self.uuid} - {self.status}"
+    
+    def mark_as_processing(self):
+        """Marca la tarea como procesando"""
+        self.status = 'processing'
+        self.started_at = timezone.now()
+        self.save(update_fields=['status', 'started_at'])
+        # Disparar evento para actualizar UI
+        self._dispatch_status_change()
+    
+    def _dispatch_status_change(self):
+        """Dispara evento JavaScript para actualizar UI (solo si hay canales configurados)"""
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'user_{self.user.id}',
+                    {
+                        'type': 'task_status_changed',
+                        'task_uuid': str(self.uuid),
+                        'status': self.status,
+                    }
+                )
+        except Exception:
+            # Si no hay canales configurados o hay error, no hacer nada
+            pass
+    
+    def mark_as_completed(self, gcs_path=None, duration=None, metadata=None, alignment=None):
+        """Marca la tarea como completada"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        
+        # Actualizar metadata si se proporciona
+        if metadata:
+            if not self.metadata:
+                self.metadata = {}
+            self.metadata.update(metadata)
+        
+        update_fields = ['status', 'completed_at']
+        if metadata:
+            update_fields.append('metadata')
+        
+        self.save(update_fields=update_fields)
+        self._dispatch_status_change()
+    
+    def mark_as_failed(self, error_message=None):
+        """Marca la tarea como fallida"""
+        self.status = 'failed'
+        self.completed_at = timezone.now()
+        if error_message:
+            self.error_message = error_message
+        self.save(update_fields=['status', 'completed_at', 'error_message'])
+        self._dispatch_status_change()
+    
+    def mark_as_cancelled(self, reason=None):
+        """Marca la tarea como cancelada"""
+        self.status = 'cancelled'
+        self.completed_at = timezone.now()
+        if reason:
+            self.error_message = reason
+        self.save(update_fields=['status', 'completed_at', 'error_message'])
+        self._dispatch_status_change()
+
+
+class Notification(models.Model):
+    """Notificaciones del sistema"""
+    
+    NOTIFICATION_TYPES = [
+        ('generation_completed', 'Generación Completada'),
+        ('generation_failed', 'Generación Fallida'),
+        ('generation_progress', 'Progreso de Generación'),
+        ('credits_low', 'Créditos Bajos'),
+        ('credits_insufficient', 'Créditos Insuficientes'),
+        ('project_invitation', 'Invitación de Proyecto'),
+        ('system_maintenance', 'Mantenimiento del Sistema'),
+        ('info', 'Información'),
+    ]
+    
+    uuid = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text='UUID único de la notificación'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        help_text='Usuario destinatario'
+    )
+    type = models.CharField(
+        max_length=50,
+        choices=NOTIFICATION_TYPES,
+        help_text='Tipo de notificación'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Título de la notificación'
+    )
+    message = models.TextField(
+        help_text='Mensaje de la notificación'
+    )
+    read = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Si la notificación ha sido leída'
+    )
+    
+    # Enlace opcional a un recurso
+    action_url = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='URL de acción (opcional)'
+    )
+    action_label = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text='Etiqueta del botón de acción'
+    )
+    
+    # Metadata adicional (progreso, item_uuid, etc.)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Metadata adicional (progreso, item_uuid, etc.)'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'notification'
+        verbose_name = 'Notificación'
+        verbose_name_plural = 'Notificaciones'
+        indexes = [
+            models.Index(fields=['user', 'read', 'created_at']),
+            models.Index(fields=['user', 'type', 'created_at']),
+        ]
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.type} - {self.title}"
+    
+    def mark_as_read(self):
+        """Marca la notificación como leída"""
+        if not self.read:
+            self.read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['read', 'read_at'])
+    
+    @classmethod
+    def create_notification(
+        cls,
+        user: User,
+        type: str,
+        title: str,
+        message: str,
+        action_url: str = None,
+        action_label: str = None,
+        metadata: dict = None
+    ) -> 'Notification':
+        """
+        Crea una notificación y la envía vía WebSocket
+        
+        Args:
+            user: Usuario destinatario
+            type: Tipo de notificación
+            title: Título
+            message: Mensaje
+            action_url: URL opcional de acción
+            action_label: Etiqueta del botón de acción
+            metadata: Metadata adicional
+        
+        Returns:
+            Notification creada
+        """
+        notification = cls.objects.create(
+            user=user,
+            type=type,
+            title=title,
+            message=message,
+            action_url=action_url,
+            action_label=action_label,
+            metadata=metadata or {}
+        )
+        
+        # Enviar vía WebSocket (si está disponible)
+        try:
+            from core.consumers import NotificationConsumer
+            NotificationConsumer.send_notification_to_user_sync(user.id, notification)
+        except Exception as e:
+            logger.warning(f"Error enviando notificación vía WebSocket: {e}")
+        
+        return notification
+
+
+class PromptTemplate(models.Model):
+    """Plantillas de prompts reutilizables para generación de contenido"""
+    
+    TEMPLATE_TYPES = [
+        ('video', 'Video'),
+        ('image', 'Imagen'),
+        ('agent', 'Agente'),
+    ]
+    
+    RECOMMENDED_SERVICES = [
+        ('sora', 'Sora'),
+        ('higgsfield', 'Higgsfield'),
+        ('gemini_veo', 'Gemini Veo'),
+        ('agent', 'Agente'),
+    ]
+    
+    # Identificación
+    uuid = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text='UUID único de la plantilla'
+    )
+    
+    # Información básica
+    name = models.CharField(
+        max_length=200,
+        help_text='Nombre de la plantilla (ej: "Raven Transition")'
+    )
+    description = models.TextField(
+        blank=True,
+        help_text='Descripción detallada de la plantilla'
+    )
+    
+    # Tipo de contenido
+    template_type = models.CharField(
+        max_length=20,
+        choices=TEMPLATE_TYPES,
+        default='video',
+        help_text='Tipo de contenido que genera',
+        db_index=True
+    )
+    
+    # Contenido del prompt
+    prompt_text = models.TextField(
+        max_length=800,
+        help_text='Texto del prompt que se enviará al servicio de IA (máximo 800 caracteres)'
+    )
+    
+    # Servicio recomendado
+    recommended_service = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        choices=RECOMMENDED_SERVICES,
+        help_text='Servicio recomendado para usar este template',
+        db_index=True
+    )
+    
+    # Preview
+    preview_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='URL del video/imagen de ejemplo'
+    )
+    
+    # Sistema de permisos
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_prompt_templates',
+        help_text='Usuario que creó la plantilla (None para templates del sistema)',
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    is_public = models.BooleanField(
+        default=False,
+        help_text='Si la plantilla es visible para todos los usuarios',
+        db_index=True
+    )
+    
+    # Sistema de votación
+    upvotes = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de votos positivos'
+    )
+    downvotes = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de votos negativos'
+    )
+    
+    # Estadísticas
+    usage_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Número de veces que se ha usado'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha de creación'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Fecha de última modificación'
+    )
+    
+    # Control de estado
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Si la plantilla está activa y disponible',
+        db_index=True
+    )
+    
+    class Meta:
+        verbose_name = 'Plantilla de Prompt'
+        verbose_name_plural = 'Plantillas de Prompts'
+        ordering = ['-usage_count', '-created_at']
+        # Permitir mismo nombre si created_by es diferente o None
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'created_by'],
+                name='unique_template_per_user',
+                condition=models.Q(created_by__isnull=False)
+            ),
+            # Para templates del sistema (created_by=None), único por nombre, tipo y servicio recomendado
+            models.UniqueConstraint(
+                fields=['name', 'template_type', 'recommended_service'],
+                name='unique_system_template',
+                condition=models.Q(created_by__isnull=True)
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['template_type', 'is_public', 'is_active']),
+            models.Index(fields=['recommended_service', 'is_public', 'is_active']),
+            models.Index(fields=['created_by', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_template_type_display()})"
+    
+    def get_rating(self):
+        """Calcula el rating basado en upvotes/downvotes (0-5)"""
+        total = self.upvotes + self.downvotes
+        if total == 0:
+            return 0.0
+        return (self.upvotes / total) * 5.0
+    
+    def increment_usage(self):
+        """Incrementa el contador de uso"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+    
+    def is_accessible_by(self, user):
+        """Verifica si un usuario puede acceder a esta plantilla"""
+        return self.is_public or self.created_by == user
+
+
+class UserPromptVote(models.Model):
+    """Votos de usuarios sobre templates"""
+    
+    VOTE_TYPES = [
+        ('upvote', 'Upvote'),
+        ('downvote', 'Downvote'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='prompt_votes',
+        help_text='Usuario que vota'
+    )
+    template = models.ForeignKey(
+        PromptTemplate,
+        on_delete=models.CASCADE,
+        related_name='votes',
+        help_text='Template votado'
+    )
+    vote_type = models.CharField(
+        max_length=10,
+        choices=VOTE_TYPES,
+        help_text='Tipo de voto'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha del voto'
+    )
+    
+    class Meta:
+        unique_together = [['user', 'template']]
+        verbose_name = 'Voto de Template'
+        verbose_name_plural = 'Votos de Templates'
+        indexes = [
+            models.Index(fields=['template', 'vote_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name} ({self.get_vote_type_display()})"
+
+
+class UserPromptFavorite(models.Model):
+    """Favoritos de usuarios sobre templates"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='favorite_prompts',
+        help_text='Usuario que marca como favorito'
+    )
+    template = models.ForeignKey(
+        PromptTemplate,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+        help_text='Template favorito'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Fecha en que se marcó como favorito'
+    )
+    
+    class Meta:
+        unique_together = [['user', 'template']]
+        verbose_name = 'Template Favorito'
+        verbose_name_plural = 'Templates Favoritos'
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name}"

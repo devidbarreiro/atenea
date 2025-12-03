@@ -84,9 +84,9 @@
                                     })
                                     .then(r => {
                                         if (r.redirected) {
-                                            return fetch('{% url 'core:project_invitations_partial' project.id %}').then(r => r.text());
+                                            return fetch('{% url 'core:project_invitations_partial' project.uuid %}').then(r => r.text());
                                         }
-                                        return fetch('{% url 'core:project_invitations_partial' project.id %}').then(r => r.text());
+                                        return fetch('{% url 'core:project_invitations_partial' project.uuid %}').then(r => r.text());
                                     })
                                     .then(html => {
                                         document.getElementById('invitations-content').innerHTML = html;

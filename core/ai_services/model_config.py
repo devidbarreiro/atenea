@@ -702,7 +702,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     # ==================== GEMINI IMAGE ====================
     'gemini-2.5-flash-image': {
         'service': 'gemini image',
-        'name': 'Gemini 2.5 Flash Image',
+        'name': 'Nano Banana Flash',
         'description': 'Generación de imágenes con Gemini',
         'type': 'image',
         'supports': {
@@ -710,11 +710,10 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
             'image_to_video': False,
             'text_to_video': False,
             'aspect_ratio': ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
-            'resolution': False,
         },
         'logo': '/static/img/logos/google.png',
     },
-    'Nano Banana Pro': {
+    'gemini-3-pro-image-preview': {
         'service': 'gemini image',
         'name': 'Nano Banana Pro',
         'description': 'Generación de imágenes con Nano Banana Pro',
@@ -723,6 +722,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
             'text_to_image': True,
             'image_to_video': False,
             'text_to_video': False,
+            'aspect_ratio': ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
         },
         'logo': '/static/img/logos/google.png',
     },

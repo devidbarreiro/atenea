@@ -166,7 +166,7 @@ let lastKnownScript = '';
 // Inicializar sesión al cargar la página
 async function initSession() {
     try {
-        const response = await fetch("{% url 'core:agent_ai_assistant_init' project.id %}", {
+        const response = await fetch("{% url 'core:agent_ai_assistant_init' project.uuid %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -227,7 +227,7 @@ async function sendMessage(userMessage) {
         // Obtener el guión actual
         const currentScript = document.getElementById('script-content').value;
         
-        const response = await fetch("{% url 'core:agent_ai_assistant_chat' project.id %}", {
+        const response = await fetch("{% url 'core:agent_ai_assistant_chat' project.uuid %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -356,7 +356,7 @@ document.getElementById('finish-script').addEventListener('click', function() {
     }));
     
     // Redirigir a configure
-    window.location.href = "{% url 'core:agent_configure' project.id %}";
+    window.location.href = "{% url 'core:agent_configure' project.uuid %}";
 });
 
 // Inicializar al cargar

@@ -96,35 +96,31 @@
                          x-cloak
                          x-transition
                          class="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2">
-                        <a href="{% url 'core:project_videos_library' project.id %}"
+                        <a href="{% url 'core:project_videos_library' project.uuid %}"
                            @click="open = false"
                            class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎬</span> Video
                         </a>
-                        <a href="{% url 'core:project_images_library' project.id %}"
+                        <a href="{% url 'core:project_images_library' project.uuid %}"
                            @click="open = false"
                            class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🖼️</span> Imagen
                         </a>
-                        <a href="{% url 'core:project_audios_library' project.id %}"
+                        <a href="{% url 'core:project_audios_library' project.uuid %}"
                            @click="open = false"
                            class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎙️</span> Audio
                         </a>
-                        <a href="{% url 'core:music_create' project.id %}" 
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                            <span>🎵</span> Música
-                        </a>
-                        <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                        <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
                                 hx-target="#project-dynamic-content"
                                 hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:script_create' project.id %}"
+                                hx-push-url="{% url 'core:script_create' project.uuid %}"
                                 @click="open = false"
                                 class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>📝</span> Guión
                         </button>
                         <div class="border-t border-gray-200 my-2"></div>
-                        <a href="{% url 'core:agent_create' project.id %}" 
+                        <a href="{% url 'core:agent_create' project.uuid %}" 
                            class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>✨</span> Video con Agente
                         </a>
@@ -139,7 +135,7 @@
                     </svg>
                     Ver Historial
                 </a>
-                <a href="{% url 'core:project_delete' project.id %}" 
+                <a href="{% url 'core:project_delete' project.uuid %}" 
                    class="w-full bg-red-50 text-red-700 hover:bg-red-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -154,20 +150,20 @@
             <div class="border-t border-gray-200 pt-6 mt-6">
                 <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Colaboradores</h3>
                 <div class="space-y-2">
-                    <button hx-get="{% url 'core:project_invite_partial' project.id %}" 
+                    <button hx-get="{% url 'core:project_invite_partial' project.uuid %}" 
                             hx-target="#project-dynamic-content" 
                             hx-swap="innerHTML"
-                            hx-push-url="{% url 'core:project_invite' project.id %}"
+                            hx-push-url="{% url 'core:project_invite' project.uuid %}"
                             class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
                         </svg>
                         Invitar Usuario
                     </button>
-                    <button hx-get="{% url 'core:project_invitations_partial' project.id %}" 
+                    <button hx-get="{% url 'core:project_invitations_partial' project.uuid %}" 
                             hx-target="#project-dynamic-content" 
                             hx-swap="innerHTML"
-                            hx-push-url="{% url 'core:project_invitations' project.id %}"
+                            hx-push-url="{% url 'core:project_invitations' project.uuid %}"
                             class="w-full bg-gray-50 text-gray-700 hover:bg-gray-100 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
@@ -217,39 +213,35 @@
          :style="'left: ' + (window.innerWidth >= 1024 ? ((sidebarCollapsed ? 64 : 256) + 320) + 'px' : '0')"
          class="fixed top-0 right-0 bg-white border-b border-gray-200 z-20 shadow-sm transition-all duration-300">
         <nav class="flex -mb-px px-6 overflow-x-auto" aria-label="Tabs">
-            <a href="{% url 'core:project_videos' project.id %}"
+            <a href="{% url 'core:project_videos_library' project.uuid %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'videos' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Videos
                 {% if videos %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ videos|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_images' project.id %}"
+            <a href="{% url 'core:project_images_library' project.uuid %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'images' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Imágenes
                 {% if images %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ images|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_audios' project.id %}"
+            <a href="{% url 'core:project_audios_library' project.uuid %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'audios' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Audios
                 {% if audios %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ audios|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_music' project.id %}"
-               class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'music' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
-                Música
-            </a>
-            <a href="{% url 'core:project_scripts' project.id %}"
+            <a href="{% url 'core:project_scripts' project.uuid %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'scripts' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Guiones
                 {% if scripts %}
                 <span class="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">{{ scripts|length }}</span>
                 {% endif %}
             </a>
-            <a href="{% url 'core:project_agent' project.id %}"
+            <a href="{% url 'core:project_agent' project.uuid %}"
                class="whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm transition-colors {% if active_tab == 'agent' %}border-black text-black{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
                 Video con Agente
             </a>
@@ -287,7 +279,7 @@
                                     ☰
                                 </button>
                             </div>
-                            <a href="{% url 'core:project_videos_library' project.id %}"
+                            <a href="{% url 'core:project_videos_library' project.uuid %}"
                                class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Video
                             </a>
@@ -310,7 +302,7 @@
                         <div class="text-5xl mb-4 opacity-30">🎬</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay videos</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer video</p>
-                        <a href="{% url 'core:project_videos_library' project.id %}"
+                        <a href="{% url 'core:project_videos_library' project.uuid %}"
                            class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Video
                         </a>
@@ -336,7 +328,7 @@
                                     ☰
                                 </button>
                             </div>
-                            <a href="{% url 'core:project_images_library' project.id %}"
+                            <a href="{% url 'core:project_images_library' project.uuid %}"
                                class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Imagen
                             </a>
@@ -359,7 +351,7 @@
                         <div class="text-5xl mb-4 opacity-30">🖼️</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay imágenes</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primera imagen</p>
-                        <a href="{% url 'core:project_images_library' project.id %}"
+                        <a href="{% url 'core:project_images_library' project.uuid %}"
                            class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Imagen
                         </a>
@@ -372,7 +364,7 @@
                     {% if audios %}
                     <div class="mb-4 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-gray-900">Audios del Proyecto</h2>
-                        <a href="{% url 'core:project_audios_library' project.id %}"
+                        <a href="{% url 'core:project_audios_library' project.uuid %}"
                            class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                             + Audio
                         </a>
@@ -387,7 +379,7 @@
                         <div class="text-5xl mb-4 opacity-30">🎙️</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay audios</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer audio</p>
-                        <a href="{% url 'core:project_audios_library' project.id %}"
+                        <a href="{% url 'core:project_audios_library' project.uuid %}"
                            class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Audio
                         </a>
@@ -413,10 +405,10 @@
                                     ☰
                                 </button>
                             </div>
-                            <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                            <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
                                     hx-target="#project-dynamic-content"
                                     hx-swap="innerHTML"
-                                    hx-push-url="{% url 'core:script_create' project.id %}"
+                                    hx-push-url="{% url 'core:script_create' project.uuid %}"
                                     class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 + Guión
                             </button>
@@ -439,41 +431,13 @@
                         <div class="text-5xl mb-4 opacity-30">📝</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay guiones</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer guión</p>
-                        <button hx-get="{% url 'core:script_create_partial' project.id %}"
+                        <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
                                 hx-target="#project-dynamic-content"
                                 hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:script_create' project.id %}"
+                                hx-push-url="{% url 'core:script_create' project.uuid %}"
                                 class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear Guión
                         </button>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <!-- Music Tab -->
-                <div x-show="activeTab === 'music'" x-cloak>
-                    {% if music_tracks %}
-                    <div class="mb-4 flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-gray-900">Música del Proyecto</h2>
-                        <a href="{% url 'core:music_create' project.id %}"
-                           class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                            + Música
-                        </a>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {% for item in music_items %}
-                            {% include 'includes/item_card.html' with item=item %}
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="text-center py-12">
-                        <div class="text-5xl mb-4 opacity-30">🎵</div>
-                        <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay música</h3>
-                        <p class="text-sm text-gray-600 mb-4">Comienza creando tu primera pista musical</p>
-                        <a href="{% url 'core:music_create' project.id %}"
-                           class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                            Crear Música
-                        </a>
                     </div>
                     {% endif %}
                 </div>
@@ -484,7 +448,7 @@
                         <div class="text-5xl mb-4 opacity-30">✨</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">Video con Agente IA</h3>
                         <p class="text-sm text-gray-600 mb-4">Crea videos guiados por un agente de IA inteligente</p>
-                        <a href="{% url 'core:agent_create' project.id %}"
+                        <a href="{% url 'core:agent_create' project.uuid %}"
                            class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                             Crear con Agente
                         </a>
@@ -504,9 +468,6 @@
     {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
 {% endfor %}
 {% for item in audios_items %}
-    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
-{% endfor %}
-{% for item in music_items %}
     {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
 {% endfor %}
 {% for item in scripts_items %}

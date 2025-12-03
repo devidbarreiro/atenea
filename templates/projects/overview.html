@@ -29,7 +29,7 @@
             <!-- Estadísticas -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <!-- Videos -->
-                <a href="{% url 'core:project_videos_library' project.id %}" 
+                <a href="{% url 'core:project_videos_library' project.uuid %}" 
                    class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -59,7 +59,7 @@
                 </a>
                 
                 <!-- Imágenes -->
-                <a href="{% url 'core:project_images_library' project.id %}" 
+                <a href="{% url 'core:project_images_library' project.uuid %}" 
                    class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -89,7 +89,7 @@
                 </a>
                 
                 <!-- Audios -->
-                <a href="{% url 'core:project_audios_library' project.id %}" 
+                <a href="{% url 'core:project_audios_library' project.uuid %}" 
                    class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -119,7 +119,7 @@
                 </a>
                 
                 <!-- Guiones -->
-                <a href="{% url 'core:project_scripts' project.id %}" 
+                <a href="{% url 'core:project_scripts' project.uuid %}" 
                    class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -140,30 +140,8 @@
                     </div>
                 </a>
                 
-                <!-- Música -->
-                <a href="{% url 'core:project_music' project.id %}" 
-                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">🎵</span>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold text-gray-900">Música</h3>
-                                <p class="text-sm text-gray-500">Total: {{ stats.music.total }}</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between text-sm">
-                            <span class="text-gray-600">Completadas</span>
-                            <span class="font-medium text-green-600">{{ stats.music.completed }}</span>
-                        </div>
-                    </div>
-                </a>
-                
                 <!-- Video con Agente -->
-                <a href="{% url 'core:project_agent' project.id %}" 
+                <a href="{% url 'core:project_agent' project.uuid %}" 
                    class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -194,7 +172,7 @@
                         </h3>
                         <div class="space-y-2">
                             {% for video in recent_videos|slice:":3" %}
-                            <a href="{% url 'core:video_detail' video.id %}" 
+                            <a href="{% url 'core:video_detail' video.uuid %}" 
                                class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                                 <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ video.title }}</div>
                                 <div class="text-xs text-gray-500 mt-1">{{ video.created_at|date:"d M Y" }}</div>
@@ -211,7 +189,7 @@
                         </h3>
                         <div class="space-y-2">
                             {% for image in recent_images|slice:":3" %}
-                            <a href="{% url 'core:image_detail' image.id %}" 
+                            <a href="{% url 'core:image_detail' image.uuid %}" 
                                class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                                 <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ image.title }}</div>
                                 <div class="text-xs text-gray-500 mt-1">{{ image.created_at|date:"d M Y" }}</div>
@@ -228,7 +206,7 @@
                         </h3>
                         <div class="space-y-2">
                             {% for audio in recent_audios|slice:":3" %}
-                            <a href="{% url 'core:audio_detail' audio.id %}" 
+                            <a href="{% url 'core:audio_detail' audio.uuid %}" 
                                class="block p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                                 <div class="font-medium text-sm text-gray-900 line-clamp-1">{{ audio.title }}</div>
                                 <div class="text-xs text-gray-500 mt-1">{{ audio.created_at|date:"d M Y" }}</div>

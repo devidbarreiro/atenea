@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Project, Video, Image, Audio, Script, Scene
+from .models import Project, Video, Image, Audio, Script, Scene, PromptTemplate, UserPromptVote, UserPromptFavorite
 
 
 @admin.register(Project)
@@ -168,3 +168,45 @@ class SceneAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at', 'completed_at')
         }),
     )
+
+
+@admin.register(PromptTemplate)
+class PromptTemplateAdmin(admin.ModelAdmin):
+    list_display = ['name', 'template_type', 'recommended_service', 'created_by', 'is_public', 'is_active', 'usage_count', 'upvotes', 'downvotes', 'created_at']
+    list_filter = ['template_type', 'recommended_service', 'is_public', 'is_active', 'created_at']
+    search_fields = ['name', 'description', 'prompt_text', 'created_by__username']
+    readonly_fields = ['uuid', 'created_at', 'updated_at', 'usage_count', 'upvotes', 'downvotes']
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('name', 'description', 'template_type', 'recommended_service')
+        }),
+        ('Contenido', {
+            'fields': ('prompt_text', 'preview_url')
+        }),
+        ('Permisos', {
+            'fields': ('created_by', 'is_public', 'is_active')
+        }),
+        ('Estadísticas', {
+            'fields': ('usage_count', 'upvotes', 'downvotes')
+        }),
+        ('Metadatos', {
+            'fields': ('uuid', 'created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(UserPromptVote)
+class UserPromptVoteAdmin(admin.ModelAdmin):
+    list_display = ['user', 'template', 'vote_type', 'created_at']
+    list_filter = ['vote_type', 'created_at']
+    search_fields = ['user__username', 'template__name']
+    readonly_fields = ['created_at']
+
+
+@admin.register(UserPromptFavorite)
+class UserPromptFavoriteAdmin(admin.ModelAdmin):
+    list_display = ['user', 'template', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['user__username', 'template__name']
+    readonly_fields = ['created_at']

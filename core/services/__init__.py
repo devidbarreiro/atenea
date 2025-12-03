@@ -30,3 +30,6 @@ for name in dir(services_main):
 
 # También exportar desde credits
 from .credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+
+# Exportar QueueService
+from .queue import QueueService

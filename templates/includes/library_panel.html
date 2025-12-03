@@ -7,11 +7,11 @@ document.addEventListener('alpine:init', () => {
         items: [],
         loading: true,
         activeTab: '{{ active_tab|default:"video" }}',
-        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        projectId: {% if project %}'{{ project.uuid }}'{% else %}null{% endif %},
         
         // Item inicial (si venimos de una URL directa como /images/20/)
         initialItemType: '{{ initial_item_type|default:"" }}',
-        initialItemId: {{ initial_item_id|default:"null" }},
+        initialItemId: '{{ initial_item_id|default:"" }}' || null,
         
         // Estado del detalle
         selectedItem: null,
@@ -23,7 +23,7 @@ document.addEventListener('alpine:init', () => {
         
         // Modal de mover
         moveModal: { open: false, item: null },
-        projects: [{% for p in projects %}{ id: {{ p.id }}, name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
+        projects: [{% for p in projects %}{ id: {{ p.id }}, uuid: '{{ p.uuid }}', name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
         
         init() {
             this.loadItems();
@@ -258,8 +258,8 @@ document.addEventListener('alpine:init', () => {
             `;
             
             if (this.projectId) {
-                // Buscar el nombre del proyecto en la lista de proyectos
-                const project = this.projects.find(p => p.id === this.projectId);
+                // Buscar el nombre del proyecto en la lista de proyectos (comparar con uuid)
+                const project = this.projects.find(p => p.uuid === this.projectId);
                 const projectName = project ? project.name : 'Proyecto';
                 
                 html += `
@@ -800,7 +800,7 @@ document.addEventListener('alpine:init', () => {
                             <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
                                 Eliminar <span x-text="deleteModal.item?.type === 'video' ? 'Video' : (deleteModal.item?.type === 'image' ? 'Imagen' : 'Audio')"></span>
                             </h3>
-                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + escapeHtml(deleteModal.item?.title || 'Sin título') + '\"'"></p>
+                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + (deleteModal.item?.title || 'Sin título') + '\"'"></p>
                             <p class="mt-1 text-xs text-gray-500">
                                 Esta acción no se puede deshacer. El item y sus archivos asociados se eliminarán permanentemente.
                             </p>
@@ -843,7 +843,7 @@ document.addEventListener('alpine:init', () => {
                 <!-- Header -->
                 <div class="px-6 py-5 border-b border-gray-200">
                     <h3 class="text-lg font-semibold text-gray-900">Mover a otro proyecto</h3>
-                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + escapeHtml(moveModal.item?.title || '') + '\"'"></p>
+                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + (moveModal.item?.title || '') + '\"'"></p>
                 </div>
                 
                 <!-- Lista de proyectos -->
@@ -858,8 +858,8 @@ document.addEventListener('alpine:init', () => {
                     </button>
                     
                     <!-- Proyectos -->
-                    <template x-for="project in projects" :key="project.id">
-                        <button @click="moveItem(project.id)" 
+                    <template x-for="project in projects" :key="project.uuid">
+                        <button @click="moveItem(project.uuid)" 
                                 class="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between transition-colors">
                             <span class="text-gray-700" x-text="project.name"></span>
                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

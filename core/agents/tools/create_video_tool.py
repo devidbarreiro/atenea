@@ -157,7 +157,7 @@ def create_video_tool(
                 'title': video.title,
                 'message': f'Video "{video.title}" creado exitosamente con {service}',
                 'preview_url': preview_url,
-                'detail_url': f'/videos/{video.id}/',
+                'detail_url': f'/videos/{video.uuid}/',
                 'status_current': video.status
             }
 
@@ -167,7 +167,7 @@ def create_video_tool(
                 'video_id': video.id,
                 'title': video.title,
                 'message': f'Video creado pero hubo un error durante la generación: {str(e)}',
-                'detail_url': f'/videos/{video.id}/',
+                'detail_url': f'/videos/{video.uuid}/',
                 'status_current': video.status
             }
 

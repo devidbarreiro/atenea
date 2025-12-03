@@ -121,7 +121,7 @@ x-init="
             </a>
 
             <!-- Agente de Video -->
-            <a href="#"
+            <a href="{% url 'core:projects_list' %}"
                class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
                :class="{ 'justify-center': sidebarCollapsed }"
                :title="sidebarCollapsed ? 'Agente de Video' : ''">
@@ -294,12 +294,27 @@ x-init="
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
             </a>
-            <button x-show="!sidebarCollapsed" class="p-2 rounded-lg hover:bg-gray-100 transition-colors relative" title="Notificaciones">
-                <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                </svg>
-                <span class="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
-            </button>
+            <div class="relative">
+                <button x-show="!sidebarCollapsed" 
+                        @click="$dispatch('open-notifications-modal')"
+                        class="p-2 rounded-lg hover:bg-gray-100 transition-colors relative" 
+                        title="Notificaciones">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    </svg>
+                    <span x-data="{ unreadCount: 0 }"
+                          x-init="
+                            fetch('{% url 'core:notifications_count' %}')
+                                .then(r => r.json())
+                                .then(data => unreadCount = data.count);
+                            window.addEventListener('show-toast', () => unreadCount++);
+                            window.addEventListener('notification-read', () => { if (unreadCount > 0) unreadCount--; });
+                          "
+                          x-show="unreadCount > 0" 
+                          x-text="unreadCount > 9 ? '9+' : unreadCount"
+                          class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[1.25rem] h-5 flex items-center justify-center px-1 font-semibold"></span>
+                </button>
+            </div>
             <button x-show="!sidebarCollapsed" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Tema">
                 <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>

@@ -18,68 +18,60 @@ urlpatterns = [
     # Projects
     path('projects/', views.ProjectsListView.as_view(), name='projects_list'),
     path('projects/create/', views.ProjectCreateView.as_view(), name='project_create'),
-    path('projects/<int:project_id>/', views.ProjectOverviewView.as_view(), name='project_overview'),
-    path('projects/<int:project_id>/detail/', views.ProjectDetailView.as_view(), name='project_detail'),
+    path('projects/<uuid:project_uuid>/', views.ProjectOverviewView.as_view(), name='project_overview'),
+    path('projects/<uuid:project_uuid>/detail/', views.ProjectDetailView.as_view(), name='project_detail'),
     # Estas rutas ahora apuntan a las vistas unificadas (ver más abajo)
-    # path('projects/<int:project_id>/videos/', views.ProjectDetailView.as_view(), {'tab': 'videos'}, name='project_videos'),
-    # path('projects/<int:project_id>/images/', views.ProjectDetailView.as_view(), {'tab': 'images'}, name='project_images'),
-    # path('projects/<int:project_id>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
-    path('projects/<int:project_id>/music/', views.ProjectDetailView.as_view(), {'tab': 'music'}, name='project_music'),
-    path('projects/<int:project_id>/scripts/', views.ProjectDetailView.as_view(), {'tab': 'scripts'}, name='project_scripts'),
-    path('projects/<int:project_id>/agent/', views.ProjectDetailView.as_view(), {'tab': 'agent'}, name='project_agent'),
-    path('projects/<int:project_id>/update-name/', views.ProjectUpdateNameView.as_view(), name='project_update_name'),
-    path('projects/<int:project_id>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
-    path('items/<int:item_id>/move/', views.ProjectItemsManagementView.move_item, name='move_item'),
+    # path('projects/<uuid:project_uuid>/videos/', views.ProjectDetailView.as_view(), {'tab': 'videos'}, name='project_videos'),
+    # path('projects/<uuid:project_uuid>/images/', views.ProjectDetailView.as_view(), {'tab': 'images'}, name='project_images'),
+    # path('projects/<uuid:project_uuid>/audios/', views.ProjectDetailView.as_view(), {'tab': 'audios'}, name='project_audios'),
+    # path('projects/<uuid:project_uuid>/music/', ...) - ELIMINADA (Music unificado con Audio)
+    path('projects/<uuid:project_uuid>/scripts/', views.ProjectDetailView.as_view(), {'tab': 'scripts'}, name='project_scripts'),
+    # Redirigir /agent/ a /agent/create/
+    path('projects/<uuid:project_uuid>/agent/', views.redirect_to_agent_create, name='project_agent'),
+    path('projects/<uuid:project_uuid>/update-name/', views.ProjectUpdateNameView.as_view(), name='project_update_name'),
+    path('projects/<uuid:project_uuid>/delete/', views.ProjectDeleteView.as_view(), name='project_delete'),
+    path('items/<str:item_id>/move/', views.ProjectItemsManagementView.move_item, name='move_item'),
     
     # Videos (nueva vista unificada - creación + biblioteca)
     path('videos/', views.VideoLibraryView.as_view(), name='video_library'),
-    path('projects/<int:project_id>/videos/', views.VideoLibraryView.as_view(), name='project_videos_library'),
-    path('videos/<int:video_id>/', views.VideoDetailView.as_view(), name='video_detail'),
-    path('projects/<int:project_id>/videos/<int:video_id>/', views.VideoDetailView.as_view(), name='project_video_detail'),
-    path('videos/<int:video_id>/delete/', views.VideoDeleteView.as_view(), name='video_delete'),
-    path('videos/<int:video_id>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
-    path('videos/<int:video_id>/status/', views.VideoStatusView.as_view(), name='video_status'),
+    path('projects/<uuid:project_uuid>/videos/', views.VideoLibraryView.as_view(), name='project_videos_library'),
+    path('videos/<uuid:video_uuid>/', views.VideoDetailView.as_view(), name='video_detail'),
+    path('projects/<uuid:project_uuid>/videos/<uuid:video_uuid>/', views.VideoDetailView.as_view(), name='project_video_detail'),
+    path('videos/<uuid:video_uuid>/delete/', views.VideoDeleteView.as_view(), name='video_delete'),
+    path('videos/<uuid:video_uuid>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
+    path('videos/<uuid:video_uuid>/status/', views.VideoStatusView.as_view(), name='video_status'),
     
     # Images (nueva vista unificada - creación + biblioteca)
     path('images/', views.ImageLibraryView.as_view(), name='image_library'),
-    path('projects/<int:project_id>/images/', views.ImageLibraryView.as_view(), name='project_images_library'),
-    path('images/<int:image_id>/', views.ImageDetailView.as_view(), name='image_detail'),
-    path('projects/<int:project_id>/images/<int:image_id>/', views.ImageDetailView.as_view(), name='project_image_detail'),
-    path('images/<int:image_id>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
-    path('images/<int:image_id>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
+    path('projects/<uuid:project_uuid>/images/', views.ImageLibraryView.as_view(), name='project_images_library'),
+    path('images/<uuid:image_uuid>/', views.ImageDetailView.as_view(), name='image_detail'),
+    path('projects/<uuid:project_uuid>/images/<uuid:image_uuid>/', views.ImageDetailView.as_view(), name='project_image_detail'),
+    path('images/<uuid:image_uuid>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
+    path('images/<uuid:image_uuid>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     
     # Audios (nueva vista unificada - creación + biblioteca)
     path('audios/', views.AudioLibraryView.as_view(), name='audio_library'),
-    path('projects/<int:project_id>/audios/', views.AudioLibraryView.as_view(), name='project_audios_library'),
-    path('audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='audio_detail'),
-    path('projects/<int:project_id>/audios/<int:audio_id>/', views.AudioDetailView.as_view(), name='project_audio_detail'),
-    path('audios/<int:audio_id>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
-    path('audios/<int:audio_id>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
+    path('projects/<uuid:project_uuid>/audios/', views.AudioLibraryView.as_view(), name='project_audios_library'),
+    path('audios/<uuid:audio_uuid>/', views.AudioDetailView.as_view(), name='audio_detail'),
+    path('projects/<uuid:project_uuid>/audios/<uuid:audio_uuid>/', views.AudioDetailView.as_view(), name='project_audio_detail'),
+    path('audios/<uuid:audio_uuid>/delete/', views.AudioDeleteView.as_view(), name='audio_delete'),
+    path('audios/<uuid:audio_uuid>/generate/', views.AudioGenerateView.as_view(), name='audio_generate'),
     
-    # Music (standalone - sin proyecto)
-    path('music/create/', views.MusicCreateView.as_view(), name='music_create_standalone'),
-    
-    # Music (con proyecto)
-    path('projects/<int:project_id>/music/create/', views.MusicCreateView.as_view(), name='music_create'),
-    path('music/<int:music_id>/', views.MusicDetailView.as_view(), name='music_detail'),
-    path('music/<int:music_id>/delete/', views.MusicDeleteView.as_view(), name='music_delete'),
-    path('music/<int:music_id>/generate/', views.MusicGenerateView.as_view(), name='music_generate'),
-    path('music/<int:music_id>/status/', views.MusicStatusView.as_view(), name='music_status'),
-    path('music/<int:music_id>/composition-plan/', views.MusicCompositionPlanView.as_view(), name='music_composition_plan'),
+    # Music URLs eliminadas - usar /audios/ con type='music'
     
     # Scripts (standalone - sin proyecto)
     path('scripts/create/', views.ScriptCreateView.as_view(), name='script_create_standalone'),
     
     # Scripts (con proyecto)
-    path('projects/<int:project_id>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
-    path('projects/<int:project_id>/scripts/create/partial/', views.ScriptCreatePartialView.as_view(), name='script_create_partial'),
+    path('projects/<uuid:project_uuid>/scripts/create/', views.ScriptCreateView.as_view(), name='script_create'),
+    path('projects/<uuid:project_uuid>/scripts/create/partial/', views.ScriptCreatePartialView.as_view(), name='script_create_partial'),
     path('scripts/<int:script_id>/', views.ScriptDetailView.as_view(), name='script_detail'),
     path('scripts/<int:script_id>/delete/', views.ScriptDeleteView.as_view(), name='script_delete'),
     path('scripts/<int:script_id>/retry/', views.ScriptRetryView.as_view(), name='script_retry'),
     
     # HTMX Partials
-    path('videos/<int:video_id>/status-partial/', views.VideoStatusPartialView.as_view(), name='video_status_partial'),
-    path('images/<int:image_id>/status-partial/', views.ImageStatusPartialView.as_view(), name='image_status_partial'),
+    path('videos/<uuid:video_uuid>/status-partial/', views.VideoStatusPartialView.as_view(), name='video_status_partial'),
+    path('images/<uuid:image_uuid>/status-partial/', views.ImageStatusPartialView.as_view(), name='image_status_partial'),
     path('scripts/<int:script_id>/status-partial/', views.ScriptStatusPartialView.as_view(), name='script_status_partial'),
     
     # API endpoints
@@ -88,7 +80,7 @@ urlpatterns = [
     path('api/models/estimate-cost/', views.EstimateCostAPIView.as_view(), name='api_estimate_cost'),
     path('videos/form-fields/', views.DynamicFormFieldsView.as_view(), name='dynamic_form_fields'),
     path('api/library/items/', views.LibraryItemsAPIView.as_view(), name='api_library_items'),
-    path('api/items/<str:item_type>/<int:item_id>/', views.ItemDetailAPIView.as_view(), name='api_item_detail'),
+    path('api/items/<str:item_type>/<str:item_id>/', views.ItemDetailAPIView.as_view(), name='api_item_detail'),
     path('api/items/create/', views.CreateItemAPIView.as_view(), name='api_create_item'),
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),
@@ -100,13 +92,13 @@ urlpatterns = [
     # path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
     
     # Agent Video Flow
-    path('projects/<int:project_id>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
-    path('projects/<int:project_id>/agent/ai-assistant/', views.AgentAIAssistantView.as_view(), name='agent_ai_assistant'),
-    path('projects/<int:project_id>/agent/ai-assistant/init/', views.AgentAIAssistantInitView.as_view(), name='agent_ai_assistant_init'),
-    path('projects/<int:project_id>/agent/ai-assistant/chat/', views.AgentAIAssistantChatView.as_view(), name='agent_ai_assistant_chat'),
-    path('projects/<int:project_id>/agent/configure/', views.AgentConfigureView.as_view(), name='agent_configure'),
-    path('projects/<int:project_id>/agent/scenes/', views.AgentScenesView.as_view(), name='agent_scenes'),
-    path('projects/<int:project_id>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
+    path('projects/<uuid:project_uuid>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
+    path('projects/<uuid:project_uuid>/agent/ai-assistant/', views.AgentAIAssistantView.as_view(), name='agent_ai_assistant'),
+    path('projects/<uuid:project_uuid>/agent/ai-assistant/init/', views.AgentAIAssistantInitView.as_view(), name='agent_ai_assistant_init'),
+    path('projects/<uuid:project_uuid>/agent/ai-assistant/chat/', views.AgentAIAssistantChatView.as_view(), name='agent_ai_assistant_chat'),
+    path('projects/<uuid:project_uuid>/agent/configure/', views.AgentConfigureView.as_view(), name='agent_configure'),
+    path('projects/<uuid:project_uuid>/agent/scenes/', views.AgentScenesView.as_view(), name='agent_scenes'),
+    path('projects/<uuid:project_uuid>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
     
     # Agent Scene Actions
     path('scripts/<int:script_id>/scenes/create/', views.SceneCreateManualView.as_view(), name='scene_create_manual'),
@@ -154,19 +146,19 @@ urlpatterns = [
 
     # Documentacion
     path('docs/structure/', views.docs_structure, name='docs_structure'),
-    path('docs/api/services/<path:path>/', views.docs_md_view, name='docs_md'),
-    re_path(r'^docs/.*$', views.docs_home, name='docs_home'),
+    path('docs/<path:path>/', views.docs_md_view, name='docs_md'),
+    re_path(r'^docs/?$', views.docs_home, name='docs_home'),
     
     # Project Invitations
-    path('projects/<int:project_id>/invite/', views.ProjectInviteView.as_view(), name='project_invite'),
-    path('projects/<int:project_id>/invite/partial/', views.ProjectInvitePartialView.as_view(), name='project_invite_partial'),
-    path('projects/<int:project_id>/invitations/', views.ProjectInvitationsListView.as_view(), name='project_invitations'),
-    path('projects/<int:project_id>/invitations/partial/', views.ProjectInvitationsPartialView.as_view(), name='project_invitations_partial'),
+    path('projects/<uuid:project_uuid>/invite/', views.ProjectInviteView.as_view(), name='project_invite'),
+    path('projects/<uuid:project_uuid>/invite/partial/', views.ProjectInvitePartialView.as_view(), name='project_invite_partial'),
+    path('projects/<uuid:project_uuid>/invitations/', views.ProjectInvitationsListView.as_view(), name='project_invitations'),
+    path('projects/<uuid:project_uuid>/invitations/partial/', views.ProjectInvitationsPartialView.as_view(), name='project_invitations_partial'),
     path('invitations/<str:token>/accept/', views.AcceptInvitationView.as_view(), name='accept_invitation'),
     path('invitations/<int:invitation_id>/cancel/', views.CancelInvitationView.as_view(), name='cancel_invitation'),
     
     # Move to Project
-    path('move-to-project/<str:item_type>/<int:item_id>/', views.MoveToProjectView.as_view(), name='move_to_project'),
+    path('move-to-project/<str:item_type>/<str:item_id>/', views.MoveToProjectView.as_view(), name='move_to_project'),
     
     # Documentation Assistant (RAG)
     path('assistant/', views.DocumentationAssistantView.as_view(), name='doc_assistant'),
@@ -179,5 +171,23 @@ urlpatterns = [
     
     # Credits Dashboard
     path('credits/', views.CreditsDashboardView.as_view(), name='credits_dashboard'),
+    
+    # Notifications
+    path('notifications/panel/', views.NotificationsPanelView.as_view(), name='notifications_panel'),
+    path('notifications/count/', views.NotificationsCountView.as_view(), name='notifications_count'),
+    path('notifications/<uuid:notification_uuid>/read/', views.MarkNotificationReadView.as_view(), name='notification_mark_read'),
+    path('notifications/mark-all-read/', views.MarkAllNotificationsReadView.as_view(), name='notifications_mark_all_read'),
+    
+    # Queues (Tareas de Generación)
+    path('queues/', views.QueuesPanelView.as_view(), name='queues_panel'),
+    path('queues/active-dropdown/', views.ActiveQueuesDropdownView.as_view(), name='active_queues_dropdown'),
+    path('queues/task/<uuid:task_uuid>/', views.QueueTaskDetailView.as_view(), name='queue_task_detail'),
+    path('queues/task/<uuid:task_uuid>/cancel/', views.CancelTaskView.as_view(), name='cancel_task'),
+    
+    # Prompt Templates API
+    path('api/prompt-templates/', views.PromptTemplatesAPIView.as_view(), name='api_prompt_templates'),
+    path('api/prompt-templates/<uuid:template_uuid>/', views.PromptTemplateDetailAPIView.as_view(), name='api_prompt_template_detail'),
+    path('api/prompt-templates/<uuid:template_uuid>/vote/', views.PromptTemplateVoteAPIView.as_view(), name='api_prompt_template_vote'),
+    path('api/prompt-templates/<uuid:template_uuid>/favorite/', views.PromptTemplateFavoriteAPIView.as_view(), name='api_prompt_template_favorite'),
 ]
 

@@ -1,6 +1,6 @@
 {% if video.status == 'processing' %}
 <div 
-    hx-get="{% url 'core:video_status_partial' video.id %}" 
+    hx-get="{% url 'core:video_status_partial' video.uuid %}" 
     hx-trigger="every 5s"
     hx-swap="outerHTML"
     hx-target="this"

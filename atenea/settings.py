@@ -36,21 +36,29 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # ALLOWED_HOSTS: dominios permitidos para la aplicación
 # Se puede configurar via variable de entorno o usar los conocidos
 allowed_hosts_env = config('ALLOWED_HOSTS', default='')
+
+# Dominios de producción conocidos (siempre incluidos)
+production_hosts = [
+    'dev.atenea.nxhumans.com',
+    'demo.atenea.nxhumans.com',
+    'atenea.nxhumans.com',
+    'dev.atenea.ailumtech.com',
+    'demo.atenea.ailumtech.com',
+    'test.atenea.ailumtech.com',
+    'npm.atenea.ailumtech.com',
+]
+
 if allowed_hosts_env:
-    ALLOWED_HOSTS = allowed_hosts_env.split(',')
+    # Si hay variable de entorno, usar esos valores y añadir los de producción
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
+    # Añadir dominios de producción conocidos (sin duplicados)
+    for host in production_hosts:
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
 else:
     # Dominios por defecto (desarrollo)
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
     # Añadir dominios de producción conocidos
-    production_hosts = [
-        'dev.atenea.nxhumans.com',
-        'demo.atenea.nxhumans.com',
-        'atenea.nxhumans.com',
-        'dev.atenea.ailumtech.com',
-        'demo.atenea.ailumtech.com',
-        'test.atenea.ailumtech.com',
-        'npm.atenea.ailumtech.com',
-    ]
     ALLOWED_HOSTS.extend(production_hosts)
 
 # CSRF Trusted Origins
@@ -101,6 +109,7 @@ INSTALLED_APPS = [
     'theme',  # App de Tailwind
     'django_celery_beat',  # Celery Beat para tareas periódicas
     'django_celery_results',  # Celery Results para almacenar resultados
+    'channels',  # Django Channels para WebSockets
     
     # Local apps
     'core',
@@ -348,7 +357,12 @@ AGENT_CACHE_TTL = config('AGENT_CACHE_TTL', default=86400, cast=int)  # 24 horas
 AGENT_CACHE_ENABLED = config('AGENT_CACHE_ENABLED', default=True, cast=bool)
 
 # Stock Search Cache Configuration
-STOCK_CACHE_TTL = config('STOCK_CACHE_TTL', default=3600, cast=int)  # 1 hora en segundos
+# Manejar caso donde STOCK_CACHE_TTL está vacío en .env
+try:
+    stock_cache_ttl_str = config('STOCK_CACHE_TTL', default='3600')
+    STOCK_CACHE_TTL = int(stock_cache_ttl_str) if stock_cache_ttl_str else 3600
+except (ValueError, TypeError):
+    STOCK_CACHE_TTL = 3600  # 1 hora en segundos
 
 # Feature Flag: Usar LangChain en lugar de n8n
 USE_LANGCHAIN_AGENT = config('USE_LANGCHAIN_AGENT', default=False, cast=bool)
@@ -374,4 +388,112 @@ RAG_CHUNK_OVERLAP = config('RAG_CHUNK_OVERLAP', default=200, cast=int)
 RAG_VECTOR_STORE_PATH = config('RAG_VECTOR_STORE_PATH', default='.rag_store')  # Carpeta para guardar índices
 RAG_PROJECT_NAME = config('RAG_PROJECT_NAME', default='atenea-doc-assistant')  # Para LangSmith
 AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=int)  # requests/hora
+
+# ====================================
+# CELERY CONFIGURATION
+# ====================================
+
+# Detectar automáticamente si estamos en Docker o desarrollo local
+# Intentamos resolver el hostname 'redis' (servicio Docker)
+# Si falla, usamos 'localhost' (desarrollo local)
+def get_redis_host():
+    """Detecta automáticamente el host de Redis según el entorno"""
+    import socket
+    try:
+        # Intentar resolver 'redis' (servicio Docker)
+        socket.gethostbyname('redis')
+        return 'redis'
+    except (socket.gaierror, OSError):
+        # Si falla, estamos en desarrollo local
+        return 'localhost'
+
+# Celery Configuration
+# En Docker, usar el nombre del servicio: redis://redis:6379/0
+# En desarrollo local, usar: redis://localhost:6379/0
+_redis_host = get_redis_host()
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f'redis://{_redis_host}:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f'redis://{_redis_host}:6379/0')
+
+# Serialización
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+# Tracking
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos máximo
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutos soft limit
+
+# Task Routes (routing por cola)
+CELERY_TASK_ROUTES = {
+    'core.tasks.generate_video_task': {'queue': 'video_generation'},
+    'core.tasks.generate_image_task': {'queue': 'image_generation'},
+    'core.tasks.generate_audio_task': {'queue': 'audio_generation'},
+    'core.tasks.generate_scene_preview_task': {'queue': 'scene_processing'},
+    'core.tasks.combine_video_audio_task': {'queue': 'scene_processing'},
+    'core.tasks.poll_video_status_task': {'queue': 'default'},
+    'core.tasks.poll_image_status_task': {'queue': 'default'},
+    'core.tasks.poll_audio_status_task': {'queue': 'default'},
+}
+
+# Prioridades por tipo (dentro de cada cola)
+# Mayor número = mayor prioridad (1-10)
+CELERY_TASK_DEFAULT_PRIORITY = 5
+CELERY_TASK_PRIORITY_MAP = {
+    'core.tasks.generate_scene_preview_task': 10,  # Previews alta prioridad
+    'core.tasks.generate_video_task': 5,  # Videos normal
+    'core.tasks.generate_image_task': 5,  # Imágenes normal
+    'core.tasks.generate_audio_task': 5,  # Audios normal
+}
+
+# Retry Configuration
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Celery Beat Schedule (tareas periódicas)
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    # Limpieza de notificaciones antiguas (diaria a las 2 AM)
+    'cleanup-old-notifications': {
+        'task': 'core.tasks.cleanup_old_notifications',
+        'schedule': crontab(hour=2, minute=0),
+    },
+    
+    # Verificar tareas atascadas (cada hora)
+    'check-stuck-tasks': {
+        'task': 'core.tasks.check_stuck_tasks',
+        'schedule': crontab(minute=0),
+    },
+}
+
+# ====================================
+# CHANNELS CONFIGURATION (WebSockets)
+# ====================================
+
+ASGI_APPLICATION = 'atenea.asgi.application'
+
+# CHANNEL_LAYERS Configuration
+# Para desarrollo local, usar localhost. Para producción/Docker, usar CHANNEL_REDIS_URL o REDIS_URL.
+# En Docker, usar el nombre del servicio: redis://redis:6379/1
+channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
+
+# Parsear URL de Redis para channels-redis
+# channels-redis acepta URLs directamente o tuplas (host, port)
+from urllib.parse import urlparse
+parsed_url = urlparse(channel_redis_url)
+redis_host = parsed_url.hostname or _redis_host
+redis_port = parsed_url.port or 6379
+redis_db = parsed_url.path.lstrip('/') if parsed_url.path else '1'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [(redis_host, redis_port)],
+        },
+    },
+}
 
