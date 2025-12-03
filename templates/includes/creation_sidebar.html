@@ -52,16 +52,66 @@ document.addEventListener('alpine:init', () => {
                 const params = new URLSearchParams({ type: type, tab: this.templateTab });
                 if (this.templateSearch) params.append('search', this.templateSearch);
                 
-                const response = await fetch('/api/prompt-templates/?' + params);
-                if (response.ok) {
-                    const data = await response.json();
-                    this.templateList = data.templates || [];
+                // Verificar caché primero
+                const cacheKey = `templates_${type}_${this.templateTab}_${this.templateSearch || ''}`;
+                const cached = this.getCachedTemplates(cacheKey);
+                if (cached) {
+                    this.templateList = cached;
+                    this.templateLoading = false;
+                    // Cargar en background para actualizar caché
+                    this.fetchAndCacheTemplates(params, cacheKey);
+                    return;
                 }
+                
+                await this.fetchAndCacheTemplates(params, cacheKey);
             } catch (error) {
                 console.error('Error loading templates:', error);
                 this.templateList = [];
             } finally {
                 this.templateLoading = false;
+            }
+        },
+        
+        async fetchAndCacheTemplates(params, cacheKey) {
+            try {
+                const response = await fetch('/api/prompt-templates/?' + params);
+                if (response.ok) {
+                    const data = await response.json();
+                    const templates = data.templates || [];
+                    this.templateList = templates;
+                    // Guardar en caché (válido por 1 hora)
+                    this.cacheTemplates(cacheKey, templates);
+                }
+            } catch (error) {
+                console.error('Error fetching templates:', error);
+            }
+        },
+        
+        getCachedTemplates(cacheKey) {
+            try {
+                const cached = localStorage.getItem(`template_cache_${cacheKey}`);
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    // Verificar que no haya expirado (1 hora)
+                    if (Date.now() - data.timestamp < 3600000) {
+                        return data.templates;
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading template cache:', e);
+            }
+            return null;
+        },
+        
+        cacheTemplates(cacheKey, templates) {
+            try {
+                const data = {
+                    templates: templates,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(`template_cache_${cacheKey}`, JSON.stringify(data));
+            } catch (e) {
+                console.warn('Error caching templates:', e);
             }
         },
         
@@ -581,11 +631,12 @@ document.addEventListener('alpine:init', () => {
                     :class="selectedTemplate ? 'border-gray-400' : 'border-gray-300 border-dashed'">
                 
                 <!-- Preview Area -->
-                <div class="aspect-video bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                <div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden rounded-lg">
                     <!-- Video Preview -->
                     <template x-if="selectedTemplate && selectedTemplate.preview_url && (selectedTemplate.preview_url.toLowerCase().includes('.mp4') || selectedTemplate.preview_url.toLowerCase().includes('.webm') || selectedTemplate.preview_url.toLowerCase().includes('.mov') || (activeTab === 'video' && !selectedTemplate.preview_url.toLowerCase().includes('.jpg') && !selectedTemplate.preview_url.toLowerCase().includes('.jpeg') && !selectedTemplate.preview_url.toLowerCase().includes('.png') && !selectedTemplate.preview_url.toLowerCase().includes('.gif') && !selectedTemplate.preview_url.toLowerCase().includes('.webp')))">
                         <video :src="selectedTemplate.preview_url" 
                                class="w-full h-full object-cover"
+                               preload="metadata"
                                autoplay
                                loop
                                muted
@@ -596,29 +647,40 @@ document.addEventListener('alpine:init', () => {
                     <template x-if="selectedTemplate && selectedTemplate.preview_url && !selectedTemplate.preview_url.toLowerCase().includes('.mp4') && !selectedTemplate.preview_url.toLowerCase().includes('.webm') && !selectedTemplate.preview_url.toLowerCase().includes('.mov')">
                         <img :src="selectedTemplate.preview_url" 
                              class="w-full h-full object-cover"
+                             loading="lazy"
                              alt="Template preview">
                     </template>
                     
-                    <!-- Placeholder -->
+                    <!-- Overlay oscuro para mejor legibilidad -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                    
+                    <!-- Placeholder (solo icono centrado cuando no hay template) -->
                     <template x-if="!selectedTemplate || !selectedTemplate.preview_url">
-                        <div class="text-center text-gray-400 p-4">
-                            <i class="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                            <div class="text-sm font-medium" x-text="selectedTemplate ? selectedTemplate.name : 'General'"></div>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i class="fas fa-layer-group text-3xl text-gray-400 opacity-50"></i>
                         </div>
                     </template>
                     
-                    <!-- Change button -->
-                    <span class="absolute top-2 right-2 bg-white bg-opacity-90 px-2 py-1 rounded text-xs font-medium text-gray-600 shadow-sm z-10">
-                        <i class="fas fa-exchange-alt mr-1"></i>Change
-                    </span>
-                </div>
-                
-                <!-- Info -->
-                <div class="p-3 border-t border-gray-200 text-left">
-                    <div class="font-semibold text-gray-900 text-sm" x-text="selectedTemplate ? selectedTemplate.name : 'General'"></div>
-                    <div x-show="selectedTemplate && selectedTemplate.recommended_service" class="text-xs text-gray-500 mt-0.5">
-                        Recomendado: <span x-text="getServiceDisplayName(selectedTemplate?.recommended_service)"></span>
+                    <!-- Texto sobre la imagen (siempre visible, pegado al lateral izquierdo) -->
+                    <div class="absolute bottom-0 left-0 right-0 pb-4 pl-4 z-10">
+                        <div class="text-white font-bold text-lg uppercase tracking-tight mb-1" 
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                             x-text="selectedTemplate ? selectedTemplate.name.toUpperCase() : 'GENERAL'"></div>
+                        <div x-show="selectedTemplate && selectedTemplate.recommended_service" 
+                             class="text-gray-300 text-xs font-medium tracking-wide"
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                             x-text="getServiceDisplayName(selectedTemplate?.recommended_service)"></div>
                     </div>
+                    
+                    <!-- Change button -->
+                    <span @click.stop="openTemplateModal()"
+                          class="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md text-xs font-medium text-white shadow-lg hover:bg-black/80 transition-all z-20 flex items-center gap-1.5 cursor-pointer"
+                          style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        Change
+                    </span>
                 </div>
             </button>
             
@@ -823,11 +885,12 @@ document.addEventListener('alpine:init', () => {
                                 class="border-2 rounded-lg overflow-hidden text-left transition-all hover:border-gray-900 hover:shadow-lg"
                                 :class="selectedTemplate && selectedTemplate.uuid === tpl.uuid ? 'border-gray-900 shadow-lg' : 'border-gray-200'">
                             
-                            <div class="aspect-video bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                            <div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden">
                                 <!-- Video Preview -->
                                 <template x-if="tpl.preview_url && (tpl.preview_url.toLowerCase().includes('.mp4') || tpl.preview_url.toLowerCase().includes('.webm') || tpl.preview_url.toLowerCase().includes('.mov') || (activeTab === 'video' && !tpl.preview_url.toLowerCase().includes('.jpg') && !tpl.preview_url.toLowerCase().includes('.jpeg') && !tpl.preview_url.toLowerCase().includes('.png') && !tpl.preview_url.toLowerCase().includes('.gif') && !tpl.preview_url.toLowerCase().includes('.webp')))">
                                     <video :src="tpl.preview_url" 
                                            class="w-full h-full object-cover"
+                                           preload="none"
                                            autoplay
                                            loop
                                            muted
@@ -837,24 +900,30 @@ document.addEventListener('alpine:init', () => {
                                 <!-- Image Preview -->
                                 <template x-if="tpl.preview_url && !tpl.preview_url.toLowerCase().includes('.mp4') && !tpl.preview_url.toLowerCase().includes('.webm') && !tpl.preview_url.toLowerCase().includes('.mov')">
                                     <img :src="tpl.preview_url" 
-                                         class="w-full h-full object-cover" 
+                                         class="w-full h-full object-cover"
+                                         loading="lazy"
                                          alt="Template preview">
                                 </template>
                                 
-                                <!-- Placeholder -->
+                                <!-- Overlay oscuro para mejor legibilidad -->
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                                
+                                <!-- Placeholder (solo icono centrado cuando no hay preview) -->
                                 <template x-if="!tpl.preview_url">
-                                    <i class="fas fa-image text-3xl text-gray-300"></i>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <i class="fas fa-image text-3xl text-gray-300"></i>
+                                    </div>
                                 </template>
-                            </div>
-                            
-                            <div class="p-3">
-                                <div class="font-semibold text-gray-900 text-sm" x-text="tpl.name"></div>
-                                <div x-show="tpl.recommended_service" class="text-xs text-gray-500 mt-1">
-                                    <span x-text="getServiceDisplayName(tpl.recommended_service)"></span>
-                                </div>
-                                <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                                    <span><i class="fas fa-play mr-1"></i><span x-text="tpl.usage_count || 0"></span></span>
-                                    <span><i class="fas fa-thumbs-up mr-1"></i><span x-text="tpl.upvotes || 0"></span></span>
+                                
+                                <!-- Texto sobre la imagen (siempre visible, pegado al lateral izquierdo) -->
+                                <div class="absolute bottom-0 left-0 right-0 pb-3 pl-3 z-10">
+                                    <div class="text-white font-bold text-sm uppercase tracking-tight mb-0.5" 
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                                         x-text="tpl.name.toUpperCase()"></div>
+                                    <div x-show="tpl.recommended_service" 
+                                         class="text-gray-300 text-xs font-medium tracking-wide"
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                                         x-text="getServiceDisplayName(tpl.recommended_service)"></div>
                                 </div>
                             </div>
                         </button>
