@@ -185,6 +185,33 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'logo': '/static/img/logos/google.png',
         'video_type': 'gemini_veo',
     },
+    'veo-3.0-fast-generate-preview': {
+        'service': 'gemini_veo',
+        'name': 'Veo 3.0 Fast Preview',
+        'description': 'Rápido con audio',
+        'type': 'video',
+        'supports': {
+            'text_to_video': True,
+            'image_to_video': True,
+            'duration': {'min': 4, 'max': 8, 'options': [4, 6, 8]},
+            'aspect_ratio': ['16:9', '9:16'],
+            'resolution': ['720p', '1080p'],
+            'audio': True,
+            'references': {
+                'start_image': False,
+                'end_image': False,
+                'style_image': False,
+                'asset_image': False,
+            },
+            'negative_prompt': True,
+            'seed': True,
+            'last_frame': False,
+            'video_extension': False,
+            'resize_mode': True,
+        },
+        'logo': '/static/img/logos/google.png',
+        'video_type': 'gemini_veo',
+    },
     'veo-3.1-generate-preview': {
         'service': 'gemini_veo',
         'name': 'Veo 3.1 Preview',
@@ -214,7 +241,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     'veo-3.1-fast-generate-preview': {
         'service': 'gemini_veo',
         'name': 'Veo 3.1 Fast Preview',
-        'description': 'Rápido con todas las características',
+        'description': 'Rápido (sin reference images)',
         'type': 'video',
         'supports': {
             'text_to_video': True,
@@ -227,7 +254,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
                 'start_image': False,
                 'end_image': False,
                 'style_image': False,
-                'asset_image': True,
+                'asset_image': False,  # Los modelos "fast" NO soportan reference images
             },
             'negative_prompt': True,
             'seed': True,
