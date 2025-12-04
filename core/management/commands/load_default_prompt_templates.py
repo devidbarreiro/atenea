@@ -189,13 +189,13 @@ class Command(BaseCommand):
                 return 'error'
             
             # Validar longitud del prompt
-            if len(prompt_text) > 800:
+            if len(prompt_text) > 2000:
                 self.stdout.write(
                     self.style.WARNING(
-                        f'{file_path}: Template "{name}" excede 800 caracteres - truncando'
+                        f'{file_path}: Template "{name}" excede 2000 caracteres - truncando'
                     )
                 )
-                prompt_text = prompt_text[:800]
+                prompt_text = prompt_text[:2000]
             
             # Buscar template existente
             # Para templates del sistema (created_by=None), buscar por nombre y tipo

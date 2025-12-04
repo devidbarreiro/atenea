@@ -35,8 +35,8 @@ services:
       - dev_static_volume:/app/staticfiles
       - dev_media_volume:/app/media
       - dev_logs_volume:/app/logs
-      # Credenciales de GCS desde el servidor
-      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
+      # Credenciales de GCS desde el servidor (usar ruta absoluta para evitar que Docker cree un directorio)
+      - ${GCS_CREDENTIALS_PATH:-/home/ubuntu/dev/html/credentials.json}:/app/credentials.json:ro
     ports:
       - "8080:8000"
     env_file:

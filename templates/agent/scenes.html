@@ -171,7 +171,7 @@
                         <div class="flex items-center justify-between mt-1 text-xs text-gray-500">
                             <span>Voz: {{ scene.audio_voice_name|default:"Predeterminada" }}</span>
                             {% if scene.audio_duration %}
-                            <span>Duración: {{ scene.audio_duration|floatformat:1 }}s</span>
+                            <span title="Duración real del archivo de audio generado por ElevenLabs">Audio real: {{ scene.audio_duration|floatformat:1 }}s</span>
                             {% endif %}
                         </div>
                     </div>
@@ -275,7 +275,7 @@
 
     <!-- Actions -->
     <div class="flex justify-between items-center">
-        <a href="{% url 'core:agent_configure' project.uuid %}?script_id={{ script.id }}" 
+        <a href="{% if project %}{% url 'core:agent_configure' project.uuid %}{% else %}{% url 'core:agent_configure_standalone' %}{% endif %}?script_id={{ script.id }}" 
            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
             ← Atrás
         </a>
@@ -857,7 +857,11 @@ async function checkAllScenesStatus() {
 }
 
 function continueToFinal() {
-    window.location.href = "{% url 'core:agent_final' project.uuid %}?script_id=" + scriptId;
+    {% if project %}
+        window.location.href = "{% url 'core:agent_final' project.uuid %}?script_id=" + scriptId;
+    {% else %}
+        window.location.href = "{% url 'core:agent_final_standalone' %}?script_id=" + scriptId;
+    {% endif %}
 }
 
 function updateSceneUI() {

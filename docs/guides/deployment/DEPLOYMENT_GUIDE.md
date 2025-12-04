@@ -222,6 +222,58 @@ ssh atenea-ovh
 cd ~/dev && docker compose exec web python manage.py reset_monthly_credits
 ```
 
+### Cargar Prompt Templates
+
+**Cargar o actualizar prompt templates desde archivos Markdown:**
+
+**Opción 1: Desde el servidor directamente (recomendado)**
+
+```bash
+# Conectarse al servidor
+ssh atenea-ovh
+
+# Ir al entorno deseado
+cd ~/dev/html  # o ~/demo/html o ~/prod/html
+
+# Cargar templates (solo crea nuevos)
+docker compose exec web python manage.py load_default_prompt_templates
+
+# Actualizar templates existentes (incluyendo preview_url)
+docker compose exec web python manage.py load_default_prompt_templates --update
+```
+
+**Opción 2: Desde tu ordenador usando SSH**
+
+```bash
+# DEV - Cargar templates
+ssh atenea-ovh "cd ~/dev/html && docker compose exec web python manage.py load_default_prompt_templates --update"
+
+# DEMO - Cargar templates
+ssh atenea-ovh "cd ~/demo/html && docker compose exec web python manage.py load_default_prompt_templates --update"
+
+# PROD - Cargar templates
+ssh atenea-ovh "cd ~/prod/html && docker compose exec web python manage.py load_default_prompt_templates --update"
+```
+
+**Opción 3: Desde tu ordenador usando docker exec**
+
+```bash
+# DEV
+docker exec dev-web-1 python manage.py load_default_prompt_templates --update
+
+# DEMO
+docker exec demo-web-1 python manage.py load_default_prompt_templates --update
+
+# PROD
+docker exec prod-web-1 python manage.py load_default_prompt_templates --update
+```
+
+**⚠️ Nota importante:**
+- El comando lee los archivos `.md` de `core/prompt_templates/default/`
+- Con `--update` actualiza templates existentes (incluyendo `preview_url` si cambió)
+- Sin `--update` solo crea templates nuevos (no actualiza existentes)
+- Los templates se marcan como públicos y activos automáticamente
+
 ### Ejemplo Completo: Configurar Usuario Nuevo
 
 **Desde tu ordenador:**
@@ -539,6 +591,9 @@ cd ~/dev && docker compose exec web python manage.py shell
 
 # Ver créditos de usuario
 cd ~/dev && docker compose exec web python manage.py show_user_credits <username>
+
+# Cargar prompt templates
+cd ~/dev/html && docker compose exec web python manage.py load_default_prompt_templates --update
 ```
 
 ---

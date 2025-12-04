@@ -1064,6 +1064,15 @@ class VideoService:
         size = video.config.get('size', '1280x720')
         use_input_reference = video.config.get('use_input_reference', False)
         
+        # Log de configuración antes de generar
+        logger.info(f"🎬 Configuración de generación Sora:")
+        logger.info(f"   Modelo: {model}")
+        logger.info(f"   Duración: {duration}s")
+        logger.info(f"   Tamaño: {size}")
+        logger.info(f"   Usa imagen de referencia: {use_input_reference}")
+        logger.info(f"   Longitud del prompt: {len(final_prompt)} caracteres")
+        logger.info(f"   Prompt: {final_prompt[:200]}...")
+        
         # Generar video
         if use_input_reference and video.config.get('input_reference_gcs_path'):
             # Descargar imagen desde GCS a un archivo temporal
@@ -1100,6 +1109,11 @@ class VideoService:
                     seconds=duration,
                     size=size
                 )
+            except Exception as e:
+                logger.error(f"❌ Error al generar video con imagen de referencia: {str(e)}")
+                logger.error(f"   Config: model={model}, duration={duration}, size={size}")
+                logger.error(f"   GCS path: {gcs_path}, MIME type: {mime_type}")
+                raise
             finally:
                 # Limpiar archivo temporal
                 if os.path.exists(tmp_path):
@@ -1107,14 +1121,22 @@ class VideoService:
                     logger.info(f"Archivo temporal eliminado: {tmp_path}")
         else:
             # Generación text-to-video
-            response = client.generate_video(
-                prompt=final_prompt,
-                model=model,
-                seconds=duration,
-                size=size
-            )
+            try:
+                response = client.generate_video(
+                    prompt=final_prompt,
+                    model=model,
+                    seconds=duration,
+                    size=size
+                )
+            except Exception as e:
+                logger.error(f"❌ Error al generar video: {str(e)}")
+                logger.error(f"   Config: model={model}, duration={duration}, size={size}")
+                logger.error(f"   Prompt length: {len(final_prompt)} caracteres")
+                raise
         
-        return response.get('video_id')
+        video_id = response.get('video_id')
+        logger.info(f"✅ Video creado con ID: {video_id}")
+        return video_id
     
     def _generate_higgsfield_video(self, video: Video) -> str:
         """Genera video con Higgsfield"""
@@ -1578,7 +1600,19 @@ class VideoService:
                     os.unlink(tmp_path)
         
         elif api_status == 'failed':
-            error_msg = status_data.get('error', 'Video generation failed')
+            error_obj = status_data.get('error')
+            
+            # El error puede ser un dict con 'code' y 'message' o un string
+            if isinstance(error_obj, dict):
+                error_code = error_obj.get('code', 'unknown_error')
+                error_message = error_obj.get('message', 'Video generation failed')
+                error_msg = f"[{error_code}] {error_message}"
+                logger.error(f"❌ Video Sora {video.id} falló: {error_msg}")
+                logger.error(f"   Error completo: {error_obj}")
+            else:
+                error_msg = str(error_obj) if error_obj else 'Video generation failed'
+                logger.error(f"❌ Video Sora {video.id} falló: {error_msg}")
+            
             video.mark_as_error(error_msg)
         
         return status_data
@@ -2660,10 +2694,21 @@ class AudioService:
             text_preview = audio.text[:100] if audio.text else ''
             logger.info(f"  Texto: {text_preview}{'...' if len(audio.text or '') > 100 else ''}")
             
+            # Procesar texto con tags de voz si los tiene
+            from .services.voice_script_processor import VoiceScriptProcessor
+            processor = VoiceScriptProcessor()
+            processed_result = processor.process_script(audio.text, use_ssml=False)
+            processed_text = processed_result['processed_text']
+            
+            # Log si se procesaron tags
+            if processed_result['has_emotions'] or processed_result['has_pauses']:
+                logger.info(f"Procesados tags de voz: {len(processed_result['metadata']['emotions_found'])} emociones, "
+                          f"{len(processed_result['metadata']['pauses_found'])} pausas")
+            
             if with_timestamps:
                 # Generar con timestamps
                 result = client.text_to_speech_with_timestamps(
-                    text=audio.text,
+                    text=processed_text,
                     voice_id=audio.voice_id,
                     model_id=audio.model_id,
                     language_code=audio.language_code,
@@ -2678,7 +2723,7 @@ class AudioService:
             else:
                 # Generar sin timestamps
                 audio_bytes = client.text_to_speech(
-                    text=audio.text,
+                    text=processed_text,
                     voice_id=audio.voice_id,
                     model_id=audio.model_id,
                     language_code=audio.language_code,
@@ -2933,7 +2978,12 @@ class SceneService:
         video_orientation = getattr(script, 'video_orientation', '16:9')
         video_type = getattr(script, 'video_type', 'general')
         
+        # Obtener preferencias de modelos del script
+        from .services.model_defaults import ModelDefaults
+        model_preferences = ModelDefaults.apply_defaults(script)
+        
         logger.info(f"Creando escenas con orientación heredada: {video_orientation}, tipo: {video_type}")
+        logger.info(f"Preferencias de modelos aplicadas: {model_preferences}")
         
         for idx, scene_data in enumerate(scenes_data):
             try:
@@ -2953,6 +3003,13 @@ class SceneService:
                 if ai_service not in ['gemini_veo', 'sora', 'heygen_v2', 'heygen_avatar_iv', 'vuela_ai']:
                     ai_service = 'gemini_veo'  # Default
                 
+                # Aplicar preferencia de servicio HeyGen si está configurada
+                if ai_service in ['heygen_v2', 'heygen_avatar_iv']:
+                    heygen_preference = model_preferences.get('heygen')
+                    if heygen_preference:
+                        ai_service = heygen_preference
+                        logger.info(f"Escena {scene_data.get('id')}: Usando servicio HeyGen {heygen_preference} (preferencia del script)")
+                
                 # Validar servicio según tipo de video
                 if video_type == 'ultra':
                     # Modo Ultra: Solo Veo3 y Sora2
@@ -2964,27 +3021,45 @@ class SceneService:
                     if ai_service not in ['heygen_v2', 'heygen_avatar_iv', 'gemini_veo', 'sora']:
                         ai_service = 'heygen_v2'  # Default para avatares
                 
+                # Obtener continuity_context si existe
+                continuity_context = scene_data.get('continuity_context', {})
+                
                 # Preparar config básica según el servicio CON ORIENTACIÓN HEREDADA
                 ai_config = {}
                 if ai_service in ['heygen_v2', 'heygen_avatar_iv'] and scene_data.get('avatar') == 'si':
-                    # Config por defecto para HeyGen V2 o Avatar IV usando valores de settings
+                    # Config por defecto para HeyGen V2 o Avatar IV
+                    # Prioridad: 1) model_preferences del script, 2) settings, 3) vacío
                     from django.conf import settings
+                    
+                    # Obtener avatar y voz por defecto desde model_preferences
+                    default_avatar_id = model_preferences.get('default_heygen_avatar_id') or getattr(settings, 'HEYGEN_DEFAULT_AVATAR_ID', '')
+                    default_voice_id = model_preferences.get('default_heygen_voice_id') or getattr(settings, 'HEYGEN_DEFAULT_VOICE_ID', '')
+                    
                     ai_config = {
-                        'avatar_id': getattr(settings, 'HEYGEN_DEFAULT_AVATAR_ID', ''),
-                        'voice_id': getattr(settings, 'HEYGEN_DEFAULT_VOICE_ID', ''),
+                        'avatar_id': default_avatar_id,
+                        'voice_id': default_voice_id,
                         'video_orientation': video_orientation,  # Heredado del script
                         'voice_speed': 1.0,
                         'voice_pitch': 50,
                         'voice_emotion': 'Excited'
                     }
+                    
+                    # Log si se usan valores por defecto del script
+                    if default_avatar_id:
+                        logger.info(f"Escena {scene_data.get('id')}: Usando avatar por defecto del script: {default_avatar_id}")
+                    if default_voice_id:
+                        logger.info(f"Escena {scene_data.get('id')}: Usando voz por defecto del script: {default_voice_id}")
+                    
                     # Para Avatar IV, agregar campo específico para image_key (si hay preview)
                     if ai_service == 'heygen_avatar_iv':
                         ai_config['image_key'] = ''  # Se llenará si hay imagen de preview
                 elif ai_service == 'gemini_veo':
                     # Convertir duration_sec a int (viene como string desde n8n)
                     duration = int(scene_data.get('duration_sec', 8))
+                    # Aplicar preferencia de modelo Veo si está configurada
+                    veo_model = model_preferences.get('gemini_veo', 'veo-3.1-generate-preview')
                     ai_config = {
-                        'veo_model': 'veo-2.0-generate-001',
+                        'veo_model': veo_model,
                         'duration': min(8, duration),  # Max 8s para Gemini Veo
                         'aspect_ratio': video_orientation,  # Heredado del script
                         'sample_count': 1,
@@ -2992,6 +3067,7 @@ class SceneService:
                         'person_generation': 'allow_adult',
                         'compression_quality': 'optimized'
                     }
+                    logger.info(f"Escena {scene_data.get('id')}: Usando modelo Veo {veo_model} (preferencia del script)")
                 elif ai_service == 'sora':
                     # Mapear orientación a tamaño para Sora
                     if video_orientation == '9:16':
@@ -3001,11 +3077,14 @@ class SceneService:
                     
                     # Convertir duration_sec a int (viene como string desde n8n)
                     duration = int(scene_data.get('duration_sec', 8))
+                    # Aplicar preferencia de modelo Sora si está configurada
+                    sora_model = model_preferences.get('sora', 'sora-2')
                     ai_config = {
-                        'sora_model': 'sora-2',
+                        'sora_model': sora_model,
                         'duration': min(12, duration),  # Max 12s para Sora
                         'size': sora_size  # Heredado del script
                     }
+                    logger.info(f"Escena {scene_data.get('id')}: Usando modelo Sora {sora_model} (preferencia del script)")
                 elif ai_service == 'vuela_ai':
                     # Configuración para Vuela.ai
                     ai_config = {
@@ -3055,11 +3134,11 @@ class SceneService:
                 scene = Scene.objects.create(
                     script=script,
                     project=script.project,
-                scene_id=scene_data.get('id'),
-                summary=scene_data.get('summary', ''),
-                script_text=scene_data.get('script_text', ''),
-                visual_prompt=visual_prompt_str,
-                duration_sec=int(scene_data.get('duration_sec', 0)),  # Convertir a int
+                    scene_id=scene_data.get('id'),
+                    summary=scene_data.get('summary', ''),
+                    script_text=scene_data.get('script_text', ''),
+                    visual_prompt=visual_prompt_str,
+                    duration_sec=int(scene_data.get('duration_sec', 0)),  # Convertir a int
                     avatar=scene_data.get('avatar', 'no'),
                     platform=scene_data.get('platform', 'gemini_veo'),
                     broll=scene_data.get('broll', []),
@@ -3070,6 +3149,7 @@ class SceneService:
                     is_included=True,
                     ai_service=ai_service,
                     ai_config=ai_config,
+                    continuity_context=continuity_context,  # Guardar contexto de continuidad
                     preview_image_status='pending',
                     video_status='pending'
                 )
@@ -3264,6 +3344,7 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         """Genera video de escena con HeyGen (V2 o Avatar IV)"""
         from .ai_services.heygen import HeyGenClient
         from .storage.gcs import gcs_storage
+        from .services.voice_validator import VoiceValidator
         
         if not settings.HEYGEN_API_KEY:
             raise ValidationException('HEYGEN_API_KEY no está configurada')
@@ -3272,8 +3353,39 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         
         # Avatar IV: requiere image_key y voice_id
         if scene.ai_service == 'heygen_avatar_iv':
-            if not scene.ai_config.get('voice_id'):
+            voice_id = scene.ai_config.get('voice_id')
+            if not voice_id:
                 raise ValidationException('Voice ID es requerido para HeyGen Avatar IV')
+            
+            # Validar voz antes de generar
+            script_default_voice_id = scene.script.default_voice_id if scene.script else None
+            valid_voice = VoiceValidator.get_valid_voice(
+                voice_id=voice_id,
+                script_default_voice_id=script_default_voice_id,
+                force_refresh=False
+            )
+            
+            # Usar voz válida (puede ser la original o un fallback)
+            actual_voice_id = valid_voice['voice_id']
+            actual_voice_name = valid_voice['voice_name']
+            
+            # Guardar información de fallback si se usó
+            if valid_voice['used_fallback']:
+                if not scene.metadata:
+                    scene.metadata = {}
+                scene.metadata['voice_fallback'] = {
+                    'original_voice_id': voice_id,
+                    'used_voice_id': actual_voice_id,
+                    'used_voice_name': actual_voice_name,
+                    'fallback_reason': valid_voice['fallback_reason']
+                }
+                scene.save(update_fields=['metadata', 'updated_at'])
+                logger.warning(
+                    f"⚠ Escena {scene.scene_id}: Voz {voice_id} no válida. "
+                    f"Usando fallback: {actual_voice_name} ({actual_voice_id})"
+                )
+            else:
+                logger.info(f"✓ Escena {scene.scene_id}: Voz {voice_id} validada correctamente")
             
             # Obtener o subir imagen de preview como asset de HeyGen
             image_key = scene.ai_config.get('image_key')
@@ -3305,7 +3417,7 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             response = client.generate_avatar_iv_video(
                 script=scene.script_text,
                 image_key=image_key,
-                voice_id=scene.ai_config['voice_id'],
+                voice_id=actual_voice_id,  # Usar voz validada
                 title=f"{scene.scene_id} - {scene.script.title}",
                 video_orientation=orientation_str,
                 fit=scene.ai_config.get('fit', 'cover')
@@ -3315,14 +3427,71 @@ This is a preview thumbnail for a video, make it visually engaging and represent
         
         # Avatar V2: requiere avatar_id y voice_id
         else:  # heygen_v2
-            if not scene.ai_config.get('avatar_id') or not scene.ai_config.get('voice_id'):
+            avatar_id = scene.ai_config.get('avatar_id')
+            voice_id = scene.ai_config.get('voice_id')
+            
+            if not avatar_id or not voice_id:
                 raise ValidationException('Avatar ID y Voice ID son requeridos para HeyGen Avatar V2')
+            
+            # Validar avatar antes de generar
+            avatar_validation = VoiceValidator.validate_avatar(avatar_id, force_refresh=False)
+            if not avatar_validation['valid']:
+                if avatar_validation.get('fallback_avatar_id'):
+                    avatar_id = avatar_validation['fallback_avatar_id']
+                    if not scene.metadata:
+                        scene.metadata = {}
+                    scene.metadata['avatar_fallback'] = {
+                        'original_avatar_id': scene.ai_config.get('avatar_id'),
+                        'used_avatar_id': avatar_id,
+                        'used_avatar_name': avatar_validation.get('fallback_avatar_name', 'Avatar por defecto')
+                    }
+                    scene.save(update_fields=['metadata', 'updated_at'])
+                    logger.warning(
+                        f"⚠ Escena {scene.scene_id}: Avatar {scene.ai_config.get('avatar_id')} no válido. "
+                        f"Usando fallback: {avatar_id}"
+                    )
+                else:
+                    raise ValidationException(
+                        f"Avatar {avatar_id} no válido y no se encontró fallback disponible"
+                    )
+            
+            # Validar voz antes de generar
+            script_default_voice_id = scene.script.default_voice_id if scene.script else None
+            valid_voice = VoiceValidator.get_valid_voice(
+                voice_id=voice_id,
+                script_default_voice_id=script_default_voice_id,
+                force_refresh=False
+            )
+            
+            # Usar voz válida (puede ser la original o un fallback)
+            actual_voice_id = valid_voice['voice_id']
+            actual_voice_name = valid_voice['voice_name']
+            
+            # Guardar información de fallback si se usó
+            if valid_voice['used_fallback']:
+                if not scene.metadata:
+                    scene.metadata = {}
+                if 'voice_fallback' not in scene.metadata:
+                    scene.metadata['voice_fallback'] = {}
+                scene.metadata['voice_fallback'].update({
+                    'original_voice_id': voice_id,
+                    'used_voice_id': actual_voice_id,
+                    'used_voice_name': actual_voice_name,
+                    'fallback_reason': valid_voice['fallback_reason']
+                })
+                scene.save(update_fields=['metadata', 'updated_at'])
+                logger.warning(
+                    f"⚠ Escena {scene.scene_id}: Voz {voice_id} no válida. "
+                    f"Usando fallback: {actual_voice_name} ({actual_voice_id})"
+                )
+            else:
+                logger.info(f"✓ Escena {scene.scene_id}: Voz {voice_id} validada correctamente")
             
             response = client.generate_video(
                 script=scene.script_text,
                 title=f"{scene.scene_id} - {scene.script.title}",
-                avatar_id=scene.ai_config['avatar_id'],
-                voice_id=scene.ai_config['voice_id'],
+                avatar_id=avatar_id,  # Usar avatar validado
+                voice_id=actual_voice_id,  # Usar voz validada
                 has_background=scene.ai_config.get('has_background', False),
                 background_url=scene.ai_config.get('background_url'),
                 voice_speed=scene.ai_config.get('voice_speed', 1.0),
@@ -3673,8 +3842,9 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             raise ServiceException(str(e))
     
     def _check_heygen_scene_status(self, scene):
-        """Consulta estado en HeyGen"""
+        """Consulta estado en HeyGen con manejo mejorado de errores"""
         from .ai_services.heygen import HeyGenClient
+        from .services.voice_validator import VoiceValidator
         
         client = HeyGenClient(api_key=settings.HEYGEN_API_KEY)
         status_data = client.get_video_status(scene.external_id)
@@ -3701,8 +3871,75 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 self._auto_generate_audio_if_needed(scene)
         
         elif api_status == 'failed':
-            error_msg = status_data.get('error', 'Video generation failed')
+            error_obj = status_data.get('error', {})
+            error_msg = 'Video generation failed'
+            
+            # Detectar errores específicos de voz/avatar no encontrados
+            if isinstance(error_obj, dict):
+                error_detail = error_obj.get('detail', '')
+                error_code = error_obj.get('code', '')
+                
+                # Detectar error de voz no encontrada
+                if 'VOICE' in error_detail and 'not found' in error_detail.lower():
+                    logger.error(f"❌ Escena {scene.scene_id}: Voz no encontrada en HeyGen")
+                    logger.error(f"   Error: {error_detail}")
+                    
+                    # Intentar regenerar con voz válida
+                    try:
+                        voice_id = scene.ai_config.get('voice_id')
+                        if voice_id:
+                            script_default_voice_id = scene.script.default_voice_id if scene.script else None
+                            valid_voice = VoiceValidator.get_valid_voice(
+                                voice_id=voice_id,
+                                script_default_voice_id=script_default_voice_id,
+                                force_refresh=True  # Forzar refresh después de error
+                            )
+                            
+                            if valid_voice['used_fallback']:
+                                # Actualizar configuración con voz válida
+                                scene.ai_config['voice_id'] = valid_voice['voice_id']
+                                if not scene.metadata:
+                                    scene.metadata = {}
+                                scene.metadata['voice_fallback'] = {
+                                    'original_voice_id': voice_id,
+                                    'used_voice_id': valid_voice['voice_id'],
+                                    'used_voice_name': valid_voice['voice_name'],
+                                    'fallback_reason': 'Error en generación - voz no encontrada',
+                                    'regenerated': True
+                                }
+                                scene.save(update_fields=['ai_config', 'metadata', 'updated_at'])
+                                
+                                logger.info(
+                                    f"🔄 Regenerando escena {scene.scene_id} con voz válida: "
+                                    f"{valid_voice['voice_name']} ({valid_voice['voice_id']})"
+                                )
+                                
+                                # Regenerar video con voz válida
+                                scene.mark_video_as_pending()  # Resetear estado
+                                external_id = self._generate_heygen_scene_video(scene)
+                                scene.external_id = external_id
+                                scene.save(update_fields=['external_id', 'updated_at'])
+                                
+                                return status_data  # Retornar sin marcar error, se regeneró
+                            
+                    except Exception as e:
+                        logger.error(f"Error al intentar regenerar con voz válida: {e}")
+                    
+                    error_msg = f"Voz no encontrada: {error_detail}"
+                
+                # Detectar error de avatar no encontrado
+                elif 'AVATAR' in error_detail and 'not found' in error_detail.lower():
+                    logger.error(f"❌ Escena {scene.scene_id}: Avatar no encontrado en HeyGen")
+                    logger.error(f"   Error: {error_detail}")
+                    error_msg = f"Avatar no encontrado: {error_detail}"
+                
+                else:
+                    error_msg = error_obj.get('message', str(error_obj))
+            else:
+                error_msg = str(error_obj) if error_obj else 'Video generation failed'
+            
             scene.mark_video_as_error(error_msg)
+            logger.error(f"❌ Escena {scene.scene_id} falló: {error_msg}")
         
         return status_data
     
@@ -3800,7 +4037,19 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                     os.unlink(tmp_path)
         
         elif api_status == 'failed':
-            error_msg = status_data.get('error', 'Video generation failed')
+            error_obj = status_data.get('error')
+            
+            # El error puede ser un dict con 'code' y 'message' o un string
+            if isinstance(error_obj, dict):
+                error_code = error_obj.get('code', 'unknown_error')
+                error_message = error_obj.get('message', 'Video generation failed')
+                error_msg = f"[{error_code}] {error_message}"
+                logger.error(f"❌ Escena Sora {scene.id} falló: {error_msg}")
+                logger.error(f"   Error completo: {error_obj}")
+            else:
+                error_msg = str(error_obj) if error_obj else 'Video generation failed'
+                logger.error(f"❌ Escena Sora {scene.id} falló: {error_msg}")
+            
             scene.mark_video_as_error(error_msg)
         
         return status_data
@@ -3956,9 +4205,10 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             scene.mark_audio_as_error(str(e))
     
     def _generate_scene_audio(self, scene, voice_id: str, voice_name: str):
-        """Genera audio para una escena usando ElevenLabs"""
+        """Genera audio para una escena usando ElevenLabs con validación y ajuste automático"""
         from .ai_services.elevenlabs import ElevenLabsClient
         from .storage.gcs import gcs_storage
+        from .services.audio_duration_calculator import AudioDurationCalculator
         from decouple import config
         import tempfile
         import os
@@ -3969,17 +4219,80 @@ This is a preview thumbnail for a video, make it visually engaging and represent
             # Obtener cliente
             client = ElevenLabsClient(api_key=settings.ELEVENLABS_API_KEY)
             
-            # Configuración de voz
+            # Configuración de voz inicial
+            base_speed = float(config('ELEVENLABS_DEFAULT_SPEED', default=1.0))
             voice_settings = {
                 'stability': float(config('ELEVENLABS_DEFAULT_STABILITY', default=0.5)),
                 'similarity_boost': float(config('ELEVENLABS_DEFAULT_SIMILARITY_BOOST', default=0.75)),
                 'style': float(config('ELEVENLABS_DEFAULT_STYLE', default=0.0)),
-                'speed': float(config('ELEVENLABS_DEFAULT_SPEED', default=1.0)),
+                'speed': base_speed,
             }
             
-            # Generar audio
-            audio_bytes = client.text_to_speech(
+            # Obtener idioma del script o usar default
+            language = scene.script.language if scene.script and scene.script.language else 'es'
+            
+            # Validar duración estimada antes de generar
+            video_duration = scene.duration_sec
+            validation = AudioDurationCalculator.validate_text_length(
                 text=scene.script_text,
+                duration_sec=video_duration,
+                language=language,
+                speed=base_speed
+            )
+            
+            logger.info(
+                f"Validación audio escena {scene.scene_id}: "
+                f"estimado={validation['estimated_duration']:.2f}s, "
+                f"target={video_duration}s, "
+                f"diferencia={validation['difference_percent']:.1f}%"
+            )
+            
+            # Si el texto es demasiado largo, ajustar velocidad
+            speed_adjustment = None
+            if validation['estimated_duration'] > video_duration:
+                excess_percent = validation['difference_percent']
+                
+                if excess_percent <= 20:  # Máximo 20% de exceso
+                    # Calcular factor de velocidad necesario
+                    speed_factor = validation['estimated_duration'] / video_duration
+                    # Limitar a máximo 1.2x (20% más rápido)
+                    speed_factor = min(speed_factor, 1.2)
+                    
+                    # Ajustar velocidad en voice_settings
+                    voice_settings['speed'] = base_speed * speed_factor
+                    speed_adjustment = speed_factor
+                    
+                    logger.info(
+                        f"Ajustando velocidad de audio: {base_speed}x → {voice_settings['speed']:.2f}x "
+                        f"(factor: {speed_factor:.2f})"
+                    )
+                else:
+                    # Texto demasiado largo (>20% de exceso)
+                    logger.warning(
+                        f"⚠ Audio excede video en {excess_percent:.1f}% "
+                        f"({validation['estimated_duration']:.2f}s vs {video_duration}s). "
+                        f"Se generará con velocidad ajustada pero puede requerir edición manual."
+                    )
+                    # Intentar ajuste máximo de velocidad
+                    speed_factor = min(validation['estimated_duration'] / video_duration, 1.2)
+                    voice_settings['speed'] = base_speed * speed_factor
+                    speed_adjustment = speed_factor
+            
+            # Procesar texto con tags de voz si los tiene
+            from .services.voice_script_processor import VoiceScriptProcessor
+            processor = VoiceScriptProcessor()
+            processed_result = processor.process_script(scene.script_text, use_ssml=False)
+            processed_text = processed_result['processed_text']
+            
+            # Log si se procesaron tags
+            if processed_result['has_emotions'] or processed_result['has_pauses']:
+                logger.info(f"Procesados tags de voz en escena {scene.scene_id}: "
+                          f"{len(processed_result['metadata']['emotions_found'])} emociones, "
+                          f"{len(processed_result['metadata']['pauses_found'])} pausas")
+            
+            # Generar audio (con velocidad ajustada si es necesario)
+            audio_bytes = client.text_to_speech(
+                text=processed_text,
                 voice_id=voice_id,
                 model_id=config('ELEVENLABS_DEFAULT_MODEL', default='eleven_turbo_v2_5'),
                 language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
@@ -3992,6 +4305,31 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                 tmp_path = tmp_file.name
             
             try:
+                # Obtener duración real del audio generado
+                actual_duration = AudioService._get_audio_duration(tmp_path)
+                
+                # Verificar si aún excede después del ajuste
+                if actual_duration > video_duration:
+                    excess_percent = ((actual_duration - video_duration) / video_duration) * 100
+                    logger.warning(
+                        f"⚠ Audio generado aún excede video: {actual_duration:.2f}s vs {video_duration}s "
+                        f"({excess_percent:.1f}% de exceso)"
+                    )
+                else:
+                    logger.info(
+                        f"✓ Audio ajustado correctamente: {actual_duration:.2f}s (target: {video_duration}s)"
+                    )
+                
+                # Guardar información de ajuste en ai_config
+                if speed_adjustment:
+                    if not scene.ai_config:
+                        scene.ai_config = {}
+                    scene.ai_config['audio_speed_adjustment'] = speed_adjustment
+                    scene.ai_config['audio_original_speed'] = base_speed
+                    scene.ai_config['audio_estimated_duration'] = validation['estimated_duration']
+                    scene.ai_config['audio_actual_duration'] = actual_duration
+                    scene.save(update_fields=['ai_config', 'updated_at'])
+                
                 # Subir a GCS
                 from datetime import datetime
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -4005,18 +4343,18 @@ This is a preview thumbnail for a video, make it visually engaging and represent
                         content_type='audio/mpeg'
                     )
                 
-                # Obtener duración
-                duration = AudioService._get_audio_duration(tmp_path)
-                
-                # Marcar como completado
+                # Marcar como completado (usar duración real)
                 scene.mark_audio_as_completed(
                     gcs_path=gcs_full_path,
-                    duration=duration,
+                    duration=actual_duration,
                     voice_id=voice_id,
                     voice_name=voice_name
                 )
                 
-                logger.info(f"✓ Audio generado para escena {scene.scene_id}: {gcs_full_path} (duración: {duration}s)")
+                logger.info(
+                    f"✓ Audio generado para escena {scene.scene_id}: {gcs_full_path} "
+                    f"(duración: {actual_duration:.2f}s, velocidad: {voice_settings['speed']:.2f}x)"
+                )
                 
                 # Combinar video+audio automáticamente
                 self._auto_combine_video_audio_if_ready(scene)
