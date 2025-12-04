@@ -154,8 +154,10 @@ class ProductionHouse:
                 logger.info("✅ Re-validando después de correcciones")
                 state = self.quality.process(state)
             
-            if iteration >= max_iterations and state.validation.get('critical_errors'):
-                logger.warning(f"⚠️ Máximo de iteraciones alcanzado ({max_iterations}), continuando con errores")
+            if iteration >= max_iterations:
+                validation = state.validation or {}
+                if validation.get('critical_errors'):
+                    logger.warning(f"⚠️ Máximo de iteraciones alcanzado ({max_iterations}), continuando con errores")
             
             # Convertir estado a formato compatible con el sistema actual
             result = self._format_output(state)

@@ -103,7 +103,12 @@ Aplica las correcciones necesarias manteniendo la intención original."""
             scenes_to_correct = []
             for scene in state.scenes:
                 # Solo incluir escenas que tienen errores críticos
-                scene_errors = [e for e in critical_errors if scene.get('id') in e]
+                # Usar coincidencia precisa para evitar falsos positivos (scene_1 vs scene_10)
+                scene_id = scene.get('id', '')
+                scene_errors = [
+                    e for e in critical_errors 
+                    if e.startswith(f"{scene_id}:") or f" {scene_id}:" in e or f"({scene_id})" in e
+                ]
                 if scene_errors:
                     scenes_to_correct.append({
                         'id': scene.get('id'),

@@ -104,7 +104,8 @@ def validate_all_scenes_durations(scenes: List[Dict]) -> Dict[str, any]:
     corrections = {}
     
     for idx, scene in enumerate(scenes):
-        platform = scene.get('platform', '').lower()
+        # Soportar ambos nombres de campo: platform y ai_service
+        platform = (scene.get('platform') or scene.get('ai_service') or '').lower()
         duration = scene.get('duration_sec')
         
         if duration is None:

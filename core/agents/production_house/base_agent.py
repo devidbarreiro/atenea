@@ -94,4 +94,59 @@ class BaseAgent(ABC):
         """Añade un log al estado"""
         state.add_log(self.name, message)
         logger.info(f"[{self.name}] {message}")
+    
+    def _parse_json_response(self, response_text: str) -> dict:
+        """
+        Parsea JSON de una respuesta LLM de forma robusta.
+        Maneja markdown code blocks, texto antes/después del JSON, etc.
+        
+        Args:
+            response_text: Texto de respuesta del LLM
+            
+        Returns:
+            Dict parseado
+            
+        Raises:
+            ValueError si no se puede parsear
+        """
+        import json
+        import re
+        
+        # Intentar extraer JSON de markdown code block primero
+        json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', response_text)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+        
+        # Intentar encontrar JSON directo
+        start_idx = response_text.find('{')
+        if start_idx == -1:
+            raise ValueError("No se encontró JSON en la respuesta")
+        
+        # Encontrar el cierre balanceado de llaves
+        depth = 0
+        end_idx = start_idx
+        for i, char in enumerate(response_text[start_idx:], start_idx):
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    end_idx = i + 1
+                    break
+        
+        if depth != 0:
+            # Fallback: usar rfind
+            end_idx = response_text.rfind('}') + 1
+        
+        json_str = response_text[start_idx:end_idx]
+        
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parseando JSON: {e}")
+            logger.error(f"JSON string: {json_str[:500]}...")
+            raise ValueError(f"Error parseando JSON: {str(e)}")
 

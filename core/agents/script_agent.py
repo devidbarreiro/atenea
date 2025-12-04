@@ -610,7 +610,7 @@ class ScriptAgent:
         initial_state: AgentState = {
             'script_text': script_text,
             'duration_min': duration_min,
-            'duration_seconds': duration_seconds or int(duration_min * 60),
+            'duration_seconds': duration_seconds,  # Ya calculado arriba si era None
             'video_format': video_format,
             'video_type': video_type,
             'llm_response': '',
