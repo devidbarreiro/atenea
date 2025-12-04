@@ -372,5 +372,5 @@ Genera la estructura JSON completa con todas las escenas según las instruccione
     return ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(system_prompt),
         HumanMessagePromptTemplate.from_template(human_prompt)
-    ]).partial(tipo_video="general")  # Default si no se proporciona
+    ])  # tipo_video se pasa dinámicamente en format_messages()
 

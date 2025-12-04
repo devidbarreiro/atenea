@@ -215,16 +215,21 @@ class ScriptAgent:
             else:
                 logger.debug("✅ Duraciones válidas")
             
-            # Validar consistencia platform/avatar
-            consistency_validation = validate_platform_avatar_consistency.invoke({'scenes': scenes})
+            # Obtener tipo de video para validaciones
+            video_type = state.get('video_type', 'general')
+            
+            # Validar consistencia platform/avatar (incluyendo restricciones por video_type)
+            consistency_validation = validate_platform_avatar_consistency.invoke({
+                'scenes': scenes,
+                'video_type': video_type
+            })
             if not consistency_validation['valid']:
                 errors.extend(consistency_validation['errors'])
                 logger.warning(f"⚠️  Errores de consistencia: {len(consistency_validation['errors'])}")
             else:
                 logger.debug("✅ Consistencia platform/avatar válida")
             
-            # Validar tipo de video
-            video_type = state.get('video_type', 'general')
+            # Validar tipo de video (verificación adicional)
             video_type_errors = self._validate_video_type(scenes, video_type)
             if video_type_errors:
                 errors.extend(video_type_errors)
@@ -266,9 +271,16 @@ class ScriptAgent:
         """
         errors = []
         
+        # Plataformas HeyGen válidas (incluyendo variantes)
+        heygen_platforms = ['heygen', 'heygen_v2', 'heygen_avatar_iv']
+        
+        def is_heygen_platform(platform: str) -> bool:
+            """Verifica si una plataforma es HeyGen (incluyendo variantes)"""
+            return platform.lower() in heygen_platforms
+        
         if video_type == 'ultra':
-            # Modo Ultra: PROHIBIDO HeyGen
-            heygen_scenes = [s for s in scenes if s.get('platform', '').lower() == 'heygen']
+            # Modo Ultra: PROHIBIDO HeyGen (incluyendo todas las variantes)
+            heygen_scenes = [s for s in scenes if is_heygen_platform(s.get('platform', '') or s.get('ai_service', ''))]
             if heygen_scenes:
                 errors.append(
                     f"Tipo 'ultra' no permite HeyGen. "
@@ -288,7 +300,7 @@ class ScriptAgent:
             # Con Avatares: Al menos 70% debe ser HeyGen
             total_scenes = len(scenes)
             if total_scenes > 0:
-                heygen_scenes = [s for s in scenes if s.get('platform', '').lower() == 'heygen']
+                heygen_scenes = [s for s in scenes if is_heygen_platform(s.get('platform', '') or s.get('ai_service', ''))]
                 heygen_percentage = (len(heygen_scenes) / total_scenes) * 100
                 
                 if heygen_percentage < 70:
