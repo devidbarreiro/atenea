@@ -597,8 +597,8 @@ class GeminiVeoClient:
                             )
                         
                         error_msg = f"Error {error_code}: {error_message}"
-                except:
-                    pass
+                except (KeyError, TypeError, AttributeError):
+                    pass  # Usar mensaje de error genérico si no se puede parsear
                 
                 logger.error(f"❌ Error en Veo 2: {error_msg}")
                 raise Exception(error_msg)

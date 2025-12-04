@@ -31,9 +31,9 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
             'message': 'Sora solo acepta duraciones de exactamente 4, 8, o 12 segundos'
         },
         'gemini_veo': {
-            'valid': list(range(5, 9)),  # 5-8 segundos
+            'valid': [4, 6, 8],  # Solo 4, 6, u 8 segundos para veo-3.1-generate-preview
             'max': 8,
-            'message': 'Gemini Veo acepta duraciones entre 5 y 8 segundos (máximo 8)'
+            'message': 'Gemini Veo (veo-3.1-generate-preview) solo acepta duraciones de exactamente 4, 6, u 8 segundos'
         },
         'heygen': {
             'valid': list(range(30, 61)),  # 30-60 segundos
@@ -66,13 +66,9 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
         valid_values = rule['valid']
         corrected = min(valid_values, key=lambda x: abs(x - duration_sec))
     elif platform == 'gemini_veo':
-        # Ajustar al rango válido
-        if duration_sec > 8:
-            corrected = 8
-        elif duration_sec < 5:
-            corrected = 5
-        else:
-            corrected = duration_sec
+        # Ajustar al valor válido más cercano (4, 6, u 8)
+        valid_values = [4, 6, 8]
+        corrected = min(valid_values, key=lambda x: abs(x - duration_sec))
     elif platform == 'heygen':
         # Ajustar al rango válido
         if duration_sec > 60:

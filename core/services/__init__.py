@@ -33,3 +33,9 @@ from .credits import CreditService, InsufficientCreditsException, RateLimitExcee
 
 # Exportar QueueService
 from .queue import QueueService
+
+# Exportar nuevos servicios de validación y cálculo
+from .voice_validator import VoiceValidator
+from .audio_duration_calculator import AudioDurationCalculator
+from .model_defaults import ModelDefaults
+from .continuity_manager import ContinuityManager
