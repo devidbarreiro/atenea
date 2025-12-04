@@ -306,6 +306,35 @@ document.addEventListener('alpine:init', () => {
             // La navegación devuelve 'uuid', no 'id'
             await this.openItem({ type: nav.type, id: nav.uuid });
         },
+
+        getNavigationPreview(navItem) {
+            if (!navItem) return null;
+            
+            // Si el objeto de navegación ya trae la URL (ideal)
+            if (navItem.thumbnail_url || navItem.preview_url) {
+                return navItem.thumbnail_url || navItem.preview_url;
+            }
+            
+            // Fallback: Búsqueda local por ID/UUID
+            const itemId = navItem.uuid || navItem.id;
+            if (itemId) {
+                // La función está definida en el mismo scope que this.items
+                const item = this.items.find(i => i.uuid === itemId || i.id == itemId); 
+                return item ? (item.thumbnail_url || item.signed_url) : null;
+            }
+            return null;
+        },
+        
+        // === CORRECCIÓN DE ERROR DE REFERENCIA: getServiceDisplayName ===
+        getServiceDisplayName(serviceKey) {
+            // Definición de un mapa de nombres para evitar el error 'is not defined'
+            const displayNames = {
+                'higgsfield-ai': 'Higgsfield AI',
+                'bytedance': 'ByteDance',
+                // Añade más aquí si es necesario
+            };
+            return displayNames[serviceKey] || serviceKey;
+        },
         
         formatDate(dateStr) {
             if (!dateStr) return '';
@@ -399,6 +428,8 @@ document.addEventListener('alpine:init', () => {
             }
         }
     }));
+
+    // =================== ZOOM =======================
     Alpine.data('imageZoom', () => ({
         pz: null,
         
@@ -701,6 +732,49 @@ document.addEventListener('alpine:init', () => {
         <div class="h-full flex">
             <!-- Panel Izquierdo: Media -->
             <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden">
+
+                <!-- Carrusel items con preview -->
+                <div x-show="navigation && (navigation.prev || navigation.next)"
+                     class="absolute bottom-8 inset-x-0 h-32 flex justify-center items-end pb-4 pointer-events-none z-30 flex">
+                    
+                    <div class="absolute inset-0 bg-gradient-to-t from-gray-100/90 via-gray-100/50 to-transparent pointer-events-none">
+
+                    </div>
+                
+                    <div class="relative w-full max-w-4xl mx-auto h-24 flex items-center justify-center gap-4 px-8 z-40 pointer-events-auto">
+                
+                        <template x-if="navigation.prev">
+                            <button @click="navigateTo('prev')" class="w-24 h-24 rounded-lg overflow-hidden shadow-lg border-2 transition-all opacity-90"
+                                    :class="{'border-gray-300 hover:border-gray-400': true}">
+                                <img :src="getNavigationPreview(navigation.prev)"
+                                        alt="Item Anterior"
+                                        class="w-full h-full object-cover">
+                            </button>
+                        </template>
+                        <template x-if="!navigation.prev">
+                            <div class="w-20 h-20"></div>
+                        </template>
+                        
+                        <button class="w-32 h-32 rounded-lg overflow-hidden shadow-xl border-4 border-blue-500 transition-all scale-105 pointer-events-none">
+                            <img :src="selectedItem.thumbnail_url || selectedItem.signed_url"
+                                    alt="Item Actual"
+                                    class="w-full h-full object-cover">
+                        </button>
+                    
+                        <template x-if="navigation.next">
+                            <button @click="navigateTo('next')" class="w-24 h-24 rounded-lg overflow-hidden shadow-lg border-2 transition-all opacity-90"
+                                    :class="{'border-gray-300 hover:border-gray-400': true}">
+                                <img :src="getNavigationPreview(navigation.next)"
+                                        alt="Item Siguiente"
+                                        class="w-full h-full object-cover">
+                            </button>
+                        </template>
+                        <template x-if="!navigation.next">
+                            <div class="w-20 h-20"></div>
+                        </template>
+                    </div>
+                </div>
+
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
                         class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
