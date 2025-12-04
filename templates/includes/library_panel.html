@@ -28,7 +28,6 @@ document.addEventListener('alpine:init', () => {
         // === ESTADO DE SELECCIÓN MASIVA ===
         isBulkActionMode: false,
         selectedItems: [], 
-        // ===================================
 
         init() {
             this.loadItems();
@@ -97,7 +96,6 @@ document.addEventListener('alpine:init', () => {
             this.isBulkActionMode = false;
             this.selectedItems = [];
         },
-        // ====================================
 
         _cleanupAllPolling() {
             // Limpiar todos los polling intervals de los items
@@ -249,10 +247,57 @@ document.addEventListener('alpine:init', () => {
             breadcrumbsContainer.innerHTML = html;
         },
         
+
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+
+        closeDetail() {
+            // Limpiar polling antes de cerrar
+            this._cleanupAllPolling();
+            
+            this.selectedItem = null;
+            this.navigation = null;
+            // Restaurar breadcrumbs originales
+            this.restoreBreadcrumbs();
+            // Si venimos de una URL directa, ir a la biblioteca
+            if (this.initialItemId) {
+                const baseUrl = this.projectId 
+                    ? '/projects/' + this.projectId + '/' + this.activeTab + 's/'
+                    : '/' + this.activeTab + 's/';
+                window.location.href = baseUrl;
+            } else {
+                history.back();
+            }
+        },
+
         async navigateTo(direction) {
+            // 1. Validación básica
             if (!this.navigation || !this.navigation[direction]) return;
-            const nav = this.navigation[direction];
-            await this.openItem({ type: this.selectedItem.type, id: nav.id });
+            
+            // 2. Obtener el objeto o valor de navegación
+            const navData = this.navigation[direction];
+            
+            // 3. CORRECCIÓN: Buscar 'uuid' o 'id'. 
+            const nextId = (typeof navData === 'object') ? (navData.uuid ) : navData;
+        
+            // 4. Validación de seguridad del ID
+            if (!nextId) {
+                console.error("Error de navegación: ID/UUID no encontrado en:", navData);
+                return;
+            }
+            // 5. Determinar el tipo (usando fallback a activeTab)
+            let nextType = this.activeTab; // Valor por defecto
+            
+            if (typeof navData === 'object' && navData.type) {
+                nextType = navData.type;
+            } else if (this.selectedItem && this.selectedItem.type) {
+                nextType = this.selectedItem.type;
+            }
+            // 6. Ejecutar la navegación
+            await this.openItem({ type: nextType, id: nextId });
         },
         
         formatDate(dateStr) {
@@ -269,8 +314,7 @@ document.addEventListener('alpine:init', () => {
         
         // Acciones del menú
         openDeleteModal(item, e) {
-            if (e) e.stopPropagation();
-            // Si item es null, significa que es acción masiva
+            e.stopPropagation();
             this.deleteModal = { open: true, item: item };
         },
         
@@ -352,7 +396,8 @@ document.addEventListener('alpine:init', () => {
 </script>
 
 <div x-data="libraryPanel()" class="h-full flex flex-col bg-white relative">
-    
+
+    <!-- =================== MODAL BULK =================== -->
     <div x-show="isBulkActionMode"
          x-transition:enter="transition cubic-bezier(0.175, 0.885, 0.32, 1.275) duration-300"
          x-transition:enter-start="opacity-0 translate-y-10 scale-95"
@@ -386,14 +431,18 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
     
+    <!-- ========== VISTA: GRID DE ITEMS ========== -->
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
+            <!-- Contenido -->
             <div class="flex-1 overflow-y-auto p-6 relative"> 
+                <!-- Loading -->
                 <div x-show="loading" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
                     <p class="mt-4 text-sm text-gray-500">Cargando...</p>
                 </div>
                 
+                <!-- Grid -->
                 <div x-show="!loading && items.length > 0" 
                      class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
@@ -456,6 +505,7 @@ document.addEventListener('alpine:init', () => {
                             }"
                             @click="handleMainClick(item)">
                             
+                            <!-- Thumbnail -->
                             <div class="relative aspect-square bg-gray-100 overflow-hidden">
                                 
                                 <div class="absolute bottom-2 right-2 z-20 transition-opacity duration-200"
@@ -474,19 +524,22 @@ document.addEventListener('alpine:init', () => {
                                         </svg>
                                     </button>
                                 </div>
-
+                                
+                                <!-- Video con preview en hover -->
                                 <template x-if="item.type === 'video' && item.signed_url">
-                                    <div class="w-full h-full relative">
+                                    <div class="w-full h-full relative"
+                                         @mouseenter="if ($refs.videoEl && !$root.isBulkActionMode) { $refs.videoEl.play(); videoPlaying = true; }"
+                                         @mouseleave="if ($refs.videoEl && !$root.isBulkActionMode) { $refs.videoEl.pause(); $refs.videoEl.currentTime = 0; videoPlaying = false; }">
+                                        
                                         <video :src="item.signed_url" 
                                                class="w-full h-full object-cover" 
                                                preload="metadata"
                                                x-ref="videoEl"
-                                               @mouseenter="if ($refs.videoEl && !isBulkActionMode) { $refs.videoEl.play(); videoPlaying = true; }"
-                                               @mouseleave="if ($refs.videoEl && !isBulkActionMode) { $refs.videoEl.pause(); $refs.videoEl.currentTime = 0; videoPlaying = false; }"
                                                muted
                                                loop></video>
-                                        <div x-show="!videoPlaying && !isBulkActionMode" 
-                                             class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                                
+                                        <div x-show="!videoPlaying && !$root.isBulkActionMode" 
+                                             class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
                                             <div class="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
                                                 <svg class="w-6 h-6 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M8 5v14l11-7z"></path>
@@ -697,7 +750,7 @@ document.addEventListener('alpine:init', () => {
                     
                     <div x-show="selectedItem.width && selectedItem.height">
                         <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">DIMENSIONES</h3>
-                        <p class="text-sm text-gray-800" x-text="selectedItem.width + ' × ' + selectedItem.height + ' px'"></p>
+                        <p class="text-sm text-gray-800" x-text="selectedItem.width + '  ' + selectedItem.height + ' px'"></p>
                     </div>
                     
                     <div x-show="selectedItem.project && selectedItem.project.name">
@@ -749,7 +802,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <div class="p-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-                    <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + '×' + selectedItem.height + ' px' : ''"></span>
+                    <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + '' + selectedItem.height + ' px' : ''"></span>
                     <button x-show="selectedItem.type === 'image'" 
                             class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
