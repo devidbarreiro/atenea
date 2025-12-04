@@ -23,6 +23,10 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
     """
     platform = platform.lower()
     
+    # Normalizar variantes de HeyGen
+    if platform in ['heygen_v2', 'heygen_avatar_iv']:
+        platform = 'heygen'
+    
     # Reglas de validación
     rules = {
         'sora': {
@@ -36,9 +40,9 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
             'message': 'Gemini Veo (veo-3.1-generate-preview) solo acepta duraciones de exactamente 4, 6, u 8 segundos'
         },
         'heygen': {
-            'valid': list(range(30, 61)),  # 30-60 segundos
+            'valid': list(range(15, 61)),  # 15-60 segundos (15-25 para social, 30-45 para educational, 45-60 para longform)
             'max': 60,
-            'message': 'HeyGen acepta duraciones entre 30 y 60 segundos'
+            'message': 'HeyGen acepta duraciones entre 15 y 60 segundos'
         }
     }
     
