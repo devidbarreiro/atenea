@@ -122,6 +122,14 @@ jobs:
         ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
           "mkdir -p $ENV_DIR_REMOTE/html $ENV_DIR_REMOTE/backups" || true
         
+        # Preservar credentials.json si existe antes del deploy
+        echo "🔐 Preservando credentials.json si existe..."
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+          "if [ -f '$ENV_DIR_REMOTE/html/credentials.json' ]; then
+            echo '📋 Guardando credentials.json temporalmente...'
+            cp '$ENV_DIR_REMOTE/html/credentials.json' '$ENV_DIR_REMOTE/html/credentials.json.backup' || true
+          fi"
+        
         # Copiar código al servidor usando rsync (excluyendo .git y otros archivos innecesarios)
         echo "📤 Copiando código al servidor..."
         rsync -avz --delete \
@@ -130,11 +138,22 @@ jobs:
           --exclude='__pycache__' \
           --exclude='*.pyc' \
           --exclude='.env' \
+          --exclude='credentials.json' \
           --exclude='venv' \
           --exclude='db.sqlite3' \
           --exclude='.pytest_cache' \
           --exclude='node_modules' \
           ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
+        
+        # Restaurar credentials.json si existía antes
+        echo "🔐 Restaurando credentials.json si existía..."
+        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+          "if [ -f '$ENV_DIR_REMOTE/html/credentials.json.backup' ]; then
+            mv '$ENV_DIR_REMOTE/html/credentials.json.backup' '$ENV_DIR_REMOTE/html/credentials.json'
+            echo '✅ credentials.json restaurado'
+          else
+            echo '⚠️  credentials.json no existía antes, debe crearse manualmente en $ENV_DIR_REMOTE/html/credentials.json'
+          fi"
         
         # Copiar docker-compose al servidor (dentro de html/)
         echo "📋 Copiando docker-compose.yml a html/"
@@ -166,6 +185,24 @@ jobs:
           fi
         else
           echo "✅ Archivo .env encontrado en $ENV_DIR/html/.env"
+        fi
+        
+        # Verificar que existe credentials.json (crítico para GCS)
+        if [ ! -f "credentials.json" ]; then
+          echo "⚠️  Advertencia: No se encuentra credentials.json en $ENV_DIR/html/credentials.json"
+          echo "💡 El archivo credentials.json debe existir en el servidor para que GCS funcione"
+          echo "💡 Puedes crearlo manualmente o copiarlo desde $ENV_DIR/credentials.json si existe"
+          if [ -f "$ENV_DIR/credentials.json" ]; then
+            echo "📋 Copiando credentials.json desde $ENV_DIR/credentials.json a $ENV_DIR/html/credentials.json"
+            cp "$ENV_DIR/credentials.json" "$ENV_DIR/html/credentials.json"
+            echo "✅ credentials.json copiado desde $ENV_DIR/"
+          else
+            echo "❌ Error: No se encuentra credentials.json en $ENV_DIR/credentials.json ni en $ENV_DIR/html/credentials.json"
+            echo "❌ El despliegue puede continuar pero GCS no funcionará sin credentials.json"
+            echo "💡 Crea el archivo manualmente en $ENV_DIR/html/credentials.json antes de usar GCS"
+          fi
+        else
+          echo "✅ Archivo credentials.json encontrado en $ENV_DIR/html/credentials.json"
         fi
         
         # Verificar que POSTGRES_PASSWORD está definido en .env

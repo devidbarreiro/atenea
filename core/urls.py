@@ -39,6 +39,7 @@ urlpatterns = [
     path('projects/<uuid:project_uuid>/videos/<uuid:video_uuid>/', views.VideoDetailView.as_view(), name='project_video_detail'),
     path('videos/<uuid:video_uuid>/delete/', views.VideoDeleteView.as_view(), name='video_delete'),
     path('videos/<uuid:video_uuid>/generate/', views.VideoGenerateView.as_view(), name='video_generate'),
+    path('videos/<uuid:video_uuid>/recreate/', views.VideoRecreateView.as_view(), name='video_recreate'),
     path('videos/<uuid:video_uuid>/status/', views.VideoStatusView.as_view(), name='video_status'),
     
     # Images (nueva vista unificada - creación + biblioteca)
@@ -48,6 +49,7 @@ urlpatterns = [
     path('projects/<uuid:project_uuid>/images/<uuid:image_uuid>/', views.ImageDetailView.as_view(), name='project_image_detail'),
     path('images/<uuid:image_uuid>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<uuid:image_uuid>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
+    path('images/<uuid:image_uuid>/recreate/', views.ImageRecreateView.as_view(), name='image_recreate'),
     
     # Audios (nueva vista unificada - creación + biblioteca)
     path('audios/', views.AudioLibraryView.as_view(), name='audio_library'),

@@ -5,6 +5,7 @@ Documentación para usuarios finales de Atenea.
 ## 📖 Contenido
 
 - **[Guía de Usuario](GUIA_USUARIO.md)** - Guía completa de uso de la plataforma
+- **[Sistema de Prompt Templates](prompt-templates.md)** - Cómo usar templates con variables dinámicas y LLM remixing
 
 ## 🎯 Propósito
 

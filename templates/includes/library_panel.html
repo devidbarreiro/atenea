@@ -296,8 +296,15 @@ document.addEventListener('alpine:init', () => {
             } else if (this.selectedItem && this.selectedItem.type) {
                 nextType = this.selectedItem.type;
             }
-            // 6. Ejecutar la navegación
-            await this.openItem({ type: nextType, id: nextId });
+            
+            breadcrumbsContainer.innerHTML = html;
+        },
+        
+        async navigateTo(direction) {
+            if (!this.navigation || !this.navigation[direction]) return;
+            const nav = this.navigation[direction];
+            // La navegación devuelve 'uuid', no 'id'
+            await this.openItem({ type: nav.type, id: nav.uuid });
         },
         
         formatDate(dateStr) {
@@ -707,6 +714,54 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                    <!-- PROMPT TEMPLATE (sin título, solo preview) -->
+                    <div x-show="selectedItem.prompt_template">
+                        <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <!-- Preview Area -->
+                            <div class="aspect-video bg-gray-900 relative overflow-hidden rounded-lg">
+                                <!-- Video Preview -->
+                                <template x-if="selectedItem.prompt_template && selectedItem.prompt_template.preview_url && (selectedItem.prompt_template.preview_url.toLowerCase().includes('.mp4') || selectedItem.prompt_template.preview_url.toLowerCase().includes('.webm') || selectedItem.prompt_template.preview_url.toLowerCase().includes('.mov'))">
+                                    <video :src="selectedItem.prompt_template.preview_url" 
+                                           class="w-full h-full object-cover"
+                                           autoplay
+                                           loop
+                                           muted
+                                           playsinline></video>
+                                </template>
+                                
+                                <!-- Image Preview -->
+                                <template x-if="selectedItem.prompt_template && selectedItem.prompt_template.preview_url && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.mp4') && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.webm') && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.mov')">
+                                    <img :src="selectedItem.prompt_template.preview_url" 
+                                         class="w-full h-full object-cover"
+                                         alt="Template preview">
+                                </template>
+                                
+                                <!-- Overlay oscuro para mejor legibilidad -->
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                                
+                                <!-- Placeholder -->
+                                <template x-if="!selectedItem.prompt_template || !selectedItem.prompt_template.preview_url">
+                                    <div class="w-full h-full flex items-center justify-center text-center text-gray-400 p-4">
+                                        <i class="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                    </div>
+                                </template>
+                                
+                                <!-- Texto sobre la imagen -->
+                                <div x-show="selectedItem.prompt_template && selectedItem.prompt_template.name"
+                                     class="absolute bottom-0 left-0 right-0 pb-3 pl-3 z-10">
+                                    <div class="text-white font-bold text-sm uppercase tracking-tight mb-0.5" 
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                                         x-text="selectedItem.prompt_template.name.toUpperCase()"></div>
+                                    <div x-show="selectedItem.prompt_template && selectedItem.prompt_template.recommended_service" 
+                                         class="text-gray-300 text-xs font-medium tracking-wide"
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                                         x-text="getServiceDisplayName ? getServiceDisplayName(selectedItem.prompt_template.recommended_service) : selectedItem.prompt_template.recommended_service"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- MODELO -->
                     <div x-show="selectedItem.model">
                         <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">MODELO</h3>
                         <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -774,12 +829,15 @@ document.addEventListener('alpine:init', () => {
                     </div>
                     
                     <div class="space-y-1 pt-2">
-                        <button class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                            Recrear
-                        </button>
+                        <form method="post" x-bind:action="selectedItem.type === 'video' ? '/videos/' + selectedItem.id + '/recreate/' : '/images/' + selectedItem.id + '/recreate/'" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Recrear
+                            </button>
+                        </form>
                         <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>

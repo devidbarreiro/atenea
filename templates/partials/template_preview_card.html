@@ -1,0 +1,67 @@
+{% comment %}
+Template parcial reutilizable para mostrar previews de templates de prompt.
+
+Parámetros esperados:
+- template: objeto template con propiedades name, preview_url, recommended_service, uuid
+- activeTab: tab activo ('video', 'image', 'audio') - opcional, por defecto 'video'
+- showChangeButton: boolean - si mostrar botón Change (por defecto false)
+- changeButtonAction: función Alpine.js a ejecutar al hacer click en Change (opcional)
+- size: 'large' o 'small' - tamaño del preview (por defecto 'large')
+- showServiceName: boolean - si mostrar el nombre del servicio recomendado (por defecto true)
+{% endcomment %}
+
+<div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden rounded-lg">
+    <!-- Video Preview -->
+    <template x-if="template && template.preview_url && (template.preview_url.toLowerCase().includes('.mp4') || template.preview_url.toLowerCase().includes('.webm') || template.preview_url.toLowerCase().includes('.mov') || ((activeTab || 'video') === 'video' && !template.preview_url.toLowerCase().includes('.jpg') && !template.preview_url.toLowerCase().includes('.jpeg') && !template.preview_url.toLowerCase().includes('.png') && !template.preview_url.toLowerCase().includes('.gif') && !template.preview_url.toLowerCase().includes('.webp')))">
+        <video :src="template.preview_url" 
+               class="w-full h-full object-cover"
+               autoplay
+               loop
+               muted
+               playsinline></video>
+    </template>
+    
+    <!-- Image Preview -->
+    <template x-if="template && template.preview_url && !template.preview_url.toLowerCase().includes('.mp4') && !template.preview_url.toLowerCase().includes('.webm') && !template.preview_url.toLowerCase().includes('.mov')">
+        <img :src="template.preview_url" 
+             class="w-full h-full object-cover"
+             alt="Template preview">
+    </template>
+    
+    <!-- Overlay oscuro para mejor legibilidad -->
+    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+    
+    <!-- Placeholder -->
+    <template x-if="!template || !template.preview_url">
+        <div class="text-center text-gray-400 p-4">
+            <i class="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+            <div class="text-sm font-medium uppercase tracking-wide" x-text="template ? template.name.toUpperCase() : 'GENERAL'"></div>
+        </div>
+    </template>
+    
+    <!-- Texto sobre la imagen -->
+    <div class="absolute bottom-0 left-0 right-0 z-10"
+         :class="size === 'small' ? 'pb-3 pl-3' : 'pb-4 pl-4'">
+        <div class="text-white font-bold uppercase tracking-tight mb-1" 
+             :class="size === 'small' ? 'text-sm' : 'text-lg'"
+             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+             x-text="template ? template.name.toUpperCase() : 'GENERAL'"></div>
+        <div x-show="template && template.recommended_service && (showServiceName !== false)" 
+             class="text-gray-300 text-xs font-medium tracking-wide"
+             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+             x-text="getServiceDisplayName ? getServiceDisplayName(template?.recommended_service) : template?.recommended_service"></div>
+    </div>
+    
+    <!-- Change button -->
+    <template x-if="showChangeButton">
+        <span @click.stop="changeButtonAction ? changeButtonAction() : null"
+              class="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md text-xs font-medium text-white shadow-lg hover:bg-black/80 transition-all z-20 flex items-center gap-1.5 cursor-pointer"
+              style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            </svg>
+            Change
+        </span>
+    </template>
+</div>
+
