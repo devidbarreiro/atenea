@@ -74,11 +74,11 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
         valid_values = [4, 6, 8]
         corrected = min(valid_values, key=lambda x: abs(x - duration_sec))
     elif platform == 'heygen':
-        # Ajustar al rango válido
+        # Ajustar al rango válido (15-60 segundos)
         if duration_sec > 60:
             corrected = 60
-        elif duration_sec < 30:
-            corrected = 30
+        elif duration_sec < 15:
+            corrected = 15
         else:
             corrected = duration_sec
     
