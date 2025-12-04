@@ -280,7 +280,7 @@ document.addEventListener('alpine:init', () => {
             // 2. Obtener el objeto o valor de navegación
             const navData = this.navigation[direction];
             
-            // 3. CORRECCIÓN: Buscar 'uuid' o 'id'. 
+            // 3. Buscar 'uuid''. 
             const nextId = (typeof navData === 'object') ? (navData.uuid ) : navData;
         
             // 4. Validación de seguridad del ID
