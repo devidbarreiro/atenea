@@ -124,7 +124,7 @@ document.addEventListener('alpine:init', () => {
             try {
                 const params = new URLSearchParams({ type: this.activeTab });
                 if (this.projectId) {
-                    params.append('project_id', this.projectId);
+                    params.append('project_uuid', this.projectId);
                 }
                 const response = await fetch('/api/library/items/?' + params);
                 const data = await response.json();
@@ -155,7 +155,7 @@ document.addEventListener('alpine:init', () => {
                 // Pasar project_id a la API para filtrar navegación correctamente
                 let apiUrl = '/api/items/' + item.type + '/' + item.id + '/';
                 if (this.projectId) {
-                    apiUrl += '?project_id=' + this.projectId;
+                    apiUrl += '?project_uuid=' + this.projectId;
                 }
                 
                 const response = await fetch(apiUrl);
