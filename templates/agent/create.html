@@ -1,15 +1,18 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Generar Video con Agente - {{ project.name }}{% endblock %}
+{% block title %}Generar Video con Agente{% if project %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="flex min-h-screen bg-gray-50">
     {% include 'includes/sidebar.html' %}
-    {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
-    {% include 'includes/project_tabs_bar.html' with active_tab='agent' project=project %}
+    {% if project %}
+        {% include 'includes/project_sidebar.html' with project=project user_role=user_role project_owner=project_owner project_members=project_members %}
+        {% include 'includes/project_tabs_bar.html' with active_tab='agent' project=project %}
+    {% endif %}
 
-    <!-- Contenido principal - Con margen para ambas sidebars y la barra fija -->
-    <main class="flex-1 min-w-0 lg:ml-80 pt-[57px]">
+    <!-- Contenido principal - Con margen para sidebars -->
+    <main class="flex-1 min-w-0 {% if project %}lg:ml-80 pt-[57px]{% else %}lg:ml-16 pt-4{% endif %}">
         <div class="p-6 max-w-5xl mx-auto">
             <!-- Progress Bar -->
             <div class="mb-8">
@@ -114,8 +117,8 @@
             {% csrf_token %}
             <input type="hidden" name="content_type" value="script-manual">
 
-            <!-- Video Type and Orientation -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <!-- Video Type, Format and Orientation -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                     <label for="video_type_manual" class="block text-sm font-medium text-gray-700 mb-2">
                         Tipo de Video
@@ -131,6 +134,23 @@
                         <option value="avatar">Con Avatares (Principalmente HeyGen)</option>
                     </select>
                     <p class="mt-1 text-xs text-gray-500">Define qué servicios de IA estarán disponibles</p>
+                </div>
+
+                <div>
+                    <label for="video_format_manual" class="block text-sm font-medium text-gray-700 mb-2">
+                        Formato de Video
+                    </label>
+                    <select 
+                        id="video_format_manual" 
+                        name="video_format" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                    >
+                        <option value="social">📱 Redes Sociales (Reels/TikTok)</option>
+                        <option value="educational" selected>🎓 Video Educativo (Píldora)</option>
+                        <option value="longform">🎬 Video Largo (YouTube/Masterclass)</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Define la estructura y duración de las escenas</p>
                 </div>
 
                 <div>
@@ -234,32 +254,217 @@
 
             <!-- Duration -->
             <div class="mb-6">
-                <label for="desired_duration_min_manual" class="block text-sm font-medium text-gray-700 mb-2">
-                    Duración Deseada (minutos)
+                <label for="desired_duration_manual" class="block text-sm font-medium text-gray-700 mb-2">
+                    Duración Deseada
                 </label>
-                <div class="flex items-center gap-4">
-                    <input 
-                        type="number" 
-                        id="desired_duration_min_manual" 
-                        name="desired_duration_min" 
-                        value="5" 
-                        min="1" 
-                        max="60"
-                        class="w-full max-w-xs px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                    <div id="estimated_duration_manual" class="text-sm text-gray-600 hidden">
-                        <span class="font-medium text-blue-600">Duración estimada:</span>
-                        <span id="estimated_duration_value_manual" class="ml-1">-</span>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            id="desired_duration_min_manual" 
+                            name="desired_duration_min" 
+                            value="1" 
+                            min="0" 
+                            max="60"
+                            class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center"
+                            onchange="updateDurationTotal()"
+                        >
+                        <span class="text-gray-600 font-medium">min</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            id="desired_duration_sec_manual" 
+                            name="desired_duration_sec" 
+                            value="0" 
+                            min="0" 
+                            max="59"
+                            step="15"
+                            class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center"
+                            onchange="updateDurationTotal()"
+                        >
+                        <span class="text-gray-600 font-medium">seg</span>
+                    </div>
+                    <div class="text-sm text-gray-600 ml-2">
+                        <span class="font-medium text-blue-600">Total:</span>
+                        <span id="duration_total_manual" class="ml-1 font-semibold">1 min 0 seg</span>
                     </div>
                 </div>
+                <div id="estimated_duration_manual" class="mt-2 text-sm text-gray-600 hidden">
+                    <span class="font-medium text-blue-600">Duración estimada:</span>
+                    <span id="estimated_duration_value_manual" class="ml-1">-</span>
+                </div>
                 <p class="mt-2 text-xs text-gray-500">
-                    La duración estimada se calcula automáticamente según el contenido del guión
+                    La duración estimada se calcula automáticamente según el contenido del guión. Los segundos se ajustan automáticamente a múltiplos de 15.
                 </p>
+            </div>
+
+            <!-- Advanced Preferences (Collapsible) -->
+            <div class="mb-6 border border-gray-200 rounded-lg overflow-hidden">
+                <button 
+                    type="button"
+                    onclick="toggleAdvancedPreferences()"
+                    class="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                    id="advanced-preferences-toggle"
+                >
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                        </svg>
+                        <span class="text-sm font-medium text-gray-700">Preferencias Avanzadas de Modelos</span>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-600 transform transition-transform" id="advanced-preferences-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                
+                <div id="advanced-preferences-content" class="hidden p-6 bg-white border-t border-gray-200">
+                    <p class="text-xs text-gray-500 mb-4">
+                        Selecciona los modelos por defecto para cada servicio. Si no especificas, se usarán los modelos recomendados según el tipo de video.
+                    </p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Veo Model -->
+                        <div>
+                            <label for="model_pref_veo_manual" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center gap-2">
+                                    <img src="{% static 'img/logos/google.png' %}" alt="Google" class="w-5 h-5">
+                                    <span>Modelo Gemini Veo (por defecto)</span>
+                                </div>
+                            </label>
+                            <select 
+                                id="model_pref_veo_manual" 
+                                name="model_pref_veo"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Usar recomendado según tipo</option>
+                                <option value="veo-3.1-generate-preview" selected>Veo 3.1 Preview (Recomendado)</option>
+                                <option value="veo-3.1-fast-generate-preview">Veo 3.1 Fast Preview</option>
+                                <option value="veo-3.0-generate-001">Veo 3.0</option>
+                                <option value="veo-3.0-fast-generate-001">Veo 3.0 Fast</option>
+                                <option value="veo-3.0-generate-preview">Veo 3.0 Preview</option>
+                                <option value="veo-2.0-generate-001">Veo 2.0</option>
+                                <option value="veo-2.0-generate-exp">Veo 2.0 Experimental</option>
+                                <option value="veo-2.0-generate-preview">Veo 2.0 Preview</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Se aplicará a todas las escenas que usen Veo</p>
+                        </div>
+
+                        <!-- Sora Model -->
+                        <div>
+                            <label for="model_pref_sora_manual" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center gap-2">
+                                    <img src="{% static 'img/logos/openai.svg' %}" alt="OpenAI" class="w-5 h-5">
+                                    <span>Modelo Sora (por defecto)</span>
+                                </div>
+                            </label>
+                            <select 
+                                id="model_pref_sora_manual" 
+                                name="model_pref_sora"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Usar recomendado según tipo</option>
+                                <option value="sora-2" selected>Sora 2 (Recomendado)</option>
+                                <option value="sora-2-pro">Sora 2 Pro</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Se aplicará a todas las escenas que usen Sora</p>
+                        </div>
+
+                        <!-- HeyGen Service -->
+                        <div>
+                            <label for="model_pref_heygen_manual" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center gap-2">
+                                    <img src="{% static 'img/logos/heygen.png' %}" alt="HeyGen" class="w-5 h-5">
+                                    <span>Servicio HeyGen (por defecto)</span>
+                                </div>
+                            </label>
+                            <select 
+                                id="model_pref_heygen_manual" 
+                                name="model_pref_heygen"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Usar recomendado según tipo</option>
+                                <option value="heygen_v2" selected>HeyGen Avatar V2 (Recomendado)</option>
+                                <option value="heygen_avatar_iv">HeyGen Avatar IV</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Se aplicará a todas las escenas que usen HeyGen</p>
+                        </div>
+                    </div>
+                    
+                    <!-- HeyGen Avatar and Voice Selection -->
+                    <div class="mt-6 pt-6 border-t border-gray-200">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                            <img src="{% static 'img/logos/heygen.png' %}" alt="HeyGen" class="w-4 h-4">
+                            <span>Avatar y Voz por Defecto de HeyGen</span>
+                        </h3>
+                        <p class="text-xs text-gray-500 mb-4">Se aplicarán a todas las escenas que usen HeyGen</p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Avatar Selection -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Avatar por Defecto
+                                </label>
+                                <input type="hidden" id="default_heygen_avatar_id_manual" name="default_heygen_avatar_id" value="">
+                                <input type="hidden" id="default_heygen_avatar_name_manual" name="default_heygen_avatar_name" value="">
+                                
+                                <div id="avatar-selected-manual" class="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <p class="text-sm font-bold text-blue-900" id="selected-avatar-name-manual">No seleccionado</p>
+                                            <p class="text-xs text-blue-600" id="selected-avatar-gender-manual">Selecciona un avatar</p>
+                                        </div>
+                                        <button type="button" onclick="openAvatarModalManual()" 
+                                                id="select-avatar-btn-manual"
+                                                class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition flex items-center gap-2">
+                                            <span id="avatar-btn-text">Seleccionar</span>
+                                            <span id="avatar-btn-loader" class="hidden">
+                                                <svg class="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Voice Selection -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Voz por Defecto
+                                </label>
+                                <input type="hidden" id="default_heygen_voice_id_manual" name="default_heygen_voice_id" value="">
+                                <input type="hidden" id="default_heygen_voice_name_manual" name="default_heygen_voice_name" value="">
+                                
+                                <div id="heygen-voice-selected-manual" class="mb-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <p class="text-sm font-bold text-purple-900" id="selected-heygen-voice-name-manual">No seleccionada</p>
+                                            <p class="text-xs text-purple-600" id="selected-heygen-voice-language-manual">Selecciona una voz</p>
+                                        </div>
+                                        <button type="button" onclick="openHeyGenVoiceModalManual()" 
+                                                id="select-voice-btn-manual"
+                                                class="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition flex items-center gap-2">
+                                            <span id="voice-btn-text">Seleccionar</span>
+                                            <span id="voice-btn-loader" class="hidden">
+                                                <svg class="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Actions -->
             <div class="flex justify-between items-center">
-                <a href="{% url 'core:project_agent' project.uuid %}" 
+                <a href="{% if project %}{% url 'core:project_agent' project.uuid %}{% else %}{% url 'core:agent_create_standalone' %}{% endif %}" 
                    class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
                     Cancelar
                 </a>
@@ -277,7 +482,7 @@
         <h2 class="text-2xl font-bold text-gray-900 mb-2">Escritura Asistida con IA</h2>
         <p class="text-gray-600 mb-6">Configura tu video antes de comenzar con el asistente</p>
 
-        <form id="agentCreateFormAI" action="{% url 'core:agent_ai_assistant' project.uuid %}" method="get">
+        <form id="agentCreateFormAI" action="{% if project %}{% url 'core:agent_ai_assistant' project.uuid %}{% else %}#{% endif %}" method="get">
             <!-- Video Type and Orientation -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
@@ -379,12 +584,79 @@ function selectContentType(type) {
 // Por defecto, seleccionar "Escribir con IA"
 selectContentType('script-ai');
 
+// Cargar valores guardados desde sessionStorage al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const savedAvatarId = sessionStorage.getItem('default_heygen_avatar_id');
+        const savedAvatarName = sessionStorage.getItem('default_heygen_avatar_name');
+        const savedVoiceId = sessionStorage.getItem('default_heygen_voice_id');
+        const savedVoiceName = sessionStorage.getItem('default_heygen_voice_name');
+        
+        if (savedAvatarId && savedAvatarName) {
+            document.getElementById('default_heygen_avatar_id_manual').value = savedAvatarId;
+            document.getElementById('default_heygen_avatar_name_manual').value = savedAvatarName;
+            document.getElementById('selected-avatar-name-manual').textContent = savedAvatarName;
+            document.getElementById('selected-avatar-gender-manual').textContent = 'Avatar guardado';
+        }
+        
+        if (savedVoiceId && savedVoiceName) {
+            document.getElementById('default_heygen_voice_id_manual').value = savedVoiceId;
+            document.getElementById('default_heygen_voice_name_manual').value = savedVoiceName;
+            document.getElementById('selected-heygen-voice-name-manual').textContent = savedVoiceName;
+            document.getElementById('selected-heygen-voice-language-manual').textContent = 'Voz guardada';
+        }
+    } catch (e) {
+        console.warn('Error cargando valores guardados:', e);
+    }
+    
+    // Cargar avatares y voces automáticamente en background (lazy loading)
+    loadHeyGenAssetsLazy();
+});
+
+// Función para actualizar el total de duración
+function updateDurationTotal() {
+    const minutes = parseInt(document.getElementById('desired_duration_min_manual').value) || 0;
+    const seconds = parseInt(document.getElementById('desired_duration_sec_manual').value) || 0;
+    
+    // Asegurar que los segundos sean múltiplos de 15
+    const adjustedSeconds = Math.round(seconds / 15) * 15;
+    if (adjustedSeconds !== seconds) {
+        document.getElementById('desired_duration_sec_manual').value = adjustedSeconds;
+    }
+    
+    const totalSeconds = (minutes * 60) + adjustedSeconds;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    
+    let displayText = '';
+    if (totalMinutes > 0) {
+        displayText = `${totalMinutes} min`;
+        if (remainingSeconds > 0) {
+            displayText += ` ${remainingSeconds} seg`;
+        }
+    } else {
+        displayText = `${remainingSeconds} seg`;
+    }
+    
+    document.getElementById('duration_total_manual').textContent = displayText;
+}
+
+// Inicializar al cargar
+document.addEventListener('DOMContentLoaded', function() {
+    updateDurationTotal();
+});
+
 document.getElementById('agentCreateFormManual').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const scriptContent = document.getElementById('script_content_manual').value;
-    const duration = document.getElementById('desired_duration_min_manual').value;
+    const durationMin = parseInt(document.getElementById('desired_duration_min_manual').value) || 0;
+    const durationSec = parseInt(document.getElementById('desired_duration_sec_manual').value) || 0;
+    const totalSeconds = (durationMin * 60) + durationSec;
+    const durationMinutesDecimal = totalSeconds / 60; // Convertir a minutos decimales (ej: 1.5 para 1 min 30 seg)
+    
     const videoType = document.getElementById('video_type_manual').value;
+    const videoFormat = document.getElementById('video_format_manual').value;
     const videoOrientation = document.getElementById('video_orientation_manual').value;
     const generatePreviews = document.getElementById('generate_previews_manual').checked;
     
@@ -398,21 +670,51 @@ document.getElementById('agentCreateFormManual').addEventListener('submit', func
     const defaultVoiceId = document.getElementById('default_voice_id_manual').value;
     const defaultVoiceName = document.getElementById('default_voice_name_manual').value;
     
+    // HeyGen defaults
+    const defaultHeyGenAvatarId = document.getElementById('default_heygen_avatar_id_manual').value;
+    const defaultHeyGenAvatarName = document.getElementById('default_heygen_avatar_name_manual').value;
+    const defaultHeyGenVoiceId = document.getElementById('default_heygen_voice_id_manual').value;
+    const defaultHeyGenVoiceName = document.getElementById('default_heygen_voice_name_manual').value;
+    
+    // Obtener preferencias de modelos (si están configuradas)
+    const modelPrefVeo = document.getElementById('model_pref_veo_manual').value;
+    const modelPrefSora = document.getElementById('model_pref_sora_manual').value;
+    const modelPrefHeyGen = document.getElementById('model_pref_heygen_manual').value;
+    
+    // Construir objeto de preferencias de modelos
+    const modelPreferences = {};
+    if (modelPrefVeo) modelPreferences.gemini_veo = modelPrefVeo;
+    if (modelPrefSora) modelPreferences.sora = modelPrefSora;
+    if (modelPrefHeyGen) modelPreferences.heygen = modelPrefHeyGen;
+    
     // Guardar en sessionStorage con todos los datos
     sessionStorage.setItem('agentContent', JSON.stringify({
         type: 'script',
         content: scriptContent,
-        duration: duration,
+        duration: durationMinutesDecimal, // Duración en minutos decimales (ej: 1.5 para 1 min 30 seg)
+        duration_seconds: totalSeconds, // Duración total en segundos
+        duration_min: durationMin, // Minutos enteros
+        duration_sec: durationSec, // Segundos
         video_type: videoType,
+        video_format: videoFormat,
         video_orientation: videoOrientation,
         generate_previews: generatePreviews,
         enable_audio: enableAudio,
         default_voice_id: defaultVoiceId,
-        default_voice_name: defaultVoiceName
+        default_voice_name: defaultVoiceName,
+        default_heygen_avatar_id: defaultHeyGenAvatarId,
+        default_heygen_avatar_name: defaultHeyGenAvatarName,
+        default_heygen_voice_id: defaultHeyGenVoiceId,
+        default_heygen_voice_name: defaultHeyGenVoiceName,
+        model_preferences: modelPreferences
     }));
     
     // Redirigir a configure
-    window.location.href = "{% url 'core:agent_configure' project.uuid %}";
+    {% if project %}
+        window.location.href = "{% url 'core:agent_configure' project.uuid %}";
+    {% else %}
+        window.location.href = "{% url 'core:agent_configure_standalone' %}";
+    {% endif %}
 });
 
 // ==================
@@ -422,60 +724,218 @@ document.getElementById('agentCreateFormManual').addEventListener('submit', func
 let voicesCache = null;
 
 async function openVoiceModalManual() {
-    // Cargar voces si no están en cache
-    if (!voicesCache) {
+    // Usar función genérica del modal de voces
+    openVoiceModal({
+        modalId: 'voice-modal-manual',
+        filterPrefix: 'manual',
+        apiUrl: '{% url "core:api_list_elevenlabs_voices" %}',
+        onSelect: function(voiceId, voiceName, voiceCategory) {
+            // Actualizar campos hidden
+            document.getElementById('default_voice_id_manual').value = voiceId;
+            document.getElementById('default_voice_name_manual').value = voiceName;
+            
+            // Actualizar UI
+            document.getElementById('selected-voice-name-manual').textContent = voiceName;
+            document.getElementById('selected-voice-category-manual').textContent = voiceCategory;
+            
+            console.log('Voz seleccionada:', voiceName, voiceId);
+        }
+    });
+}
+
+// Función obsoleta - eliminada, usar openVoiceModalManual() directamente
+
+// ==================== HEYGEN AVATAR SELECTOR ====================
+let heygenAvatarsCache = null;
+
+// Cargar cache desde sessionStorage al iniciar
+function loadAvatarsCacheFromSession() {
+    try {
+        const cached = sessionStorage.getItem('heygen_avatars_cache');
+        if (cached) {
+            heygenAvatarsCache = JSON.parse(cached);
+            console.log('Avatares cargados desde sessionStorage');
+        }
+    } catch (e) {
+        console.warn('Error cargando cache de avatares:', e);
+    }
+}
+
+// Guardar cache en sessionStorage
+function saveAvatarsCacheToSession(avatars) {
+    try {
+        sessionStorage.setItem('heygen_avatars_cache', JSON.stringify(avatars));
+        sessionStorage.setItem('heygen_avatars_cache_timestamp', Date.now().toString());
+    } catch (e) {
+        console.warn('Error guardando cache de avatares:', e);
+    }
+}
+
+// Cargar cache al iniciar
+loadAvatarsCacheFromSession();
+
+// Función para cargar avatares y voces automáticamente en background
+async function loadHeyGenAssetsLazy() {
+    // Cargar avatares si no están en cache
+    if (!heygenAvatarsCache) {
         try {
-            const response = await fetch('{% url "core:api_list_elevenlabs_voices" %}');
+            console.log('🔄 Cargando avatares de HeyGen en background...');
+            const response = await fetch('{% url "core:api_list_avatars" %}');
             const data = await response.json();
-            voicesCache = data.voices || [];
+            heygenAvatarsCache = data.avatars || [];
+            
+            // Guardar en sessionStorage
+            saveAvatarsCacheToSession(heygenAvatarsCache);
+            console.log(`✅ ${heygenAvatarsCache.length} avatares cargados y cacheados`);
         } catch (error) {
-            console.error('Error cargando voces:', error);
-            alert('Error al cargar voces de ElevenLabs');
+            console.warn('⚠️ Error cargando avatares en background:', error);
+            // No mostrar error al usuario, solo log
+        }
+    } else {
+        console.log(`✅ ${heygenAvatarsCache.length} avatares ya en cache`);
+    }
+    
+    // Cargar voces si no están en cache
+    if (!heygenVoicesCache) {
+        try {
+            console.log('🔄 Cargando voces de HeyGen en background...');
+            const response = await fetch('{% url "core:api_list_voices" %}');
+            const data = await response.json();
+            heygenVoicesCache = data.voices || [];
+            
+            // Guardar en sessionStorage
+            saveVoicesCacheToSession(heygenVoicesCache);
+            console.log(`✅ ${heygenVoicesCache.length} voces cargadas y cacheadas`);
+        } catch (error) {
+            console.warn('⚠️ Error cargando voces en background:', error);
+            // No mostrar error al usuario, solo log
+        }
+    } else {
+        console.log(`✅ ${heygenVoicesCache.length} voces ya en cache`);
+    }
+}
+
+async function openAvatarModalManual() {
+    // Si los avatares ya están cargados, mostrar modal directamente
+    if (heygenAvatarsCache && heygenAvatarsCache.length > 0) {
+        createAvatarModal(false); // false = no mostrar loader
+        return;
+    }
+    
+    // Mostrar loader en el botón
+    const btn = document.getElementById('select-avatar-btn-manual');
+    const btnText = document.getElementById('avatar-btn-text');
+    const btnLoader = document.getElementById('avatar-btn-loader');
+    if (btn && btnText && btnLoader) {
+        btn.disabled = true;
+        btnText.classList.add('hidden');
+        btnLoader.classList.remove('hidden');
+    }
+    
+    // Mostrar modal con loader primero
+    createAvatarModal(true); // true = mostrar loader
+    
+    // Cargar avatares si no están en cache
+    if (!heygenAvatarsCache) {
+        try {
+            const response = await fetch('{% url "core:api_list_avatars" %}');
+            const data = await response.json();
+            heygenAvatarsCache = data.avatars || [];
+            
+            // Guardar en sessionStorage
+            saveAvatarsCacheToSession(heygenAvatarsCache);
+        } catch (error) {
+            console.error('Error cargando avatares:', error);
+            // Ocultar loader del botón
+            if (btn && btnText && btnLoader) {
+                btn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
+            }
+            // Mostrar error en el modal
+            const grid = document.getElementById('avatars-grid-manual');
+            if (grid) {
+                grid.innerHTML = '<div class="col-span-3 text-center py-12"><p class="text-red-500">Error al cargar avatares. Por favor, intenta de nuevo.</p></div>';
+            }
             return;
         }
     }
     
-    // Crear y mostrar modal
-    createVoiceModal();
+    // Ocultar loader del botón
+    if (btn && btnText && btnLoader) {
+        btn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+    }
+    
+    // Actualizar modal con los avatares cargados
+    updateAvatarModalContent();
 }
 
-function createVoiceModal() {
+function createAvatarModal(showLoader = false) {
     // Eliminar modal anterior si existe
-    const existingModal = document.getElementById('voice-modal-manual');
+    const existingModal = document.getElementById('avatar-modal-manual');
     if (existingModal) {
         existingModal.remove();
     }
     
     // Crear modal
     const modal = document.createElement('div');
-    modal.id = 'voice-modal-manual';
+    modal.id = 'avatar-modal-manual';
     modal.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4';
+    
+    const avatarsCount = heygenAvatarsCache ? heygenAvatarsCache.length : 0;
+    const gridContent = showLoader ? renderAvatarLoader() : renderAvatarCards();
     
     modal.innerHTML = `
         <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
             <!-- Header -->
-            <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex justify-between items-center">
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 flex justify-between items-center">
                 <div>
-                    <h2 class="text-2xl font-bold text-white">Catálogo de Voces ElevenLabs</h2>
-                    <p class="text-green-100 text-sm mt-1">${voicesCache.length} voces disponibles</p>
+                    <h2 class="text-2xl font-bold text-white">Catálogo de Avatares HeyGen</h2>
+                    <p class="text-blue-100 text-sm mt-1">
+                        ${showLoader ? 'Cargando avatares...' : `${avatarsCount} avatares disponibles`}
+                    </p>
                 </div>
-                <button type="button" onclick="closeVoiceModalManual()" 
-                        class="text-white hover:text-green-100 text-3xl leading-none">
+                <button type="button" onclick="closeAvatarModalManual()" 
+                        class="text-white hover:text-blue-100 text-3xl leading-none">
                     &times;
                 </button>
             </div>
             
-            <!-- Buscador -->
-            <div class="px-6 py-4 bg-gray-50 border-b">
-                <input type="text" id="voice-search-manual" placeholder="🔍 Buscar por nombre, acento, género..." 
-                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                       oninput="filterVoicesManual(this.value)">
+            <!-- Buscador y Filtros -->
+            <div class="px-6 py-4 bg-gray-50 border-b" ${showLoader ? 'style="display: none;"' : ''}>
+                <input type="text" id="avatar-search-manual" placeholder="🔍 Buscar por nombre, género..." 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-3"
+                       oninput="applyAvatarFiltersManual()">
+                
+                <!-- Filtros -->
+                <div class="flex flex-wrap gap-2">
+                    <span class="text-sm font-medium text-gray-700 self-center">Filtros:</span>
+                    
+                    <!-- Género -->
+                    <button type="button" onclick="toggleAvatarFilterManual('gender', 'all')" 
+                            class="avatar-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-blue-600 text-white" 
+                            data-filter="gender" data-value="all">
+                        Todos
+                    </button>
+                    <button type="button" onclick="toggleAvatarFilterManual('gender', 'male')" 
+                            class="avatar-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="gender" data-value="male">
+                        👨 Masculino
+                    </button>
+                    <button type="button" onclick="toggleAvatarFilterManual('gender', 'female')" 
+                            class="avatar-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="gender" data-value="female">
+                        👩 Femenino
+                    </button>
+                </div>
             </div>
             
-            <!-- Lista de Voces -->
+            <!-- Lista de Avatares -->
             <div class="overflow-y-auto p-6" style="max-height: calc(90vh - 200px);">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="voices-grid-manual">
-                    ${renderVoiceCards()}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="avatars-grid-manual">
+                    ${gridContent}
                 </div>
             </div>
         </div>
@@ -484,42 +944,408 @@ function createVoiceModal() {
     document.body.appendChild(modal);
 }
 
-function renderVoiceCards() {
-    if (!voicesCache || voicesCache.length === 0) {
+function renderAvatarLoader() {
+    return `
+        <div class="col-span-3 flex flex-col items-center justify-center py-20">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p class="text-gray-600 font-medium">Cargando avatares...</p>
+            <p class="text-sm text-gray-500 mt-2">Por favor espera</p>
+        </div>
+    `;
+}
+
+function updateAvatarModalContent() {
+    const grid = document.getElementById('avatars-grid-manual');
+    const headerCount = document.querySelector('#avatar-modal-manual .text-blue-100');
+    const searchContainer = document.querySelector('#avatar-modal-manual .bg-gray-50');
+    
+    if (grid) {
+        grid.innerHTML = renderAvatarCards();
+    }
+    
+    if (headerCount && heygenAvatarsCache) {
+        headerCount.textContent = `${heygenAvatarsCache.length} avatares disponibles`;
+    }
+    
+    if (searchContainer) {
+        searchContainer.style.display = 'block';
+    }
+}
+
+function renderAvatarCards() {
+    if (!heygenAvatarsCache || heygenAvatarsCache.length === 0) {
+        return '<div class="col-span-3 text-center py-12"><p class="text-gray-500">No hay avatares disponibles</p></div>';
+    }
+    
+    return heygenAvatarsCache.map(avatar => {
+        const gender = avatar.gender || 'unknown';
+        const genderEmoji = gender === 'female' ? '👩' : gender === 'male' ? '👨' : '👤';
+        const previewUrl = avatar.preview_image_url || avatar.preview_video_url || '';
+        
+        return `
+            <div class="avatar-card border-2 border-gray-200 rounded-xl p-4 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
+                 data-avatar-id="${avatar.avatar_id}"
+                 data-avatar-name="${avatar.avatar_name || avatar.avatar_id}"
+                 data-avatar-gender="${gender}"
+                 onclick="selectAvatarManual('${avatar.avatar_id}', '${avatar.avatar_name || avatar.avatar_id}', '${gender}')">
+                
+                ${previewUrl ? `
+                    <div class="mb-3 rounded-lg overflow-hidden bg-gray-100" style="aspect-ratio: 16/9;">
+                        ${previewUrl.includes('.mp4') || previewUrl.includes('.webm') ? `
+                            <video src="${previewUrl}" class="w-full h-full object-cover" muted loop playsinline></video>
+                        ` : `
+                            <img src="${previewUrl}" alt="${avatar.avatar_name || avatar.avatar_id}" class="w-full h-full object-cover">
+                        `}
+                    </div>
+                ` : `
+                    <div class="mb-3 rounded-lg bg-gray-100 flex items-center justify-center" style="aspect-ratio: 16/9; min-height: 120px;">
+                        <span class="text-4xl">${genderEmoji}</span>
+                    </div>
+                `}
+                
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <h3 class="font-bold text-gray-900 text-base">${avatar.avatar_name || avatar.avatar_id}</h3>
+                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">${gender === 'female' ? 'Mujer' : gender === 'male' ? 'Hombre' : 'Indefinido'}</p>
+                    </div>
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-lg">${genderEmoji}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function closeAvatarModalManual() {
+    const modal = document.getElementById('avatar-modal-manual');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function selectAvatarManual(avatarId, avatarName, avatarGender) {
+    // Actualizar campos hidden
+    document.getElementById('default_heygen_avatar_id_manual').value = avatarId;
+    document.getElementById('default_heygen_avatar_name_manual').value = avatarName;
+    
+    // Actualizar UI
+    document.getElementById('selected-avatar-name-manual').textContent = avatarName;
+    document.getElementById('selected-avatar-gender-manual').textContent = avatarGender === 'female' ? 'Mujer' : avatarGender === 'male' ? 'Hombre' : 'Indefinido';
+    
+    // Guardar en sessionStorage
+    try {
+        sessionStorage.setItem('default_heygen_avatar_id', avatarId);
+        sessionStorage.setItem('default_heygen_avatar_name', avatarName);
+    } catch (e) {
+        console.warn('Error guardando avatar en sessionStorage:', e);
+    }
+    
+    // Cerrar modal
+    closeAvatarModalManual();
+    
+    console.log('Avatar seleccionado:', avatarName, avatarId);
+}
+
+// Estado de filtros activos para avatares
+let avatarFiltersManual = {
+    gender: 'all',
+    search: ''
+};
+
+function toggleAvatarFilterManual(filterType, value) {
+    avatarFiltersManual[filterType] = value;
+    
+    // Actualizar UI de botones
+    document.querySelectorAll(`.avatar-filter-btn[data-filter="${filterType}"]`).forEach(btn => {
+        if (btn.dataset.value === value) {
+            btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+            btn.classList.add('bg-blue-600', 'text-white');
+        } else {
+            btn.classList.remove('bg-blue-600', 'text-white');
+            btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+        }
+    });
+    
+    applyAvatarFiltersManual();
+}
+
+function applyAvatarFiltersManual() {
+    const searchTerm = document.getElementById('avatar-search-manual')?.value || '';
+    avatarFiltersManual.search = searchTerm.toLowerCase();
+    
+    const cards = document.querySelectorAll('#avatars-grid-manual .avatar-card');
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        const avatarName = card.dataset.avatarName.toLowerCase();
+        const avatarGender = card.dataset.avatarGender || 'unknown';
+        const text = card.textContent.toLowerCase();
+        
+        const matchesSearch = !avatarFiltersManual.search || 
+            avatarName.includes(avatarFiltersManual.search) || 
+            text.includes(avatarFiltersManual.search);
+        
+        const matchesGender = avatarFiltersManual.gender === 'all' || 
+            avatarGender === avatarFiltersManual.gender.toLowerCase();
+        
+        if (matchesSearch && matchesGender) {
+            card.style.display = 'block';
+            visibleCount++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Actualizar contador
+    const countElement = document.querySelector('#avatar-modal-manual .text-blue-100');
+    if (countElement) {
+        countElement.textContent = `${visibleCount} avatares disponibles`;
+    }
+}
+
+function filterAvatarsManual(searchTerm) {
+    applyAvatarFiltersManual();
+}
+
+// ==================== HEYGEN VOICE SELECTOR ====================
+let heygenVoicesCache = null;
+
+// Cargar cache desde sessionStorage al iniciar
+function loadVoicesCacheFromSession() {
+    try {
+        const cached = sessionStorage.getItem('heygen_voices_cache');
+        if (cached) {
+            heygenVoicesCache = JSON.parse(cached);
+            console.log('Voces cargadas desde sessionStorage');
+        }
+    } catch (e) {
+        console.warn('Error cargando cache de voces:', e);
+    }
+}
+
+// Guardar cache en sessionStorage
+function saveVoicesCacheToSession(voices) {
+    try {
+        sessionStorage.setItem('heygen_voices_cache', JSON.stringify(voices));
+        sessionStorage.setItem('heygen_voices_cache_timestamp', Date.now().toString());
+    } catch (e) {
+        console.warn('Error guardando cache de voces:', e);
+    }
+}
+
+// Cargar cache al iniciar
+loadVoicesCacheFromSession();
+
+async function openHeyGenVoiceModalManual() {
+    // Si las voces ya están cargadas, mostrar modal directamente
+    if (heygenVoicesCache && heygenVoicesCache.length > 0) {
+        createHeyGenVoiceModal(false); // false = no mostrar loader
+        return;
+    }
+    
+    // Mostrar loader en el botón
+    const btn = document.getElementById('select-voice-btn-manual');
+    const btnText = document.getElementById('voice-btn-text');
+    const btnLoader = document.getElementById('voice-btn-loader');
+    if (btn && btnText && btnLoader) {
+        btn.disabled = true;
+        btnText.classList.add('hidden');
+        btnLoader.classList.remove('hidden');
+    }
+    
+    // Mostrar modal con loader primero
+    createHeyGenVoiceModal(true); // true = mostrar loader
+    
+    // Cargar voces si no están en cache
+    if (!heygenVoicesCache) {
+        try {
+            const response = await fetch('{% url "core:api_list_voices" %}');
+            const data = await response.json();
+            heygenVoicesCache = data.voices || [];
+            
+            // Guardar en sessionStorage
+            saveVoicesCacheToSession(heygenVoicesCache);
+        } catch (error) {
+            console.error('Error cargando voces:', error);
+            // Ocultar loader del botón
+            if (btn && btnText && btnLoader) {
+                btn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
+            }
+            // Mostrar error en el modal
+            const grid = document.getElementById('heygen-voices-grid-manual');
+            if (grid) {
+                grid.innerHTML = '<div class="col-span-3 text-center py-12"><p class="text-red-500">Error al cargar voces. Por favor, intenta de nuevo.</p></div>';
+            }
+            return;
+        }
+    }
+    
+    // Ocultar loader del botón
+    if (btn && btnText && btnLoader) {
+        btn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+    }
+    
+    // Actualizar modal con las voces cargadas
+    updateHeyGenVoiceModalContent();
+}
+
+function createHeyGenVoiceModal(showLoader = false) {
+    // Eliminar modal anterior si existe
+    const existingModal = document.getElementById('heygen-voice-modal-manual');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Crear modal
+    const modal = document.createElement('div');
+    modal.id = 'heygen-voice-modal-manual';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4';
+    
+    const voicesCount = heygenVoicesCache ? heygenVoicesCache.length : 0;
+    const gridContent = showLoader ? renderVoiceLoader() : renderHeyGenVoiceCards();
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-5 flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Catálogo de Voces HeyGen</h2>
+                    <p class="text-purple-100 text-sm mt-1">
+                        ${showLoader ? 'Cargando voces...' : `${voicesCount} voces disponibles`}
+                    </p>
+                </div>
+                <button type="button" onclick="closeHeyGenVoiceModalManual()" 
+                        class="text-white hover:text-purple-100 text-3xl leading-none">
+                    &times;
+                </button>
+            </div>
+            
+            <!-- Buscador y Filtros -->
+            <div class="px-6 py-4 bg-gray-50 border-b" ${showLoader ? 'style="display: none;"' : ''}>
+                <input type="text" id="heygen-voice-search-manual" placeholder="🔍 Buscar por nombre, idioma, género..." 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mb-3"
+                       oninput="applyHeyGenVoiceFiltersManual()">
+                
+                <!-- Filtros -->
+                <div class="flex flex-wrap gap-2">
+                    <span class="text-sm font-medium text-gray-700 self-center">Filtros:</span>
+                    
+                    <!-- Género -->
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('gender', 'all')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-purple-600 text-white" 
+                            data-filter="gender" data-value="all">
+                        Todos
+                    </button>
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('gender', 'male')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="gender" data-value="male">
+                        👨 Masculino
+                    </button>
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('gender', 'female')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="gender" data-value="female">
+                        👩 Femenino
+                    </button>
+                    
+                    <!-- Idioma -->
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('language', 'all')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-purple-600 text-white" 
+                            data-filter="language" data-value="all">
+                        Todos
+                    </button>
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('language', 'es')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="language" data-value="es">
+                        🇪🇸 Español
+                    </button>
+                    <button type="button" onclick="toggleHeyGenVoiceFilterManual('language', 'en')" 
+                            class="heygen-voice-filter-btn px-3 py-1 rounded-full text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300" 
+                            data-filter="language" data-value="en">
+                        🇬🇧 Inglés
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Lista de Voces -->
+            <div class="overflow-y-auto p-6" style="max-height: calc(90vh - 200px);">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="heygen-voices-grid-manual">
+                    ${gridContent}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function renderVoiceLoader() {
+    return `
+        <div class="col-span-3 flex flex-col items-center justify-center py-20">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+            <p class="text-gray-600 font-medium">Cargando voces...</p>
+            <p class="text-sm text-gray-500 mt-2">Por favor espera</p>
+        </div>
+    `;
+}
+
+function updateHeyGenVoiceModalContent() {
+    const grid = document.getElementById('heygen-voices-grid-manual');
+    const headerCount = document.querySelector('#heygen-voice-modal-manual .text-purple-100');
+    const searchContainer = document.querySelector('#heygen-voice-modal-manual .bg-gray-50');
+    
+    if (grid) {
+        grid.innerHTML = renderHeyGenVoiceCards();
+    }
+    
+    if (headerCount && heygenVoicesCache) {
+        headerCount.textContent = `${heygenVoicesCache.length} voces disponibles`;
+    }
+    
+    if (searchContainer) {
+        searchContainer.style.display = 'block';
+    }
+}
+
+function renderHeyGenVoiceCards() {
+    if (!heygenVoicesCache || heygenVoicesCache.length === 0) {
         return '<div class="col-span-3 text-center py-12"><p class="text-gray-500">No hay voces disponibles</p></div>';
     }
     
-    return voicesCache.map(voice => {
-        const labels = voice.labels || {};
-        const labelsHtml = Object.values(labels).map(label => 
-            `<span class="inline-block bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">${label}</span>`
-        ).join('');
+    return heygenVoicesCache.map(voice => {
+        // Arreglar nombres undefined - usar name o voice_name o un fallback
+        const voiceName = voice.name || voice.voice_name || `Voz ${voice.voice_id?.substring(0, 8) || 'Desconocida'}`;
+        const language = voice.language || 'Desconocido';
+        const gender = voice.gender || 'unknown';
+        const genderEmoji = gender === 'female' ? '👩' : gender === 'male' ? '👨' : '👤';
+        const previewAudio = voice.preview_audio || voice.preview_url || null;
         
         return `
-            <div class="voice-card border-2 border-gray-200 rounded-xl p-5 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
+            <div class="voice-card border-2 border-gray-200 rounded-xl p-5 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
                  data-voice-id="${voice.voice_id}"
-                 data-voice-name="${voice.name}"
-                 data-voice-category="${voice.category || 'premade'}"
-                 onclick="selectVoiceManual('${voice.voice_id}', '${voice.name}', '${voice.category || 'premade'}')">
+                 data-voice-name="${voiceName}"
+                 data-voice-language="${language}"
+                 data-voice-gender="${gender}"
+                 onclick="selectHeyGenVoiceManual('${voice.voice_id}', '${voiceName}', '${language}')">
                 
                 <div class="flex items-start justify-between mb-3">
                     <div class="flex-1">
-                        <h3 class="font-bold text-gray-900 text-lg">${voice.name}</h3>
-                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">${voice.category || 'premade'}</p>
+                        <h3 class="font-bold text-gray-900 text-lg">${voiceName}</h3>
+                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">${language} • ${gender === 'female' ? 'Mujer' : gender === 'male' ? 'Hombre' : 'Indefinido'}</p>
                     </div>
-                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span class="text-xl">🎙️</span>
+                    <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">${genderEmoji}</span>
                     </div>
                 </div>
                 
-                ${voice.description ? `<p class="text-sm text-gray-700 mb-3">${voice.description}</p>` : ''}
-                
-                ${labelsHtml ? `<div class="flex flex-wrap gap-1 mb-3">${labelsHtml}</div>` : ''}
-                
-                ${voice.preview_url ? `
+                ${previewAudio ? `
                     <div class="mt-3" onclick="event.stopPropagation();">
                         <audio controls preload="none" class="w-full h-8">
-                            <source src="${voice.preview_url}" type="audio/mpeg">
+                            <source src="${previewAudio}" type="audio/mpeg">
                         </audio>
                     </div>
                 ` : ''}
@@ -528,43 +1354,113 @@ function renderVoiceCards() {
     }).join('');
 }
 
-function closeVoiceModalManual() {
-    const modal = document.getElementById('voice-modal-manual');
+function closeHeyGenVoiceModalManual() {
+    const modal = document.getElementById('heygen-voice-modal-manual');
     if (modal) {
         modal.remove();
     }
 }
 
-function selectVoiceManual(voiceId, voiceName, voiceCategory) {
+function selectHeyGenVoiceManual(voiceId, voiceName, voiceLanguage) {
     // Actualizar campos hidden
-    document.getElementById('default_voice_id_manual').value = voiceId;
-    document.getElementById('default_voice_name_manual').value = voiceName;
+    document.getElementById('default_heygen_voice_id_manual').value = voiceId;
+    document.getElementById('default_heygen_voice_name_manual').value = voiceName;
     
     // Actualizar UI
-    document.getElementById('selected-voice-name-manual').textContent = voiceName;
-    document.getElementById('selected-voice-category-manual').textContent = voiceCategory;
+    document.getElementById('selected-heygen-voice-name-manual').textContent = voiceName;
+    document.getElementById('selected-heygen-voice-language-manual').textContent = voiceLanguage;
+    
+    // Guardar en sessionStorage
+    try {
+        sessionStorage.setItem('default_heygen_voice_id', voiceId);
+        sessionStorage.setItem('default_heygen_voice_name', voiceName);
+    } catch (e) {
+        console.warn('Error guardando voz en sessionStorage:', e);
+    }
     
     // Cerrar modal
-    closeVoiceModalManual();
+    closeHeyGenVoiceModalManual();
     
-    console.log('Voz seleccionada:', voiceName, voiceId);
+    console.log('Voz HeyGen seleccionada:', voiceName, voiceId);
 }
 
-function filterVoicesManual(searchTerm) {
-    const cards = document.querySelectorAll('#voices-grid-manual .voice-card');
-    const term = searchTerm.toLowerCase();
+// Estado de filtros activos para voces HeyGen
+let heygenVoiceFiltersManual = {
+    gender: 'all',
+    language: 'all',
+    search: ''
+};
+
+function toggleHeyGenVoiceFilterManual(filterType, value) {
+    heygenVoiceFiltersManual[filterType] = value;
+    
+    // Actualizar UI de botones
+    document.querySelectorAll(`.heygen-voice-filter-btn[data-filter="${filterType}"]`).forEach(btn => {
+        if (btn.dataset.value === value) {
+            btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+            btn.classList.add('bg-purple-600', 'text-white');
+        } else {
+            btn.classList.remove('bg-purple-600', 'text-white');
+            btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+        }
+    });
+    
+    applyHeyGenVoiceFiltersManual();
+}
+
+function applyHeyGenVoiceFiltersManual() {
+    const searchTerm = document.getElementById('heygen-voice-search-manual')?.value || '';
+    heygenVoiceFiltersManual.search = searchTerm.toLowerCase();
+    
+    const cards = document.querySelectorAll('#heygen-voices-grid-manual .voice-card');
+    let visibleCount = 0;
     
     cards.forEach(card => {
         const voiceName = card.dataset.voiceName.toLowerCase();
-        const voiceCategory = card.dataset.voiceCategory.toLowerCase();
+        const voiceLanguage = card.dataset.voiceLanguage || 'unknown';
+        const voiceGender = card.dataset.voiceGender || 'unknown';
         const text = card.textContent.toLowerCase();
         
-        if (voiceName.includes(term) || voiceCategory.includes(term) || text.includes(term)) {
+        const matchesSearch = !heygenVoiceFiltersManual.search || 
+            voiceName.includes(heygenVoiceFiltersManual.search) || 
+            text.includes(heygenVoiceFiltersManual.search);
+        
+        const matchesGender = heygenVoiceFiltersManual.gender === 'all' || 
+            voiceGender === heygenVoiceFiltersManual.gender.toLowerCase();
+        
+        const matchesLanguage = heygenVoiceFiltersManual.language === 'all' || 
+            voiceLanguage.toLowerCase().includes(heygenVoiceFiltersManual.language.toLowerCase());
+        
+        if (matchesSearch && matchesGender && matchesLanguage) {
             card.style.display = 'block';
+            visibleCount++;
         } else {
             card.style.display = 'none';
         }
     });
+    
+    // Actualizar contador
+    const countElement = document.querySelector('#heygen-voice-modal-manual .text-purple-100');
+    if (countElement) {
+        countElement.textContent = `${visibleCount} voces disponibles`;
+    }
+}
+
+function filterHeyGenVoicesManual(searchTerm) {
+    applyHeyGenVoiceFiltersManual();
+}
+
+function toggleAdvancedPreferences() {
+    const content = document.getElementById('advanced-preferences-content');
+    const arrow = document.getElementById('advanced-preferences-arrow');
+    
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        arrow.classList.add('rotate-180');
+    } else {
+        content.classList.add('hidden');
+        arrow.classList.remove('rotate-180');
+    }
 }
 
 // ==================
