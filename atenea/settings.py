@@ -482,17 +482,19 @@ channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:
 
 # Parsear URL de Redis para channels-redis
 # channels-redis acepta URLs directamente o tuplas (host, port)
+# Para especificar database, usamos formato URL completo o dict con address
 from urllib.parse import urlparse
 parsed_url = urlparse(channel_redis_url)
 redis_host = parsed_url.hostname or _redis_host
 redis_port = parsed_url.port or 6379
-redis_db = parsed_url.path.lstrip('/') if parsed_url.path else '1'
+redis_db = int(parsed_url.path.lstrip('/')) if parsed_url.path and parsed_url.path != '/' else 1
 
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [(redis_host, redis_port)],
+            # Usar formato dict para incluir database number
+            "hosts": [{"address": (redis_host, redis_port), "db": redis_db}],
         },
     },
 }
