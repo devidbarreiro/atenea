@@ -1,6 +1,5 @@
 {% load static %}
 
-
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('libraryPanel', () => ({
@@ -307,35 +306,6 @@ document.addEventListener('alpine:init', () => {
             // La navegación devuelve 'uuid', no 'id'
             await this.openItem({ type: nav.type, id: nav.uuid });
         },
-
-        getNavigationPreview(navItem) {
-            if (!navItem) return null;
-            
-            // Si el objeto de navegación ya trae la URL (ideal)
-            if (navItem.thumbnail_url || navItem.preview_url) {
-                return navItem.thumbnail_url || navItem.preview_url;
-            }
-            
-            // Fallback: Búsqueda local por ID/UUID
-            const itemId = navItem.uuid || navItem.id;
-            if (itemId) {
-                // La función está definida en el mismo scope que this.items
-                const item = this.items.find(i => i.uuid === itemId || i.id == itemId); 
-                return item ? (item.thumbnail_url || item.signed_url) : null;
-            }
-            return null;
-        },
-        
-        // === CORRECCIÓN DE ERROR DE REFERENCIA: getServiceDisplayName ===
-        getServiceDisplayName(serviceKey) {
-            // Definición de un mapa de nombres para evitar el error 'is not defined'
-            const displayNames = {
-                'higgsfield-ai': 'Higgsfield AI',
-                'bytedance': 'ByteDance',
-                // Añade más aquí si es necesario
-            };
-            return displayNames[serviceKey] || serviceKey;
-        },
         
         formatDate(dateStr) {
             if (!dateStr) return '';
@@ -427,48 +397,6 @@ document.addEventListener('alpine:init', () => {
                 console.error('Error moving item:', error);
                 alert('Error al mover los items');
             }
-        }
-    }));
-
-    // =================== ZOOM =======================
-    Alpine.data('imageZoom', () => ({
-        pz: null,
-        
-        // Esta función la llamaremos desde el HTML cuando la imagen cargue
-        initZoom() {
-            if (this.pz) { this.pz.destroy(); } // Limpieza previa si existe
-            
-            const imageEl = this.$refs.zoomImage;
-            const containerEl = this.$refs.zoomContainer;
-    
-            if (!imageEl || !containerEl) return;
-    
-            // Inicializar Panzoom
-            this.pz = Panzoom(imageEl, {
-                maxScale: 6,
-                minScale: 0.75,
-                contain: 'outside', // Mantiene la imagen dentro del área lógica
-                startScale: 1,
-                cursor: 'default'
-            });
-    
-            // Habilitar el zoom con la rueda del ratón sobre el contenedor
-            // (Usamos el contenedor padre para capturar la rueda más fácilmente)
-            containerEl.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
-        },
-    
-        handleWheel(e) {
-            if (!this.pz) return;
-            this.pz.zoomWithWheel(e);
-        },
-    
-        zoomIn() { this.pz && this.pz.zoomIn(); },
-        zoomOut() { this.pz && this.pz.zoomOut(); },
-        reset() { this.pz && this.pz.reset(); },
-        
-        // Limpieza automática cuando Alpine destruye el componente (al cerrar el modal)
-        destroy() {
-            if (this.pz) this.pz.destroy();
         }
     }));
 });
