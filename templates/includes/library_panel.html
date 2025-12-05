@@ -1,5 +1,5 @@
 {% load static %}
-<script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('libraryPanel', () => ({
@@ -731,50 +731,7 @@ document.addEventListener('alpine:init', () => {
     <template x-if="selectedItem && !loadingDetail">
         <div class="h-full flex">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden">
-
-                <!-- Carrusel items con preview -->
-                <div x-show="navigation && (navigation.prev || navigation.next)"
-                     class="absolute bottom-8 inset-x-0 h-32 flex justify-center items-end pb-4 pointer-events-none z-30 flex">
-                    
-                    <div class="absolute inset-0 bg-gradient-to-t from-gray-100/90 via-gray-100/50 to-transparent pointer-events-none">
-
-                    </div>
-                
-                    <div class="relative w-full max-w-4xl mx-auto h-24 flex items-center justify-center gap-4 px-8 z-40 pointer-events-auto">
-                
-                        <template x-if="navigation.prev">
-                            <button @click="navigateTo('prev')" class="w-24 h-24 rounded-lg overflow-hidden shadow-lg border-2 transition-all opacity-90"
-                                    :class="{'border-gray-300 hover:border-gray-400': true}">
-                                <img :src="getNavigationPreview(navigation.prev)"
-                                        alt="Item Anterior"
-                                        class="w-full h-full object-cover">
-                            </button>
-                        </template>
-                        <template x-if="!navigation.prev">
-                            <div class="w-20 h-20"></div>
-                        </template>
-                        
-                        <button class="w-32 h-32 rounded-lg overflow-hidden shadow-xl border-4 border-blue-500 transition-all scale-105 pointer-events-none">
-                            <img :src="selectedItem.thumbnail_url || selectedItem.signed_url"
-                                    alt="Item Actual"
-                                    class="w-full h-full object-cover">
-                        </button>
-                    
-                        <template x-if="navigation.next">
-                            <button @click="navigateTo('next')" class="w-24 h-24 rounded-lg overflow-hidden shadow-lg border-2 transition-all opacity-90"
-                                    :class="{'border-gray-300 hover:border-gray-400': true}">
-                                <img :src="getNavigationPreview(navigation.next)"
-                                        alt="Item Siguiente"
-                                        class="w-full h-full object-cover">
-                            </button>
-                        </template>
-                        <template x-if="!navigation.next">
-                            <div class="w-20 h-20"></div>
-                        </template>
-                    </div>
-                </div>
-
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
                         class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
@@ -807,24 +764,10 @@ document.addEventListener('alpine:init', () => {
                        class="max-w-full max-h-full rounded-lg shadow-lg"></video>
                 
                 <!-- Image -->
-                <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
-                    <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
-                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
-                         x-data="imageZoom" 
-                         x-key="selectedItem.id"> 
-                        
-                        <div x-ref="zoomContainer" 
-                             class="w-full h-full max-w-[800px] max-h-full relative flex items-center justify-center">
-                            
-                            <img x-ref="zoomImage"
-                                 :src="selectedItem.signed_url" 
-                                 @load="initZoom()" 
-                                 class="w-auto h-auto cursor-default"
-                                 alt="Visualización detallada">
-                        </div>
-                    </div>
-                </div>
-
+                <img x-show="selectedItem.type === 'image' && selectedItem.signed_url"
+                     :src="selectedItem.signed_url" 
+                     class="max-w-full max-h-full rounded-lg shadow-lg object-contain">
+                
                 <!-- Audio -->
                 <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">
                     <div class="bg-white rounded-lg p-8 shadow-lg text-center">
