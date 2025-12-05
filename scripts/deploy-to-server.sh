@@ -74,13 +74,14 @@ else
     }
 fi
 
-echo "📋 Copiando docker-compose.yml"
-cp html/docker/$COMPOSE_FILE docker-compose.yml || {
+echo "📋 Copiando docker-compose.yml a html/"
+cp html/docker/$COMPOSE_FILE html/docker-compose.yml || {
     echo "Error: No se encontró docker/$COMPOSE_FILE en el repositorio"
     exit 1
 }
 
-echo "🔨 Construyendo y reiniciando contenedores"
+echo "🔨 Construyendo y reiniciando contenedores (desde html/)"
+cd html
 docker compose down || true
 docker compose build --no-cache
 docker compose up -d
@@ -93,6 +94,7 @@ docker compose run --rm migrate || echo "⚠️  Advertencia: Error en migracion
 
 echo "📦 Recolectando archivos estáticos"
 docker compose run --rm collectstatic || echo "⚠️  Advertencia: Error en collectstatic"
+cd ..
 
 echo "✅ Despliegue completado!"
 echo "🌐 URL: https://$([ "$ENV" == "prod" ] && echo "atenea.nxhumans.com" || echo "$ENV.atenea.nxhumans.com")"

@@ -12,10 +12,143 @@ document.addEventListener('alpine:init', () => {
         loading: false,
         submitting: false,
         prompt: '',
-        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        projectId: {% if project %}'{{ project.uuid }}'{% else %}null{% endif %},
+        
+        // Template selector state
+        selectedTemplate: null,
+        defaultTemplateId: '{{ default_template_id|default_if_none:""|escapejs }}',
+        templateModalOpen: false,
+        templateList: [],
+        templateLoading: false,
+        templateTab: 'public',
+        templateSearch: '',
         
         init() {
             this.loadModels(this.activeTab);
+            // Cargar template por defecto si existe
+            if (this.defaultTemplateId && this.defaultTemplateId.trim() !== '') {
+                this.loadDefaultTemplate();
+            }
+        },
+        
+        async loadDefaultTemplate() {
+            if (!this.defaultTemplateId || this.defaultTemplateId.trim() === '') return;
+            try {
+                const response = await fetch('/api/prompt-templates/' + this.defaultTemplateId + '/');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.selectedTemplate = data;
+                }
+            } catch (error) {
+                console.error('Error cargando template por defecto:', error);
+            }
+        },
+        
+        // Template selector methods
+        async loadTemplates() {
+            this.templateLoading = true;
+            try {
+                const type = this.activeTab === 'audio' ? 'video' : this.activeTab;
+                const params = new URLSearchParams({ type: type, tab: this.templateTab });
+                if (this.templateSearch) params.append('search', this.templateSearch);
+                
+                // Verificar caché primero
+                const cacheKey = `templates_${type}_${this.templateTab}_${this.templateSearch || ''}`;
+                const cached = this.getCachedTemplates(cacheKey);
+                if (cached) {
+                    this.templateList = cached;
+                    this.templateLoading = false;
+                    // Cargar en background para actualizar caché
+                    this.fetchAndCacheTemplates(params, cacheKey);
+                    return;
+                }
+                
+                await this.fetchAndCacheTemplates(params, cacheKey);
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                this.templateList = [];
+            } finally {
+                this.templateLoading = false;
+            }
+        },
+        
+        async fetchAndCacheTemplates(params, cacheKey) {
+            try {
+                const response = await fetch('/api/prompt-templates/?' + params);
+                if (response.ok) {
+                    const data = await response.json();
+                    const templates = data.templates || [];
+                    this.templateList = templates;
+                    // Guardar en caché (válido por 1 hora)
+                    this.cacheTemplates(cacheKey, templates);
+                }
+            } catch (error) {
+                console.error('Error fetching templates:', error);
+            }
+        },
+        
+        getCachedTemplates(cacheKey) {
+            try {
+                const cached = localStorage.getItem(`template_cache_${cacheKey}`);
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    // Validar estructura de datos
+                    if (!data || typeof data !== 'object' || !data.timestamp || !data.templates) {
+                        console.warn('Cache data structure invalid, clearing cache');
+                        localStorage.removeItem(`template_cache_${cacheKey}`);
+                        return null;
+                    }
+                    // Verificar que no haya expirado (1 hora = 3600000 ms)
+                    const cacheAge = Date.now() - data.timestamp;
+                    if (cacheAge >= 0 && cacheAge < 3600000) {
+                        return data.templates;
+                    } else {
+                        // Cache expirado, limpiarlo
+                        localStorage.removeItem(`template_cache_${cacheKey}`);
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading template cache:', e);
+                // Limpiar cache corrupto
+                try {
+                    localStorage.removeItem(`template_cache_${cacheKey}`);
+                } catch (clearError) {
+                    console.error('Error clearing corrupted cache:', clearError);
+                }
+            }
+            return null;
+        },
+        
+        cacheTemplates(cacheKey, templates) {
+            try {
+                const data = {
+                    templates: templates,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(`template_cache_${cacheKey}`, JSON.stringify(data));
+            } catch (e) {
+                console.warn('Error caching templates:', e);
+            }
+        },
+        
+        openTemplateModal() {
+            this.templateModalOpen = true;
+            this.loadTemplates();
+        },
+        
+        selectTemplate(template) {
+            this.selectedTemplate = template;
+            this.templateModalOpen = false;
+        },
+        
+        clearTemplate() {
+            this.selectedTemplate = null;
+            this.templateModalOpen = false;
+        },
+        
+        getServiceDisplayName(service) {
+            const names = { 'sora': 'Sora', 'gemini_veo': 'Gemini Veo', 'higgsfield': 'Higgsfield', 'gemini_image': 'Gemini Image', 'agent': 'Agent' };
+            return names[service] || service || '';
         },
         
         async loadModels(type) {
@@ -23,6 +156,13 @@ document.addEventListener('alpine:init', () => {
             try {
                 const response = await fetch('/api/models/config/?type=' + type + '&grouped=true');
                 const data = await response.json();
+                
+                // Mostrar toast si viene en el response
+                if (data.toast) {
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: data.toast
+                    }));
+                }
                 if (data.models) {
                     this.models = data.models;
                     const allResponse = await fetch('/api/models/config/?type=' + type);
@@ -93,7 +233,9 @@ document.addEventListener('alpine:init', () => {
                 document.querySelector('input[name="start_image"]'),
                 document.querySelector('input[name="end_image"]'),
                 document.querySelector('input[name="style_image"]'),
-                document.querySelector('input[name="asset_image"]')
+                document.querySelector('input[name="asset_image_1"]'),
+                document.querySelector('input[name="asset_image_2"]'),
+                document.querySelector('input[name="asset_image_3"]')
             ].filter(input => input && input.files && input.files[0]);
             
             const maxSize = 10 * 1024 * 1024; // 10MB
@@ -112,6 +254,37 @@ document.addEventListener('alpine:init', () => {
                         valid: false,
                         error: `El archivo "${file.name}" tiene un formato no soportado. Use: JPG, PNG o WEBP`
                     };
+                }
+            }
+            
+            // Validar restricciones de referencia para veo-2.0-generate-exp
+            if (this.selectedModel === 'veo-2.0-generate-exp') {
+                const styleImage = document.querySelector('input[name="style_image"]');
+                const assetImage1 = document.querySelector('input[name="asset_image_1"]');
+                const assetImage2 = document.querySelector('input[name="asset_image_2"]');
+                const assetImage3 = document.querySelector('input[name="asset_image_3"]');
+                
+                const hasStyle = styleImage && styleImage.files && styleImage.files[0];
+                const hasAsset = (assetImage1 && assetImage1.files && assetImage1.files[0]) ||
+                                (assetImage2 && assetImage2.files && assetImage2.files[0]) ||
+                                (assetImage3 && assetImage3.files && assetImage3.files[0]);
+                
+                if (hasStyle && hasAsset) {
+                    return {
+                        valid: false,
+                        error: 'Veo 2.0-exp no permite mezclar imágenes de tipo "Style" y "Asset" en la misma generación. Usa solo Style (máx. 1) O solo Asset (máx. 3).'
+                    };
+                }
+                
+                // Validar que solo haya 1 style image
+                if (hasStyle) {
+                    const styleCount = 1; // Solo hay un campo style_image
+                    if (styleCount > 1) {
+                        return {
+                            valid: false,
+                            error: 'Solo puedes usar 1 imagen de tipo "Style" en Veo 2.0-exp.'
+                        };
+                    }
                 }
             }
             
@@ -260,16 +433,24 @@ document.addEventListener('alpine:init', () => {
                     settings.avatar_image_id = avatarImageId;
                 }
                 
+                // Obtener prompt_template_id del campo oculto
+                const promptTemplateIdInput = document.querySelector('input[name="prompt_template_id"]');
+                const promptTemplateId = promptTemplateIdInput ? promptTemplateIdInput.value : null;
+                
                 // Verificar si hay imágenes de referencia para enviar como FormData
                 const startImage = document.querySelector('input[name="start_image"]');
                 const endImage = document.querySelector('input[name="end_image"]');
                 const styleImage = document.querySelector('input[name="style_image"]');
-                const assetImage = document.querySelector('input[name="asset_image"]');
+                const assetImage1 = document.querySelector('input[name="asset_image_1"]');
+                const assetImage2 = document.querySelector('input[name="asset_image_2"]');
+                const assetImage3 = document.querySelector('input[name="asset_image_3"]');
                 
                 const hasReferenceImages = (startImage && startImage.files && startImage.files[0]) ||
                                           (endImage && endImage.files && endImage.files[0]) ||
                                           (styleImage && styleImage.files && styleImage.files[0]) ||
-                                          (assetImage && assetImage.files && assetImage.files[0]);
+                                          (assetImage1 && assetImage1.files && assetImage1.files[0]) ||
+                                          (assetImage2 && assetImage2.files && assetImage2.files[0]) ||
+                                          (assetImage3 && assetImage3.files && assetImage3.files[0]);
                 
                 let response;
                 
@@ -284,6 +465,10 @@ document.addEventListener('alpine:init', () => {
                     formData.append('text', this.prompt);
                     if (this.projectId) {
                         formData.append('project_id', this.projectId);
+                    }
+                    // Añadir prompt_template_id si existe
+                    if (promptTemplateId) {
+                        formData.append('prompt_template_id', promptTemplateId);
                     }
                     // Añadir campos específicos de Manim directamente al FormData también
                     if (settings.author) {
@@ -304,8 +489,15 @@ document.addEventListener('alpine:init', () => {
                     if (styleImage && styleImage.files && styleImage.files[0]) {
                         formData.append('style_image', styleImage.files[0]);
                     }
-                    if (assetImage && assetImage.files && assetImage.files[0]) {
-                        formData.append('asset_image', assetImage.files[0]);
+                    // Múltiples assets (hasta 3)
+                    if (assetImage1 && assetImage1.files && assetImage1.files[0]) {
+                        formData.append('asset_image_1', assetImage1.files[0]);
+                    }
+                    if (assetImage2 && assetImage2.files && assetImage2.files[0]) {
+                        formData.append('asset_image_2', assetImage2.files[0]);
+                    }
+                    if (assetImage3 && assetImage3.files && assetImage3.files[0]) {
+                        formData.append('asset_image_3', assetImage3.files[0]);
                     }
                     
                     response = await fetch('/api/items/create/', {
@@ -327,6 +519,11 @@ document.addEventListener('alpine:init', () => {
                         project_id: this.projectId,
                         settings: settings
                     };
+                    
+                    // Añadir prompt_template_id si existe
+                    if (promptTemplateId) {
+                        requestData.prompt_template_id = promptTemplateId;
+                    }
                     
                     response = await fetch('/api/items/create/', {
                         method: 'POST',
@@ -358,14 +555,47 @@ document.addEventListener('alpine:init', () => {
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Mostrar toast si viene en el response (reemplaza el showSuccess)
+                    if (data.toast) {
+                        console.log('Dispatching toast event:', data.toast);
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: data.toast
+                        }));
+                        // Verificar que el evento se disparó correctamente
+                        setTimeout(() => {
+                            const container = document.getElementById('toast-container');
+                            if (container && container._x_dataStack) {
+                                const toastData = container._x_dataStack[0];
+                                console.log('Toast container state:', toastData?.toasts?.length || 0, 'toasts');
+                            }
+                        }, 100);
+                    } else {
+                        // Fallback: usar toast en lugar de alert nativo
+                        console.warn('No toast in response, using fallback toast');
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: {
+                                type: 'success',
+                                title: 'Creado exitosamente',
+                                message: 'El elemento se ha creado correctamente',
+                                auto_close: 5
+                            }
+                        }));
+                    }
+                    
                     window.dispatchEvent(new CustomEvent('item-created', { detail: data.item }));
                     window.dispatchEvent(new CustomEvent('library-tab-changed', { detail: { tab: this.activeTab } }));
                     this.prompt = '';
                     this.selectedModel = null;
                     this.selectedModelData = null;
-                    this.showSuccess('¡Creado exitosamente!');
                 } else {
-                    this.showError(data.error || 'Error desconocido');
+                    // Mostrar toast de error si viene en el response
+                    if (data.toast) {
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: data.toast
+                        }));
+                    } else {
+                        this.showError(data.error || 'Error desconocido');
+                    }
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -405,6 +635,74 @@ document.addEventListener('alpine:init', () => {
     
     <!-- Contenido del Sidebar -->
     <div class="p-6 space-y-5">
+        
+        <!-- Sección PROMPT TEMPLATE (solo para video e image) -->
+        <div x-show="activeTab === 'video' || activeTab === 'image'">
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">PROMPT TEMPLATE</label>
+            
+            <!-- Botón selector -->
+            <button type="button"
+                    @click="openTemplateModal()"
+                    class="w-full border-2 rounded-lg overflow-hidden bg-white hover:border-gray-400 transition-colors"
+                    :class="selectedTemplate ? 'border-gray-400' : 'border-gray-300 border-dashed'">
+                
+                <!-- Preview Area -->
+                <div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden rounded-lg">
+                    <!-- Video Preview -->
+                    <template x-if="selectedTemplate && selectedTemplate.preview_url && (selectedTemplate.preview_url.toLowerCase().includes('.mp4') || selectedTemplate.preview_url.toLowerCase().includes('.webm') || selectedTemplate.preview_url.toLowerCase().includes('.mov') || (activeTab === 'video' && !selectedTemplate.preview_url.toLowerCase().includes('.jpg') && !selectedTemplate.preview_url.toLowerCase().includes('.jpeg') && !selectedTemplate.preview_url.toLowerCase().includes('.png') && !selectedTemplate.preview_url.toLowerCase().includes('.gif') && !selectedTemplate.preview_url.toLowerCase().includes('.webp')))">
+                        <video :src="selectedTemplate.preview_url" 
+                               class="w-full h-full object-cover"
+                               preload="metadata"
+                               autoplay
+                               loop
+                               muted
+                               playsinline></video>
+                    </template>
+                    
+                    <!-- Image Preview -->
+                    <template x-if="selectedTemplate && selectedTemplate.preview_url && !selectedTemplate.preview_url.toLowerCase().includes('.mp4') && !selectedTemplate.preview_url.toLowerCase().includes('.webm') && !selectedTemplate.preview_url.toLowerCase().includes('.mov')">
+                        <img :src="selectedTemplate.preview_url" 
+                             class="w-full h-full object-cover"
+                             loading="lazy"
+                             alt="Template preview">
+                    </template>
+                    
+                    <!-- Overlay oscuro para mejor legibilidad -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                    
+                    <!-- Placeholder (solo icono centrado cuando no hay template) -->
+                    <template x-if="!selectedTemplate || !selectedTemplate.preview_url">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i class="fas fa-layer-group text-3xl text-gray-400 opacity-50"></i>
+                        </div>
+                    </template>
+                    
+                    <!-- Texto sobre la imagen (siempre visible, pegado al lateral izquierdo) -->
+                    <div class="absolute bottom-0 left-0 right-0 pb-4 pl-4 z-10">
+                        <div class="text-white font-bold text-lg uppercase tracking-tight mb-1" 
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                             x-text="selectedTemplate ? selectedTemplate.name.toUpperCase() : 'GENERAL'"></div>
+                        <div x-show="selectedTemplate && selectedTemplate.recommended_service" 
+                             class="text-gray-300 text-xs font-medium tracking-wide"
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                             x-text="getServiceDisplayName(selectedTemplate?.recommended_service)"></div>
+                    </div>
+                    
+                    <!-- Change button -->
+                    <span @click.stop="openTemplateModal()"
+                          class="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md text-xs font-medium text-white shadow-lg hover:bg-black/80 transition-all z-20 flex items-center gap-1.5 cursor-pointer"
+                          style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        Change
+                    </span>
+                </div>
+            </button>
+            
+            <!-- Hidden input para el form -->
+            <input type="hidden" name="prompt_template_id" :value="selectedTemplate ? selectedTemplate.uuid : ''">
+        </div>
         
         <!-- Sección MODEL -->
         <div>
@@ -530,5 +828,147 @@ document.addEventListener('alpine:init', () => {
             </button>
         </div>
         
+    </div>
+    
+    <!-- Modal de selección de Template -->
+    <div x-show="templateModalOpen"
+         x-cloak
+         @click.self="templateModalOpen = false"
+         @keydown.escape.window="templateModalOpen = false"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col"
+             @click.stop
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center p-6 border-b">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-layer-group mr-2"></i>Seleccionar Template
+                </h3>
+                <button type="button" @click="templateModalOpen = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Tabs & Search -->
+            <div class="p-4 border-b space-y-3">
+                <div class="flex gap-2">
+                    <button type="button"
+                            @click="templateTab = 'public'; loadTemplates()"
+                            :class="templateTab === 'public' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Públicos</button>
+                    <button type="button"
+                            @click="templateTab = 'my'; loadTemplates()"
+                            :class="templateTab === 'my' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Mis Templates</button>
+                    <button type="button"
+                            @click="templateTab = 'favorites'; loadTemplates()"
+                            :class="templateTab === 'favorites' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Favoritos</button>
+                </div>
+                
+                <div class="relative">
+                    <input type="text"
+                           x-model="templateSearch"
+                           @input.debounce.300ms="loadTemplates()"
+                           placeholder="Buscar por nombre..."
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-gray-900">
+                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                </div>
+            </div>
+            
+            <!-- Grid -->
+            <div class="flex-1 overflow-y-auto p-4">
+                <!-- Loading -->
+                <div x-show="templateLoading" class="flex justify-center items-center py-12">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                </div>
+                
+                <!-- Templates Grid -->
+                <div x-show="!templateLoading && templateList.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <template x-for="tpl in templateList" :key="tpl.uuid">
+                        <button type="button"
+                                @click="selectTemplate(tpl)"
+                                class="border-2 rounded-lg overflow-hidden text-left transition-all hover:border-gray-900 hover:shadow-lg"
+                                :class="selectedTemplate && selectedTemplate.uuid === tpl.uuid ? 'border-gray-900 shadow-lg' : 'border-gray-200'">
+                            
+                            <div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden">
+                                <!-- Video Preview -->
+                                <template x-if="tpl.preview_url && (tpl.preview_url.toLowerCase().includes('.mp4') || tpl.preview_url.toLowerCase().includes('.webm') || tpl.preview_url.toLowerCase().includes('.mov') || (activeTab === 'video' && !tpl.preview_url.toLowerCase().includes('.jpg') && !tpl.preview_url.toLowerCase().includes('.jpeg') && !tpl.preview_url.toLowerCase().includes('.png') && !tpl.preview_url.toLowerCase().includes('.gif') && !tpl.preview_url.toLowerCase().includes('.webp')))">
+                                    <video :src="tpl.preview_url" 
+                                           class="w-full h-full object-cover"
+                                           preload="none"
+                                           autoplay
+                                           loop
+                                           muted
+                                           playsinline></video>
+                                </template>
+                                
+                                <!-- Image Preview -->
+                                <template x-if="tpl.preview_url && !tpl.preview_url.toLowerCase().includes('.mp4') && !tpl.preview_url.toLowerCase().includes('.webm') && !tpl.preview_url.toLowerCase().includes('.mov')">
+                                    <img :src="tpl.preview_url" 
+                                         class="w-full h-full object-cover"
+                                         loading="lazy"
+                                         alt="Template preview">
+                                </template>
+                                
+                                <!-- Overlay oscuro para mejor legibilidad -->
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                                
+                                <!-- Placeholder (solo icono centrado cuando no hay preview) -->
+                                <template x-if="!tpl.preview_url">
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <i class="fas fa-image text-3xl text-gray-300"></i>
+                                    </div>
+                                </template>
+                                
+                                <!-- Texto sobre la imagen (siempre visible, pegado al lateral izquierdo) -->
+                                <div class="absolute bottom-0 left-0 right-0 pb-3 pl-3 z-10">
+                                    <div class="text-white font-bold text-sm uppercase tracking-tight mb-0.5" 
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                                         x-text="tpl.name.toUpperCase()"></div>
+                                    <div x-show="tpl.recommended_service" 
+                                         class="text-gray-300 text-xs font-medium tracking-wide"
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                                         x-text="getServiceDisplayName(tpl.recommended_service)"></div>
+                                </div>
+                            </div>
+                        </button>
+                    </template>
+                </div>
+                
+                <!-- Empty State -->
+                <div x-show="!templateLoading && templateList.length === 0" class="text-center py-12">
+                    <i class="fas fa-inbox text-5xl text-gray-300 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">No hay templates</h3>
+                    <p class="text-gray-500 text-sm">No se encontraron templates disponibles</p>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="flex justify-between items-center p-4 border-t bg-gray-50">
+                <button type="button"
+                        @click="clearTemplate()"
+                        x-show="selectedTemplate"
+                        class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                    <i class="fas fa-times mr-1"></i>Quitar Template
+                </button>
+                <div x-show="!selectedTemplate"></div>
+                <button type="button"
+                        @click="templateModalOpen = false"
+                        class="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                    Cerrar
+                </button>
+            </div>
+        </div>
     </div>
 </div>

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Final Video - {{ project.name }}{% endblock %}
+{% block title %}Final Video{% if project %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-6xl mx-auto">
@@ -139,7 +139,7 @@
 
     <!-- Actions -->
     <div class="flex justify-between items-center">
-        <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+        <a href="{% if project %}{% url 'core:agent_scenes' project.uuid %}{% else %}{% url 'core:agent_scenes_standalone' %}{% endif %}?script_id={{ script.id }}" 
            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
             ← Volver a Escenas
         </a>
@@ -172,7 +172,7 @@ function combineVideos() {
     combiningState.classList.remove('hidden');
     
     // Send request to combine videos
-    fetch("{% url 'core:agent_final' project.id %}", {
+    fetch("{% if project %}{% url 'core:agent_final' project.uuid %}{% else %}{% url 'core:agent_final_standalone' %}{% endif %}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -193,19 +193,32 @@ function combineVideos() {
         console.log('Respuesta del servidor:', data);
         
         if (data.status === 'success') {
-            if (data.video_id) {
-                console.log(`✓ Video combinado exitosamente. ID: ${data.video_id}`);
+            if (data.video_uuid) {
+                console.log(`✓ Video combinado exitosamente. UUID: ${data.video_uuid}`);
                 
                 // Mostrar mensaje de éxito
                 alert('✓ Video combinado exitosamente!\n\nRedirigiendo al video...');
                 
-                // Redirect to video detail
-                window.location.href = `/videos/${data.video_id}/`;
+                // Redirect to video detail usando UUID
+                window.location.href = `/videos/${data.video_uuid}/`;
+            } else if (data.video_id) {
+                // Fallback: si solo tenemos ID, redirigir al proyecto
+                console.warn('Video combinado pero sin video_uuid en respuesta, usando video_id como fallback');
+                alert('Video procesado. Redirigiendo al proyecto...');
+                {% if project %}
+                    window.location.href = "{% url 'core:project_detail' project.uuid %}";
+                {% else %}
+                    window.location.href = "{% url 'core:dashboard' %}";
+                {% endif %}
             } else {
                 // No debería llegar aquí, pero por si acaso
-                console.warn('Video combinado pero sin video_id en respuesta');
+                console.warn('Video combinado pero sin video_id ni video_uuid en respuesta');
                 alert('Video procesado. Redirigiendo al proyecto...');
-                window.location.href = "{% url 'core:project_detail' project.id %}";
+                {% if project %}
+                    window.location.href = "{% url 'core:project_detail' project.uuid %}";
+                {% else %}
+                    window.location.href = "{% url 'core:dashboard' %}";
+                {% endif %}
             }
         } else {
             console.error('Error en la combinación:', data.message);

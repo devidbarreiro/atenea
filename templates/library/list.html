@@ -49,10 +49,6 @@
                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'audio' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
                 🔊 Audios ({{ stats.audios }})
             </a>
-            <a href="{% url 'core:library' %}?type=music{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
-               class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'music' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
-                🎵 Música ({{ stats.music }})
-            </a>
             <a href="{% url 'core:library' %}?type=script{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" 
                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if selected_type == 'script' %}bg-black text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
                 📝 Guiones ({{ stats.scripts }})

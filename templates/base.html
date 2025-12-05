@@ -22,6 +22,15 @@
         <!-- Alpine.js - Componentes reactivos -->
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
         
+        <!-- Toast Manager -->
+        <script src="{% static 'js/toast.js' %}"></script>
+        
+        <!-- Notification Manager (WebSocket) -->
+        <script src="{% static 'js/notifications.js' %}"></script>
+        
+        <!-- Voice Modal - Modal reutilizable de selección de voces -->
+        <script src="{% static 'js/voice-modal.js' %}"></script>
+        
         <!-- Marked.js - Renderizado de Markdown -->
         <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
         
@@ -88,7 +97,7 @@
             {% block extra_css %}{% endblock %}
         </style>
     </head>
-    <body class="bg-gray-50">
+    <body class="bg-gray-50" {% if user.is_authenticated %}data-user-authenticated="true" data-user-id="{{ user.id }}"{% endif %}>
         {% if not hide_header %}
         <!-- Overlay para móvil -->
         <div x-data="{ mobileMenuOpen: false }"
@@ -139,29 +148,236 @@
         
         {% endif %}
         
-        <!-- Mensajes Flash -->
-        {% if messages %}
-        <div class="fixed top-4 right-4 z-50 space-y-2 max-w-md" 
-             x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true' }"
-             x-init="window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; })"
-             :style="'left: ' + (window.innerWidth >= 1024 ? (sidebarCollapsed ? '64px' : '256px') : '0') + ';'">
-            {% for message in messages %}
-            <div class="message shadow-lg rounded-lg p-4 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
-                <div class="flex items-center">
-                    {% if message.tags == 'success' %}
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                    </svg>
-                    {% elif message.tags == 'error' %}
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                    </svg>
-                    {% endif %}
-                    <span>{{ message }}</span>
+        <!-- Sidebar de Notificaciones (al lado del sidebar principal) -->
+        {% if user.is_authenticated %}
+        <div x-data="notificationSidebar()"
+        x-show="notificationSidebarOpen"
+        x-cloak
+        :class="isCreationPage ? 'z-30' : 'z-40'"
+        class="fixed top-0 h-full bg-white"
+        :style="'left: ' + sidebarWidth + 'px; width: ' + getNotificationWidth() + 'px;'"
+        style="display: none;">
+            <!-- Sidebar -->
+            <div class="h-full w-full bg-white border-r border-gray-200 shadow-xl flex flex-col"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full"
+                 x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0"
+                 x-transition:leave-end="translate-x-full">
+                <!-- Header -->
+                <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
+                    <h2 class="text-lg font-semibold text-gray-900">Notificaciones</h2>
+                    <div class="flex items-center gap-1">
+                        <!-- Botón configuración -->
+                        <button @click="showSettings = !showSettings" 
+                                :class="showSettings ? 'bg-gray-100' : ''"
+                                class="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+                                title="Configuración">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                        </button>
+                        <button @click="close()" 
+                                class="p-1.5 rounded-md hover:bg-gray-100 transition-colors">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Panel de Configuración -->
+                <div x-show="showSettings" 
+                     x-cloak
+                     x-transition
+                     class="px-4 py-4 border-b border-gray-200 bg-gray-50 space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3">Preferencias</h3>
+                    
+                    <!-- Sonido de notificaciones -->
+                    <label class="flex items-center justify-between cursor-pointer group">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                            </svg>
+                            <span class="text-sm text-gray-700">Sonido de notificaciones</span>
+                        </div>
+                        <div class="relative">
+                            <input type="checkbox" 
+                                   x-model="soundEnabled"
+                                   @change="localStorage.setItem('notificationSoundEnabled', soundEnabled)"
+                                   class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                        </div>
+                    </label>
+                    
+                    <!-- Mostrar toasts -->
+                    <label class="flex items-center justify-between cursor-pointer group">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                            </svg>
+                            <span class="text-sm text-gray-700">Mostrar notificaciones emergentes</span>
+                        </div>
+                        <div class="relative">
+                            <input type="checkbox" 
+                                   x-model="toastsEnabled"
+                                   @change="localStorage.setItem('notificationToastsEnabled', toastsEnabled)"
+                                   class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                        </div>
+                    </label>
+                    
+                    <!-- Test de sonido -->
+                    <button @click="testSound()"
+                            x-show="soundEnabled"
+                            class="w-full mt-2 px-3 py-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Probar sonido
+                    </button>
+                </div>
+                
+                <!-- Contenido del panel (cargado vía HTMX) -->
+                <div id="notification-panel-content" 
+                     class="flex-1 overflow-y-auto bg-white"
+                     hx-get="{% url 'core:notifications_panel' %}"
+                     hx-trigger="load, refreshNotifications from:body, notification-sidebar-opened from:window"
+                     hx-swap="innerHTML">
+                    <div class="p-8 text-center text-gray-500">
+                        <svg class="animate-spin h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-3 text-sm">Cargando...</p>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
         </div>
+        {% endif %}
+        
+        <!-- Botón de Colas Activas (flotante, esquina superior derecha) - Solo visible si hay tareas activas -->
+        {% if user.is_authenticated %}
+        <div class="fixed top-4 right-4 z-40"
+             x-data="{ 
+                 queuesOpen: false,
+                 activeCount: 0,
+                 init() {
+                     // Cargar contador inicial
+                     this.loadActiveCount();
+                     // Actualizar cada 5 segundos
+                     setInterval(() => {
+                         this.loadActiveCount();
+                         // Si el dropdown está abierto, refrescar contenido también
+                         if (this.queuesOpen) {
+                             const content = document.getElementById('active-queues-content');
+                             if (content) {
+                                 htmx.trigger(content, 'refresh');
+                             }
+                         }
+                     }, 5000);
+                     // Escuchar eventos de actualización
+                     window.addEventListener('task-status-changed', () => {
+                         this.loadActiveCount();
+                         // Refrescar contenido si está abierto
+                         if (this.queuesOpen) {
+                             const content = document.getElementById('active-queues-content');
+                             if (content) {
+                                 htmx.trigger(content, 'refresh');
+                             }
+                         }
+                     });
+                 },
+                 async loadActiveCount() {
+                     try {
+                         const response = await fetch('{% url 'core:active_queues_dropdown' %}');
+                         const html = await response.text();
+                         const parser = new DOMParser();
+                         const doc = parser.parseFromString(html, 'text/html');
+                         const tasks = doc.querySelectorAll('[data-task-uuid]');
+                         this.activeCount = tasks.length;
+                     } catch (e) {
+                         console.error('Error cargando colas activas:', e);
+                     }
+                 }
+             }"
+             x-show="activeCount > 0">
+            <button @click="queuesOpen = !queuesOpen"
+                    class="relative p-2.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200/50 hover:bg-white hover:shadow-xl transition-all duration-200"
+                    title="Colas activas">
+                <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                </svg>
+                <span x-show="activeCount > 0" 
+                      x-text="activeCount > 9 ? '9+' : activeCount"
+                      class="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full min-w-[1.25rem] h-5 flex items-center justify-center px-1 font-semibold"></span>
+            </button>
+            
+            <!-- Dropdown de Colas -->
+            <div x-show="queuesOpen"
+                 @click.away="queuesOpen = false"
+                 x-cloak
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-150"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="absolute top-full right-0 mt-2 w-80 bg-white/95 backdrop-blur-md border border-gray-200/50 rounded-lg shadow-xl z-50 max-h-[24rem] flex flex-col overflow-hidden"
+                 style="display: none;">
+                <!-- Header -->
+                <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-900">Colas Activas</h3>
+                    <button @click="queuesOpen = false" 
+                            class="p-1 rounded-md hover:bg-gray-100 transition-colors">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Contenido (cargado vía HTMX) -->
+                <div id="active-queues-content" 
+                     class="flex-1 overflow-y-auto"
+                     hx-get="{% url 'core:active_queues_dropdown' %}"
+                     hx-trigger="load, refresh from:body, task-status-changed from:body"
+                     hx-swap="innerHTML"
+                     hx-on::after-swap="
+                         // Disparar evento para actualizar contador
+                         window.dispatchEvent(new CustomEvent('queues-updated'));
+                     ">
+                    <div class="p-6 text-center text-gray-500">
+                        <svg class="animate-spin h-6 w-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-2 text-xs">Cargando...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Toast Container -->
+        {% include 'partials/toast_container.html' %}
+        
+        <!-- Mensajes Flash → Toasts automáticos -->
+        {% if messages %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                {% for message in messages %}
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        type: '{% if message.tags == "success" %}success{% elif message.tags == "error" %}error{% elif message.tags == "warning" %}warning{% else %}info{% endif %}',
+                        message: '{{ message|escapejs }}'
+                    }
+                }));
+                {% endfor %}
+            });
+        </script>
         {% endif %}
         
         <!-- Breadcrumbs -->
@@ -169,28 +385,27 @@
         
         <!-- Contenido Principal -->
         <main class="transition-all duration-300 px-4 sm:px-6 lg:px-8 py-8"
-            x-data="{ sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true', windowWidth: window.innerWidth }"
-            :style="'margin-left: ' + (windowWidth >= 1024 ? (sidebarCollapsed ? '64px' : '256px') : '0') + ';'"
-            x-init="
-                window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; });
-                window.addEventListener('resize', () => { windowWidth = window.innerWidth });
-            ">
+            x-data="{ 
+                sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true', 
+                windowWidth: window.innerWidth,
+                notificationSidebarOpen: false,
+                isCreationPage: false,
+                getSidebarWidth() {
+                    return this.windowWidth >= 1024 ? (this.sidebarCollapsed ? 64 : 256) : 0;
+                },
+                getNotificationWidth() {
+                    if (this.isCreationPage) return 0;
+                    return this.notificationSidebarOpen ? 400 : 0;
+                }
+            }"
+            :style="'margin-left: ' + getSidebarWidth() + 'px; margin-right: ' + getNotificationWidth() + 'px;'"
+            x-init="isCreationPage = document.querySelector('[x-data*=&quot;creationSidebarWidth&quot;]') !== null; window.addEventListener('sidebar-toggled', (e) => { sidebarCollapsed = e.detail.collapsed; }); window.addEventListener('resize', () => { windowWidth = window.innerWidth }); window.addEventListener('notification-sidebar-opened', () => { notificationSidebarOpen = true; }); window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });">
             {% block content %}{% endblock %}
         </main>
         
         {% block extra_js %}{% endblock %}
         
         <script>
-            // Auto-dismiss messages después de 5 segundos
-            setTimeout(() => {
-                const messages = document.querySelectorAll('.message');
-                messages.forEach(msg => {
-                    msg.style.transition = 'opacity 0.3s ease';
-                    msg.style.opacity = '0';
-                    setTimeout(() => msg.remove(), 300);
-                });
-            }, 5000);
-
             // Sincronizar estado del sidebar entre componentes
             document.addEventListener('alpine:init', () => {
                 Alpine.store('sidebar', {
@@ -198,9 +413,113 @@
                     toggle() {
                         this.collapsed = !this.collapsed;
                         localStorage.setItem('sidebarCollapsed', this.collapsed);
+                        window.dispatchEvent(new CustomEvent('sidebar-toggled', { detail: { collapsed: this.collapsed } }));
                     }
                 });
+                
+                // Componente del sidebar de notificaciones
+                Alpine.data('notificationSidebar', () => ({
+                    notificationSidebarOpen: false,
+                    unreadCount: 0,
+                    sidebarWidth: 256,
+                    isCreationPage: false,
+                    creationSidebarWidth: 320,
+                    // Configuración de notificaciones
+                    showSettings: false,
+                    soundEnabled: localStorage.getItem('notificationSoundEnabled') !== 'false', // Default: true
+                    toastsEnabled: localStorage.getItem('notificationToastsEnabled') !== 'false', // Default: true
+                    init() {
+                        // Detectar si estamos en una página de creación
+                        this.isCreationPage = document.querySelector('[x-data*="creationSidebarWidth"]') !== null;
+                        
+                        // Cargar preferencias desde localStorage
+                        this.soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+                        this.toastsEnabled = localStorage.getItem('notificationToastsEnabled') !== 'false';
+                        
+                        // Exponer preferencias globalmente
+                        window.notificationPreferences = {
+                            soundEnabled: () => this.soundEnabled,
+                            toastsEnabled: () => this.toastsEnabled
+                        };
+                        
+                        // Cargar contador inicial
+                        fetch('{% url 'core:notifications_count' %}')
+                            .then(r => r.json())
+                            .then(data => this.unreadCount = data.count);
+                        // Escuchar evento para abrir sidebar
+                        window.addEventListener('open-notifications-modal', () => {
+                            this.notificationSidebarOpen = true;
+                            window.dispatchEvent(new CustomEvent('notification-sidebar-opened'));
+                        });
+                        // Actualizar contador cuando llegue nueva notificación
+                        window.addEventListener('show-toast', () => {
+                            this.unreadCount++;
+                        });
+                        // Actualizar contador cuando se marque como leída
+                        window.addEventListener('notification-read', () => {
+                            if (this.unreadCount > 0) this.unreadCount--;
+                        });
+                        // Resetear contador cuando se marquen todas como leídas
+                        window.addEventListener('all-notifications-read', () => {
+                            this.unreadCount = 0;
+                        });
+                        // Actualizar contador desde polling o WebSocket
+                        window.addEventListener('update-notification-count', (e) => {
+                            if (e.detail.increment) {
+                                this.unreadCount++;
+                            } else if (e.detail.count !== undefined) {
+                                this.unreadCount = e.detail.count;
+                            }
+                        });
+                        // Cerrar con Escape
+                        window.addEventListener('keydown', (e) => {
+                            if (e.key === 'Escape' && this.notificationSidebarOpen) {
+                                this.close();
+                            }
+                        });
+                        // Calcular ancho del sidebar principal
+                        this.updateSidebarWidth();
+                        window.addEventListener('sidebar-toggled', () => {
+                            setTimeout(() => this.updateSidebarWidth(), 300);
+                        });
+                    },
+                    updateSidebarWidth() {
+                        const sidebar = document.querySelector('[x-data*="sidebarCollapsed"]');
+                        if (sidebar && sidebar._x_dataStack) {
+                            const data = sidebar._x_dataStack[0];
+                            if (data) {
+                                const isCollapsed = data.sidebarCollapsed || localStorage.getItem('sidebarCollapsed') === 'true';
+                                this.sidebarWidth = isCollapsed ? 64 : 256;
+                            }
+                        } else {
+                            const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+                            this.sidebarWidth = isCollapsed ? 64 : 256;
+                        }
+                    },
+                    getNotificationWidth() {
+                        // En páginas de creación, usar el mismo ancho que el sidebar de creación
+                        return this.isCreationPage ? this.creationSidebarWidth : 400;
+                    },
+                    close() {
+                        this.notificationSidebarOpen = false;
+                        this.showSettings = false;
+                        window.dispatchEvent(new CustomEvent('notification-sidebar-closed'));
+                    },
+                    testSound() {
+                        if (window.playNotificationSound) {
+                            window.playNotificationSound();
+                        } else {
+                            // Crear y reproducir audio de test
+                            const audio = new Audio('/static/sounds/notification.mp3');
+                            audio.volume = 0.5;
+                            audio.play().catch(e => console.log('Error al reproducir sonido:', e));
+                        }
+                    }
+                }));
             });
+            
+            // Exponer variable global para saber si el usuario está autenticado
+            window.user_is_authenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
             
             // Asegurar que Alpine inicialice todos los componentes
             document.addEventListener('DOMContentLoaded', () => {

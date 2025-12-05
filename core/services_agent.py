@@ -46,7 +46,7 @@ class ScriptAgentService:
         self.llm_provider = llm_provider
         self.use_cache = use_cache
         
-        # Crear agente
+        # Crear agente monolítico (para fallback)
         llm_model = getattr(settings, 'DEFAULT_LLM_MODEL', None)
         self.agent = ScriptAgent(
             llm_provider=llm_provider,
@@ -56,6 +56,7 @@ class ScriptAgentService:
         )
         
         logger.info(f"ScriptAgentService inicializado (provider: {llm_provider}, cache: {use_cache})")
+        logger.info("Production House multi-agente habilitado (con fallback al agente monolítico)")
     
     def process_script(self, script: Script) -> Script:
         """
@@ -93,14 +94,50 @@ class ScriptAgentService:
                 logger.info(f"Usando respuesta cacheada para guión {script.id}")
                 result_data = cached_response
             else:
-                # Procesar con el agente
-                logger.info(f"Procesando guión {script.id} con LLM ({self.llm_provider})")
+                # Procesar con Production House (multi-agente)
+                logger.info(f"Procesando guión {script.id} con Production House ({self.llm_provider})")
                 
-                result_data = self.agent.process_script(
-                    script_text=script.original_script,
-                    duration_min=script.desired_duration_min,
-                    script_id=script.id
-                )
+                # Convertir duración a segundos
+                duration_seconds = int(script.desired_duration_min * 60)
+                
+                try:
+                    # Usar Production House en lugar del agente monolítico
+                    from core.agents.production_house import ProductionHouse
+                    
+                    production_house = ProductionHouse(
+                        llm_provider=self.llm_provider,
+                        use_expensive_models=True  # Usar GPT-4 para creatividad
+                    )
+                    
+                    result_data = production_house.process_script(
+                        script_id=script.id,
+                        script_text=script.original_script,
+                        duration_min=script.desired_duration_min,
+                        duration_seconds=duration_seconds,
+                        video_format=getattr(script, 'video_format', 'educational'),
+                        video_type=getattr(script, 'video_type', 'general'),
+                        video_orientation=getattr(script, 'video_orientation', '16:9')
+                    )
+                    
+                except Exception as e:
+                    # Fallback al sistema antiguo si Production House falla
+                    logger.error(f"Error en Production House, usando fallback al sistema antiguo: {e}", exc_info=True)
+                    logger.info(f"Procesando guión {script.id} con agente monolítico (fallback)")
+                    
+                    # Configurar límite de recursión para LangGraph
+                    config = {
+                        "recursion_limit": 50,
+                    }
+                    
+                    result_data = self.agent.process_script(
+                        script_text=script.original_script,
+                        duration_min=script.desired_duration_min,
+                        duration_seconds=duration_seconds,
+                        script_id=script.id,
+                        video_format=getattr(script, 'video_format', 'educational'),
+                        video_type=getattr(script, 'video_type', 'general'),
+                        config=config
+                    )
                 
                 # Guardar en caché
                 if self.use_cache:
@@ -132,13 +169,62 @@ class ScriptAgentService:
                 'characters': result_data.get('characters', [])
             }
             
+            # Extraer y aplicar continuidad cinematográfica (Fase 3)
+            from .services.continuity_manager import ContinuityManager
+            
+            # Extraer contexto global
+            global_context = ContinuityManager.extract_global_context(
+                script_text=script.original_script,
+                processed_data=output_data
+            )
+            
+            # Guardar contexto global en visual_style_guide (incluyendo personajes)
+            script.visual_style_guide = {
+                'time_period': global_context.get('time_period'),
+                'historical_context': global_context.get('historical_context'),
+                'color_palette': global_context.get('color_palette'),
+                'visual_style': global_context.get('visual_style'),
+                'mood': global_context.get('mood'),
+                'location_types': global_context.get('location_types', []),
+                'characters': global_context.get('characters', {})  # Guardar descripciones de personajes
+            }
+            
+            # Mejorar escenas con continuidad
+            scenes_data = output_data.get('scenes', [])
+            enhanced_scenes = []
+            previous_scenes = []
+            
+            for idx, scene_data in enumerate(scenes_data):
+                # Mejorar con continuidad
+                enhanced_scene = ContinuityManager.enhance_prompt_with_continuity(
+                    scene_data=scene_data.copy(),
+                    previous_scenes=previous_scenes.copy(),
+                    global_context=global_context
+                )
+                enhanced_scenes.append(enhanced_scene)
+                previous_scenes.append(enhanced_scene)
+            
+            # Actualizar output_data con escenas mejoradas
+            output_data['scenes'] = enhanced_scenes
+            
+            # Validar continuidad (solo logging, no bloquea)
+            continuity_issues = ContinuityManager.validate_continuity(
+                scenes=enhanced_scenes,
+                global_context=global_context
+            )
+            
+            if continuity_issues:
+                logger.warning(f"Script {script.id}: {len(continuity_issues)} problemas de continuidad detectados")
+                for issue in continuity_issues:
+                    logger.warning(f"  - {issue.get('type')}: {issue.get('message')}")
+            
             # Marcar como completado
             script.mark_as_completed(output_data)
             
             # Si es flujo del agente, crear objetos Scene en la BD
             if script.agent_flow:
                 logger.info(f"Script {script.id} es del flujo del agente, creando escenas en BD...")
-                scenes_data = output_data.get('scenes', [])
+                scenes_data = enhanced_scenes
                 
                 if scenes_data:
                     # Crear escenas usando SceneService

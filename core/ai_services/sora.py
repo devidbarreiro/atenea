@@ -289,7 +289,14 @@ class SoraClient:
                     logger.info(f"✅ Video completado!")
                     logger.info(f"   Expira en: {data.get('expires_at')}")
                 elif status == 'failed':
-                    logger.error(f"❌ Video falló: {data.get('error')}")
+                    error_obj = data.get('error')
+                    if isinstance(error_obj, dict):
+                        error_code = error_obj.get('code', 'unknown_error')
+                        error_message = error_obj.get('message', 'Unknown error')
+                        logger.error(f"❌ Video falló: [{error_code}] {error_message}")
+                        logger.error(f"   Error completo: {error_obj}")
+                    else:
+                        logger.error(f"❌ Video falló: {error_obj}")
                 
                 return result
             else:
@@ -461,7 +468,7 @@ class SoraClient:
                     return str(error_obj)
             
             return error_data.get('message', response.text)
-        except:
+        except (json.JSONDecodeError, KeyError, TypeError):
             return f"HTTP {response.status_code}: {response.text[:200]}"
     
     def list_videos(self, limit: int = 20, after: Optional[str] = None, order: str = "desc") -> dict:

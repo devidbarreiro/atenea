@@ -365,6 +365,6 @@ class HiggsfieldClient:
             if 'message' in error_data:
                 return str(error_data['message'])
             return error_data.get('detail', response.text)
-        except:
+        except (json.JSONDecodeError, KeyError, TypeError):
             return f"HTTP {response.status_code}: {response.text[:200]}"
 

@@ -23,6 +23,10 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
     """
     platform = platform.lower()
     
+    # Normalizar variantes de HeyGen
+    if platform in ['heygen_v2', 'heygen_avatar_iv']:
+        platform = 'heygen'
+    
     # Reglas de validación
     rules = {
         'sora': {
@@ -31,14 +35,14 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
             'message': 'Sora solo acepta duraciones de exactamente 4, 8, o 12 segundos'
         },
         'gemini_veo': {
-            'valid': list(range(5, 9)),  # 5-8 segundos
+            'valid': [4, 6, 8],  # Solo 4, 6, u 8 segundos para veo-3.1-generate-preview
             'max': 8,
-            'message': 'Gemini Veo acepta duraciones entre 5 y 8 segundos (máximo 8)'
+            'message': 'Gemini Veo (veo-3.1-generate-preview) solo acepta duraciones de exactamente 4, 6, u 8 segundos'
         },
         'heygen': {
-            'valid': list(range(30, 61)),  # 30-60 segundos
+            'valid': list(range(15, 61)),  # 15-60 segundos (15-25 para social, 30-45 para educational, 45-60 para longform)
             'max': 60,
-            'message': 'HeyGen acepta duraciones entre 30 y 60 segundos'
+            'message': 'HeyGen acepta duraciones entre 15 y 60 segundos'
         }
     }
     
@@ -66,19 +70,15 @@ def validate_duration(platform: str, duration_sec: int) -> Dict[str, any]:
         valid_values = rule['valid']
         corrected = min(valid_values, key=lambda x: abs(x - duration_sec))
     elif platform == 'gemini_veo':
-        # Ajustar al rango válido
-        if duration_sec > 8:
-            corrected = 8
-        elif duration_sec < 5:
-            corrected = 5
-        else:
-            corrected = duration_sec
+        # Ajustar al valor válido más cercano (4, 6, u 8)
+        valid_values = [4, 6, 8]
+        corrected = min(valid_values, key=lambda x: abs(x - duration_sec))
     elif platform == 'heygen':
-        # Ajustar al rango válido
+        # Ajustar al rango válido (15-60 segundos)
         if duration_sec > 60:
             corrected = 60
-        elif duration_sec < 30:
-            corrected = 30
+        elif duration_sec < 15:
+            corrected = 15
         else:
             corrected = duration_sec
     
@@ -104,7 +104,8 @@ def validate_all_scenes_durations(scenes: List[Dict]) -> Dict[str, any]:
     corrections = {}
     
     for idx, scene in enumerate(scenes):
-        platform = scene.get('platform', '').lower()
+        # Soportar ambos nombres de campo: platform y ai_service
+        platform = (scene.get('platform') or scene.get('ai_service') or '').lower()
         duration = scene.get('duration_sec')
         
         if duration is None:

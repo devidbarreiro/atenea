@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Colas de Generación - Atenea{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-4xl font-bold mb-2">Colas de Generación</h1>
+        <p class="text-gray-600">Gestiona y monitorea tus tareas de generación</p>
+    </div>
+    
+    <!-- Estadísticas -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+            <div class="text-sm text-gray-600 mb-1">Total</div>
+            <div class="text-2xl font-bold text-gray-900">{{ stats.total }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
+            <div class="text-sm text-gray-600 mb-1">En Cola</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ stats.queued }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+            <div class="text-sm text-gray-600 mb-1">Procesando</div>
+            <div class="text-2xl font-bold text-blue-600">{{ stats.processing }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+            <div class="text-sm text-gray-600 mb-1">Completadas</div>
+            <div class="text-2xl font-bold text-green-600">{{ stats.completed }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+            <div class="text-sm text-gray-600 mb-1">Fallidas</div>
+            <div class="text-2xl font-bold text-red-600">{{ stats.failed }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-gray-500">
+            <div class="text-sm text-gray-600 mb-1">Canceladas</div>
+            <div class="text-2xl font-bold text-gray-600">{{ stats.cancelled }}</div>
+        </div>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex flex-wrap gap-2">
+            <a href="?status=all" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'all' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                Todas
+            </a>
+            <a href="?status=queued" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'queued' %}bg-yellow-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                En Cola
+            </a>
+            <a href="?status=processing" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'processing' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                Procesando
+            </a>
+            <a href="?status=completed" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'completed' %}bg-green-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                Completadas
+            </a>
+            <a href="?status=failed" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'failed' %}bg-red-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                Fallidas
+            </a>
+            <a href="?status=cancelled" 
+               class="px-4 py-2 rounded-md {% if status_filter == 'cancelled' %}bg-gray-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} transition-colors">
+                Canceladas
+            </a>
+        </div>
+    </div>
+    
+    <!-- Lista de Tareas -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        {% if tasks %}
+            <div class="divide-y divide-gray-200">
+                {% for task in tasks %}
+                    {% include 'queues/task_item.html' with task=task %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="p-12 text-center">
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                <p class="text-gray-500 text-lg">No hay tareas con este filtro</p>
+                <p class="text-gray-400 text-sm mt-2">Las tareas aparecerán aquí cuando generes contenido</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+
+
+
+

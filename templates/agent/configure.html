@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Configure Scenes - {{ project.name }}{% endblock %}
+{% block title %}Configure Scenes{% if project %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto">
@@ -153,7 +153,28 @@
                                 <p class="text-sm text-gray-600">{{ scene.summary }}</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">{{ scene.duration_sec }}s</span>
+                                <div class="flex flex-col items-end">
+                                    <label class="text-xs text-gray-500 mb-1">Duración Video</label>
+                                    <select class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded border-0 focus:ring-2 focus:ring-blue-500"
+                                            id="scene-duration-select-{{ scene.id }}"
+                                            onchange="handleDurationChange({{ scene.id }}, parseInt(this.value))">
+                                        {% if scene.ai_service == 'gemini_veo' %}
+                                            <option value="4" {% if scene.duration_sec == 4 %}selected{% endif %}>4s</option>
+                                            <option value="6" {% if scene.duration_sec == 6 %}selected{% endif %}>6s</option>
+                                            <option value="8" {% if scene.duration_sec == 8 %}selected{% endif %}>8s</option>
+                                        {% elif scene.ai_service == 'sora' %}
+                                            <option value="4" {% if scene.duration_sec == 4 %}selected{% endif %}>4s</option>
+                                            <option value="8" {% if scene.duration_sec == 8 %}selected{% endif %}>8s</option>
+                                            <option value="12" {% if scene.duration_sec == 12 %}selected{% endif %}>12s</option>
+                                        {% else %}
+                                            <option value="{{ scene.duration_sec }}" selected>{{ scene.duration_sec }}s</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="flex flex-col items-end">
+                                    <label class="text-xs text-gray-500 mb-1">Est. Audio</label>
+                                    <span id="estimated-duration-{{ scene.id }}" class="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded cursor-help" title="Duración estimada del audio según el guión (calculada automáticamente). Compara con la duración del video configurada arriba. Si el audio estimado es mayor que la duración del video, el audio puede cortarse.">~-s</span>
+                                </div>
                                 <button 
                                     onclick="openInspector({{ scene.id }})"
                                     class="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
@@ -222,7 +243,7 @@
 
         <!-- Actions -->
         <div class="flex justify-between items-center">
-            <a href="{% url 'core:project_detail' project.id %}" 
+            <a href="{% if project %}{% url 'core:project_detail' project.uuid %}{% else %}{% url 'core:dashboard' %}{% endif %}" 
                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
                 Cancelar
             </a>
@@ -230,7 +251,7 @@
                 <p class="text-xs text-gray-500">
                     💡 Tip: Las configuraciones se guardan automáticamente
                 </p>
-                <a href="{% url 'core:agent_scenes' project.id %}?script_id={{ script.id }}" 
+                <a href="{% if project %}{% url 'core:agent_scenes' project.uuid %}{% else %}{% url 'core:agent_scenes_standalone' %}{% endif %}?script_id={{ script.id }}" 
                    class="px-8 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
                     Continuar a Escenas →
                 </a>
@@ -261,17 +282,47 @@
             <div>
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm font-medium text-gray-700">🎙️ Guión/Narración (para Audio)</label>
-                    <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" 
+                                onclick="toggleVoiceTagsHelp()"
+                                class="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+                                title="Ayuda con tags de voz">
+                            🎭 Tags de Voz
+                        </button>
+                        <span id="inspector-char-count" class="text-xs text-gray-500">0 / 1000</span>
+                    </div>
                 </div>
+                
+                <!-- Ayuda de Tags de Voz (colapsable) -->
+                <div id="voice-tags-help" class="hidden mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-semibold text-purple-900">💡 Tags de Voz para ElevenLabs</h4>
+                        <button onclick="toggleVoiceTagsHelp()" class="text-purple-600 hover:text-purple-800">✕</button>
+                    </div>
+                    <p class="text-purple-800 mb-2">Mejora la interpretación añadiendo tags de emoción y pausas:</p>
+                    <div class="space-y-1 text-purple-700 mb-2">
+                        <p><strong>Emociones:</strong> <code class="bg-purple-100 px-1 rounded">[Confident]</code>, <code class="bg-purple-100 px-1 rounded">[Energetic]</code>, <code class="bg-purple-100 px-1 rounded">[Whisper]</code>, <code class="bg-purple-100 px-1 rounded">[Storytelling]</code></p>
+                        <p><strong>Pausas:</strong> <code class="bg-purple-100 px-1 rounded">[Pause: 0.4s]</code> (corta), <code class="bg-purple-100 px-1 rounded">[Pause: 0.6s]</code> (media), <code class="bg-purple-100 px-1 rounded">[Pause: 0.8s]</code> (larga)</p>
+                        <p><strong>Ejemplo:</strong> <code class="bg-purple-100 px-1 rounded">[Confident] Hola [Pause: 0.3s] esto es un ejemplo [Energetic] ¡genial!</code></p>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        <button onclick="insertVoiceTag('[Confident]')" class="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300">Confident</button>
+                        <button onclick="insertVoiceTag('[Energetic]')" class="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300">Energetic</button>
+                        <button onclick="insertVoiceTag('[Whisper]')" class="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300">Whisper</button>
+                        <button onclick="insertVoiceTag('[Storytelling]')" class="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300">Storytelling</button>
+                        <button onclick="insertVoiceTag('[Pause: 0.4s]')" class="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300">Pausa</button>
+                    </div>
+                </div>
+                
                 <textarea 
                     id="inspector-script-text"
                     rows="5"
                     maxlength="1000"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 font-mono"
                     oninput="updateCharCounter()"
-                    placeholder="Texto que se narrará con ElevenLabs o HeyGen..."
+                    placeholder="Texto que se narrará con ElevenLabs o HeyGen... Usa tags como [Confident] o [Pause: 0.4s] para mejorar la interpretación"
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">Este texto se usa para generar el audio con ElevenLabs o la voz del avatar en HeyGen</p>
+                <p class="mt-1 text-xs text-gray-500">Este texto se usa para generar el audio con ElevenLabs o la voz del avatar en HeyGen. <span class="text-purple-600 font-medium">💡 Usa tags de voz para mejorar la interpretación</span></p>
             </div>
             
             <!-- Visual Prompt Editor -->
@@ -481,12 +532,25 @@
 // ==========================================
 // VARIABLES GLOBALES - DEBEN IR AL INICIO
 // ==========================================
+var scenesInspectorData = {};
 var currentInspectorSceneId = null;
 var avatarsCache = null;
 var voicesCache = null;
 
-// Cache de datos de escenas para el inspector
-var scenesInspectorData = {};
+// Obtener valores por defecto del script (si están disponibles)
+var scriptDefaultAvatarId = null;
+var scriptDefaultVoiceId = null;
+try {
+    {% if script_model_preferences_json %}
+    const scriptModelPrefs = {{ script_model_preferences_json|safe }};
+    scriptDefaultAvatarId = scriptModelPrefs?.default_heygen_avatar_id || null;
+    scriptDefaultVoiceId = scriptModelPrefs?.default_heygen_voice_id || null;
+    console.log('Valores por defecto del script:', { avatar: scriptDefaultAvatarId, voice: scriptDefaultVoiceId });
+    {% endif %}
+} catch (e) {
+    console.warn('Error obteniendo defaults del script:', e);
+}
+
 var scenesRawData = `{
     {% for scene_data in scenes_with_urls %}
     "{{ scene_data.scene.id }}": {
@@ -514,6 +578,225 @@ try {
     scenesInspectorData = {};
 }
 
+// ==================
+// FUNCIONES GLOBALES (deben estar antes de cualquier uso en onclick/onchange)
+// ==================
+
+// Abrir inspector (FUNCIÓN GLOBAL - debe estar disponible antes de que se renderice el HTML)
+function openInspector(sceneId) {
+    console.log('🔵 [openInspector] Iniciando apertura del inspector para escena:', sceneId);
+    console.log('🔵 [openInspector] typeof scenesInspectorData:', typeof scenesInspectorData);
+    console.log('🔵 [openInspector] scenesInspectorData keys:', scenesInspectorData ? Object.keys(scenesInspectorData) : 'null');
+    
+    try {
+        // Verificar que scenesInspectorData existe
+        if (!scenesInspectorData || typeof scenesInspectorData !== 'object') {
+            console.error('❌ [openInspector] scenesInspectorData no está disponible');
+            alert('Error: Los datos de las escenas no están disponibles. Por favor recarga la página.');
+            return;
+        }
+        
+        console.log('🔵 [openInspector] Available scenes:', Object.keys(scenesInspectorData));
+        
+        // Verificar que la escena existe
+        currentInspectorSceneId = sceneId;
+        const scene = scenesInspectorData[sceneId];
+        
+        if (!scene) {
+            console.error('❌ [openInspector] Escena no encontrada:', sceneId);
+            console.error('❌ [openInspector] scenesInspectorData completo:', scenesInspectorData);
+            alert(`Error: No se encontró la escena ${sceneId} en los datos. Escenas disponibles: ${Object.keys(scenesInspectorData).join(', ')}`);
+            return;
+        }
+        
+        console.log('🔵 [openInspector] Escena encontrada:', scene);
+        
+        // Verificar que el panel existe ANTES de intentar llenarlo
+        const panelEl = document.getElementById('inspector-panel');
+        const overlayEl = document.getElementById('inspector-overlay');
+        
+        if (!panelEl) {
+            console.error('❌ [openInspector] Panel del inspector no encontrado en el DOM');
+            console.error('❌ [openInspector] Buscando elemento con id="inspector-panel"');
+            alert('Error: No se encontró el panel del inspector. Por favor recarga la página.');
+            return;
+        }
+        
+        if (!overlayEl) {
+            console.error('❌ [openInspector] Overlay del inspector no encontrado en el DOM');
+            alert('Error: No se encontró el overlay del inspector. Por favor recarga la página.');
+            return;
+        }
+        
+        console.log('✓ [openInspector] Panel y overlay encontrados');
+        
+        // Llenar datos del inspector
+        const titleEl = document.getElementById('inspector-scene-title');
+        const summaryEl = document.getElementById('inspector-scene-summary');
+        const scriptTextEl = document.getElementById('inspector-script-text');
+        const visualPromptEl = document.getElementById('inspector-visual-prompt');
+        const serviceSelectEl = document.getElementById('inspector-service-select');
+        
+        if (!titleEl || !summaryEl || !scriptTextEl || !visualPromptEl || !serviceSelectEl) {
+            console.error('❌ [openInspector] Elementos del inspector no encontrados:', {
+                titleEl: !!titleEl,
+                summaryEl: !!summaryEl,
+                scriptTextEl: !!scriptTextEl,
+                visualPromptEl: !!visualPromptEl,
+                serviceSelectEl: !!serviceSelectEl
+            });
+            // Continuar de todas formas, algunos elementos pueden ser opcionales
+        }
+        
+        if (titleEl) titleEl.textContent = scene.scene_id || '';
+        if (summaryEl) summaryEl.textContent = scene.summary || '';
+        if (scriptTextEl) scriptTextEl.value = scene.script_text || '';
+        if (visualPromptEl) visualPromptEl.value = scene.visual_prompt || '';
+        if (serviceSelectEl) serviceSelectEl.value = scene.ai_service || 'gemini_veo';
+        
+        // Llenar datos de voz
+        const voiceIdEl = document.getElementById('inspector-voice-id');
+        const voiceNameEl = document.getElementById('inspector-voice-name');
+        if (voiceIdEl) voiceIdEl.value = scene.audio_voice_id || '';
+        if (voiceNameEl) voiceNameEl.value = scene.audio_voice_name || '';
+        
+        const selectedVoiceNameEl = document.getElementById('inspector-selected-voice-name');
+        const selectedVoiceCategoryEl = document.getElementById('inspector-selected-voice-category');
+        if (selectedVoiceNameEl && selectedVoiceCategoryEl) {
+            if (scene.audio_voice_name) {
+                selectedVoiceNameEl.textContent = scene.audio_voice_name;
+                selectedVoiceCategoryEl.textContent = 'Voz personalizada para esta escena';
+            } else {
+                selectedVoiceNameEl.textContent = 'Voz por defecto del script';
+                selectedVoiceCategoryEl.textContent = 'Se usará la voz global';
+            }
+        }
+        
+        // Actualizar contadores de caracteres (solo si existen)
+        try {
+            if (typeof updateCharCounter === 'function') {
+                updateCharCounter();
+            }
+        } catch(e) {
+            console.warn('⚠️ [openInspector] Error actualizando contadores:', e);
+        }
+        
+        // Actualizar duración estimada en el inspector
+        const inspectorDurationSec = scene.duration_sec || 8;
+        updateSceneEstimatedDuration(sceneId, scene.script_text || '', inspectorDurationSec);
+        
+        // Mostrar panel
+        panelEl.classList.remove('hidden');
+        overlayEl.classList.remove('hidden');
+        
+        // Actualizar configuración del inspector según el servicio
+        try {
+            if (typeof updateInspectorConfig === 'function') {
+                // Esperar un momento para que el DOM esté completamente renderizado
+                setTimeout(() => {
+                    updateInspectorConfig();
+                }, 50);
+            }
+        } catch(e) {
+            console.warn('⚠️ [openInspector] Error actualizando configuración:', e);
+        }
+        
+        console.log('✓ [openInspector] Inspector abierto correctamente');
+    } catch (error) {
+        console.error('❌ [openInspector] Error:', error);
+        alert('Error al abrir el inspector: ' + error.message);
+    }
+}
+
+// Cerrar inspector (FUNCIÓN GLOBAL)
+function closeInspector() {
+    try {
+        const panelEl = document.getElementById('inspector-panel');
+        const overlayEl = document.getElementById('inspector-overlay');
+        
+        if (panelEl) {
+            panelEl.classList.add('hidden');
+        }
+        
+        if (overlayEl) {
+            overlayEl.classList.add('hidden');
+        }
+        
+        currentInspectorSceneId = null;
+        console.log('✓ Inspector cerrado');
+    } catch (error) {
+        console.error('❌ [closeInspector] Error:', error);
+        // No mostrar alert, solo loggear
+    }
+}
+
+// ==================
+// FUNCIONES DE CÁLCULO DE DURACIÓN (GLOBALES)
+// ==================
+
+// Función para calcular duración estimada según el guión
+function calculateEstimatedDurationFromText(text, durationSec) {
+    if (!text || !text.trim()) {
+        return null;
+    }
+    
+    // Contar palabras
+    const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+    const wordCount = words.length;
+    
+    // Velocidad de narración: 2.5 palabras por segundo (español)
+    const WORDS_PER_SECOND = 2.5;
+    const estimatedSeconds = wordCount / WORDS_PER_SECOND;
+    
+    return {
+        wordCount: wordCount,
+        estimatedSeconds: estimatedSeconds,
+        configuredSeconds: durationSec,
+        difference: estimatedSeconds - durationSec,
+        isValid: Math.abs(estimatedSeconds - durationSec) <= (durationSec * 0.1) // ±10% de margen
+    };
+}
+
+// Función para actualizar la duración estimada en una card de escena (GLOBAL)
+function updateSceneEstimatedDuration(sceneId, scriptText, durationSec) {
+    const result = calculateEstimatedDurationFromText(scriptText, durationSec);
+    const badgeElement = document.getElementById(`estimated-duration-${sceneId}`);
+    
+    if (!badgeElement) {
+        console.warn(`⚠️ Badge de duración estimada no encontrado para escena ${sceneId}`);
+        return;
+    }
+    
+    if (!result) {
+        console.warn(`⚠️ No se pudo calcular duración estimada para escena ${sceneId}`);
+        badgeElement.textContent = '-';
+        badgeElement.className = 'px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded';
+        return;
+    }
+    
+    const estimatedSec = Math.round(result.estimatedSeconds);
+    const diff = result.difference;
+    const diffPercent = ((diff / durationSec) * 100).toFixed(0);
+    
+    // Determinar color según si está dentro del rango válido
+    let badgeClass = 'bg-green-100 text-green-800';
+    let badgeText = `~${estimatedSec}s`;
+    
+    if (diff > durationSec * 0.1) {
+        // Texto demasiado largo (supera el tiempo)
+        badgeClass = 'bg-red-100 text-red-800';
+        badgeText = `~${estimatedSec}s ⚠️`;
+    } else if (diff < -(durationSec * 0.1)) {
+        // Texto demasiado corto
+        badgeClass = 'bg-yellow-100 text-yellow-800';
+        badgeText = `~${estimatedSec}s`;
+    }
+    
+    badgeElement.className = `px-2 py-1 ${badgeClass} text-xs font-medium rounded`;
+    badgeElement.textContent = badgeText;
+    badgeElement.title = `${result.wordCount} palabras → ~${estimatedSec}s (configurado: ${durationSec}s, diferencia: ${diffPercent > 0 ? '+' : ''}${diffPercent}%)`;
+}
+
 // Script ya procesado, mostrar escenas
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Script procesado, mostrando escenas');
@@ -521,22 +804,93 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializar configuraciones de cada escena
     {% for scene_data in scenes_with_urls %}
-    updateServiceConfig({{ scene_data.scene.id }}, '{{ scene_data.scene.ai_service }}');
+    (function() {
+        // Usar IIFE para evitar redeclaración de sceneId
+        const sceneId = {{ scene_data.scene.id }};
+        updateServiceConfig(sceneId, '{{ scene_data.scene.ai_service }}');
+        
+        // Calcular y mostrar duración estimada para cada escena
+        const sceneData = scenesInspectorData[sceneId];
+        
+        if (sceneData) {
+            const scriptText = sceneData.script_text || '';
+            const durationSec = sceneData.duration_sec || {{ scene_data.scene.duration_sec }};
+            
+            console.log(`🔵 Calculando duración estimada para escena ${sceneId}:`, {
+                scriptText: scriptText.substring(0, 50) + (scriptText.length > 50 ? '...' : ''),
+                durationSec: durationSec,
+                wordCount: scriptText.trim().split(/\s+/).filter(w => w.length > 0).length
+            });
+            
+            // Llamar inmediatamente
+            updateSceneEstimatedDuration(sceneId, scriptText, durationSec);
+            
+            // También verificar después de un pequeño delay por si acaso
+            setTimeout(() => {
+                const badgeEl = document.getElementById(`estimated-duration-${sceneId}`);
+                if (badgeEl && badgeEl.textContent === '-') {
+                    console.warn(`⚠️ Badge aún muestra "-" para escena ${sceneId}, reintentando...`);
+                    updateSceneEstimatedDuration(sceneId, scriptText, durationSec);
+                }
+            }, 100);
+        } else {
+            console.warn(`⚠️ No se encontraron datos para escena ${sceneId} en scenesInspectorData`);
+            console.warn(`   Escenas disponibles:`, Object.keys(scenesInspectorData));
+        }
+    })();
     {% endfor %}
     
     // Cargar avatares y voces de HeyGen (solo una vez gracias al cache)
     loadHeyGenAssets();
+    
+    console.log('✓ DOMContentLoaded completado');
+    console.log('✓ Total de escenas procesadas:', Object.keys(scenesInspectorData).length);
 });
 
-// Cambiar servicio y guardar
-function changeServiceAndSave(sceneId, service) {
-    updateServiceConfig(sceneId, service);
-    saveSceneConfig(sceneId, { ai_service: service });
+// ==================
+// FUNCIONES GLOBALES (deben estar fuera de DOMContentLoaded para estar disponibles en onclick/onchange)
+// ==================
+
+// Función para manejar cambios de duración en las cards
+function handleDurationChange(sceneId, newDuration) {
+    console.log(`Cambiando duración de escena ${sceneId} a ${newDuration}s`);
+    
+    // Guardar configuración
+    saveSceneAiConfig(sceneId, 'duration', newDuration);
+    
+    // Actualizar scenesInspectorData
+    if (scenesInspectorData[sceneId]) {
+        scenesInspectorData[sceneId].duration_sec = newDuration;
+        
+        // Recalcular duración estimada
+        const sceneData = scenesInspectorData[sceneId];
+        const scriptText = sceneData.script_text || '';
+        updateSceneEstimatedDuration(sceneId, scriptText, newDuration);
+    }
 }
 
-// Actualizar configuración según el servicio seleccionado
+// Cambiar servicio y guardar (FUNCIÓN GLOBAL)
+function changeServiceAndSave(sceneId, service) {
+    console.log(`🔵 [changeServiceAndSave] Cambiando servicio de escena ${sceneId} a ${service}`);
+    if (typeof updateServiceConfig === 'function') {
+        updateServiceConfig(sceneId, service);
+    } else {
+        console.error('❌ updateServiceConfig no está definida');
+    }
+    if (typeof saveSceneConfig === 'function') {
+        saveSceneConfig(sceneId, { ai_service: service });
+    } else {
+        console.error('❌ saveSceneConfig no está definida');
+    }
+}
+
+// Actualizar configuración según el servicio seleccionado (FUNCIÓN GLOBAL)
 function updateServiceConfig(sceneId, service) {
     const container = document.getElementById(`config-${sceneId}`);
+    if (!container) {
+        console.warn(`⚠️ [updateServiceConfig] Container config-${sceneId} no encontrado (puede ser normal si es inspector)`);
+        return; // Puede ser normal si se llama desde el inspector
+    }
     container.innerHTML = ''; // Limpiar contenido anterior
     
     // Obtener orientación heredada del script
@@ -555,8 +909,10 @@ function updateServiceConfig(sceneId, service) {
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
                 <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
-                    <option value="5" ${duration === 5 ? 'selected' : ''}>5s</option>
+                        id="scene-duration-${sceneId}"
+                        onchange="handleDurationChange(${sceneId}, parseInt(this.value))">
+                    <option value="4" ${duration === 4 ? 'selected' : ''}>4s</option>
+                    <option value="6" ${duration === 6 ? 'selected' : ''}>6s</option>
                     <option value="8" ${duration === 8 ? 'selected' : ''}>8s</option>
                 </select>
             </div>
@@ -587,7 +943,8 @@ function updateServiceConfig(sceneId, service) {
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-1 block">Duración</label>
                 <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        onchange="saveSceneAiConfig(${sceneId}, 'duration', parseInt(this.value))">
+                        id="scene-duration-${sceneId}"
+                        onchange="handleDurationChange(${sceneId}, parseInt(this.value))">
                     <option value="4" ${duration === 4 ? 'selected' : ''}>4s</option>
                     <option value="8" ${duration === 8 ? 'selected' : ''}>8s</option>
                     <option value="12" ${duration === 12 ? 'selected' : ''}>12s</option>
@@ -706,6 +1063,7 @@ function updateServiceConfig(sceneId, service) {
 }
 
 // Guardar configuración de escena
+// Guardar configuración de escena (FUNCIÓN GLOBAL)
 async function saveSceneConfig(sceneId, data) {
     try {
         const response = await fetch(`/scenes/${sceneId}/update/`, {
@@ -719,6 +1077,35 @@ async function saveSceneConfig(sceneId, data) {
         
         const result = await response.json();
         if (result.status === 'success') {
+            // Actualizar scenesInspectorData localmente
+            if (!scenesInspectorData[sceneId]) {
+                scenesInspectorData[sceneId] = {};
+            }
+            
+            // Actualizar campos según lo que se guardó
+            if (data.script_text !== undefined) {
+                scenesInspectorData[sceneId].script_text = data.script_text;
+            }
+            if (data.duration_sec !== undefined) {
+                scenesInspectorData[sceneId].duration_sec = data.duration_sec;
+            }
+            if (data.ai_config !== undefined) {
+                scenesInspectorData[sceneId].ai_config = {
+                    ...(scenesInspectorData[sceneId].ai_config || {}),
+                    ...data.ai_config
+                };
+            }
+            
+            // Recalcular duración estimada si cambió el texto o la duración
+            const sceneData = scenesInspectorData[sceneId];
+            if (sceneData && (data.script_text !== undefined || data.duration_sec !== undefined || data.ai_config?.duration !== undefined)) {
+                const scriptText = sceneData.script_text || '';
+                const durationSec = data.duration_sec || 
+                                  (data.ai_config?.duration ? parseInt(data.ai_config.duration) : null) ||
+                                  sceneData.duration_sec || 8;
+                updateSceneEstimatedDuration(sceneId, scriptText, durationSec);
+            }
+            
             // Mostrar indicador visual temporal
             showSaveIndicator(sceneId);
         } else {
@@ -743,6 +1130,7 @@ function showSaveIndicator(sceneId) {
 }
 
 // Guardar configuración específica de AI
+// Guardar configuración AI de escena (FUNCIÓN GLOBAL)
 function saveSceneAiConfig(sceneId, key, value) {
     const aiConfig = {};
     aiConfig[key] = value;
@@ -860,42 +1248,122 @@ async function loadVoices(retryCount = 0) {
 function populateAvatarSelects(avatars) {
     const avatarSelects = document.querySelectorAll('[data-config-field="avatar_id"]');
     
+    // Obtener avatar por defecto del paso 1 (desde sessionStorage o desde el script)
+    let defaultAvatarId = null;
+    try {
+        const agentContent = JSON.parse(sessionStorage.getItem('agentContent') || '{}');
+        defaultAvatarId = agentContent.default_heygen_avatar_id || 
+                         agentContent.model_preferences?.default_heygen_avatar_id || 
+                         scriptDefaultAvatarId ||  // Desde el script
+                         null;
+    } catch (e) {
+        console.warn('Error obteniendo avatar por defecto:', e);
+        // Fallback al valor del script
+        defaultAvatarId = scriptDefaultAvatarId || null;
+    }
+    
     avatarSelects.forEach(select => {
         const sceneId = select.dataset.sceneId;
         const sceneData = scenesInspectorData[sceneId] || {};
         const config = sceneData.ai_config || {};
-        const savedAvatarId = config.avatar_id || '';
+        // Usar avatar guardado o el por defecto del paso 1
+        const savedAvatarId = config.avatar_id || defaultAvatarId || '';
         
         select.innerHTML = '<option value="">Selecciona un avatar</option>';
         
         avatars.forEach(avatar => {
             const option = document.createElement('option');
             option.value = avatar.avatar_id;
-            option.textContent = avatar.avatar_name;
+            option.textContent = avatar.avatar_name || avatar.avatar_id;
+            // Agregar preview como data attribute para poder mostrarlo después
+            if (avatar.preview_image_url) {
+                option.dataset.previewImage = avatar.preview_image_url;
+            }
+            if (avatar.preview_video_url) {
+                option.dataset.previewVideo = avatar.preview_video_url;
+            }
             if (savedAvatarId && avatar.avatar_id === savedAvatarId) {
                 option.selected = true;
             }
             select.appendChild(option);
         });
         
-        // Añadir evento onchange para guardar automáticamente
+        // Si no hay avatar guardado pero hay uno por defecto, aplicarlo automáticamente
+        if (!config.avatar_id && defaultAvatarId) {
+            // Seleccionar el avatar por defecto
+            select.value = defaultAvatarId;
+            // Guardar automáticamente
+            saveSceneAiConfig(sceneId, 'avatar_id', defaultAvatarId);
+            // Disparar evento change para mostrar preview
+            select.dispatchEvent(new Event('change'));
+        }
+        
+        // Agregar preview de avatar cuando se selecciona
         select.onchange = function() {
             const avatarId = this.value;
+            const selectedOption = this.options[this.selectedIndex];
+            const previewImage = selectedOption.dataset.previewImage;
+            const previewVideo = selectedOption.dataset.previewVideo;
+            
+            // Mostrar preview si existe
+            let previewContainer = select.parentElement.querySelector('.avatar-preview-container');
+            if (!previewContainer && (previewImage || previewVideo)) {
+                previewContainer = document.createElement('div');
+                previewContainer.className = 'avatar-preview-container mt-2 rounded-lg overflow-hidden bg-gray-100';
+                previewContainer.style.cssText = 'width: 100%; aspect-ratio: 16/9; max-width: 300px;';
+                select.parentElement.appendChild(previewContainer);
+            }
+            
+            if (previewContainer) {
+                if (previewVideo) {
+                    previewContainer.innerHTML = `<video src="${previewVideo}" class="w-full h-full object-cover" muted loop playsinline></video>`;
+                } else if (previewImage) {
+                    previewContainer.innerHTML = `<img src="${previewImage}" alt="Avatar preview" class="w-full h-full object-cover">`;
+                } else {
+                    previewContainer.innerHTML = '';
+                }
+            }
+            
+            // Guardar avatar_id
             if (avatarId) {
                 saveSceneAiConfig(sceneId, 'avatar_id', avatarId);
             }
         };
+        
+        // Mostrar preview del avatar seleccionado inicialmente
+        if (savedAvatarId) {
+            const savedOption = Array.from(select.options).find(opt => opt.value === savedAvatarId);
+            if (savedOption) {
+                select.dispatchEvent(new Event('change'));
+            }
+        }
+        
     });
 }
 
 function populateVoiceSelects(voices) {
     const voiceSelects = document.querySelectorAll('[data-config-field="voice_id"]');
     
+    // Obtener voz por defecto del paso 1 (desde sessionStorage o desde el script)
+    let defaultVoiceId = null;
+    try {
+        const agentContent = JSON.parse(sessionStorage.getItem('agentContent') || '{}');
+        defaultVoiceId = agentContent.default_heygen_voice_id || 
+                        agentContent.model_preferences?.default_heygen_voice_id || 
+                        scriptDefaultVoiceId ||  // Desde el script
+                        null;
+    } catch (e) {
+        console.warn('Error obteniendo voz por defecto:', e);
+        // Fallback al valor del script
+        defaultVoiceId = scriptDefaultVoiceId || null;
+    }
+    
     voiceSelects.forEach(select => {
         const sceneId = select.dataset.sceneId;
         const sceneData = scenesInspectorData[sceneId] || {};
         const config = sceneData.ai_config || {};
-        const savedVoiceId = config.voice_id || '';
+        // Usar voz guardada o la por defecto del paso 1
+        const savedVoiceId = config.voice_id || defaultVoiceId || '';
         
         
         select.innerHTML = '<option value="">Selecciona una voz</option>';
@@ -903,12 +1371,23 @@ function populateVoiceSelects(voices) {
         voices.forEach(voice => {
             const option = document.createElement('option');
             option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
+            // Arreglar nombres undefined - usar name o display_name o un fallback
+            const voiceName = voice.name || voice.display_name || voice.voice_name || `Voz ${voice.voice_id?.substring(0, 8) || 'Desconocida'}`;
+            const language = voice.language || 'Desconocido';
+            option.textContent = `${voiceName} (${language})`;
             if (savedVoiceId && voice.voice_id === savedVoiceId) {
                 option.selected = true;
             }
             select.appendChild(option);
         });
+        
+        // Si no hay voz guardada pero hay una por defecto, aplicarla automáticamente
+        if (!config.voice_id && defaultVoiceId) {
+            // Seleccionar la voz por defecto
+            select.value = defaultVoiceId;
+            // Guardar automáticamente
+            saveSceneAiConfig(sceneId, 'voice_id', defaultVoiceId);
+        }
         
         // Añadir evento onchange para guardar automáticamente
         select.onchange = function() {
@@ -1521,12 +2000,35 @@ async function loadHeyGenAssetsForAddScene() {
             voicesCache = voiceData.voices;
         }
         
+        // Obtener valores por defecto del paso 1 (desde sessionStorage o desde el script)
+        let defaultAvatarId = null;
+        let defaultVoiceId = null;
+        try {
+            const agentContent = JSON.parse(sessionStorage.getItem('agentContent') || '{}');
+            defaultAvatarId = agentContent.default_heygen_avatar_id || 
+                             agentContent.model_preferences?.default_heygen_avatar_id || 
+                             scriptDefaultAvatarId ||  // Desde el script
+                             null;
+            defaultVoiceId = agentContent.default_heygen_voice_id || 
+                            agentContent.model_preferences?.default_heygen_voice_id || 
+                            scriptDefaultVoiceId ||  // Desde el script
+                            null;
+        } catch (e) {
+            console.warn('Error obteniendo valores por defecto:', e);
+            // Fallback a valores del script
+            defaultAvatarId = scriptDefaultAvatarId || null;
+            defaultVoiceId = scriptDefaultVoiceId || null;
+        }
+        
         const avatarSelect = document.querySelector('#add-scene-config-container select[name="avatar_id"]');
         avatarSelect.innerHTML = '<option value="">Selecciona un avatar</option>';
         avatarsCache.forEach(avatar => {
             const option = document.createElement('option');
             option.value = avatar.avatar_id;
             option.textContent = avatar.avatar_name;
+            if (defaultAvatarId && avatar.avatar_id === defaultAvatarId) {
+                option.selected = true;
+            }
             avatarSelect.appendChild(option);
         });
         
@@ -1535,7 +2037,11 @@ async function loadHeyGenAssetsForAddScene() {
         voicesCache.forEach(voice => {
             const option = document.createElement('option');
             option.value = voice.voice_id;
-            option.textContent = `${voice.display_name} (${voice.language})`;
+            const voiceName = voice.name || voice.display_name || voice.voice_name || `Voz ${voice.voice_id?.substring(0, 8) || 'Desconocida'}`;
+            option.textContent = `${voiceName} (${voice.language || 'Desconocido'})`;
+            if (defaultVoiceId && voice.voice_id === defaultVoiceId) {
+                option.selected = true;
+            }
             voiceSelect.appendChild(option);
         });
     } catch (error) {
@@ -1609,76 +2115,50 @@ async function saveNewScene(event) {
     }
 }
 
-// ==================
-// INSPECTOR PANEL
-// ==================
+// (openInspector ya está definida arriba, antes de DOMContentLoaded)
 
-function openInspector(sceneId) {
-    console.log('Opening inspector for scene:', sceneId);
-    console.log('typeof scenesInspectorData:', typeof scenesInspectorData);
-    console.log('scenesInspectorData:', scenesInspectorData);
-    
-    if (!scenesInspectorData) {
-        alert('Error: Los datos de las escenas no están disponibles. Por favor recarga la página.');
-        return;
-    }
-    
-    console.log('Available scenes:', Object.keys(scenesInspectorData));
-    
-    currentInspectorSceneId = sceneId;
-    const scene = scenesInspectorData[sceneId];
-    
-    if (!scene) {
-        console.error('Escena no encontrada:', sceneId);
-        console.error('scenesInspectorData:', scenesInspectorData);
-        alert(`Error: No se encontró la escena ${sceneId} en los datos`);
-        return;
-    }
-    
-    // Llenar datos del inspector
-    document.getElementById('inspector-scene-title').textContent = scene.scene_id || '';
-    document.getElementById('inspector-scene-summary').textContent = scene.summary || '';
-    document.getElementById('inspector-script-text').value = scene.script_text || '';
-    document.getElementById('inspector-visual-prompt').value = scene.visual_prompt || '';
-    document.getElementById('inspector-service-select').value = scene.ai_service || 'gemini_veo';
-    
-    // Llenar datos de voz
-    document.getElementById('inspector-voice-id').value = scene.audio_voice_id || '';
-    document.getElementById('inspector-voice-name').value = scene.audio_voice_name || '';
-    
-    if (scene.audio_voice_name) {
-        document.getElementById('inspector-selected-voice-name').textContent = scene.audio_voice_name;
-        document.getElementById('inspector-selected-voice-category').textContent = 'Voz personalizada para esta escena';
-    } else {
-        document.getElementById('inspector-selected-voice-name').textContent = 'Voz por defecto del script';
-        document.getElementById('inspector-selected-voice-category').textContent = 'Se usará la voz global';
-    }
-    
-    // Actualizar contadores de caracteres
-    updateCharCounter();
-    updateVisualCharCounter();
-    
-    // Actualizar configuración dinámica
-    updateInspectorConfig();
-    
-    // Mostrar panel y overlay
-    document.getElementById('inspector-panel').classList.remove('hidden');
-    document.getElementById('inspector-overlay').classList.remove('hidden');
-    
-    // Scroll al top del panel
-    document.getElementById('inspector-panel').scrollTop = 0;
-}
+// ==================
+// INSPECTOR PANEL (FUNCIONES GLOBALES - DUPLICADAS, ELIMINAR)
+// ==================
+// (openInspector y closeInspector ya están definidas arriba, antes de DOMContentLoaded - NO DUPLICAR)
 
-function closeInspector() {
-    document.getElementById('inspector-panel').classList.add('hidden');
-    document.getElementById('inspector-overlay').classList.add('hidden');
-    currentInspectorSceneId = null;
+function updateInspectorDurationAndRecalculate() {
+    if (!currentInspectorSceneId) return;
+    
+    const durationSelect = document.getElementById('inspector-duration');
+    if (!durationSelect) return;
+    
+    const newDuration = parseInt(durationSelect.value);
+    const sceneData = scenesInspectorData[currentInspectorSceneId];
+    
+    if (sceneData && newDuration) {
+        // Guardar la nueva duración
+        saveSceneAiConfig(currentInspectorSceneId, 'duration', newDuration);
+        
+        // Actualizar duration_sec en scenesInspectorData
+        sceneData.duration_sec = newDuration;
+        
+        // Recalcular duración estimada
+        const scriptText = document.getElementById('inspector-script-text')?.value || sceneData.script_text || '';
+        updateSceneEstimatedDuration(currentInspectorSceneId, scriptText, newDuration);
+    }
 }
 
 function updateCharCounter() {
-    const text = document.getElementById('inspector-script-text').value;
+    const textEl = document.getElementById('inspector-script-text');
+    if (!textEl) {
+        console.warn('⚠️ [updateCharCounter] inspector-script-text no encontrado');
+        return;
+    }
+    
+    const text = textEl.value;
     const charCount = text.length;
     const counter = document.getElementById('inspector-char-count');
+    
+    if (!counter) {
+        console.warn('⚠️ [updateCharCounter] inspector-char-count no encontrado');
+        return;
+    }
     
     counter.textContent = `${charCount} / 1000`;
     
@@ -1692,6 +2172,21 @@ function updateCharCounter() {
     } else {
         counter.classList.remove('text-red-600', 'text-yellow-600', 'font-bold');
         counter.classList.add('text-gray-500');
+    }
+    
+    // Recalcular duración estimada si hay una escena abierta
+    if (currentInspectorSceneId) {
+        const sceneData = scenesInspectorData[currentInspectorSceneId];
+        if (sceneData) {
+            // Obtener duración actual (del select si existe, sino del sceneData)
+            const durationSelect = document.getElementById('inspector-duration');
+            const durationSec = durationSelect ? parseInt(durationSelect.value) : (sceneData.duration_sec || 8);
+            
+            updateSceneEstimatedDuration(currentInspectorSceneId, text, durationSec);
+            
+            // Actualizar también en scenesInspectorData para mantener sincronizado
+            sceneData.script_text = text;
+        }
     }
 }
 
@@ -1719,18 +2214,37 @@ function updateVisualCharCounter() {
 function updateInspectorConfig() {
     if (!currentInspectorSceneId) return;
     
-    const service = document.getElementById('inspector-service-select').value;
+    const serviceSelect = document.getElementById('inspector-service-select');
+    if (!serviceSelect) {
+        console.warn('⚠️ [updateInspectorConfig] inspector-service-select no encontrado');
+        return;
+    }
+    
+    const service = serviceSelect.value;
     const scene = scenesInspectorData[currentInspectorSceneId];
+    if (!scene) {
+        console.warn('⚠️ [updateInspectorConfig] Escena no encontrada en scenesInspectorData');
+        return;
+    }
+    
     const config = scene.ai_config || {};
     const videoOrientation = '{{ video_orientation }}';
     const container = document.getElementById('inspector-config-container');
+    
+    if (!container) {
+        console.warn('⚠️ [updateInspectorConfig] inspector-config-container no encontrado');
+        return;
+    }
     
     if (service === 'gemini_veo') {
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
-                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                    <option value="5" ${config.duration == 5 ? 'selected' : ''}>5 segundos</option>
+                <select id="inspector-duration" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="updateInspectorDurationAndRecalculate()">
+                    <option value="4" ${config.duration == 4 ? 'selected' : ''}>4 segundos</option>
+                    <option value="6" ${config.duration == 6 ? 'selected' : ''}>6 segundos</option>
                     <option value="8" ${config.duration == 8 || !config.duration ? 'selected' : ''}>8 segundos</option>
                 </select>
             </div>
@@ -1765,7 +2279,9 @@ function updateInspectorConfig() {
         container.innerHTML = `
             <div>
                 <label class="text-sm font-medium text-gray-700 mb-2 block">Duración</label>
-                <select id="inspector-duration" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <select id="inspector-duration" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        onchange="updateInspectorDurationAndRecalculate()">
                     <option value="4" ${duration === 4 ? 'selected' : ''}>4 segundos</option>
                     <option value="8" ${duration === 8 ? 'selected' : ''}>8 segundos</option>
                     <option value="12" ${duration === 12 ? 'selected' : ''}>12 segundos</option>
@@ -2004,6 +2520,19 @@ async function saveInspectorChanges() {
             console.log('✓ Inspector: Cambios guardados');
             
             // Actualizar cache local
+            if (!scenesInspectorData[currentInspectorSceneId]) {
+                scenesInspectorData[currentInspectorSceneId] = {};
+            }
+            scenesInspectorData[currentInspectorSceneId].script_text = scriptText;
+            if (data.ai_config.duration) {
+                scenesInspectorData[currentInspectorSceneId].duration_sec = data.ai_config.duration;
+            }
+            
+            // Recalcular duración estimada
+            const durationSec = data.ai_config.duration || scenesInspectorData[currentInspectorSceneId].duration_sec || 8;
+            updateSceneEstimatedDuration(currentInspectorSceneId, scriptText, durationSec);
+            
+            // Actualizar cache local
             scenesInspectorData[currentInspectorSceneId].script_text = scriptText;
             scenesInspectorData[currentInspectorSceneId].visual_prompt = visualPrompt;
             scenesInspectorData[currentInspectorSceneId].ai_service = service;
@@ -2033,155 +2562,76 @@ async function saveInspectorChanges() {
 }
 
 // ==================
-// VOICE SELECTOR FOR INSPECTOR
+// VOICE SELECTOR FOR INSPECTOR (REUTILIZANDO FUNCIONES GENÉRICAS)
 // ==================
 
+// Usar el cache global de voces si existe, sino crear uno específico
 let voicesCacheInspector = null;
 
 async function openInspectorVoiceModal() {
-    // Cargar voces si no están en cache
-    if (!voicesCacheInspector) {
-        try {
-            const response = await fetch('{% url "core:api_list_elevenlabs_voices" %}');
-            const data = await response.json();
-            voicesCacheInspector = data.voices || [];
-        } catch (error) {
-            console.error('Error cargando voces:', error);
-            alert('Error al cargar voces de ElevenLabs');
-            return;
-        }
-    }
-    
-    // Crear y mostrar modal
-    createInspectorVoiceModal();
-}
-
-function createInspectorVoiceModal() {
-    // Eliminar modal anterior si existe
-    const existingModal = document.getElementById('voice-modal-inspector');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    // Crear modal
-    const modal = document.createElement('div');
-    modal.id = 'voice-modal-inspector';
-    modal.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4';
-    
-    modal.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-            <!-- Header -->
-            <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex justify-between items-center">
-                <div>
-                    <h2 class="text-2xl font-bold text-white">Catálogo de Voces ElevenLabs</h2>
-                    <p class="text-green-100 text-sm mt-1">${voicesCacheInspector.length} voces disponibles</p>
-                </div>
-                <button type="button" onclick="closeInspectorVoiceModal()" 
-                        class="text-white hover:text-green-100 text-3xl leading-none">
-                    &times;
-                </button>
-            </div>
+    // Usar función genérica del modal de voces
+    openVoiceModal({
+        modalId: 'voice-modal-inspector',
+        filterPrefix: 'inspector',
+        apiUrl: '{% url "core:api_list_elevenlabs_voices" %}',
+        onSelect: function(voiceId, voiceName, voiceCategory) {
+            // Actualizar campos hidden
+            document.getElementById('inspector-voice-id').value = voiceId;
+            document.getElementById('inspector-voice-name').value = voiceName;
             
-            <!-- Buscador -->
-            <div class="px-6 py-4 bg-gray-50 border-b">
-                <input type="text" id="voice-search-inspector" placeholder="🔍 Buscar por nombre, acento, género..." 
-                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                       oninput="filterVoicesInspector(this.value)">
-            </div>
+            // Actualizar UI
+            document.getElementById('inspector-selected-voice-name').textContent = voiceName;
+            document.getElementById('inspector-selected-voice-category').textContent = voiceCategory + ' (personalizada)';
             
-            <!-- Lista de Voces -->
-            <div class="overflow-y-auto p-6" style="max-height: calc(90vh - 200px);">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="voices-grid-inspector">
-                    ${renderInspectorVoiceCards()}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-}
-
-function renderInspectorVoiceCards() {
-    if (!voicesCacheInspector || voicesCacheInspector.length === 0) {
-        return '<div class="col-span-3 text-center py-12"><p class="text-gray-500">No hay voces disponibles</p></div>';
-    }
-    
-    return voicesCacheInspector.map(voice => {
-        const labels = voice.labels || {};
-        const labelsHtml = Object.values(labels).map(label => 
-            `<span class="inline-block bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">${label}</span>`
-        ).join('');
-        
-        return `
-            <div class="voice-card border-2 border-gray-200 rounded-xl p-5 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer bg-white" 
-                 data-voice-id="${voice.voice_id}"
-                 data-voice-name="${voice.name}"
-                 data-voice-category="${voice.category || 'premade'}"
-                 onclick="selectInspectorVoice('${voice.voice_id}', '${voice.name}', '${voice.category || 'premade'}')">
-                
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex-1">
-                        <h3 class="font-bold text-gray-900 text-lg">${voice.name}</h3>
-                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">${voice.category || 'premade'}</p>
-                    </div>
-                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span class="text-xl">🎙️</span>
-                    </div>
-                </div>
-                
-                ${voice.description ? `<p class="text-sm text-gray-700 mb-3">${voice.description}</p>` : ''}
-                
-                ${labelsHtml ? `<div class="flex flex-wrap gap-1 mb-3">${labelsHtml}</div>` : ''}
-                
-                ${voice.preview_url ? `
-                    <div class="mt-3" onclick="event.stopPropagation();">
-                        <audio controls preload="none" class="w-full h-8">
-                            <source src="${voice.preview_url}" type="audio/mpeg">
-                        </audio>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }).join('');
-}
-
-function closeInspectorVoiceModal() {
-    const modal = document.getElementById('voice-modal-inspector');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-function selectInspectorVoice(voiceId, voiceName, voiceCategory) {
-    // Actualizar campos hidden
-    document.getElementById('inspector-voice-id').value = voiceId;
-    document.getElementById('inspector-voice-name').value = voiceName;
-    
-    // Actualizar UI
-    document.getElementById('inspector-selected-voice-name').textContent = voiceName;
-    document.getElementById('inspector-selected-voice-category').textContent = voiceCategory + ' (personalizada)';
-    
-    // Cerrar modal
-    closeInspectorVoiceModal();
-    
-    console.log('Voz seleccionada para escena:', voiceName, voiceId);
-}
-
-function filterVoicesInspector(searchTerm) {
-    const cards = document.querySelectorAll('#voices-grid-inspector .voice-card');
-    const term = searchTerm.toLowerCase();
-    
-    cards.forEach(card => {
-        const voiceName = card.dataset.voiceName.toLowerCase();
-        const voiceCategory = card.dataset.voiceCategory.toLowerCase();
-        const text = card.textContent.toLowerCase();
-        
-        if (voiceName.includes(term) || voiceCategory.includes(term) || text.includes(term)) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
+            console.log('Voz seleccionada para escena:', voiceName, voiceId);
         }
     });
+}
+
+// Función obsoleta - eliminada, usar openInspectorVoiceModal() directamente
+
+// ==================
+// VOICE TAGS HELPER FUNCTIONS
+// ==================
+
+function toggleVoiceTagsHelp() {
+    const helpDiv = document.getElementById('voice-tags-help');
+    if (helpDiv) {
+        helpDiv.classList.toggle('hidden');
+    }
+}
+
+function insertVoiceTag(tag) {
+    const textarea = document.getElementById('inspector-script-text');
+    if (!textarea) return;
+    
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.substring(0, cursorPos);
+    const textAfter = textarea.value.substring(cursorPos);
+    
+    // Insertar tag con espacio después si es necesario
+    const tagWithSpace = tag.endsWith(']') && !textAfter.startsWith(' ') && textAfter.length > 0 ? tag + ' ' : tag;
+    
+    textarea.value = textBefore + tagWithSpace + textAfter;
+    
+    // Reposicionar cursor después del tag
+    const newCursorPos = cursorPos + tagWithSpace.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+    
+    // Actualizar contador
+    if (typeof updateCharCounter === 'function') {
+        updateCharCounter();
+    }
+    
+    // Actualizar duración estimada si existe la función
+    if (typeof updateSceneEstimatedDuration === 'function') {
+        const sceneId = currentInspectorSceneId;
+        if (sceneId) {
+            const durationSec = scenesInspectorData[sceneId]?.duration_sec || 8;
+            updateSceneEstimatedDuration(sceneId, textarea.value, durationSec);
+        }
+    }
 }
 </script>
 {% endif %}
@@ -2194,7 +2644,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const agentContent = JSON.parse(sessionStorage.getItem('agentContent'));
     
     if (!agentContent) {
-        window.location.href = "{% url 'core:agent_create' project.id %}";
+        {% if project %}
+            window.location.href = "{% url 'core:agent_create' project.uuid %}";
+        {% else %}
+            window.location.href = "{% url 'core:agent_create_standalone' %}";
+        {% endif %}
         return;
     }
     
@@ -2202,7 +2656,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateProcessingStatus('Enviando guión a procesamiento...');
     
     // Enviar a backend
-    fetch("{% url 'core:agent_configure' project.id %}", {
+    fetch("{% if project %}{% url 'core:agent_configure' project.uuid %}{% else %}{% url 'core:agent_configure_standalone' %}{% endif %}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -2213,11 +2667,21 @@ document.addEventListener('DOMContentLoaded', function() {
             'script_content': agentContent.content,
             'desired_duration_min': agentContent.duration,
             'video_type': agentContent.video_type || 'general',
+            'video_format': agentContent.video_format || 'educational',
             'video_orientation': agentContent.video_orientation || '16:9',
             'generate_previews': agentContent.generate_previews !== false ? 'true' : 'false',
             'enable_audio': agentContent.enable_audio !== false ? 'true' : 'false',
             'default_voice_id': agentContent.default_voice_id || 'pFZP5JQG7iQjIQuC4Bku',
-            'default_voice_name': agentContent.default_voice_name || 'Aria'
+            'default_voice_name': agentContent.default_voice_name || 'Aria',
+            // HeyGen defaults
+            'default_heygen_avatar_id': agentContent.default_heygen_avatar_id || agentContent.model_preferences?.default_heygen_avatar_id || '',
+            'default_heygen_avatar_name': agentContent.default_heygen_avatar_name || agentContent.model_preferences?.default_heygen_avatar_name || '',
+            'default_heygen_voice_id': agentContent.default_heygen_voice_id || agentContent.model_preferences?.default_heygen_voice_id || '',
+            'default_heygen_voice_name': agentContent.default_heygen_voice_name || agentContent.model_preferences?.default_heygen_voice_name || '',
+            // Preferencias de modelos
+            'model_pref_veo': agentContent.model_preferences?.gemini_veo || '',
+            'model_pref_sora': agentContent.model_preferences?.sora || '',
+            'model_pref_heygen': agentContent.model_preferences?.heygen || ''
         })
     })
     .then(response => response.json())
@@ -2228,13 +2692,21 @@ document.addEventListener('DOMContentLoaded', function() {
             pollScriptStatus(data.script_id);
         } else {
             alert('Error: ' + data.message);
-            window.location.href = "{% url 'core:agent_create' project.id %}";
+            {% if project %}
+                window.location.href = "{% url 'core:agent_create' project.uuid %}";
+            {% else %}
+                window.location.href = "{% url 'core:agent_create_standalone' %}";
+            {% endif %}
         }
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error al enviar script');
-        window.location.href = "{% url 'core:agent_create' project.id %}";
+        {% if project %}
+            window.location.href = "{% url 'core:agent_create' project.uuid %}";
+        {% else %}
+            window.location.href = "{% url 'core:agent_create_standalone' %}";
+        {% endif %}
     });
 });
 
@@ -2259,7 +2731,11 @@ function pollScriptStatus(scriptId) {
             clearInterval(interval);
             updateProcessingStatus('⚠️ Timeout: El procesamiento está tardando más de lo esperado.');
             alert('El procesamiento está tardando más de lo esperado. Por favor, verifica el estado del script en el proyecto.');
-            window.location.href = "{% url 'core:project_detail' project.id %}";
+            {% if project %}
+                window.location.href = "{% url 'core:project_detail' project.uuid %}";
+            {% else %}
+                window.location.href = "{% url 'core:dashboard' %}";
+            {% endif %}
             return;
         }
         
@@ -2281,14 +2757,22 @@ function pollScriptStatus(scriptId) {
                 // Esperar 2 segundos para que terminen de generarse las preview images
                 setTimeout(() => {
                     // Redirigir a la misma página con script_id para mostrar escenas
-                    window.location.href = "{% url 'core:agent_configure' project.id %}?script_id=" + scriptId;
+                    {% if project %}
+                        window.location.href = "{% url 'core:agent_configure' project.uuid %}?script_id=" + scriptId;
+                    {% else %}
+                        window.location.href = "{% url 'core:agent_configure_standalone' %}?script_id=" + scriptId;
+                    {% endif %}
                 }, 2000);
                 
             } else if (html.includes('Error') || html.includes('bg-red-500')) {
                 clearInterval(interval);
                 updateProcessingStatus('✗ Error al procesar guión');
                 alert('Error al procesar el guión. Por favor, intenta nuevamente.');
-                window.location.href = "{% url 'core:agent_create' project.id %}";
+                {% if project %}
+                    window.location.href = "{% url 'core:agent_create' project.uuid %}";
+                {% else %}
+                    window.location.href = "{% url 'core:agent_create_standalone' %}";
+                {% endif %}
             } else {
                 // Actualizar mensaje de progreso
                 if (pollCount % 5 === 0) { // Cada 15 segundos

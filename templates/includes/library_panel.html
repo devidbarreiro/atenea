@@ -7,11 +7,11 @@ document.addEventListener('alpine:init', () => {
         items: [],
         loading: true,
         activeTab: '{{ active_tab|default:"video" }}',
-        projectId: {% if project %}{{ project.id }}{% else %}null{% endif %},
+        projectId: {% if project %}'{{ project.uuid }}'{% else %}null{% endif %},
         
         // Item inicial (si venimos de una URL directa como /images/20/)
         initialItemType: '{{ initial_item_type|default:"" }}',
-        initialItemId: {{ initial_item_id|default:"null" }},
+        initialItemId: '{{ initial_item_id|default:"" }}' || null,
         
         // Estado del detalle
         selectedItem: null,
@@ -23,8 +23,12 @@ document.addEventListener('alpine:init', () => {
         
         // Modal de mover
         moveModal: { open: false, item: null },
-        projects: [{% for p in projects %}{ id: {{ p.id }}, name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
+        projects: [{% for p in projects %}{ id: {{ p.id }}, uuid: '{{ p.uuid }}', name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
         
+        // === ESTADO DE SELECCIÓN MASIVA ===
+        isBulkActionMode: false,
+        selectedItems: [], 
+
         init() {
             this.loadItems();
             
@@ -40,6 +44,7 @@ document.addEventListener('alpine:init', () => {
                     this._cleanupAllPolling();
                     this.activeTab = e.detail.tab;
                     this.selectedItem = null;
+                    this.resetBulkActionMode(); // Resetear al cambiar de tab
                     this.loadItems();
                 },
                 itemCreated: () => {
@@ -65,6 +70,33 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('popstate', this._handlers.popstate);
         },
         
+        // === MÉTODOS DE SELECCIÓN Y CLICK ===
+        // Esta función decide qué hacer cuando haces clic en la carta
+        handleMainClick(item) {
+            if (this.isBulkActionMode) {
+                this.toggleSelection(item.id);
+            } else {
+                this.openItem(item);
+            }
+        },
+
+        toggleSelection(itemId) {
+            const index = this.selectedItems.indexOf(itemId);
+            if (index > -1) {
+                this.selectedItems.splice(index, 1);
+            } else {
+                this.selectedItems.push(itemId);
+            }
+            
+            // Activa el modo bulk si hay items, o desactiva si está vacío
+            this.isBulkActionMode = this.selectedItems.length > 0;
+        },
+
+        resetBulkActionMode() {
+            this.isBulkActionMode = false;
+            this.selectedItems = [];
+        },
+
         _cleanupAllPolling() {
             // Limpiar todos los polling intervals de los items
             this.items.forEach(item => {
@@ -92,7 +124,7 @@ document.addEventListener('alpine:init', () => {
             try {
                 const params = new URLSearchParams({ type: this.activeTab });
                 if (this.projectId) {
-                    params.append('project_id', this.projectId);
+                    params.append('project_uuid', this.projectId);
                 }
                 const response = await fetch('/api/library/items/?' + params);
                 const data = await response.json();
@@ -123,7 +155,7 @@ document.addEventListener('alpine:init', () => {
                 // Pasar project_id a la API para filtrar navegación correctamente
                 let apiUrl = '/api/items/' + item.type + '/' + item.id + '/';
                 if (this.projectId) {
-                    apiUrl += '?project_id=' + this.projectId;
+                    apiUrl += '?project_uuid=' + this.projectId;
                 }
                 
                 const response = await fetch(apiUrl);
@@ -215,12 +247,13 @@ document.addEventListener('alpine:init', () => {
             breadcrumbsContainer.innerHTML = html;
         },
         
+
         escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         },
-        
+
         closeDetail() {
             // Limpiar polling antes de cerrar
             this._cleanupAllPolling();
@@ -239,52 +272,29 @@ document.addEventListener('alpine:init', () => {
                 history.back();
             }
         },
+
+        async navigateTo(direction) {
+            // 1. Validación básica
+            if (!this.navigation || !this.navigation[direction]) return;
+            
+            // 2. Obtener el objeto o valor de navegación
+            const navData = this.navigation[direction];
+            
+            // 3. Buscar 'uuid''. 
+            const nextId = (typeof navData === 'object') ? (navData.uuid ) : navData;
         
-        restoreBreadcrumbs() {
-            const breadcrumbsContainer = document.querySelector('#breadcrumbs-list');
-            if (!breadcrumbsContainer) return;
+            // 4. Validación de seguridad del ID
+            if (!nextId) {
+                console.error("Error de navegación: ID/UUID no encontrado en:", navData);
+                return;
+            }
+            // 5. Determinar el tipo (usando fallback a activeTab)
+            let nextType = this.activeTab; // Valor por defecto
             
-            const typeLabels = { 'video': 'Videos', 'image': 'Imágenes', 'audio': 'Audios' };
-            const typeLabel = typeLabels[this.activeTab] || this.activeTab;
-            
-            let html = `
-                <li class="flex-shrink-0">
-                    <a href="/" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                        </svg>
-                    </a>
-                </li>
-            `;
-            
-            if (this.projectId) {
-                // Buscar el nombre del proyecto en la lista de proyectos
-                const project = this.projects.find(p => p.id === this.projectId);
-                const projectName = project ? project.name : 'Proyecto';
-                
-                html += `
-                    <li class="flex items-center gap-2 flex-shrink-0">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                        <a href="/projects/${this.projectId}/" class="text-gray-500 hover:text-gray-700 text-sm">${this.escapeHtml(projectName)}</a>
-                    </li>
-                    <li class="flex items-center gap-2 flex-shrink-0">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                        <span class="text-gray-900 font-medium">${typeLabel}</span>
-                    </li>
-                `;
-            } else {
-                html += `
-                    <li class="flex items-center gap-2 flex-shrink-0">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                        <span class="text-gray-900 font-medium">${typeLabel}</span>
-                    </li>
-                `;
+            if (typeof navData === 'object' && navData.type) {
+                nextType = navData.type;
+            } else if (this.selectedItem && this.selectedItem.type) {
+                nextType = this.selectedItem.type;
             }
             
             breadcrumbsContainer.innerHTML = html;
@@ -293,7 +303,8 @@ document.addEventListener('alpine:init', () => {
         async navigateTo(direction) {
             if (!this.navigation || !this.navigation[direction]) return;
             const nav = this.navigation[direction];
-            await this.openItem({ type: this.selectedItem.type, id: nav.id });
+            // La navegación devuelve 'uuid', no 'id'
+            await this.openItem({ type: nav.type, id: nav.uuid });
         },
         
         formatDate(dateStr) {
@@ -315,22 +326,28 @@ document.addEventListener('alpine:init', () => {
         },
         
         async deleteItem() {
-            if (!this.deleteModal.item) return;
-            const item = this.deleteModal.item;
+            const itemsToDelete = this.deleteModal.item ? [this.deleteModal.item] : this.items.filter(i => this.selectedItems.includes(i.id));
+            
+            if (itemsToDelete.length === 0) return;
+            
             try {
                 const token = document.querySelector('[name=csrfmiddlewaretoken]');
-                const response = await fetch(item.delete_url, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': token ? token.value : ''
-                    }
-                });
-                if (response.ok) {
-                    this.deleteModal = { open: false, item: null };
-                    this.loadItems();
+                // Ejecutar eliminaciones (simulando bulk si es múltiple)
+                for (const item of itemsToDelete) {
+                    await fetch(item.delete_url, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': token ? token.value : ''
+                        }
+                    });
                 }
+                
+                this.deleteModal = { open: false, item: null };
+                this.resetBulkActionMode();
+                this.loadItems();
+                
             } catch (error) {
-                console.error('Error deleting item:', error);
+                console.error('Error deleting item(s):', error);
             }
         },
         
@@ -347,46 +364,85 @@ document.addEventListener('alpine:init', () => {
         },
         
         openMoveModal(item, e) {
-            e.stopPropagation();
+            if (e) e.stopPropagation();
+            // Si item es null, significa acción masiva
             this.moveModal = { open: true, item: item };
         },
         
         async moveItem(projectId) {
-            if (!this.moveModal.item) return;
-            const item = this.moveModal.item;
+            const itemsToMove = this.moveModal.item ? [this.moveModal.item] : this.items.filter(i => this.selectedItems.includes(i.id));
+            
+            if (itemsToMove.length === 0) return;
+
             try {
                 const token = document.querySelector('[name=csrfmiddlewaretoken]');
-                const response = await fetch('/items/' + item.id + '/move/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': token ? token.value : ''
-                    },
-                    body: JSON.stringify({ project_id: projectId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.moveModal = { open: false, item: null };
-                    this.loadItems();
-                } else {
-                    alert(data.error || 'Error al mover el item');
+                
+                // Ejecutar movimientos
+                for (const item of itemsToMove) {
+                    await fetch('/items/' + item.id + '/move/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': token ? token.value : ''
+                        },
+                        body: JSON.stringify({ project_id: projectId })
+                    });
                 }
+                
+                this.moveModal = { open: false, item: null };
+                this.resetBulkActionMode();
+                this.loadItems();
+
             } catch (error) {
                 console.error('Error moving item:', error);
-                alert('Error al mover el item');
+                alert('Error al mover los items');
             }
         }
     }));
 });
 </script>
 
-<div x-data="libraryPanel()" class="h-full flex flex-col bg-white">
+<div x-data="libraryPanel()" class="h-full flex flex-col bg-white relative">
+
+    <!-- =================== MODAL BULK =================== -->
+    <div x-show="isBulkActionMode"
+         x-transition:enter="transition cubic-bezier(0.175, 0.885, 0.32, 1.275) duration-300"
+         x-transition:enter-start="opacity-0 translate-y-10 scale-95"
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+         x-transition:leave-end="opacity-0 translate-y-10 scale-95"
+         class="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50"
+         style="display: none;">
+         
+        <div class="flex items-center gap-4 bg-gray-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-white/10">
+            
+            <div class="flex items-center gap-2 border-r border-white/20 pr-4">
+                <div class="bg-white text-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold" x-text="selectedItems.length"></div>
+                <span class="text-sm font-medium">Seleccionados</span>
+            </div>
+    
+            <div class="flex items-center gap-2">
+                <button @click="openMoveModal(null, $event)" class="p-2 hover:bg-white/20 rounded-full transition-colors group relative" title="Mover">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                </button>
+                
+                <button @click="openDeleteModal(null, $event)" class="p-2 hover:bg-red-500/80 rounded-full transition-colors text-red-300 hover:text-white" title="Eliminar">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </div>
+    
+            <button @click="resetBulkActionMode()" class="ml-2 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <svg class="w-5 h-5 text-gray-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+    </div>
     
     <!-- ========== VISTA: GRID DE ITEMS ========== -->
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
             <!-- Contenido -->
-            <div class="flex-1 overflow-y-auto p-6">
+            <div class="flex-1 overflow-y-auto p-6 relative"> 
                 <!-- Loading -->
                 <div x-show="loading" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
@@ -395,7 +451,7 @@ document.addEventListener('alpine:init', () => {
                 
                 <!-- Grid -->
                 <div x-show="!loading && items.length > 0" 
-                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
                                 menuOpen: false, 
@@ -406,6 +462,9 @@ document.addEventListener('alpine:init', () => {
                                     if (item.type === 'video' && item.status === 'processing') {
                                         this.startPolling(item.id);
                                     }
+                                },
+                                isSelected() {
+                                    return selectedItems.includes(item.id);
                                 },
                                 startPolling(videoId) {
                                     // Limpiar intervalo anterior si existe
@@ -446,26 +505,48 @@ document.addEventListener('alpine:init', () => {
                                     }
                                 }
                             }"
-                             class="group rounded-lg overflow-hidden hover:shadow-lg transition-all cursor-pointer relative bg-white border border-gray-200">
+                            class="group rounded-lg overflow-hidden transition-all cursor-pointer relative bg-white border"
+                            :class="{
+                                'ring-2 ring-blue-500 border-blue-500 shadow-md': isSelected(),
+                                'border-gray-200 hover:shadow-lg': !isSelected()
+                            }"
+                            @click="handleMainClick(item)">
                             
                             <!-- Thumbnail -->
-                            <div class="relative aspect-square bg-gray-100 overflow-hidden"
-                                 @click="if (!videoPlaying) openItem(item)">
+                            <div class="relative aspect-square bg-gray-100 overflow-hidden">
+                                
+                                <div class="absolute bottom-2 right-2 z-20 transition-opacity duration-200"
+                                     :class="{
+                                        'opacity-100': isBulkActionMode || isSelected() || $el.closest('.group:hover'),
+                                        'opacity-0 group-hover:opacity-100': !isBulkActionMode && !isSelected()
+                                     }">
+                                    <button @click.stop="toggleSelection(item.id)"
+                                            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shadow-sm focus:outline-none"
+                                            :class="{
+                                                'bg-blue-500 border-blue-500': isSelected(),
+                                                'bg-white border-gray-300 hover:border-blue-400': !isSelected()
+                                            }">
+                                        <svg x-show="isSelected()" class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    </button>
+                                </div>
                                 
                                 <!-- Video con preview en hover -->
                                 <template x-if="item.type === 'video' && item.signed_url">
-                                    <div class="w-full h-full relative">
+                                    <div class="w-full h-full relative"
+                                         @mouseenter="if ($refs.videoEl && !$root.isBulkActionMode) { $refs.videoEl.play(); videoPlaying = true; }"
+                                         @mouseleave="if ($refs.videoEl && !$root.isBulkActionMode) { $refs.videoEl.pause(); $refs.videoEl.currentTime = 0; videoPlaying = false; }">
+                                        
                                         <video :src="item.signed_url" 
                                                class="w-full h-full object-cover" 
                                                preload="metadata"
                                                x-ref="videoEl"
-                                               @mouseenter="if ($refs.videoEl) { $refs.videoEl.play(); videoPlaying = true; }"
-                                               @mouseleave="if ($refs.videoEl) { $refs.videoEl.pause(); $refs.videoEl.currentTime = 0; videoPlaying = false; }"
                                                muted
                                                loop></video>
-                                        <!-- Overlay con botón play (solo visible cuando no está reproduciendo) -->
-                                        <div x-show="!videoPlaying" 
-                                             class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                                
+                                        <div x-show="!videoPlaying && !$root.isBulkActionMode" 
+                                             class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
                                             <div class="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
                                                 <svg class="w-6 h-6 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M8 5v14l11-7z"></path>
@@ -475,7 +556,7 @@ document.addEventListener('alpine:init', () => {
                                     </div>
                                 </template>
                                 
-                                <!-- Imagen -->
+                                <!-- Image -->
                                 <img x-show="item.type === 'image' && item.signed_url"
                                      :src="item.signed_url" 
                                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
@@ -488,14 +569,14 @@ document.addEventListener('alpine:init', () => {
                                     </svg>
                                 </div>
                                 
-                                <!-- Procesando -->
+                                <!-- Processing -->
                                 <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
                                     <div class="text-center">
                                         <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
                                         <p class="text-xs text-gray-500">Procesando...</p>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Placeholder -->
                                 <div x-show="!item.signed_url && item.status !== 'processing'" 
                                      class="w-full h-full flex items-center justify-center bg-gray-100">
@@ -504,8 +585,9 @@ document.addEventListener('alpine:init', () => {
                                     </svg>
                                 </div>
                                 
-                                <!-- Menú de 3 puntos -->
-                                <div class="absolute top-2 right-2 z-20">
+                                
+                                <div x-show="!isBulkActionMode" class="absolute top-2 right-2 z-20">
+                                    <!-- Menú de 3 puntos -->
                                     <button @click.stop="menuOpen = !menuOpen" 
                                             class="p-1.5 bg-white/90 rounded-md hover:bg-white transition-all opacity-0 group-hover:opacity-100"
                                             :class="{ 'opacity-100': menuOpen }">
@@ -520,7 +602,7 @@ document.addEventListener('alpine:init', () => {
                                          x-cloak
                                          class="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
                                         
-                                        <!-- Descargar -->
+                                        <!-- Download -->
                                         <button @click="downloadItem(item, $event); menuOpen = false" 
                                                 x-show="item.signed_url"
                                                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
@@ -530,7 +612,7 @@ document.addEventListener('alpine:init', () => {
                                             Descargar
                                         </button>
                                         
-                                        <!-- Mover -->
+                                        <!-- Move -->
                                         <button @click="openMoveModal(item, $event); menuOpen = false" 
                                                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -539,7 +621,7 @@ document.addEventListener('alpine:init', () => {
                                             Mover
                                         </button>
                                         
-                                        <!-- Eliminar -->
+                                        <!-- Delete -->
                                         <button @click="openDeleteModal(item, $event); menuOpen = false" 
                                                 class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -610,7 +692,7 @@ document.addEventListener('alpine:init', () => {
                        controls 
                        class="max-w-full max-h-full rounded-lg shadow-lg"></video>
                 
-                <!-- Imagen -->
+                <!-- Image -->
                 <img x-show="selectedItem.type === 'image' && selectedItem.signed_url"
                      :src="selectedItem.signed_url" 
                      class="max-w-full max-h-full rounded-lg shadow-lg object-contain">
@@ -655,6 +737,53 @@ document.addEventListener('alpine:init', () => {
                 
                 <!-- Content -->
                 <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                    <!-- PROMPT TEMPLATE (sin título, solo preview) -->
+                    <div x-show="selectedItem.prompt_template">
+                        <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <!-- Preview Area -->
+                            <div class="aspect-video bg-gray-900 relative overflow-hidden rounded-lg">
+                                <!-- Video Preview -->
+                                <template x-if="selectedItem.prompt_template && selectedItem.prompt_template.preview_url && (selectedItem.prompt_template.preview_url.toLowerCase().includes('.mp4') || selectedItem.prompt_template.preview_url.toLowerCase().includes('.webm') || selectedItem.prompt_template.preview_url.toLowerCase().includes('.mov'))">
+                                    <video :src="selectedItem.prompt_template.preview_url" 
+                                           class="w-full h-full object-cover"
+                                           autoplay
+                                           loop
+                                           muted
+                                           playsinline></video>
+                                </template>
+                                
+                                <!-- Image Preview -->
+                                <template x-if="selectedItem.prompt_template && selectedItem.prompt_template.preview_url && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.mp4') && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.webm') && !selectedItem.prompt_template.preview_url.toLowerCase().includes('.mov')">
+                                    <img :src="selectedItem.prompt_template.preview_url" 
+                                         class="w-full h-full object-cover"
+                                         alt="Template preview">
+                                </template>
+                                
+                                <!-- Overlay oscuro para mejor legibilidad -->
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                                
+                                <!-- Placeholder -->
+                                <template x-if="!selectedItem.prompt_template || !selectedItem.prompt_template.preview_url">
+                                    <div class="w-full h-full flex items-center justify-center text-center text-gray-400 p-4">
+                                        <i class="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                    </div>
+                                </template>
+                                
+                                <!-- Texto sobre la imagen -->
+                                <div x-show="selectedItem.prompt_template && selectedItem.prompt_template.name"
+                                     class="absolute bottom-0 left-0 right-0 pb-3 pl-3 z-10">
+                                    <div class="text-white font-bold text-sm uppercase tracking-tight mb-0.5" 
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                                         x-text="selectedItem.prompt_template.name.toUpperCase()"></div>
+                                    <div x-show="selectedItem.prompt_template && selectedItem.prompt_template.recommended_service" 
+                                         class="text-gray-300 text-xs font-medium tracking-wide"
+                                         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
+                                         x-text="getServiceDisplayName ? getServiceDisplayName(selectedItem.prompt_template.recommended_service) : selectedItem.prompt_template.recommended_service"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- MODELO -->
                     <div x-show="selectedItem.model">
                         <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">MODELO</h3>
@@ -702,9 +831,9 @@ document.addEventListener('alpine:init', () => {
                     <!-- DIMENSIONES (para imágenes) -->
                     <div x-show="selectedItem.width && selectedItem.height">
                         <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">DIMENSIONES</h3>
-                        <p class="text-sm text-gray-800" x-text="selectedItem.width + ' × ' + selectedItem.height + ' px'"></p>
+                        <p class="text-sm text-gray-800" x-text="selectedItem.width + '  ' + selectedItem.height + ' px'"></p>
                     </div>
-                    
+
                     <!-- PROYECTO -->
                     <div x-show="selectedItem.project && selectedItem.project.name">
                         <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROYECTO</h3>
@@ -730,12 +859,15 @@ document.addEventListener('alpine:init', () => {
                     
                     <!-- Acciones -->
                     <div class="space-y-1 pt-2">
-                        <button class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                            Recrear
-                        </button>
+                        <form method="post" x-bind:action="selectedItem.type === 'video' ? '/videos/' + selectedItem.id + '/recreate/' : '/images/' + selectedItem.id + '/recreate/'" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Recrear
+                            </button>
+                        </form>
                         <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
@@ -757,9 +889,8 @@ document.addEventListener('alpine:init', () => {
                     </div>
                 </div>
                 
-                <!-- Footer -->
                 <div class="p-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-                    <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + '×' + selectedItem.height + ' px' : ''"></span>
+                    <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + 'x' + selectedItem.height + ' px' : ''"></span>
                     <button x-show="selectedItem.type === 'image'" 
                             class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -798,17 +929,16 @@ document.addEventListener('alpine:init', () => {
                         </div>
                         <div class="flex-1 min-w-0">
                             <h3 class="text-lg font-semibold text-gray-900" id="modal-title">
-                                Eliminar <span x-text="deleteModal.item?.type === 'video' ? 'Video' : (deleteModal.item?.type === 'image' ? 'Imagen' : 'Audio')"></span>
+                                <span x-text="deleteModal.item ? 'Eliminar item' : 'Eliminar ' + selectedItems.length + ' elementos'"></span>
                             </h3>
-                            <p class="mt-2 text-base font-medium text-gray-900" x-text="'\"' + escapeHtml(deleteModal.item?.title || 'Sin título') + '\"'"></p>
+                            <p class="mt-2 text-base font-medium text-gray-900" x-text="deleteModal.item ? ('\'' + (deleteModal.item.title || 'Sin título') + '\'') : '¿Estás seguro?'"></p>
                             <p class="mt-1 text-xs text-gray-500">
-                                Esta acción no se puede deshacer. El item y sus archivos asociados se eliminarán permanentemente.
+                                Esta acción no se puede deshacer. Los archivos asociados se eliminarán permanentemente.
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Actions -->
                 <div class="px-6 py-4 bg-white flex gap-3 justify-end">
                     <button type="button"
                             @click="deleteModal = { open: false, item: null }"
@@ -843,9 +973,9 @@ document.addEventListener('alpine:init', () => {
                 <!-- Header -->
                 <div class="px-6 py-5 border-b border-gray-200">
                     <h3 class="text-lg font-semibold text-gray-900">Mover a otro proyecto</h3>
-                    <p class="mt-1 text-sm text-gray-500" x-text="'Selecciona el proyecto de destino para \"' + escapeHtml(moveModal.item?.title || '') + '\"'"></p>
+                    <p class="mt-1 text-sm text-gray-500" x-text="moveModal.item ? 'Selecciona el proyecto de destino para \'' + (moveModal.item.title || '') + '\'' : 'Mover ' + selectedItems.length + ' elementos seleccionados'"></p>
                 </div>
-                
+
                 <!-- Lista de proyectos -->
                 <div class="max-h-64 overflow-y-auto p-4 space-y-2">
                     <!-- Sin proyecto -->
@@ -858,8 +988,8 @@ document.addEventListener('alpine:init', () => {
                     </button>
                     
                     <!-- Proyectos -->
-                    <template x-for="project in projects" :key="project.id">
-                        <button @click="moveItem(project.id)" 
+                    <template x-for="project in projects" :key="project.uuid">
+                        <button @click="moveItem(project.uuid)" 
                                 class="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between transition-colors">
                             <span class="text-gray-700" x-text="project.name"></span>
                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

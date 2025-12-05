@@ -21,18 +21,18 @@
             </div>
             <div class="flex gap-2">
                 {% if image.status == 'pending' or image.status == 'error' %}
-                <form method="post" action="{% url 'core:image_generate' image.id %}" style="display: inline;">
+                <form method="post" action="{% url 'core:image_generate' image.uuid %}" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit" class="bg-green-500 text-white hover:bg-green-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                         {% if image.status == 'error' %}Reintentar{% else %}Generar{% endif %}
                     </button>
                 </form>
                 {% endif %}
-                <a href="{% url 'core:image_delete' image.id %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                <a href="{% url 'core:image_delete' image.uuid %}" class="bg-red-500 text-white hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Eliminar
                 </a>
                 {% if image.project %}
-                <a href="{% url 'core:project_detail' image.project.id %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                <a href="{% url 'core:project_detail' image.project.uuid %}" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     Volver
                 </a>
                 {% else %}
@@ -67,6 +67,17 @@
                             <p class="text-sm text-gray-400 mt-2">Esto puede tomar algunos segundos</p>
                         </div>
                     {% elif image.status == 'error' %}
+                        <div class="text-center text-white">
+                            <div class="text-6xl mb-4">❌</div>
+                            <p class="text-xl font-semibold mb-2">Error al generar imagen</p>
+                            {% if image.error_message %}
+                            <p class="text-sm text-gray-300 mt-2 bg-red-900 bg-opacity-50 p-3 rounded max-w-md mx-auto">
+                                {{ image.error_message }}
+                            </p>
+                            {% else %}
+                            <p class="text-sm text-gray-400 mt-2">No se pudo generar la imagen</p>
+                            {% endif %}
+                        </div>
                         <div class="text-center text-white">
                             <div class="text-6xl mb-4">❌</div>
                             <p class="text-xl">Error al generar imagen</p>
@@ -126,8 +137,8 @@
                 <h3 class="text-lg font-bold text-gray-900 mb-4">Información General</h3>
                 <div class="space-y-3 text-sm">
                     <div>
-                        <div class="text-gray-600 mb-1">ID</div>
-                        <div class="font-mono text-gray-900">{{ image.id }}</div>
+                        <div class="text-gray-600 mb-1">UUID</div>
+                        <div class="font-mono text-gray-900 text-xs">{{ image.uuid }}</div>
                     </div>
                     <div>
                         <div class="text-gray-600 mb-1">Estado</div>

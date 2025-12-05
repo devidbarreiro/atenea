@@ -120,7 +120,7 @@ def create_image_tool(
                 'title': image.title,
                 'message': f'Imagen "{image.title}" creada exitosamente',
                 'preview_url': preview_url,
-                'detail_url': f'/images/{image.id}/',
+                'detail_url': f'/images/{image.uuid}/',
                 'status_current': image.status  # 'pending', 'processing', 'completed', 'error'
             }
             
@@ -131,7 +131,7 @@ def create_image_tool(
                 'image_id': image.id,
                 'title': image.title,
                 'message': f'Imagen creada pero hubo un error al generarla: {str(e)}',
-                'detail_url': f'/images/{image.id}/',
+                'detail_url': f'/images/{image.uuid}/',
                 'status_current': image.status
             }
     
