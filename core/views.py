@@ -4638,7 +4638,8 @@ class ScriptCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Form
         # Obtener datos básicos
         title = request.POST.get('title')
         original_script = request.POST.get('original_script')
-        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        desired_duration_min = request.POST.get('desired_duration_min', '1')
+        desired_duration_sec = request.POST.get('desired_duration_sec', '0')
         
         # Validaciones básicas
         if not all([title, original_script]):
@@ -4646,12 +4647,23 @@ class ScriptCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Form
             return self.get(request, *args, **kwargs)
         
         try:
+            duration_min_int = int(desired_duration_min) if desired_duration_min else 0
+            duration_sec_int = int(desired_duration_sec) if desired_duration_sec else 0
+            
+            # Convertir a minutos decimales (ej: 1 min 30 seg = 1.5 min)
+            desired_duration_min_decimal = duration_min_int + (duration_sec_int / 60.0)
+            
+            # Validar que la duración sea válida
+            if desired_duration_min_decimal <= 0:
+                messages.error(request, 'La duración debe ser mayor a 0')
+                return self.get(request, *args, **kwargs)
+            
             # Crear guión
             script = Script.objects.create(
                 project=project,
                 title=title,
                 original_script=original_script,
-                desired_duration_min=int(desired_duration_min),
+                desired_duration_min=desired_duration_min_decimal,
                 status='pending',
                 created_by=request.user
             )
@@ -4939,6 +4951,9 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                         scene_data['ai_config_json'] = '{}'
                     scenes_with_urls.append(scene_data)
                 
+                # Serializar model_preferences para el template
+                script_model_preferences_json = json.dumps(script.model_preferences or {})
+                
                 context = {
                     'project': project,
                     'script': script,
@@ -4946,6 +4961,7 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                     'scenes_with_urls': scenes_with_urls,
                     'video_type': script.video_type or 'general',
                     'video_orientation': script.video_orientation or '16:9',
+                    'script_model_preferences_json': script_model_preferences_json,
                     'breadcrumbs': self.get_breadcrumbs()
                 }
                 
@@ -4974,11 +4990,44 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
         script_content = request.POST.get('script_content')
         desired_duration_min = request.POST.get('desired_duration_min', 5)
         video_type = request.POST.get('video_type', 'general')
+        video_format = request.POST.get('video_format', 'educational')
         video_orientation = request.POST.get('video_orientation', '16:9')
         generate_previews = request.POST.get('generate_previews', 'true').lower() == 'true'
         enable_audio = request.POST.get('enable_audio', 'true').lower() == 'true'
         default_voice_id = request.POST.get('default_voice_id', 'pFZP5JQG7iQjIQuC4Bku')
         default_voice_name = request.POST.get('default_voice_name', 'Aria')
+        
+        # HeyGen defaults
+        default_heygen_avatar_id = request.POST.get('default_heygen_avatar_id', '')
+        default_heygen_avatar_name = request.POST.get('default_heygen_avatar_name', '')
+        default_heygen_voice_id = request.POST.get('default_heygen_voice_id', '')
+        default_heygen_voice_name = request.POST.get('default_heygen_voice_name', '')
+        
+        # Obtener preferencias de modelos (asegurar que sea un diccionario serializable)
+        model_preferences = {}
+        model_pref_veo = request.POST.get('model_pref_veo')
+        model_pref_sora = request.POST.get('model_pref_sora')
+        model_pref_heygen = request.POST.get('model_pref_heygen')
+        
+        if model_pref_veo:
+            model_preferences['gemini_veo'] = str(model_pref_veo)  # Asegurar que sea string
+        if model_pref_sora:
+            model_preferences['sora'] = str(model_pref_sora)  # Asegurar que sea string
+        if model_pref_heygen:
+            model_preferences['heygen'] = str(model_pref_heygen)  # Asegurar que sea string
+        
+        # Si hay preferencias, también incluir voz por defecto si está habilitada
+        if enable_audio and default_voice_id:
+            model_preferences['default_voice_id'] = str(default_voice_id)  # Asegurar que sea string
+            model_preferences['default_voice_name'] = str(default_voice_name)  # Asegurar que sea string
+        
+        # Guardar defaults de HeyGen si están presentes
+        if default_heygen_avatar_id:
+            model_preferences['default_heygen_avatar_id'] = str(default_heygen_avatar_id)
+            model_preferences['default_heygen_avatar_name'] = str(default_heygen_avatar_name)
+        if default_heygen_voice_id:
+            model_preferences['default_heygen_voice_id'] = str(default_heygen_voice_id)
+            model_preferences['default_heygen_voice_name'] = str(default_heygen_voice_name)
         
         if not script_content:
             messages.error(request, 'El contenido del script es requerido')
@@ -4993,11 +5042,13 @@ class AgentConfigureView(BreadcrumbMixin, ServiceMixin, View):
                 desired_duration_min=int(desired_duration_min),
                 agent_flow=True,  # Marcar como flujo del agente
                 video_type=video_type,
+                video_format=video_format,  # Guardar formato de video
                 video_orientation=video_orientation,
                 generate_previews=generate_previews,
                 enable_audio=enable_audio,
                 default_voice_id=default_voice_id if enable_audio else None,
                 default_voice_name=default_voice_name if enable_audio else None,
+                model_preferences=model_preferences if model_preferences else {},  # Guardar preferencias
                 status='pending',
                 created_by=request.user  # Asignar usuario para poder cobrar créditos
             )
@@ -5216,12 +5267,434 @@ class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
             script.final_video = video
             script.save(update_fields=['final_video'])
             
-            logger.info(f"✓ Video final creado: {video.id} para script {script.id}")
+            logger.info(f"✓ Video final creado: {video.id} (UUID: {video.uuid}) para script {script.id}")
             
             return JsonResponse({
                 'status': 'success',
                 'message': 'Video combinado exitosamente',
-                'video_id': video.id
+                'video_id': video.id,
+                'video_uuid': str(video.uuid)  # Añadir UUID para redirección correcta
+            })
+            
+        except Script.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Script no encontrado'
+            }, status=404)
+        except (ValidationException, ServiceException) as e:
+            logger.error(f"Error de servicio al combinar videos: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+        except Exception as e:
+            logger.error(f"Error inesperado al combinar videos: {e}")
+            logger.exception("Traceback completo:")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error inesperado: {str(e)}'
+            }, status=500)
+
+
+# ====================
+# AGENT STANDALONE VIEWS (sin proyecto)
+# ====================
+
+class AgentCreateStandaloneView(SidebarProjectsMixin, BreadcrumbMixin, View):
+    """Paso 1: Crear contenido sin proyecto"""
+    template_name = 'agent/create.html'
+    
+    def get_breadcrumbs(self):
+        return [
+            {'label': 'Agente de Video', 'url': None}
+        ]
+    
+    def get(self, request):
+        context = {
+            'project': None,  # Sin proyecto
+            'breadcrumbs': self.get_breadcrumbs(),
+            'user_role': None,
+            'project_owner': None,
+            'project_members': []
+        }
+        context = self.add_sidebar_projects_to_context(context)
+        
+        return render(request, self.template_name, context)
+    
+    def post(self, request):
+        """
+        Guarda el contenido en sessionStorage (lado cliente) y redirige
+        El POST solo valida y redirige a configure
+        """
+        content_type = request.POST.get('content_type')
+        script_content = request.POST.get('script_content')
+        
+        if not content_type or not script_content:
+            messages.error(request, 'Debes proporcionar el contenido del script')
+            return redirect('core:agent_create_standalone')
+        
+        # El script se guarda en sessionStorage en el cliente
+        # Aquí solo redirigimos a configure
+        return redirect('core:agent_configure_standalone')
+
+
+class AgentConfigureStandaloneView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 2: Procesar con IA y configurar escenas (sin proyecto)"""
+    template_name = 'agent/configure.html'
+    
+    def get_breadcrumbs(self):
+        return [
+            {'label': 'Configurar Escenas', 'url': None}
+        ]
+    
+    def get(self, request):
+        """
+        Muestra pantalla de "Processing..." 
+        Si hay un script_id en la URL, muestra las escenas
+        """
+        script_id = request.GET.get('script_id')
+        
+        # Si hay script_id, cargar escenas
+        if script_id:
+            try:
+                # Buscar script sin proyecto (project__isnull=True)
+                script = Script.objects.get(
+                    id=script_id, 
+                    project__isnull=True, 
+                    agent_flow=True,
+                    created_by=request.user  # Solo scripts del usuario actual
+                )
+                scenes = script.db_scenes.all().order_by('order')
+                
+                # Generar URLs firmadas para preview images
+                scenes_with_urls = []
+                for scene in scenes:
+                    scene_data = SceneService().get_scene_with_signed_urls(scene)
+                    # Serializar ai_config a JSON string para el template
+                    if 'scene' in scene_data and scene_data['scene'].ai_config:
+                        scene_data['ai_config_json'] = json.dumps(scene_data['scene'].ai_config)
+                    else:
+                        scene_data['ai_config_json'] = '{}'
+                    scenes_with_urls.append(scene_data)
+                
+                # Serializar model_preferences para el template
+                script_model_preferences_json = json.dumps(script.model_preferences or {})
+                
+                context = {
+                    'project': None,  # Sin proyecto
+                    'script': script,
+                    'scenes': scenes,
+                    'scenes_with_urls': scenes_with_urls,
+                    'video_type': script.video_type or 'general',
+                    'video_orientation': script.video_orientation or '16:9',
+                    'script_model_preferences_json': script_model_preferences_json,
+                    'breadcrumbs': self.get_breadcrumbs()
+                }
+                
+                return render(request, self.template_name, context)
+                
+            except Script.DoesNotExist:
+                messages.error(request, 'Script no encontrado')
+                return redirect('core:agent_create_standalone')
+        
+        # Si no hay script_id, mostrar pantalla inicial
+        context = {
+            'project': None,  # Sin proyecto
+            'breadcrumbs': self.get_breadcrumbs()
+        }
+        
+        return render(request, self.template_name, context)
+    
+    def post(self, request):
+        """
+        Recibe el script desde el cliente y lo procesa (sin proyecto)
+        """
+        # Obtener datos del POST
+        script_title = request.POST.get('title', 'Video con Agente')
+        script_content = request.POST.get('script_content')
+        desired_duration_min = request.POST.get('desired_duration_min', 5)
+        video_type = request.POST.get('video_type', 'general')
+        video_format = request.POST.get('video_format', 'educational')
+        video_orientation = request.POST.get('video_orientation', '16:9')
+        generate_previews = request.POST.get('generate_previews', 'true').lower() == 'true'
+        enable_audio = request.POST.get('enable_audio', 'true').lower() == 'true'
+        default_voice_id = request.POST.get('default_voice_id', 'pFZP5JQG7iQjIQuC4Bku')
+        default_voice_name = request.POST.get('default_voice_name', 'Aria')
+        
+        # HeyGen defaults
+        default_heygen_avatar_id = request.POST.get('default_heygen_avatar_id', '')
+        default_heygen_avatar_name = request.POST.get('default_heygen_avatar_name', '')
+        default_heygen_voice_id = request.POST.get('default_heygen_voice_id', '')
+        default_heygen_voice_name = request.POST.get('default_heygen_voice_name', '')
+        
+        # Obtener preferencias de modelos (asegurar que sea un diccionario serializable)
+        model_preferences = {}
+        model_pref_veo = request.POST.get('model_pref_veo')
+        model_pref_sora = request.POST.get('model_pref_sora')
+        model_pref_heygen = request.POST.get('model_pref_heygen')
+        
+        if model_pref_veo:
+            model_preferences['gemini_veo'] = str(model_pref_veo)
+        if model_pref_sora:
+            model_preferences['sora'] = str(model_pref_sora)
+        if model_pref_heygen:
+            model_preferences['heygen'] = str(model_pref_heygen)
+        
+        # Si hay preferencias, también incluir voz por defecto si está habilitada
+        if enable_audio and default_voice_id:
+            model_preferences['default_voice_id'] = str(default_voice_id)
+            model_preferences['default_voice_name'] = str(default_voice_name)
+        
+        # Guardar defaults de HeyGen si están presentes
+        if default_heygen_avatar_id:
+            model_preferences['default_heygen_avatar_id'] = str(default_heygen_avatar_id)
+            model_preferences['default_heygen_avatar_name'] = str(default_heygen_avatar_name)
+        if default_heygen_voice_id:
+            model_preferences['default_heygen_voice_id'] = str(default_heygen_voice_id)
+            model_preferences['default_heygen_voice_name'] = str(default_heygen_voice_name)
+        
+        if not script_content:
+            messages.error(request, 'El contenido del script es requerido')
+            return redirect('core:agent_create_standalone')
+        
+        try:
+            # Crear Script sin proyecto (project=None)
+            script = Script.objects.create(
+                project=None,  # Sin proyecto
+                title=script_title,
+                original_script=script_content,
+                desired_duration_min=float(desired_duration_min),
+                agent_flow=True,
+                video_type=video_type,
+                video_format=video_format,
+                video_orientation=video_orientation,
+                generate_previews=generate_previews,
+                enable_audio=enable_audio,
+                default_voice_id=default_voice_id if enable_audio else None,
+                default_voice_name=default_voice_name if enable_audio else None,
+                model_preferences=model_preferences if model_preferences else {},
+                status='pending',
+                created_by=request.user
+            )
+            
+            # Procesar con el servicio configurado (n8n o LangChain)
+            service = get_script_service()
+            
+            try:
+                if hasattr(service, 'process_script'):
+                    # LangChain: procesamiento síncrono
+                    script = service.process_script(script)
+                    return JsonResponse({
+                        'status': 'success',
+                        'script_id': script.id,
+                        'scenes_count': script.db_scenes.count(),
+                        'message': 'Script procesado exitosamente'
+                    })
+                else:
+                    # n8n: procesamiento asíncrono
+                    service.send_script_for_processing(script)
+                    return JsonResponse({
+                        'status': 'success',
+                        'script_id': script.id,
+                        'message': 'Script enviado para procesamiento'
+                    })
+                
+            except Exception as e:
+                logger.error(f"Error al procesar guión: {e}")
+                script.mark_as_error(str(e))
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Error al enviar script: {str(e)}'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error al crear script: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Error al crear script: {str(e)}'
+            }, status=500)
+
+
+class AgentScenesStandaloneView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 3: Generar videos de las escenas (sin proyecto)"""
+    template_name = 'agent/scenes.html'
+    
+    def get_breadcrumbs(self):
+        return [
+            {'label': 'Generar Escenas', 'url': None}
+        ]
+    
+    def get(self, request):
+        script_id = request.GET.get('script_id')
+        
+        if not script_id:
+            messages.error(request, 'Script ID requerido')
+            return redirect('core:agent_create_standalone')
+        
+        try:
+            script = Script.objects.get(
+                id=script_id, 
+                project__isnull=True, 
+                agent_flow=True,
+                created_by=request.user
+            )
+            scenes = script.db_scenes.filter(is_included=True).order_by('order')
+            
+            # Generar URLs firmadas para cada escena
+            scenes_with_urls = []
+            for scene in scenes:
+                scene_data = SceneService().get_scene_with_signed_urls(scene)
+                if 'scene' in scene_data and scene_data['scene'].ai_config:
+                    scene_data['ai_config_json'] = json.dumps(scene_data['scene'].ai_config)
+                else:
+                    scene_data['ai_config_json'] = '{}'
+                scenes_with_urls.append(scene_data)
+            
+            context = {
+                'project': None,  # Sin proyecto
+                'script': script,
+                'scenes': scenes,
+                'scenes_with_urls': scenes_with_urls,
+                'breadcrumbs': self.get_breadcrumbs()
+            }
+            
+            return render(request, self.template_name, context)
+            
+        except Script.DoesNotExist:
+            messages.error(request, 'Script no encontrado')
+            return redirect('core:agent_create_standalone')
+
+
+class AgentFinalStandaloneView(BreadcrumbMixin, ServiceMixin, View):
+    """Paso 4: Combinar videos y crear video final (sin proyecto)"""
+    template_name = 'agent/final.html'
+    
+    def get_breadcrumbs(self):
+        return [
+            {'label': 'Video Final', 'url': None}
+        ]
+    
+    def get(self, request):
+        script_id = request.GET.get('script_id')
+        
+        if not script_id:
+            messages.error(request, 'Script ID requerido')
+            return redirect('core:agent_create_standalone')
+        
+        try:
+            script = Script.objects.get(
+                id=script_id, 
+                project__isnull=True, 
+                agent_flow=True,
+                created_by=request.user
+            )
+            scenes = script.db_scenes.filter(
+                is_included=True,
+                video_status='completed'
+            ).order_by('order')
+            
+            # Generar URLs firmadas
+            scenes_with_urls = []
+            for scene in scenes:
+                scene_data = SceneService().get_scene_with_signed_urls(scene)
+                scenes_with_urls.append(scene_data)
+            
+            context = {
+                'project': None,  # Sin proyecto
+                'script': script,
+                'scenes': scenes,
+                'scenes_with_urls': scenes_with_urls,
+                'breadcrumbs': self.get_breadcrumbs()
+            }
+            
+            return render(request, self.template_name, context)
+            
+        except Script.DoesNotExist:
+            messages.error(request, 'Script no encontrado')
+            return redirect('core:agent_create_standalone')
+    
+    def post(self, request):
+        """Combinar videos de escenas con FFmpeg (sin proyecto)"""
+        from .services import VideoCompositionService
+        from datetime import datetime
+        
+        script_id = request.POST.get('script_id')
+        video_title = request.POST.get('video_title')
+        
+        if not script_id or not video_title:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Script ID y título son requeridos'
+            }, status=400)
+        
+        try:
+            script = Script.objects.get(
+                id=script_id, 
+                project__isnull=True, 
+                agent_flow=True,
+                created_by=request.user
+            )
+            scenes = script.db_scenes.filter(
+                is_included=True,
+                video_status='completed'
+            ).order_by('order')
+            
+            if scenes.count() == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No hay escenas completadas para combinar'
+                }, status=400)
+            
+            # Combinar videos con FFmpeg
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_filename = f"{timestamp}_{video_title.replace(' ', '_')}.mp4"
+            
+            composition_service = VideoCompositionService()
+            gcs_path = composition_service.combine_scene_videos(scenes, output_filename)
+            
+            # Calcular duración total
+            total_duration = sum(scene.duration_sec for scene in scenes)
+            
+            # Crear objeto Video final sin proyecto
+            video = Video.objects.create(
+                project=None,  # Sin proyecto
+                created_by=request.user,
+                title=video_title,
+                type='gemini_veo',
+                status='completed',
+                script=f"Video generado por agente con {scenes.count()} escenas",
+                config={
+                    'agent_generated': True,
+                    'script_id': script.id,
+                    'num_scenes': scenes.count(),
+                    'scene_ids': [scene.id for scene in scenes]
+                },
+                gcs_path=gcs_path,
+                duration=total_duration,
+                metadata={
+                    'scenes': [
+                        {
+                            'scene_id': scene.scene_id,
+                            'ai_service': scene.ai_service,
+                            'duration_sec': scene.duration_sec
+                        }
+                        for scene in scenes
+                    ]
+                },
+                completed_at=timezone.now()
+            )
+            
+            # Asociar video final con el script
+            script.final_video = video
+            script.save(update_fields=['final_video'])
+            
+            logger.info(f"✓ Video final creado: {video.id} (UUID: {video.uuid}) para script {script.id}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Video combinado exitosamente',
+                'video_id': video.id,
+                'video_uuid': str(video.uuid)
             })
             
         except Script.DoesNotExist:

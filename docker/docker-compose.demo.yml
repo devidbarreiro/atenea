@@ -25,11 +25,11 @@ services:
 
   web:
     build:
-      context: ./html
+      context: .
       dockerfile: Dockerfile
     command: gunicorn atenea.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
     volumes:
-      - ./html:/app
+      - .:/app
       - demo_static_volume:/app/staticfiles
       - demo_media_volume:/app/media
       - demo_logs_volume:/app/logs
@@ -53,11 +53,11 @@ services:
   # Servicio para ejecutar migraciones (ejecutar manualmente)
   migrate:
     build:
-      context: ./html
+      context: .
       dockerfile: Dockerfile
     command: python manage.py migrate --noinput
     volumes:
-      - ./html:/app
+      - .:/app
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
       - .env
@@ -75,11 +75,11 @@ services:
   # Recolectar archivos estáticos (ejecutar manualmente)
   collectstatic:
     build:
-      context: ./html
+      context: .
       dockerfile: Dockerfile
     command: python manage.py collectstatic --noinput
     volumes:
-      - ./html:/app
+      - .:/app
       - demo_static_volume:/app/staticfiles
     env_file:
       - .env

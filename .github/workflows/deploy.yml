@@ -152,7 +152,7 @@ jobs:
             mv '$ENV_DIR_REMOTE/html/credentials.json.backup' '$ENV_DIR_REMOTE/html/credentials.json'
             echo '✅ credentials.json restaurado'
           else
-            echo '⚠️  credentials.json no existía antes, debe crearse manualmente en $ENV_DIR_REMOTE/html/credentials.json'
+            echo \"⚠️  credentials.json no existía antes, debe crearse manualmente en $ENV_DIR_REMOTE/html/credentials.json\"
           fi"
         
         # Copiar docker-compose al servidor (dentro de html/)

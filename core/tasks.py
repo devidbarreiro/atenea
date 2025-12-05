@@ -92,8 +92,8 @@ def generate_video_task(self, task_uuid, video_uuid, user_id, **kwargs):
                     vid = Video.objects.filter(uuid=item_uuid).first()
                     if vid:
                         video_title = vid.title
-            except:
-                pass
+            except Exception:
+                pass  # Ignorar errores al obtener título para notificación
             
             # Crear notificación de error solo si no se va a reintentar
             if task.retry_count >= task.max_retries:
@@ -186,8 +186,8 @@ def generate_image_task(self, task_uuid, image_uuid, user_id, **kwargs):
                     img = Image.objects.filter(uuid=item_uuid).first()
                     if img:
                         image_title = img.title
-            except:
-                pass
+            except Exception:
+                pass  # Ignorar errores al obtener título para notificación
             
             # Crear notificación de error solo si no se va a reintentar
             if task.retry_count >= task.max_retries:
@@ -278,8 +278,8 @@ def generate_audio_task(self, task_uuid, audio_uuid, user_id, **kwargs):
                     aud = Audio.objects.filter(uuid=item_uuid).first()
                     if aud:
                         audio_title = aud.title
-            except:
-                pass
+            except Exception:
+                pass  # Ignorar errores al obtener título para notificación
             
             # Crear notificación de error solo si no se va a reintentar
             if task.retry_count >= task.max_retries:
