@@ -93,7 +93,7 @@ urlpatterns = [
     # DEPRECATED: N8nWebhookView está comentado, ya no se usa con LangChain
     # path('webhooks/n8n/', views.N8nWebhookView.as_view(), name='n8n_webhook'),
     
-    # Agent Video Flow
+    # Agent Video Flow (con proyecto)
     path('projects/<uuid:project_uuid>/agent/create/', views.AgentCreateView.as_view(), name='agent_create'),
     path('projects/<uuid:project_uuid>/agent/ai-assistant/', views.AgentAIAssistantView.as_view(), name='agent_ai_assistant'),
     path('projects/<uuid:project_uuid>/agent/ai-assistant/init/', views.AgentAIAssistantInitView.as_view(), name='agent_ai_assistant_init'),
@@ -101,6 +101,12 @@ urlpatterns = [
     path('projects/<uuid:project_uuid>/agent/configure/', views.AgentConfigureView.as_view(), name='agent_configure'),
     path('projects/<uuid:project_uuid>/agent/scenes/', views.AgentScenesView.as_view(), name='agent_scenes'),
     path('projects/<uuid:project_uuid>/agent/final/', views.AgentFinalView.as_view(), name='agent_final'),
+    
+    # Agent Video Flow (sin proyecto - standalone)
+    path('agent/create/', views.AgentCreateStandaloneView.as_view(), name='agent_create_standalone'),
+    path('agent/configure/', views.AgentConfigureStandaloneView.as_view(), name='agent_configure_standalone'),
+    path('agent/scenes/', views.AgentScenesStandaloneView.as_view(), name='agent_scenes_standalone'),
+    path('agent/final/', views.AgentFinalStandaloneView.as_view(), name='agent_final_standalone'),
     
     # Agent Scene Actions
     path('scripts/<int:script_id>/scenes/create/', views.SceneCreateManualView.as_view(), name='scene_create_manual'),

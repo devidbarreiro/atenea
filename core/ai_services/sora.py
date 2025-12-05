@@ -468,7 +468,7 @@ class SoraClient:
                     return str(error_obj)
             
             return error_data.get('message', response.text)
-        except:
+        except (json.JSONDecodeError, KeyError, TypeError):
             return f"HTTP {response.status_code}: {response.text[:200]}"
     
     def list_videos(self, limit: int = 20, after: Optional[str] = None, order: str = "desc") -> dict:

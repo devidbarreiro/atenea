@@ -3,6 +3,10 @@ Script Agent con LangGraph
 Reemplaza el workflow de n8n para análisis de guiones
 """
 
+# IMPORTANTE: Configurar Django ANTES de cualquier import que use Django
+from core.agents._django_setup import setup_django
+setup_django()
+
 import json
 import logging
 from typing import Dict, Any, List, TypedDict, Annotated
@@ -16,6 +20,7 @@ from core.agents.tools.duration_validator import validate_all_scenes_durations
 from core.agents.tools.json_validator import validate_json_structure
 from core.agents.tools.auto_corrector import auto_correct_all_scenes
 from core.agents.tools.platform_selector import validate_platform_avatar_consistency
+from core.agents.tools.word_counter import validate_text_length_for_duration, count_words
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +28,15 @@ logger = logging.getLogger(__name__)
 class AgentState(TypedDict):
     """Estado del agente durante el procesamiento"""
     script_text: str
-    duration_min: int
+    duration_min: float  # Puede ser decimal (ej: 1.5 para 1 min 30 seg)
+    duration_seconds: int  # Duración total en segundos
+    video_format: str
+    video_type: str  # 'ultra', 'avatar', 'general'
     llm_response: str
     parsed_json: Dict[str, Any]
     validation_errors: List[str]
     corrections_applied: List[str]
+    correction_attempts: int  # Contador de intentos de corrección
     final_output: Dict[str, Any]
     metrics: Dict[str, Any]
 
@@ -108,12 +117,21 @@ class ScriptAgent:
         """Nodo: Analiza el guión con el LLM"""
         logger.info("🔵 [NODO] analyze_script - Iniciando análisis del guión")
         logger.info(f"   Duración: {state['duration_min']} min")
+        logger.info(f"   Tipo: {state.get('video_type', 'general')}")
+        logger.info(f"   Formato: {state.get('video_format', 'educational')}")
         logger.info(f"   Texto: {len(state['script_text'])} caracteres")
+        
+        # Calcular duración en segundos
+        duration_min = state['duration_min']
+        duration_seconds = state.get('duration_seconds', int(duration_min * 60))
         
         # Crear mensajes
         messages = self.prompt_template.format_messages(
-            duracion_minutos=state['duration_min'],
-            guion=state['script_text']
+            duracion_minutos=f"{duration_min:.2f}",  # Formato con 2 decimales
+            duracion_segundos=str(duration_seconds),
+            guion=state['script_text'],
+            formato_video=state.get('video_format', 'educational'),
+            tipo_video=state.get('video_type', 'general')
         )
         
         # Invocar LLM
@@ -197,13 +215,39 @@ class ScriptAgent:
             else:
                 logger.debug("✅ Duraciones válidas")
             
-            # Validar consistencia platform/avatar
-            consistency_validation = validate_platform_avatar_consistency.invoke({'scenes': scenes})
+            # Obtener tipo de video para validaciones
+            video_type = state.get('video_type', 'general')
+            
+            # Validar consistencia platform/avatar (incluyendo restricciones por video_type)
+            consistency_validation = validate_platform_avatar_consistency.invoke({
+                'scenes': scenes,
+                'video_type': video_type
+            })
             if not consistency_validation['valid']:
                 errors.extend(consistency_validation['errors'])
                 logger.warning(f"⚠️  Errores de consistencia: {len(consistency_validation['errors'])}")
             else:
                 logger.debug("✅ Consistencia platform/avatar válida")
+            
+            # Validar tipo de video (verificación adicional)
+            video_type_errors = self._validate_video_type(scenes, video_type)
+            if video_type_errors:
+                errors.extend(video_type_errors)
+                logger.warning(f"⚠️  Errores de tipo de video: {len(video_type_errors)}")
+                for error in video_type_errors[:3]:
+                    logger.warning(f"   - {error}")
+            else:
+                logger.debug(f"✅ Tipo de video '{video_type}' respetado")
+            
+            # Validar longitud de texto vs duración (REGLA DE ORO)
+            text_length_errors = self._validate_text_length_for_scenes(scenes)
+            if text_length_errors:
+                errors.extend(text_length_errors)
+                logger.warning(f"⚠️  Errores de longitud de texto: {len(text_length_errors)}")
+                for error in text_length_errors[:3]:
+                    logger.warning(f"   - {error}")
+            else:
+                logger.debug("✅ Longitud de texto válida para todas las escenas")
         
         state['validation_errors'] = errors
         
@@ -214,21 +258,184 @@ class ScriptAgent:
         
         return state
     
+    def _validate_video_type(self, scenes: List[Dict], video_type: str) -> List[str]:
+        """
+        Valida que las escenas respeten el tipo de video seleccionado
+        
+        Args:
+            scenes: Lista de escenas
+            video_type: Tipo de video ('ultra', 'avatar', 'general')
+        
+        Returns:
+            Lista de errores encontrados
+        """
+        errors = []
+        
+        # Plataformas HeyGen válidas (incluyendo variantes)
+        heygen_platforms = ['heygen', 'heygen_v2', 'heygen_avatar_iv']
+        
+        def is_heygen_platform(platform: str) -> bool:
+            """Verifica si una plataforma es HeyGen (incluyendo variantes)"""
+            return platform.lower() in heygen_platforms
+        
+        if video_type == 'ultra':
+            # Modo Ultra: PROHIBIDO HeyGen (incluyendo todas las variantes)
+            heygen_scenes = [s for s in scenes if is_heygen_platform(s.get('platform', '') or s.get('ai_service', ''))]
+            if heygen_scenes:
+                errors.append(
+                    f"Tipo 'ultra' no permite HeyGen. "
+                    f"Encontradas {len(heygen_scenes)} escenas con HeyGen. "
+                    f"Usa solo 'gemini_veo' o 'sora'."
+                )
+            
+            # Verificar que todas las escenas tengan avatar: "no"
+            avatar_scenes = [s for s in scenes if s.get('avatar', '').lower() == 'si']
+            if avatar_scenes:
+                errors.append(
+                    f"Tipo 'ultra' requiere todas las escenas con avatar: 'no'. "
+                    f"Encontradas {len(avatar_scenes)} escenas con avatar: 'si'."
+                )
+        
+        elif video_type == 'avatar':
+            # Con Avatares: Al menos 70% debe ser HeyGen
+            total_scenes = len(scenes)
+            if total_scenes > 0:
+                heygen_scenes = [s for s in scenes if is_heygen_platform(s.get('platform', '') or s.get('ai_service', ''))]
+                heygen_percentage = (len(heygen_scenes) / total_scenes) * 100
+                
+                if heygen_percentage < 70:
+                    errors.append(
+                        f"Tipo 'avatar' requiere al menos 70% de escenas con HeyGen. "
+                        f"Actual: {heygen_percentage:.1f}% ({len(heygen_scenes)}/{total_scenes} escenas)."
+                    )
+        
+        # 'general' no tiene restricciones específicas
+        
+        return errors
+    
+    def _validate_text_length_for_scenes(self, scenes: List[Dict]) -> List[str]:
+        """
+        Valida que cada escena tenga el número correcto de palabras según su duración.
+        REGLA DE ORO: El guión no debe superar el tiempo de video.
+        
+        Args:
+            scenes: Lista de escenas
+        
+        Returns:
+            Lista de errores encontrados
+        """
+        errors = []
+        
+        for idx, scene in enumerate(scenes):
+            script_text = scene.get('script_text', '')
+            duration_sec = scene.get('duration_sec')
+            scene_id = scene.get('id', f'Escena {idx + 1}')
+            
+            if not script_text:
+                errors.append(f"{scene_id}: script_text está vacío")
+                continue
+            
+            if duration_sec is None:
+                errors.append(f"{scene_id}: duration_sec faltante")
+                continue
+            
+            # Validar longitud de texto
+            validation_result = validate_text_length_for_duration.invoke({
+                'text': script_text,
+                'duration_sec': duration_sec
+            })
+            
+            if not validation_result['valid']:
+                word_count = validation_result['word_count']
+                min_words, max_words = validation_result['expected_range']
+                
+                if word_count > max_words:
+                    # Texto demasiado largo - CRÍTICO
+                    errors.append(
+                        f"{scene_id}: Texto demasiado largo ({word_count} palabras para {duration_sec}s). "
+                        f"Esperado: {min_words}-{max_words} palabras. "
+                        f"El guión supera el tiempo de video disponible."
+                    )
+                elif word_count < min_words:
+                    # Texto demasiado corto - advertencia menor
+                    errors.append(
+                        f"{scene_id}: Texto muy corto ({word_count} palabras para {duration_sec}s). "
+                        f"Esperado: {min_words}-{max_words} palabras."
+                    )
+        
+        return errors
+    
     def _should_correct(self, state: AgentState) -> str:
         """Decide si necesita corrección automática"""
-        if len(state['validation_errors']) > 0:
-            logger.info(f"Errores encontrados, aplicando corrección automática")
-            return "correct"
+        MAX_CORRECTION_ATTEMPTS = 3  # Límite de intentos de corrección
+        
+        errors = state.get('validation_errors', [])
+        attempts = state.get('correction_attempts', 0)
+        
+        # Si hay errores y no hemos excedido el límite de intentos
+        if len(errors) > 0 and attempts < MAX_CORRECTION_ATTEMPTS:
+            # Filtrar errores críticos vs advertencias
+            critical_errors = self._filter_critical_errors(errors)
+            
+            if len(critical_errors) > 0:
+                logger.info(f"Errores críticos encontrados ({len(critical_errors)}/{len(errors)}), aplicando corrección automática (intento {attempts + 1}/{MAX_CORRECTION_ATTEMPTS})")
+                return "correct"
+            else:
+                # Solo advertencias, continuar sin corregir
+                logger.info(f"Solo advertencias encontradas ({len(errors)}), continuando sin corrección")
+                return "continue"
+        elif len(errors) > 0 and attempts >= MAX_CORRECTION_ATTEMPTS:
+            # Límite alcanzado, continuar con advertencias
+            logger.warning(f"Límite de correcciones alcanzado ({MAX_CORRECTION_ATTEMPTS}), continuando con errores")
+            return "continue"
+        
         return "continue"
+    
+    def _filter_critical_errors(self, errors: List[str]) -> List[str]:
+        """
+        Filtra errores críticos que requieren corrección automática.
+        Los errores de longitud de texto son críticos, pero algunos otros pueden ser advertencias.
+        """
+        critical = []
+        warnings = []
+        
+        for error in errors:
+            # Errores críticos que deben corregirse
+            if any(keyword in error.lower() for keyword in [
+                'texto demasiado largo',
+                'texto muy largo',
+                'supera el tiempo',
+                'duración inválida',
+                'platform',
+                'avatar',
+                'tipo de video',
+                'estructura json',
+                'duration_sec faltante'
+            ]):
+                critical.append(error)
+            else:
+                warnings.append(error)
+        
+        # Si hay errores críticos, retornar solo esos
+        # Si solo hay advertencias, retornar vacío para continuar
+        return critical
     
     def _auto_correct_node(self, state: AgentState) -> AgentState:
         """Nodo: Corrige errores automáticamente"""
-        logger.info("🔵 [NODO] auto_correct - Aplicando corrección automática")
+        # Incrementar contador de intentos
+        attempts = state.get('correction_attempts', 0) + 1
+        state['correction_attempts'] = attempts
+        
+        logger.info(f"🔵 [NODO] auto_correct - Aplicando corrección automática (intento {attempts})")
         
         parsed = state['parsed_json']
         scenes = parsed.get('scenes', [])
         
         if scenes:
+            # Intentar corregir errores de longitud de texto primero
+            scenes = self._correct_text_length_errors(scenes)
+            
+            # Luego aplicar correcciones generales
             correction_result = auto_correct_all_scenes.invoke({'scenes': scenes})
             parsed['scenes'] = correction_result['corrected_scenes']
             
@@ -245,6 +452,65 @@ class ScriptAgent:
                 logger.info(f"✅ [NODO] auto_correct - No se requirieron correcciones")
         
         return state
+    
+    def _correct_text_length_errors(self, scenes: List[Dict]) -> List[Dict]:
+        """
+        Corrige errores de longitud de texto ajustando el texto a la duración.
+        Si el texto es demasiado largo, lo trunca manteniendo el sentido.
+        Si es demasiado corto, lo expande con información adicional.
+        """
+        corrected_scenes = []
+        
+        for scene in scenes:
+            script_text = scene.get('script_text', '')
+            duration_sec = scene.get('duration_sec')
+            
+            if not script_text or not duration_sec:
+                corrected_scenes.append(scene)
+                continue
+            
+            # Validar longitud
+            validation = validate_text_length_for_duration.invoke({
+                'text': script_text,
+                'duration_sec': duration_sec
+            })
+            
+            if validation['valid']:
+                corrected_scenes.append(scene)
+                continue
+            
+            word_count = validation['word_count']
+            min_words, max_words = validation['expected_range']
+            
+            # Si el texto es demasiado largo, truncar
+            if word_count > max_words:
+                words = script_text.split()
+                # Tomar aproximadamente max_words palabras, pero intentar mantener frases completas
+                target_words = max_words
+                truncated_words = words[:target_words]
+                
+                # Intentar mantener una frase completa (buscar punto, coma, etc.)
+                truncated_text = ' '.join(truncated_words)
+                if truncated_text and truncated_text[-1] not in '.!?':
+                    # Buscar el último punto o coma
+                    last_punctuation = max(
+                        truncated_text.rfind('.'),
+                        truncated_text.rfind(','),
+                        truncated_text.rfind('!'),
+                        truncated_text.rfind('?')
+                    )
+                    if last_punctuation > len(truncated_text) * 0.5:  # Si está en la segunda mitad
+                        truncated_text = truncated_text[:last_punctuation + 1]
+                
+                scene['script_text'] = truncated_text
+                logger.debug(f"Escena {scene.get('id', '?')}: Texto truncado de {word_count} a ~{len(truncated_text.split())} palabras")
+            
+            # Si el texto es demasiado corto, no hacemos nada (el auto_corrector puede manejar esto)
+            # porque expandir texto requiere contexto del LLM
+            
+            corrected_scenes.append(scene)
+        
+        return corrected_scenes
     
     def _format_output_node(self, state: AgentState) -> AgentState:
         """Nodo: Formatea la salida final"""
@@ -275,7 +541,7 @@ class ScriptAgent:
         try:
             json.loads(response_text)
             return response_text
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
         
         # Buscar JSON en bloques de código
@@ -298,16 +564,23 @@ class ScriptAgent:
     def process_script(
         self,
         script_text: str,
-        duration_min: int,
-        script_id: int = None
+        duration_min: float,  # Ahora puede ser decimal (ej: 1.5 para 1 min 30 seg)
+        script_id: int = None,
+        video_format: str = 'educational',
+        video_type: str = 'general',
+        duration_seconds: int = None,  # Duración total en segundos (opcional, se calcula si no se proporciona)
+        config: Dict[str, Any] = None  # Configuración de LangGraph (recursion_limit, etc.)
     ) -> Dict[str, Any]:
         """
         Procesa un guión y retorna escenas estructuradas.
         
         Args:
             script_text: Texto del guión
-            duration_min: Duración deseada en minutos
+            duration_min: Duración deseada en minutos (puede ser decimal, ej: 1.5 para 1 min 30 seg)
             script_id: ID del script (opcional, para logging)
+            video_format: Formato de video ('social', 'educational', 'longform')
+            video_type: Tipo de video ('ultra', 'avatar', 'general')
+            duration_seconds: Duración total en segundos (opcional, se calcula si no se proporciona)
             
         Returns:
             Dict con estructura compatible con n8n:
@@ -321,10 +594,14 @@ class ScriptAgent:
         Raises:
             ValueError: Si el procesamiento falla después de todos los reintentos
         """
+        # Calcular duración total en segundos si no se proporciona
+        if duration_seconds is None:
+            duration_seconds = int(duration_min * 60)
+        
         logger.info("=" * 80)
         logger.info(f"🚀 INICIANDO PROCESAMIENTO DE GUION")
         logger.info(f"   Script ID: {script_id}")
-        logger.info(f"   Duración: {duration_min} min")
+        logger.info(f"   Duración: {duration_min} min ({duration_seconds} seg)")
         logger.info(f"   Proveedor LLM: {self.llm_provider}")
         logger.info(f"   Modelo: {self.llm_model or 'default'}")
         logger.info("=" * 80)
@@ -333,10 +610,14 @@ class ScriptAgent:
         initial_state: AgentState = {
             'script_text': script_text,
             'duration_min': duration_min,
+            'duration_seconds': duration_seconds,  # Ya calculado arriba si era None
+            'video_format': video_format,
+            'video_type': video_type,
             'llm_response': '',
             'parsed_json': {},
             'validation_errors': [],
             'corrections_applied': [],
+            'correction_attempts': 0,  # Inicializar contador
             'final_output': {},
             'metrics': {}
         }
@@ -346,7 +627,10 @@ class ScriptAgent:
         for attempt in range(self.max_retries + 1):
             try:
                 logger.info(f"🔄 Intento {attempt + 1}/{self.max_retries + 1}")
-                result = self.agent_executor.invoke(initial_state)
+                # Usar configuración si se proporciona, sino usar valores por defecto
+                graph_config = config or {"recursion_limit": 50}
+                
+                result = self.agent_executor.invoke(initial_state, config=graph_config)
                 
                 if result.get('final_output'):
                     scenes_count = len(result['final_output'].get('scenes', []))
@@ -396,15 +680,7 @@ def create_script_agent_graph():
     Returns:
         StateGraph: Grafo SIN compilar (Studio lo compila internamente)
     """
-    import os
-    import sys
-    
-    # Configurar Django
-    if 'django' not in sys.modules or not sys.modules.get('django').conf.settings.configured:
-        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'atenea.settings')
-        import django
-        django.setup()
-    
+    # Django ya está configurado por el import de _django_setup al inicio del módulo
     try:
         # Crear el agente
         agent = ScriptAgent(

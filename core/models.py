@@ -5,6 +5,7 @@ from django.utils.crypto import get_random_string
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from decimal import Decimal
+from typing import Optional, Dict
 import logging
 import uuid
 
@@ -44,6 +45,13 @@ AGENT_VIDEO_TYPES = [
     ('ultra', 'Modo Ultra (Veo3 y Sora2)'),
     ('avatar', 'Con Avatares (HeyGen)'),
     ('general', 'Video General'),
+]
+
+# Formatos de video según uso/duración
+VIDEO_FORMATS = [
+    ('social', 'Redes Sociales (Reels/TikTok)'),
+    ('educational', 'Video Educativo (Píldora)'),
+    ('longform', 'Video Largo (YouTube/Masterclass)'),
 ]
 
 # Orientaciones de video
@@ -759,9 +767,9 @@ class Script(models.Model):
     
     # Contenido del guión
     original_script = models.TextField(help_text='Guión original enviado')
-    desired_duration_min = models.IntegerField(
+    desired_duration_min = models.FloatField(
         default=5,
-        help_text='Duración deseada del video en minutos'
+        help_text='Duración deseada del video en minutos (puede ser decimal, ej: 1.5 para 1 min 30 seg)'
     )
     processed_data = models.JSONField(
         default=dict,
@@ -788,7 +796,15 @@ class Script(models.Model):
         choices=AGENT_VIDEO_TYPES,
         blank=True,
         null=True,
-        help_text='Tipo de video para el flujo del agente'
+        help_text='Tipo de video para el flujo del agente (qué servicios usar)'
+    )
+    video_format = models.CharField(
+        max_length=20,
+        choices=VIDEO_FORMATS,
+        default='educational',
+        blank=True,
+        null=True,
+        help_text='Formato de video según uso (estructura y duraciones de escenas)'
     )
     video_orientation = models.CharField(
         max_length=10,
@@ -843,6 +859,33 @@ class Script(models.Model):
         help_text='Si True, genera audio automáticamente para escenas Veo/Sora'
     )
     
+    # Preferencias de modelos (Paso 1)
+    model_preferences = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Preferencias de modelos por servicio. Ejemplo: '
+                  '{"gemini_veo": "veo-3.1-generate-preview", '
+                  '"sora": "sora-2", "heygen": "heygen_v2", '
+                  '"default_voice_id": "voice_id"}'
+    )
+    
+    # Referencias visuales compartidas (Fase 3: Raccord)
+    character_reference_images = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Imágenes de referencia de personajes. '
+                  'Ejemplo: {"char_1": "gcs_path/to/image.jpg"}'
+    )
+    
+    visual_style_guide = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Guía de estilo visual compartida. '
+                  'Ejemplo: {"color_palette": ["#hex1", "#hex2"], '
+                  '"time_period": "Segunda Guerra Mundial", '
+                  '"visual_style": "Realista cinematográfico"}'
+    )
+    
     # Control de errores
     error_message = models.TextField(blank=True, null=True)
     
@@ -870,13 +913,36 @@ class Script(models.Model):
         self.completed_at = timezone.now()
         if processed_data:
             self.processed_data = processed_data
+            
+            # Guardar estado completo de Production House si existe
+            if '_production_house_state' in processed_data:
+                # El estado completo ya está en processed_data, no hacer nada extra
+                pass
+            
             # Extraer metadatos del processed_data
             if 'project' in processed_data:
                 project_data = processed_data['project']
                 self.platform_mode = project_data.get('platform_mode')
                 self.num_scenes = project_data.get('num_scenes')
                 self.language = project_data.get('language')
-                self.total_estimated_duration_min = project_data.get('total_estimated_duration_min')
+                
+                # Convertir total_estimated_duration_min a número si viene como string
+                total_duration = project_data.get('total_estimated_duration_min')
+                if total_duration is not None:
+                    try:
+                        if isinstance(total_duration, str):
+                            # Convertir string a float
+                            self.total_estimated_duration_min = float(total_duration)
+                        elif isinstance(total_duration, (int, float)):
+                            self.total_estimated_duration_min = float(total_duration)
+                        else:
+                            logger.warning(f"total_estimated_duration_min tiene tipo inesperado: {type(total_duration)}")
+                            self.total_estimated_duration_min = None
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error al convertir total_estimated_duration_min: {total_duration}, error: {e}")
+                        self.total_estimated_duration_min = None
+                else:
+                    self.total_estimated_duration_min = None
         self.save(update_fields=['status', 'completed_at', 'processed_data', 'platform_mode', 'num_scenes', 'language', 'total_estimated_duration_min', 'updated_at'])
 
     def mark_as_error(self, error_message):
@@ -894,6 +960,48 @@ class Script(models.Model):
     def project_data(self):
         """Retorna los datos del proyecto del guión procesado"""
         return self.processed_data.get('project', {})
+    
+    def get_model_preference(self, service: str):
+        """
+        Obtiene la preferencia de modelo para un servicio
+        
+        Args:
+            service: Nombre del servicio ('gemini_veo', 'sora', 'heygen', 'default_voice_id')
+        
+        Returns:
+            ID del modelo preferido o None si no está configurado
+        """
+        if not self.model_preferences:
+            return None
+        return self.model_preferences.get(service)
+    
+    def get_character_description(self, character_id: str) -> Optional[Dict]:
+        """
+        Obtiene la descripción de un personaje desde visual_style_guide
+        
+        Args:
+            character_id: ID del personaje (ej: 'char_1')
+        
+        Returns:
+            Dict con información del personaje o None si no existe
+        """
+        if not self.visual_style_guide:
+            return None
+        
+        characters = self.visual_style_guide.get('characters', {})
+        return characters.get(character_id)
+    
+    def get_all_characters(self) -> Dict:
+        """
+        Retorna todos los personajes definidos en el script
+        
+        Returns:
+            Dict con todos los personajes {char_id: {name, visual_description, ...}}
+        """
+        if not self.visual_style_guide:
+            return {}
+        
+        return self.visual_style_guide.get('characters', {})
 
 
 class Scene(models.Model):
@@ -910,6 +1018,8 @@ class Scene(models.Model):
         Project,
         on_delete=models.CASCADE,
         related_name='scenes',
+        null=True,
+        blank=True,
         help_text='Proyecto al que pertenece (para consultas directas)'
     )
     
@@ -1023,6 +1133,16 @@ class Scene(models.Model):
     ai_config = models.JSONField(
         default=dict,
         help_text='Configuración específica del servicio (avatar_id, voice_id, duration, etc.)'
+    )
+    
+    # Contexto de continuidad cinematográfica (Fase 3: Raccord)
+    continuity_context = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Contexto de continuidad con otras escenas. '
+                  'Ejemplo: {"references_previous_scenes": ["Escena 1"], '
+                  '"time_progression": "+2 horas", '
+                  '"maintained_elements": ["uniforme", "locación"]}'
     )
     
     # Video generado

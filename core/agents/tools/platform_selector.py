@@ -66,23 +66,31 @@ def suggest_platform(
 
 
 @tool
-def validate_platform_avatar_consistency(scenes: List[Dict]) -> Dict[str, any]:
+def validate_platform_avatar_consistency(scenes: List[Dict], video_type: str = 'general') -> Dict[str, any]:
     """
-    Valida que la combinación platform/avatar sea consistente.
+    Valida que la combinación platform/avatar sea consistente con el tipo de video.
     
     Args:
         scenes: Lista de escenas
+        video_type: Tipo de video ('ultra', 'avatar', 'general')
         
     Returns:
         Dict con 'valid' (bool), 'errors' (lista de errores)
     """
     errors = []
+    heygen_count = 0
+    total_count = len(scenes)
     
     for idx, scene in enumerate(scenes):
-        platform = scene.get('platform', '').lower()
+        # Soportar ambos nombres de campo: platform y ai_service
+        platform = (scene.get('platform') or scene.get('ai_service') or '').lower()
         avatar = scene.get('avatar', '').lower()
         
-        # Validar consistencia
+        # Contar escenas de HeyGen
+        if platform in ['heygen', 'heygen_v2', 'heygen_avatar_iv']:
+            heygen_count += 1
+        
+        # Validar consistencia platform/avatar
         if avatar == 'si' and platform not in ['heygen', 'heygen_v2', 'heygen_avatar_iv']:
             errors.append(
                 f'Escena {idx + 1}: avatar="si" pero platform="{platform}". '
@@ -93,6 +101,24 @@ def validate_platform_avatar_consistency(scenes: List[Dict]) -> Dict[str, any]:
             errors.append(
                 f'Escena {idx + 1}: avatar="no" pero platform="{platform}". '
                 f'HeyGen requiere avatar="si"'
+            )
+        
+        # Validar según video_type
+        if video_type == 'ultra':
+            # Modo Ultra: NO permite HeyGen
+            if platform in ['heygen', 'heygen_v2', 'heygen_avatar_iv'] or avatar == 'si':
+                errors.append(
+                    f'Escena {idx + 1}: Tipo "ultra" no permite HeyGen ni avatares. '
+                    f'Usa gemini_veo o sora.'
+                )
+    
+    # Validar proporción para tipo "avatar"
+    if video_type == 'avatar' and total_count > 0:
+        heygen_ratio = heygen_count / total_count
+        if heygen_ratio < 0.7:
+            errors.append(
+                f'Tipo "avatar" requiere al menos 70% escenas HeyGen. '
+                f'Actual: {heygen_ratio * 100:.0f}% ({heygen_count}/{total_count})'
             )
     
     return {
