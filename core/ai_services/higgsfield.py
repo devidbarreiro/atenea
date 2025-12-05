@@ -66,6 +66,17 @@ HIGGSFIELD_MODELS = {
         'supports_image_to_video': False,
         'supports_text_to_image': True,
     },
+    'flux-pro/kontext/max/text-to-image': {
+        'name': 'Flux Pro Kontext Max Text-to-Image',
+        'description': 'Generación de imágenes de alta calidad a partir de texto (Flux Pro Kontext Max)',
+        'type': 'text_to_image',
+        'aspect_ratio': ['16:9', '4:3', '1:1', '3:4', '9:16'],
+        'safety_tolerance': [1, 2, 3, 4, 5, 6],
+        'seed': 'string',
+        'supports_text_to_video': False,
+        'supports_image_to_video': False,
+        'supports_text_to_image': True,
+    },
 }
 
 
@@ -368,3 +379,108 @@ class HiggsfieldClient:
         except (json.JSONDecodeError, KeyError, TypeError):
             return f"HTTP {response.status_code}: {response.text[:200]}"
 
+def generate_image(
+    self,
+    model_id: str,
+    prompt: str,
+    aspect_ratio: str = None,
+    resolution: str = None,
+    output_format: str = None,
+    image_url: str = None,
+    wait_for_completion: bool = True,
+    poll_interval: int = 5,
+    max_wait_seconds: int = 300
+) -> dict:
+    """
+    Genera una imagen con Higgsfield (o edita una existente).
+    
+    Args:
+        model_id: ID del modelo (ej: 'nano-banana-pro' o 'nano-banana-pro/edit')
+        prompt: Texto descriptivo de la imagen
+        aspect_ratio: Relación de aspecto (ej: '1:1', '4:3', etc.)
+        resolution: Resolución ('1k', '2k', '4k')
+        output_format: Formato de salida ('png', 'jpeg')
+        image_url: URL de imagen de entrada (solo para edición)
+        wait_for_completion: Si True, espera a que la imagen esté lista
+        poll_interval: Intervalo de polling en segundos
+        max_wait_seconds: Tiempo máximo de espera en segundos
+    
+    Returns:
+        dict con información de la solicitud y URLs de imágenes generadas
+    """
+    model_info = HIGGSFIELD_MODELS.get(model_id)
+    if not model_info:
+        raise ValueError(f"Modelo no soportado: {model_id}")
+    
+    if model_info['type'] not in ['text_to_image', 'image_edit']:
+        raise ValueError(f"El modelo {model_id} no es de generación de imágenes")
+    
+    # Para modelos de edición, image_url es obligatorio
+    if model_info['type'] == 'image_edit' and not image_url:
+        raise ValueError(f"El modelo {model_id} requiere image_url para editar la imagen")
+    
+    payload = {"prompt": prompt}
+    
+    if aspect_ratio:
+        payload["aspect_ratio"] = aspect_ratio
+    if resolution:
+        payload["resolution"] = resolution
+    if output_format:
+        payload["output_format"] = output_format
+    if image_url:
+        payload["image_url"] = image_url
+    
+    endpoint = f"{self.base_url}/{model_id}"
+    
+    logger.info(f"📤 Enviando request a: {endpoint}")
+    logger.info(f"   Payload: {payload}")
+    
+    response = self.session.post(
+        endpoint,
+        json=payload,
+        headers=self._get_headers(),
+        timeout=60
+    )
+    
+    if response.status_code != 200:
+        error_msg = self._parse_error(response)
+        logger.error(f"❌ Error al crear imagen: {error_msg}")
+        raise Exception(error_msg)
+    
+    data = response.json()
+    request_id = data.get('request_id')
+    
+    result = {
+        'request_id': request_id,
+        'status': data.get('status', 'queued'),
+        'status_url': data.get('status_url'),
+        'cancel_url': data.get('cancel_url'),
+        'model_id': model_id,
+        'prompt': prompt,
+        'image_urls': [],
+        'raw_response': data
+    }
+    
+    if wait_for_completion:
+        start_time = time.time()
+        while True:
+            status_data = self.get_request_status(request_id)
+            status = status_data.get('status')
+            
+            if status == 'completed':
+                result['status'] = 'completed'
+                result['image_urls'] = [img.get('url') for img in status_data.get('images', []) if img.get('url')]
+                break
+            elif status in ['failed', 'nsfw']:
+                result.update(status_data)
+                break
+            
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_seconds:
+                result['status'] = 'timeout'
+                result['error'] = f"Timeout después de {elapsed:.1f}s"
+                break
+            
+            time.sleep(poll_interval)
+    
+    return result
