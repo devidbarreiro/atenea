@@ -1,5 +1,5 @@
 {% load static %}
-<script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('libraryPanel', () => ({
@@ -272,6 +272,33 @@ document.addEventListener('alpine:init', () => {
                 history.back();
             }
         },
+
+        async navigateTo(direction) {
+            // 1. Validación básica
+            if (!this.navigation || !this.navigation[direction]) return;
+            
+            // 2. Obtener el objeto o valor de navegación
+            const navData = this.navigation[direction];
+            
+            // 3. Buscar 'uuid''. 
+            const nextId = (typeof navData === 'object') ? (navData.uuid ) : navData;
+        
+            // 4. Validación de seguridad del ID
+            if (!nextId) {
+                console.error("Error de navegación: ID/UUID no encontrado en:", navData);
+                return;
+            }
+            // 5. Determinar el tipo (usando fallback a activeTab)
+            let nextType = this.activeTab; // Valor por defecto
+            
+            if (typeof navData === 'object' && navData.type) {
+                nextType = navData.type;
+            } else if (this.selectedItem && this.selectedItem.type) {
+                nextType = this.selectedItem.type;
+            }
+            
+            breadcrumbsContainer.innerHTML = html;
+        },
         
         async navigateTo(direction) {
             if (!this.navigation || !this.navigation[direction]) return;
@@ -372,48 +399,7 @@ document.addEventListener('alpine:init', () => {
             }
         }
     }));
-    Alpine.data('imageZoom', () => ({
-        pz: null,
-
-        // Esta función la llamaremos desde el HTML cuando la imagen cargue
-        initZoom() {
-            if (this.pz) { this.pz.destroy(); } // Limpieza previa si existe
-
-            const imageEl = this.$refs.zoomImage;
-            const containerEl = this.$refs.zoomContainer;
-
-            if (!imageEl || !containerEl) return;
-
-            // Inicializar Panzoom
-            this.pz = Panzoom(imageEl, {
-                maxScale: 6,
-                minScale: 0.75,
-                contain: 'outside', // Mantiene la imagen dentro del área lógica
-                startScale: 1,
-                cursor: 'default'
-            });
-
-            // Habilitar el zoom con la rueda del ratón sobre el contenedor
-            // (Usamos el contenedor padre para capturar la rueda más fácilmente)
-            containerEl.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
-        },
-
-        handleWheel(e) {
-            if (!this.pz) return;
-            this.pz.zoomWithWheel(e);
-        },
-
-        zoomIn() { this.pz && this.pz.zoomIn(); },
-        zoomOut() { this.pz && this.pz.zoomOut(); },
-        reset() { this.pz && this.pz.reset(); },
-
-        // Limpieza automática cuando Alpine destruye el componente (al cerrar el modal)
-        destroy() {
-            if (this.pz) this.pz.destroy();
-        }
-    }));
 });
-
 </script>
 
 <div x-data="libraryPanel()" class="h-full flex flex-col bg-white relative">
@@ -674,7 +660,7 @@ document.addEventListener('alpine:init', () => {
     <template x-if="selectedItem && !loadingDetail">
         <div class="h-full flex">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative overflow-hidden">
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
                         class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
@@ -707,23 +693,9 @@ document.addEventListener('alpine:init', () => {
                        class="max-w-full max-h-full rounded-lg shadow-lg"></video>
                 
                 <!-- Image -->
-                <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
-                    <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
-                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
-                         x-data="imageZoom" 
-                         x-key="selectedItem.id"> 
-
-                        <div x-ref="zoomContainer" 
-                             class="w-full h-full max-w-[800px] max-h-full relative flex items-center justify-center rounded-lg">
-
-                            <img x-ref="zoomImage"
-                                 :src="selectedItem.signed_url" 
-                                 @load="initZoom()" 
-                                 class="w-auto h-auto cursor-default"
-                                 alt="Visualización detallada">
-                        </div>
-                    </div>
-                </div>
+                <img x-show="selectedItem.type === 'image' && selectedItem.signed_url"
+                     :src="selectedItem.signed_url" 
+                     class="max-w-full max-h-full rounded-lg shadow-lg object-contain">
                 
                 <!-- Audio -->
                 <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">

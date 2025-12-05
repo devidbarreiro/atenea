@@ -1,4 +1,4 @@
-"""Cliente para Gemini Image Generation API - Todos los modelos"""
+"""Cliente para Gemini Image Generation API"""
 import logging
 from typing import Dict, Optional, List
 from google import genai
@@ -9,103 +9,71 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-# --- Configuración de Modelos de Imagen de Gemini ---
-
-GEMINI_IMAGE_MODELS = {
-    # ==================== GEMINI 2.5 FLASH IMAGE ====================
-    'gemini-2.5-flash-image': {
-        'version': '2.5 Flash (1K Max)',
-        'max_images': 3,
-        'description': 'Generación rápida y eficiente (hasta 1K)',
-        # Dimensiones para 2.5 Flash
-        'resolutions': {
-            '1:1': {'width': 1024, 'height': 1024, 'tokens': 1290},
-            '2:3': {'width': 832, 'height': 1248, 'tokens': 1290},
-            '3:2': {'width': 1248, 'height': 832, 'tokens': 1290},
-            '3:4': {'width': 864, 'height': 1184, 'tokens': 1290},
-            '4:3': {'width': 1184, 'height': 864, 'tokens': 1290},
-            '4:5': {'width': 896, 'height': 1152, 'tokens': 1290},
-            '5:4': {'width': 1152, 'height': 896, 'tokens': 1290},
-            '9:16': {'width': 768, 'height': 1344, 'tokens': 1290},
-            '16:9': {'width': 1344, 'height': 768, 'tokens': 1290},
-            '21:9': {'width': 1536, 'height': 672, 'tokens': 1290},
-        }
-    },
-    
-    # ==================== GEMINI 3 PRO IMAGE PREVIEW ====================
-    'gemini-3-pro-image-preview': {
-        'version': '3.0 Pro Preview (1K Implícito)',
-        'max_images': 14,
-        'supports_grounding': True,
-        'description': 'Generación y edición avanzada (forzada a 1K para evitar error SDK)',
-        # Usamos la resolución 1K por defecto del Pro (aunque internamente el modelo soporta más)
-        'resolutions': {
-            '1:1': {'width': 1024, 'height': 1024, 'tokens': 1210}, 
-            '2:3': {'width': 848, 'height': 1264, 'tokens': 1210}, 
-            '3:2': {'width': 1264, 'height': 848, 'tokens': 1210}, 
-            '3:4': {'width': 896, 'height': 1200, 'tokens': 1210},
-            '4:3': {'width': 1200, 'height': 896, 'tokens': 1210},
-            '4:5': {'width': 928, 'height': 1152, 'tokens': 1210},
-            '5:4': {'width': 1152, 'height': 928, 'tokens': 1210},
-            '16:9': {'width': 1376, 'height': 768, 'tokens': 1210}, 
-            '9:16': {'width': 768, 'height': 1376, 'tokens': 1210}, 
-        }
-    }
-}
-
 
 class GeminiImageClient:
-    """Cliente para generar imágenes con múltiples modelos de Gemini"""
+    """Cliente para generar imágenes con Gemini 2.5 Flash Image"""
     
-    # Se usa el diccionario centralizado para los modelos
-    MODEL_CONFIGS = GEMINI_IMAGE_MODELS
+    # Aspect ratios disponibles según la documentación
+    ASPECT_RATIOS = {
+        '1:1': {'width': 1024, 'height': 1024, 'tokens': 1290},
+        '2:3': {'width': 832, 'height': 1248, 'tokens': 1290},
+        '3:2': {'width': 1248, 'height': 832, 'tokens': 1290},
+        '3:4': {'width': 864, 'height': 1184, 'tokens': 1290},
+        '4:3': {'width': 1184, 'height': 864, 'tokens': 1290},
+        '4:5': {'width': 896, 'height': 1152, 'tokens': 1290},
+        '5:4': {'width': 1152, 'height': 896, 'tokens': 1290},
+        '9:16': {'width': 768, 'height': 1344, 'tokens': 1290},
+        '16:9': {'width': 1344, 'height': 768, 'tokens': 1290},
+        '21:9': {'width': 1536, 'height': 672, 'tokens': 1290},
+    }
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash-image"):
+    def __init__(self, api_key: str):
         """
         Inicializa el cliente de Gemini Image
-        """ 
+        
+        Args:
+            api_key: API key de Google Gemini
+        """
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
-        self.model = model_name
-        self.model_config = self.MODEL_CONFIGS[model_name]
-        logger.info(f"[Gemini Image] Cliente inicializado con modelo: {self.model} ({self.model_config['version']})")
-    
+        self.model = "gemini-2.5-flash-image"
+        logger.info(f"[Gemini Image] Cliente inicializado con modelo: {self.model}")
     
     def generate_image_from_text(
         self,
         prompt: str,
         aspect_ratio: str = '1:1',
-        response_modalities: Optional[List[str]] = None,
-        enable_grounding: bool = False, # Nuevo para 3 Pro
+        response_modalities: Optional[List[str]] = None
     ) -> Dict:
         """
         Genera una imagen desde un prompt de texto (text-to-image)
+        
+        Args:
+            prompt: Descripción textual de la imagen a generar
+            aspect_ratio: Relación de aspecto (default: '1:1')
+            response_modalities: Lista de modalidades ['Text', 'Image'] o ['Image']
+        
+        Returns:
+            Dict con 'image_data' (bytes), 'text_response' (opcional), 'width', 'height'
+        
+        Raises:
+            Exception si falla la generación
         """
-        
-        # Validación de aspect ratio (simplificado)
-        if aspect_ratio not in self.model_config['resolutions']:
-             raise ValueError(f"Aspect ratio {aspect_ratio} no válido para {self.model}.")
-        
         try:
-            logger.info(f"[Gemini Image] Generando imagen text-to-image ({self.model})")
+            logger.info(f"[Gemini Image] Generando imagen text-to-image")
+            logger.info(f"[Gemini Image] Prompt: {prompt[:100]}...")
+            logger.info(f"[Gemini Image] Aspect ratio: {aspect_ratio}")
             
-            # Construir image_config
-            image_config_args = {"aspect_ratio": aspect_ratio}
+            # Configurar la solicitud
+            config = types.GenerateContentConfig(
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio,
+                )
+            )
             
-            
-            image_config = types.ImageConfig(**image_config_args)
-            
-            # Construir config
-            config_args = {"image_config": image_config}
+            # Agregar response_modalities si se especifica
             if response_modalities:
-                config_args["response_modalities"] = response_modalities
-            
-            # Agregar Grounding (Búsqueda de Google) si está soportado y habilitado
-            if enable_grounding and self.model_config.get('supports_grounding'):
-                config_args['tools'] = [{"google_search": {}}]
-                logger.info("[Gemini Image] Grounding con Búsqueda de Google habilitado.")
-            
-            config = types.GenerateContentConfig(**config_args)
+                config.response_modalities = response_modalities
             
             # Generar contenido
             response = self.client.models.generate_content(
@@ -124,42 +92,42 @@ class GeminiImageClient:
             logger.error(f"[Gemini Image] ❌ Error al generar imagen: {str(e)}")
             raise
     
-    
     def generate_image_from_image(
         self,
         prompt: str,
         input_image_data: bytes,
         aspect_ratio: str = '1:1',
-        response_modalities: Optional[List[str]] = None,
-        enable_grounding: bool = False,
+        response_modalities: Optional[List[str]] = None
     ) -> Dict:
         """
         Edita una imagen existente con instrucciones de texto (image-to-image)
-        """
         
-        if aspect_ratio not in self.model_config['resolutions']:
-             raise ValueError(f"Aspect ratio {aspect_ratio} no válido para {self.model}.")
-
+        Args:
+            prompt: Instrucciones de edición (ej: "Add a wizard hat to the cat")
+            input_image_data: Bytes de la imagen de entrada
+            aspect_ratio: Relación de aspecto (default: '1:1')
+            response_modalities: Lista de modalidades
+        
+        Returns:
+            Dict con 'image_data' (bytes), 'text_response' (opcional), 'width', 'height'
+        """
         try:
-            logger.info(f"[Gemini Image] Generando imagen image-to-image (edición) con {self.model}")
+            logger.info(f"[Gemini Image] Generando imagen image-to-image (edición)")
+            logger.info(f"[Gemini Image] Prompt: {prompt[:100]}...")
+            logger.info(f"[Gemini Image] Aspect ratio: {aspect_ratio}")
             
             # Cargar imagen con PIL
             input_image = PILImage.open(BytesIO(input_image_data))
             
-            # Construir image_config
-            image_config_args = {"aspect_ratio": aspect_ratio}
-                
-            image_config = types.ImageConfig(**image_config_args)
+            # Configurar la solicitud
+            config = types.GenerateContentConfig(
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio,
+                )
+            )
             
-            # Construir config
-            config_args = {"image_config": image_config}
             if response_modalities:
-                config_args["response_modalities"] = response_modalities
-            
-            if enable_grounding and self.model_config.get('supports_grounding'):
-                config_args['tools'] = [{"google_search": {}}]
-            
-            config = types.GenerateContentConfig(**config_args)
+                config.response_modalities = response_modalities
             
             # Generar contenido con imagen y prompt
             response = self.client.models.generate_content(
@@ -178,47 +146,46 @@ class GeminiImageClient:
             logger.error(f"[Gemini Image] ❌ Error al editar imagen: {str(e)}")
             raise
     
-    
     def generate_image_from_multiple_images(
         self,
         prompt: str,
         input_images_data: List[bytes],
         aspect_ratio: str = '1:1',
-        response_modalities: Optional[List[str]] = None,
-        enable_grounding: bool = False,
+        response_modalities: Optional[List[str]] = None
     ) -> Dict:
         """
         Crea una imagen compuesta desde múltiples imágenes (composición/transferencia de estilo)
-        """
         
-        # Validación de límites de imágenes
-        if len(input_images_data) > self.model_config['max_images']:
-            logger.warning(f"[Gemini Image] El modelo {self.model} soporta hasta {self.model_config['max_images']} imágenes. Se usará el límite.")
-            # Nota: La API de Gemini manejará el recorte/límite si se pasan más de 14.
-            
-        if aspect_ratio not in self.model_config['resolutions']:
-             raise ValueError(f"Aspect ratio {aspect_ratio} no válido para {self.model}.")
-            
+        Args:
+            prompt: Instrucciones de composición (ej: "Combine these images into one scene")
+            input_images_data: Lista de bytes de imágenes de entrada
+            aspect_ratio: Relación de aspecto
+            response_modalities: Lista de modalidades
+        
+        Returns:
+            Dict con 'image_data' (bytes), 'text_response' (opcional), 'width', 'height'
+        """
         try:
-            logger.info(f"[Gemini Image] Generando compuesta ({self.model}). Imágenes: {len(input_images_data)}")
+            logger.info(f"[Gemini Image] Generando imagen desde múltiples imágenes")
+            logger.info(f"[Gemini Image] Número de imágenes: {len(input_images_data)}")
+            logger.info(f"[Gemini Image] Prompt: {prompt[:100]}...")
             
             # Cargar imágenes con PIL
-            images = [PILImage.open(BytesIO(img_data)) for img_data in input_images_data]
+            images = []
+            for i, img_data in enumerate(input_images_data):
+                image = PILImage.open(BytesIO(img_data))
+                images.append(image)
+                logger.info(f"[Gemini Image] Imagen {i+1}: {image.size}")
             
-            # Construir image_config
-            image_config_args = {"aspect_ratio": aspect_ratio}
-                
-            image_config = types.ImageConfig(**image_config_args)
+            # Configurar la solicitud
+            config = types.GenerateContentConfig(
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio,
+                )
+            )
             
-            # Construir config
-            config_args = {"image_config": image_config}
             if response_modalities:
-                config_args["response_modalities"] = response_modalities
-                
-            if enable_grounding and self.model_config.get('supports_grounding'):
-                config_args['tools'] = [{"google_search": {}}]
-            
-            config = types.GenerateContentConfig(**config_args)
+                config.response_modalities = response_modalities
             
             # Construir contenido: prompt + imágenes
             contents = [prompt] + images
@@ -240,11 +207,16 @@ class GeminiImageClient:
             logger.error(f"[Gemini Image] ❌ Error al generar imagen compuesta: {str(e)}")
             raise
     
-    
     def _extract_response_data(self, response, aspect_ratio: str) -> Dict:
         """
-        Extrae datos de imagen y texto de la respuesta de Gemini, determinando
-        las dimensiones basado en el modelo y el size/ratio.
+        Extrae datos de imagen y texto de la respuesta de Gemini
+        
+        Args:
+            response: Respuesta de la API
+            aspect_ratio: Aspect ratio usado
+        
+        Returns:
+            Dict con image_data, text_response, width, height
         """
         result = {
             'image_data': None,
@@ -254,42 +226,38 @@ class GeminiImageClient:
             'aspect_ratio': aspect_ratio,
         }
         
-        # --- Obtener dimensiones ---
-        try:
-            resolutions = self.model_config['resolutions']
-            
-            # Lógica simplificada: Usar el diccionario de resoluciones directamente
-            # Ahora resolutions[aspect_ratio] es {width, height, tokens} para AMBOS modelos
-            dims = resolutions[aspect_ratio] 
-
-            result['width'] = dims['width']
-            result['height'] = dims['height']
-        except (KeyError, TypeError):
-            logger.warning(f"[Gemini Image] No se encontraron dimensiones exactas para {self.model}/{aspect_ratio}. Usando 1024x1024.")
-            result['width'] = 1024
-            result['height'] = 1024
+        # Obtener dimensiones del aspect ratio
+        if aspect_ratio in self.ASPECT_RATIOS:
+            result['width'] = self.ASPECT_RATIOS[aspect_ratio]['width']
+            result['height'] = self.ASPECT_RATIOS[aspect_ratio]['height']
         
-        # --- Extracción de contenido de la respuesta (se mantiene) ---
+        # Validar que la respuesta tenga candidatos
         if not response.candidates:
-            raise ValueError("Gemini no devolvió candidatos en la respuesta. Contenido bloqueado.")
+            logger.error("[Gemini Image] ❌ Respuesta sin candidatos")
+            raise ValueError("Gemini no devolvió candidatos en la respuesta. Es posible que el contenido haya sido bloqueado por políticas de seguridad.")
         
+        # Validar que el primer candidato tenga contenido
         candidate = response.candidates[0]
         if not candidate.content:
+            logger.error(f"[Gemini Image] ❌ Candidato sin contenido. Finish reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'unknown'}")
+            if hasattr(candidate, 'finish_reason'):
+                logger.error(f"[Gemini Image] Motivo de finalización: {candidate.finish_reason}")
             raise ValueError(f"Gemini bloqueó la generación. Motivo: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'desconocido'}")
         
+        # Extraer partes de la respuesta
         for part in candidate.content.parts:
             if part.text is not None:
                 result['text_response'] = part.text
+                logger.info(f"[Gemini Image] Texto de respuesta: {part.text[:100]}...")
             elif part.inline_data is not None:
                 result['image_data'] = part.inline_data.data
+                logger.info(f"[Gemini Image] Imagen generada: {len(part.inline_data.data)} bytes")
         
         if not result['image_data']:
             raise ValueError("No se recibió imagen en la respuesta de Gemini")
         
         return result
     
-    
-    # --- Métodos de utilidad (se mantienen igual) ---
     @staticmethod
     def image_bytes_to_base64(image_bytes: bytes) -> str:
         """Convierte bytes de imagen a string base64"""
@@ -300,19 +268,23 @@ class GeminiImageClient:
         """Convierte string base64 a bytes de imagen"""
         return base64.b64decode(base64_string)
     
-    @classmethod
-    def get_supported_models(cls) -> List[str]:
-        """Retorna lista de modelos soportados"""
-        return list(cls.MODEL_CONFIGS.keys())
-
-    @classmethod
-    def get_supported_aspect_ratios(cls, model_name: str) -> List[str]:
-        """Retorna lista de aspect ratios soportados por un modelo"""
-        if model_name in cls.MODEL_CONFIGS and 'resolutions' in cls.MODEL_CONFIGS[model_name]:
-            return list(cls.MODEL_CONFIGS[model_name]['resolutions'].keys())
-        return []
+    @staticmethod
+    def validate_aspect_ratio(aspect_ratio: str) -> bool:
+        """Valida si el aspect ratio es soportado"""
+        return aspect_ratio in GeminiImageClient.ASPECT_RATIOS
     
     @classmethod
-    def get_supported_resolutions(cls, model_name: str) -> List[str]:
-        """Retorna lista de resoluciones (ELIMINADO - siempre vacío)"""
-        return []
+    def get_supported_aspect_ratios(cls) -> List[str]:
+        """Retorna lista de aspect ratios soportados"""
+        return list(cls.ASPECT_RATIOS.keys())
+    
+    @classmethod
+    def get_aspect_ratio_dimensions(cls, aspect_ratio: str) -> Dict[str, int]:
+        """Retorna dimensiones para un aspect ratio"""
+        if aspect_ratio in cls.ASPECT_RATIOS:
+            return {
+                'width': cls.ASPECT_RATIOS[aspect_ratio]['width'],
+                'height': cls.ASPECT_RATIOS[aspect_ratio]['height'],
+            }
+        return {'width': 1024, 'height': 1024}  # Default 1:1
+

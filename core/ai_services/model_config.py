@@ -440,26 +440,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/higgsfield.png',
     },
-
-
-    # ==================== Black Forest Labs (Flux) ====================
-    'flux-pro/kontext/max/text-to-image': {
-        'service': 'higgsfield',
-        'name': 'Flux Pro Kontext Max',
-        'description': 'Generación de imágenes de alta calidad a partir de texto (Flux Pro Kontext Max)',
-        'type': 'image',
-        'supports': {
-            'text_to_image': True,
-            'image_to_video': False,
-            'text_to_video': False,
-            'aspect_ratio': ['16:9', '4:3', '1:1', '3:4', '9:16'],
-            'safety_tolerance': [1, 2, 3, 4, 5, 6],
-            'seed': 'string',
-        },
-        'logo': '/static/img/logos/flux-ai.png',
-    },
-
-
+    
     # ==================== KLING ====================
     'kling-v1': {
         'service': 'kling',
@@ -728,8 +709,8 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
     
     # ==================== GEMINI IMAGE ====================
     'gemini-2.5-flash-image': {
-        'service': 'gemini image',
-        'name': 'Nano Banana Flash',
+        'service': 'gemini_image',
+        'name': 'Gemini 2.5 Flash Image',
         'description': 'Generación de imágenes con Gemini',
         'type': 'image',
         'supports': {
@@ -737,55 +718,11 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
             'image_to_video': False,
             'text_to_video': False,
             'aspect_ratio': ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
+            'resolution': False,
         },
         'logo': '/static/img/logos/google.png',
-    },
-    'gemini-3-pro-image-preview': {
-        'service': 'gemini image',
-        'name': 'Nano Banana Pro',
-        'description': 'Generación de imágenes con Nano Banana Pro',
-        'type': 'image',
-        'supports': {
-            'text_to_image': True,
-            'image_to_video': False,
-            'text_to_video': False,
-            'aspect_ratio': ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
-        },
-        'logo': '/static/img/logos/google.png',
-    },
-
-    # ==================== SEEDREAM IMAGE ====================
-    'seedream-4-5-251128': {
-        'service': 'seedream',
-        'name': 'SeeDream 4.5 Advanced',
-        'description': 'Generación avanzada, edición y mezcla de imágenes (soporta multi-imagen).',
-        'type': 'image',
-        'supports': {
-            'text_to_image': True,
-            'image_to_image': True,     # Habilitado para edición avanzada (I2I)
-            'multi_image': True,        # Habilitado para Multi-Imagen (Blending)
-            'image_to_video': False,
-            'text_to_video': False,
-            'aspect_ratio': ['1:1', '2:3', '3:2', '16:9', '9:16', '4:3', '21:9'],
-        },
-        'logo': '/static/img/logos/seedream.png',
     },
     
-    'seedream-3-0-t2i-250415': {
-        'service': 'seedream',
-        'name': 'SeeDream 3.0 Standard',
-        'description': 'Modelo estándar de generación (Text-to-Image) simple.',
-        'type': 'image',
-        'supports': {
-            'text_to_image': True,      # <-- Activamos la generación simple (T2I)
-            'image_to_image': False,    # <-- Desactivamos edición simple (si es solo T2I)
-            'multi_image': False,
-            'image_to_video': False,
-            'text_to_video': False,
-            'aspect_ratio': ['1:1', '2:3', '3:2', '16:9', '9:16'],
-        },
-        'logo': '/static/img/logos/seedream.png',
-    },
     # ==================== ELEVENLABS ====================
     'elevenlabs': {
         'service': 'elevenlabs',

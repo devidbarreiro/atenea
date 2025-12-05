@@ -256,7 +256,6 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
 VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
 ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
-SEEDREAM_API_KEY= config('SEEDREAM_API_KEY', default='')
 # Higgsfield
 HIGGSFIELD_API_KEY_ID = config('HIGGSFIELD_API_KEY_ID', default='')
 HIGGSFIELD_API_KEY = config('HIGGSFIELD_API_KEY', default='')
