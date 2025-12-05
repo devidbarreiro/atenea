@@ -941,16 +941,22 @@ class VideoService:
         image_source = video.config.get('image_source', 'upload')
         
         if image_source == 'upload':
-            if not video.config.get('gcs_avatar_path'):
+            # Buscar imagen en diferentes ubicaciones posibles
+            # 1. gcs_avatar_path (formulario tradicional)
+            # 2. start_image (formulario dinámico)
+            gcs_path = video.config.get('gcs_avatar_path') or video.config.get('start_image')
+            
+            if not gcs_path:
                 raise ValidationException('Imagen de avatar es requerida')
             
             # Obtener URL firmada y subir a HeyGen
-            gcs_path = video.config['gcs_avatar_path']
             avatar_url = gcs_storage.get_signed_url(gcs_path, expiration=600)
             image_key = client.upload_asset_from_url(avatar_url)
             
-            # Guardar image_key para futuro uso
+            # Guardar image_key y normalizar gcs_avatar_path para futuro uso
             video.config['image_key'] = image_key
+            if not video.config.get('gcs_avatar_path') and video.config.get('start_image'):
+                video.config['gcs_avatar_path'] = video.config['start_image']
             video.save(update_fields=['config'])
             
             return image_key
@@ -1811,15 +1817,22 @@ class APIService:
     
     def _get_stale_cache(self, cache_key: str):
         """Obtiene datos obsoletos del caché (stale cache)"""
-        from django.core.cache import cache
-        stale_key = f"{cache_key}_stale"
-        return cache.get(stale_key)
+        try:
+            from django.core.cache import cache
+            stale_key = f"{cache_key}_stale"
+            return cache.get(stale_key)
+        except Exception as e:
+            logger.debug(f"Error al obtener stale cache (continuando sin caché): {e}")
+            return None
     
     def _set_stale_cache(self, cache_key: str, data: List[Dict]):
         """Guarda datos en el caché obsoleto (stale cache)"""
-        from django.core.cache import cache
-        stale_key = f"{cache_key}_stale"
-        cache.set(stale_key, data, self.STALE_CACHE_TTL)
+        try:
+            from django.core.cache import cache
+            stale_key = f"{cache_key}_stale"
+            cache.set(stale_key, data, self.STALE_CACHE_TTL)
+        except Exception as e:
+            logger.debug(f"Error al guardar stale cache (continuando sin caché): {e}")
     
     def list_avatars(self, use_cache: bool = True) -> List[Dict]:
         """
@@ -1840,10 +1853,14 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando avatares desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando avatares desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                # Si hay error con el caché, continuar sin caché
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1853,9 +1870,12 @@ class APIService:
             avatars = client.list_avatars()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, avatars, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, avatars)
-            logger.debug(f"Avatares guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, avatars, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, avatars)
+                logger.debug(f"Avatares guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return avatars
         except Exception as e:
@@ -1867,10 +1887,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando avatares en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando avatares en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de avatares disponibles (ni API ni caché)")
@@ -1895,10 +1918,13 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando voces desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando voces desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1908,9 +1934,12 @@ class APIService:
             voices = client.list_voices()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, voices, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, voices)
-            logger.debug(f"Voces guardadas en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, voices, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, voices)
+                logger.debug(f"Voces guardadas en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return voices
         except Exception as e:
@@ -1922,10 +1951,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando voces en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando voces en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de voces disponibles (ni API ni caché)")
@@ -1950,10 +1982,13 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando image assets desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando image assets desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1963,9 +1998,12 @@ class APIService:
             image_assets = client.list_image_assets()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, image_assets, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, image_assets)
-            logger.debug(f"Image assets guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, image_assets, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, image_assets)
+                logger.debug(f"Image assets guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return image_assets
         except Exception as e:
@@ -1977,10 +2015,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando image assets en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando image assets en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de image assets disponibles (ni API ni caché)")

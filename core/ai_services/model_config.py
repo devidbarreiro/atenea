@@ -648,7 +648,7 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'supports': {
             'text_to_video': True,
             'image_to_video': True,  # Requiere imagen de avatar
-            'duration': {'variable': True},
+            'duration': False,  # La duración la determina el script/audio
             'aspect_ratio': ['16:9', '9:16'],
             'resolution': False,
             'audio': True,

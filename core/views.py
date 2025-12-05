@@ -345,6 +345,34 @@ class ServiceMixin:
         return APIService()
 
 
+class HeyGenPreloadMixin:
+    """Mixin para precargar datos de HeyGen en background cuando se accede a vistas de creación"""
+    
+    def dispatch(self, request, *args, **kwargs):
+        """Precargar datos de HeyGen en background al acceder a la vista"""
+        response = super().dispatch(request, *args, **kwargs)
+        
+        # Precargar en background usando threading (no bloquea la respuesta)
+        import threading
+        def preload_heygen_data():
+            try:
+                api_service = APIService()
+                # Precargar avatares, voces e image assets con caché
+                # Esto los guardará en Redis para uso futuro
+                api_service.list_avatars(use_cache=True)
+                api_service.list_voices(use_cache=True)
+                api_service.list_image_assets(use_cache=True)
+                logger.debug("✅ Datos de HeyGen precargados en background")
+            except Exception as e:
+                logger.debug(f"⚠️ Error precargando datos de HeyGen (no crítico): {e}")
+        
+        # Ejecutar en thread separado para no bloquear la respuesta
+        thread = threading.Thread(target=preload_heygen_data, daemon=True)
+        thread.start()
+        
+        return response
+
+
 class SidebarProjectsMixin:
     """Mixin para exponer los proyectos del usuario en plantillas con sidebar."""
     _sidebar_projects_cache = None
@@ -1202,7 +1230,7 @@ class ProjectDeleteView(BreadcrumbMixin, ServiceMixin, DeleteView):
 # VIDEO VIEWS
 # ====================
 
-class VideoLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+class VideoLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, HeyGenPreloadMixin, View):
     """Vista unificada para creación y biblioteca de videos"""
     template_name = 'creation/base_creation.html'
     
@@ -2487,19 +2515,39 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
 class LibraryItemsAPIView(ServiceMixin, View):
     """API endpoint para obtener items de la biblioteca filtrados por tipo y proyecto"""
     
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 100
+    
     def get(self, request):
         """
-        Retorna items de la biblioteca
+        Retorna items de la biblioteca con paginación
         
         Query params:
             type: Filtrar por tipo ('video', 'image', 'audio')
             project_id: Filtrar por proyecto (opcional)
+            limit: Número de items a retornar (default: 20, max: 100)
+            offset: Número de items a saltar (default: 0)
+            include_urls: Si incluir signed URLs (default: true) - false para carga rápida
         """
         from django.db.models import Q
         
         item_type = request.GET.get('type', 'video')
         project_id = request.GET.get('project_id')
         user = request.user
+        
+        # Incluir URLs (para carga rápida, puede ser false)
+        include_urls = request.GET.get('include_urls', 'true').lower() != 'false'
+        
+        # Paginación
+        try:
+            limit = min(int(request.GET.get('limit', self.DEFAULT_LIMIT)), self.MAX_LIMIT)
+        except (ValueError, TypeError):
+            limit = self.DEFAULT_LIMIT
+        
+        try:
+            offset = max(int(request.GET.get('offset', 0)), 0)
+        except (ValueError, TypeError):
+            offset = 0
         
         # Obtener proyectos del usuario
         user_projects = ProjectService.get_user_projects(user)
@@ -2524,10 +2572,13 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 return JsonResponse({'error': 'Proyecto no encontrado'}, status=404)
         
         items_data = []
+        total_count = 0
         
         try:
             if item_type == 'video':
-                videos = Video.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                queryset = Video.objects.filter(base_filter).select_related('project').order_by('-created_at')
+                total_count = queryset.count()
+                videos = queryset[offset:offset + limit]
                 video_service = self.get_video_service()
                 for video in videos:
                     item_data = {
@@ -2541,10 +2592,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'video_type': video.get_type_display(),
                         'script': video.script[:100] if video.script else '',
                         'signed_url': None,
+                        'has_media': video.status == 'completed' and bool(video.gcs_path),
                         'detail_url': reverse('core:video_detail', args=[video.uuid]),
                         'delete_url': reverse('core:video_delete', args=[video.uuid]),
                     }
-                    if video.status == 'completed' and video.gcs_path:
+                    # Solo generar signed URLs si se pide explícitamente
+                    if include_urls and video.status == 'completed' and video.gcs_path:
                         try:
                             video_data = video_service.get_video_with_signed_urls(video)
                             item_data['signed_url'] = video_data.get('signed_url')
@@ -2553,7 +2606,9 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     items_data.append(item_data)
                     
             elif item_type == 'image':
-                images = Image.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                queryset = Image.objects.filter(base_filter).select_related('project').order_by('-created_at')
+                total_count = queryset.count()
+                images = queryset[offset:offset + limit]
                 image_service = self.get_image_service()
                 for image in images:
                     item_data = {
@@ -2567,10 +2622,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'image_type': image.get_type_display(),
                         'prompt': image.prompt[:100] if image.prompt else '',
                         'signed_url': None,
+                        'has_media': image.status == 'completed' and bool(image.gcs_path),
                         'detail_url': reverse('core:image_detail', args=[image.uuid]),
                         'delete_url': reverse('core:image_delete', args=[image.uuid]),
                     }
-                    if image.status == 'completed' and image.gcs_path:
+                    # Solo generar signed URLs si se pide explícitamente
+                    if include_urls and image.status == 'completed' and image.gcs_path:
                         try:
                             image_data = image_service.get_image_with_signed_url(image)
                             item_data['signed_url'] = image_data.get('signed_url')
@@ -2579,7 +2636,9 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     items_data.append(item_data)
                     
             elif item_type == 'audio':
-                audios = Audio.objects.filter(base_filter).select_related('project').order_by('-created_at')[:50]
+                queryset = Audio.objects.filter(base_filter).select_related('project').order_by('-created_at')
+                total_count = queryset.count()
+                audios = queryset[offset:offset + limit]
                 audio_service = self.get_audio_service()
                 for audio in audios:
                     item_data = {
@@ -2591,10 +2650,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'created_at': audio.created_at.isoformat(),
                         'project': audio.project.name if audio.project else None,
                         'signed_url': None,
+                        'has_media': audio.status == 'completed' and bool(audio.gcs_path),
                         'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
                     }
-                    if audio.status == 'completed' and audio.gcs_path:
+                    # Solo generar signed URLs si se pide explícitamente
+                    if include_urls and audio.status == 'completed' and audio.gcs_path:
                         try:
                             audio_data = audio_service.get_audio_with_signed_url(audio)
                             item_data['signed_url'] = audio_data.get('signed_url')
@@ -2604,9 +2665,14 @@ class LibraryItemsAPIView(ServiceMixin, View):
             else:
                 return JsonResponse({'error': 'Tipo no válido'}, status=400)
                 
+            has_more = (offset + len(items_data)) < total_count
             return JsonResponse({
                 'items': items_data,
                 'count': len(items_data),
+                'total': total_count,
+                'offset': offset,
+                'limit': limit,
+                'has_more': has_more,
                 'type': item_type
             })
             
@@ -3121,6 +3187,10 @@ class CreateItemAPIView(ServiceMixin, View):
         video_service = self.get_video_service()
         
         # Construir configuración
+        # Asegurar que settings es un diccionario
+        if not isinstance(settings, dict):
+            settings = {}
+        
         # Convertir duration a int, usando valor por defecto si es None o vacío
         duration = settings.get('duration')
         if duration is None or duration == '':
@@ -3130,14 +3200,20 @@ class CreateItemAPIView(ServiceMixin, View):
             if capabilities:
                 supports = capabilities.get('supports', {})
                 dur_config = supports.get('duration', {})
-                if dur_config.get('fixed'):
-                    duration = dur_config['fixed']
-                elif dur_config.get('options'):
-                    duration = dur_config['options'][0]
-                elif dur_config.get('min'):
-                    duration = dur_config['min']
+                # Si duration es False, no usar duración (ej: HeyGen Avatar IV)
+                if dur_config is False:
+                    duration = None
+                elif isinstance(dur_config, dict):
+                    if dur_config.get('fixed'):
+                        duration = dur_config['fixed']
+                    elif dur_config.get('options'):
+                        duration = dur_config['options'][0]
+                    elif dur_config.get('min'):
+                        duration = dur_config['min']
+                    else:
+                        duration = 8  # Default general
                 else:
-                    duration = 8  # Default general
+                    duration = 8
             else:
                 duration = 8
         else:
@@ -3149,13 +3225,24 @@ class CreateItemAPIView(ServiceMixin, View):
         
         config = {
             'model_id': model_id,  # Guardar model_id para usar el modelo correcto al generar
-            'duration': duration,
             'aspect_ratio': settings.get('aspect_ratio'),
             'mode': settings.get('mode'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
-            'prompt_template_id': data.get('prompt_template_id'),  # Template de prompt seleccionado
         }
+        
+        # Solo agregar prompt_template_id si existe, no está vacío, y el modelo lo soporta
+        # HeyGen y Manim no usan prompt templates
+        prompt_template_id = data.get('prompt_template_id')
+        is_heygen = 'heygen' in model_id.lower() if model_id else False
+        is_manim = 'manim' in model_id.lower() if model_id else False
+        
+        if prompt_template_id and prompt_template_id.strip() and not is_heygen and not is_manim:
+            config['prompt_template_id'] = prompt_template_id.strip()
+        
+        # Solo agregar duration si no es None (para modelos que no requieren duración)
+        if duration is not None:
+            config['duration'] = duration
         
         # Para Veo, también guardar veo_model (nombre del modelo de Veo)
         if video_type == 'gemini_veo':
@@ -3185,11 +3272,13 @@ class CreateItemAPIView(ServiceMixin, View):
             has_bg_setting = settings.get('has_background', False)
             has_bg_data = data.get('has_background', False)
             has_background = has_bg_setting if 'has_background' in settings else has_bg_data
+            logger.info(f"[HeyGen V2] has_background raw - settings: {has_bg_setting}, data: {has_bg_data}, final: {has_background}")
             if isinstance(has_background, str):
                 config['has_background'] = has_background.lower() in ('true', '1', 'yes', 'on')
             else:
                 config['has_background'] = bool(has_background)
             config['background_url'] = settings.get('background_url') if 'background_url' in settings else data.get('background_url')
+            logger.info(f"[HeyGen V2] Background config - has_background: {config['has_background']}, background_url: {config.get('background_url')}")
             config['voice_speed'] = settings.get('voice_speed') if 'voice_speed' in settings else data.get('voice_speed', 1.0)
             config['voice_pitch'] = settings.get('voice_pitch') if 'voice_pitch' in settings else data.get('voice_pitch', 50)
             config['voice_emotion'] = settings.get('voice_emotion') if 'voice_emotion' in settings else data.get('voice_emotion', 'Excited')
@@ -3204,6 +3293,21 @@ class CreateItemAPIView(ServiceMixin, View):
                     config['voice_pitch'] = int(config['voice_pitch'])
             except (ValueError, TypeError):
                 config['voice_pitch'] = 50
+        
+        # Para HeyGen Avatar IV, añadir campos específicos
+        if video_type == 'heygen_avatar_iv':
+            # Obtener voice_id (requerido)
+            config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
+            config['video_orientation'] = settings.get('video_orientation') if 'video_orientation' in settings else data.get('video_orientation', 'portrait')
+            config['fit'] = settings.get('fit') if 'fit' in settings else data.get('fit', 'cover')
+            
+            # Manejar imagen de avatar: puede venir como start_image (formulario dinámico) o avatar_image_id (select)
+            # start_image se procesará más abajo en el código, aquí solo manejamos avatar_image_id
+            avatar_image_id = settings.get('avatar_image_id') if 'avatar_image_id' in settings else data.get('avatar_image_id')
+            if avatar_image_id:
+                config['existing_image_id'] = avatar_image_id
+                config['image_source'] = 'existing'
+            # Si viene start_image, se procesará más abajo y se guardará en config['start_image']
         
         # Procesar imágenes de referencia desde request.FILES
         # Nota: Veo solo acepta "asset" o "style" como referenceType
@@ -3255,6 +3359,7 @@ class CreateItemAPIView(ServiceMixin, View):
         
         # start_image y end_image se manejan diferente según el servicio
         # Para Veo: start_image es input_image (image-to-video)
+        # Para HeyGen Avatar IV: start_image es la imagen de avatar
         # Para otros servicios: pueden ser referencias específicas
         if 'start_image' in request.FILES:
             start_file = request.FILES['start_image']
@@ -3268,6 +3373,17 @@ class CreateItemAPIView(ServiceMixin, View):
                 config['input_image_gcs_uri'] = gcs_path
                 config['input_image_mime_type'] = start_file.content_type or 'image/jpeg'
                 logger.info(f"✅ Imagen inicial subida para image-to-video: {gcs_path}")
+            elif video_type == 'heygen_avatar_iv':
+                # Para HeyGen Avatar IV, start_image es la imagen de avatar
+                from .storage.gcs import gcs_storage
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_filename = start_file.name.replace(' ', '_')
+                gcs_destination = f"videos/project_{project.id if project else 'standalone'}/{timestamp}_start_{safe_filename}"
+                gcs_path = gcs_storage.upload_django_file(start_file, gcs_destination)
+                config['start_image'] = gcs_path
+                config['gcs_avatar_path'] = gcs_path  # También guardar en gcs_avatar_path para compatibilidad
+                config['image_source'] = 'upload'
+                logger.info(f"✅ Imagen de avatar subida para HeyGen Avatar IV: {gcs_path}")
             else:
                 # Para otros servicios, guardar en config para procesamiento específico
                 from .storage.gcs import gcs_storage
@@ -3352,8 +3468,13 @@ class CreateItemAPIView(ServiceMixin, View):
             'aspect_ratio': settings.get('aspect_ratio', '1:1'),
             'negative_prompt': settings.get('negative_prompt'),
             'seed': settings.get('seed'),
-            'prompt_template_id': data.get('prompt_template_id'),  # Template de prompt seleccionado
         }
+        
+        # Solo agregar prompt_template_id si existe, no está vacío
+        # (Las imágenes sí pueden usar prompt templates, a diferencia de HeyGen/Manim)
+        prompt_template_id = data.get('prompt_template_id')
+        if prompt_template_id and prompt_template_id.strip():
+            config['prompt_template_id'] = prompt_template_id.strip()
         
         # Crear imagen
         image = image_service.create_image(
@@ -3517,7 +3638,7 @@ class ListElevenLabsVoicesView(ServiceMixin, View):
 # IMAGE VIEWS
 # ====================
 
-class ImageLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+class ImageLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, HeyGenPreloadMixin, View):
     """Vista unificada para creación y biblioteca de imágenes"""
     template_name = 'creation/base_creation.html'
     
@@ -4055,7 +4176,7 @@ class ImageRecreateView(ServiceMixin, View):
 # AUDIO VIEWS
 # ====================
 
-class AudioLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, View):
+class AudioLibraryView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, HeyGenPreloadMixin, View):
     """Vista unificada para creación y biblioteca de audios"""
     template_name = 'creation/base_creation.html'
     
