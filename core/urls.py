@@ -50,6 +50,7 @@ urlpatterns = [
     path('images/<uuid:image_uuid>/delete/', views.ImageDeleteView.as_view(), name='image_delete'),
     path('images/<uuid:image_uuid>/generate/', views.ImageGenerateView.as_view(), name='image_generate'),
     path('images/<uuid:image_uuid>/recreate/', views.ImageRecreateView.as_view(), name='image_recreate'),
+    path('images/<uuid:image_uuid>/remove-bg/', views.ImageRemoveBackgroundView.as_view(), name='image_remove_bg'),
     
     # Audios (nueva vista unificada - creación + biblioteca)
     path('audios/', views.AudioLibraryView.as_view(), name='audio_library'),

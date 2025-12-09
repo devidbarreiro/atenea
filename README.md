@@ -233,5 +233,41 @@ celery -A atenea worker --loglevel=info ^
 
 # Windows (una sola línea):
 celery -A atenea worker --loglevel=info --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks --concurrency=4
-```# Test deployment
+```
+
+## 🧹 Limpiar Celery (Si se atasca)
+
+Si las colas de Celery se atascan o acumulan tareas que no se pueden purgar:
+
+### Paso 1: Ver estado actual
+```powershell
+python manage.py celery_status
+```
+
+### Paso 2: Limpiar tareas atascadas en BD
+```powershell
+# Ver qué se eliminaría (sin hacer cambios)
+python manage.py clean_stuck_tasks --dry-run
+
+# Eliminar
+python manage.py clean_stuck_tasks
+```
+
+### Paso 3: Limpiar Redis
+```powershell
+# Limpiar solo Celery (recomendado)
+python manage.py clean_celery
+
+# O si nada funciona, limpiar TODO Redis (nuclear)
+python manage.py clean_celery --hard
+```
+
+### Paso 4: Verificar que está limpio
+```powershell
+python manage.py celery_status
+```
+
+**Ver guía completa:** [🧹 Limpiar Celery](docs/guides/celery-cleanup.md)
+
+# Test deployment
 

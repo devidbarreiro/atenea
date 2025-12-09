@@ -27,6 +27,8 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
+from core.tasks import remove_image_background_task
+
 from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
@@ -4170,6 +4172,77 @@ class ImageRecreateView(ServiceMixin, View):
             logger.error(f'Error al recrear imagen: {e}', exc_info=True)
             messages.error(request, f'Error inesperado: {str(e)}')
             return redirect('core:image_detail', image_uuid=original_image.uuid)
+
+
+class ImageRemoveBackgroundView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para encolar una tarea de remoción de fondo usando rembg + BiRefNet"""
+    
+    def post(self, request, image_uuid):
+        """
+        Encola una tarea asíncrona para remover el fondo de una imagen
+        Crea la imagen de procesamiento inmediatamente para que aparezca en librería
+        
+        Args:
+            image_uuid: UUID de la imagen a procesar
+        
+        Returns:
+            JsonResponse con { success, task_id, message, new_image_uuid }
+        """
+        # Obtener imagen original
+        image = get_object_or_404(Image, uuid=image_uuid)
+        
+        # Verificar permisos
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Debes estar autenticado'}, status=401)
+        
+        if image.project:
+            if not ProjectService.user_has_access(image.project, request.user):
+                return JsonResponse({'error': 'No tienes acceso a esta imagen'}, status=403)
+        else:
+            if image.created_by != request.user:
+                return JsonResponse({'error': 'No tienes acceso a esta imagen'}, status=403)
+        
+        # Validar que imagen esté completada y tenga GCS path
+        if image.status != 'completed' or not image.gcs_path:
+            return JsonResponse({
+                'error': 'La imagen debe estar completada y disponible para procesar'
+            }, status=400)
+        
+        try:
+            # Crear la nueva imagen con status='processing' INMEDIATAMENTE para que aparezca en la librería
+            new_image = Image.objects.create(
+                title=f"{image.title} (Sin Fondo)",
+                type='text_to_image',
+                prompt= image.prompt if image.prompt else "Versión sin fondo",
+                created_by=image.created_by,
+                project=image.project,
+                width=image.width,
+                height=image.height,
+                status='processing'  # Aparecerá en la librería con animación
+            )
+            logger.info(f"Imagen de procesamiento creada: {new_image.uuid}")
+            
+            # Encolar tarea de procesamiento
+            logger.info(f"Encolando tarea de remove-bg para imagen {image_uuid} -> {new_image.uuid}")
+            task = remove_image_background_task.delay(
+                str(image_uuid),
+                str(new_image.uuid)  # Pasar UUID de imagen destino
+            )
+            
+            logger.info(f"Tarea de remove-bg encolada: task_id={task.id}, image_uuid={image_uuid}, new_image_uuid={new_image.uuid}")
+            
+            return JsonResponse({
+                'success': True,
+                'task_id': task.id,
+                'message': '✨ Quitando fondo de la imagen...',
+                'new_image_uuid': str(new_image.uuid)
+            })
+            
+        except Exception as e:
+            logger.error(f'Error encolando remove-bg task: {e}', exc_info=True)
+            return JsonResponse({
+                'error': f'Error al encolar tarea: {str(e)}'
+            }, status=500)
 
 
 # ====================
