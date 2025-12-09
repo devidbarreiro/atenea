@@ -242,123 +242,54 @@ jobs:
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
-        # Paso 1: Detener TODOS los contenedores que puedan estar corriendo (no solo los de docker compose)
-        echo "⏸️  Deteniendo TODOS los contenedores relacionados..."
-        ALL_CONTAINERS=$(docker ps --format "{{.ID}} {{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" | awk '{print $1}' || echo "")
-        if [ ! -z "$ALL_CONTAINERS" ]; then
-          for container_id in $ALL_CONTAINERS; do
-            echo "⏸️  Deteniendo contenedor ID: $container_id"
-            docker stop "$container_id" 2>/dev/null || true
+        # MÉTODO DIRECTO: Eliminar contenedores por nombre exacto primero
+        echo "🗑️  Eliminando contenedores por nombre exacto..."
+        docker rm -f html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 html-migrate-1 html-collectstatic-1 2>/dev/null || true
+        docker rm -f ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 ${ENV}-migrate-1 ${ENV}-collectstatic-1 2>/dev/null || true
+        
+        # Eliminar con docker compose
+        echo "🗑️  docker compose down..."
+        docker compose down --remove-orphans -v 2>/dev/null || true
+        docker compose rm -f 2>/dev/null || true
+        
+        # Buscar y eliminar TODOS los contenedores con prefijo html- o ${ENV}-
+        echo "🔍 Buscando contenedores huérfanos..."
+        for container_id in $(docker ps -aq --filter "name=html-" 2>/dev/null); do
+          echo "🗑️  Eliminando contenedor: $container_id"
+          docker rm -f "$container_id" 2>/dev/null || true
+        done
+        for container_id in $(docker ps -aq --filter "name=${ENV}-" 2>/dev/null); do
+          echo "🗑️  Eliminando contenedor: $container_id"
+          docker rm -f "$container_id" 2>/dev/null || true
+        done
+        
+        # Verificación y limpieza forzada
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$REMAINING" ]; then
+          echo "⚠️  Contenedores restantes: $REMAINING"
+          echo "🔄 Forzando eliminación..."
+          for name in $REMAINING; do
+            docker rm -f "$name" 2>/dev/null || true
           done
         fi
         
-        # Paso 2: Detener contenedores con docker compose
-        echo "⏸️  Deteniendo contenedores con docker compose..."
-        docker compose stop || true
+        # Limpiar redes huérfanas
+        echo "🧹 Limpiando redes y volúmenes huérfanos..."
+        docker network prune -f 2>/dev/null || true
         
-        # Esperar un momento para que los contenedores se detengan completamente
-        sleep 3
-        
-        # Paso 3: Eliminar contenedores con docker compose down
-        echo "🗑️  Eliminando contenedores con docker compose down..."
-        docker compose down --remove-orphans -v || true
-        
-        # Paso 4: Eliminar contenedores que puedan estar detenidos pero aún existan
-        docker compose rm -f || true
-        
-        # Paso 5: Buscar y eliminar TODOS los contenedores por nombre exacto (más agresivo)
-        echo "🔍 Buscando y eliminando contenedores por nombres específicos..."
-        for name in "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1" \
-                    "html-migrate-1" "html-collectstatic-1" \
-                    "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1" \
-                    "${ENV}-migrate-1" "${ENV}-collectstatic-1"; do
-          # Buscar por nombre exacto
-          CONTAINER_ID=$(docker ps -a --filter "name=^${name}$" --format "{{.ID}}" 2>/dev/null | head -1)
-          if [ ! -z "$CONTAINER_ID" ]; then
-            echo "🗑️  Eliminando contenedor por nombre exacto: $name (ID: $CONTAINER_ID)"
-            docker stop "$CONTAINER_ID" 2>/dev/null || true
-            docker rm -f "$CONTAINER_ID" 2>/dev/null || true
-          fi
-          # También buscar por nombre parcial (por si hay variaciones)
-          CONTAINER_IDS=$(docker ps -a --filter "name=${name}" --format "{{.ID}}" 2>/dev/null || echo "")
-          if [ ! -z "$CONTAINER_IDS" ]; then
-            for container_id in $CONTAINER_IDS; do
-              if [ ! -z "$container_id" ]; then
-                echo "🗑️  Eliminando contenedor por nombre parcial: $name (ID: $container_id)"
-                docker stop "$container_id" 2>/dev/null || true
-                docker rm -f "$container_id" 2>/dev/null || true
-              fi
-            done
-          fi
-        done
-        
-        # Paso 6: Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-" y eliminarlos por ID
-        echo "🔍 Buscando TODOS los contenedores con prefijo 'html-' o '${ENV}-'..."
-        # Usar un archivo temporal para evitar problemas con subshells
-        TEMP_FILE=$(mktemp)
-        docker ps -a --format "{{.ID}}|{{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" > "$TEMP_FILE" || true
-        if [ -s "$TEMP_FILE" ]; then
-          while IFS='|' read -r container_id container_name; do
-            if [ ! -z "$container_id" ] && [ ! -z "$container_name" ]; then
-              echo "🗑️  Eliminando contenedor: $container_name (ID: $container_id)"
-              docker stop "$container_id" 2>/dev/null || true
-              docker rm -f "$container_id" 2>/dev/null || true
-            fi
-          done < "$TEMP_FILE"
-        fi
-        rm -f "$TEMP_FILE" || true
-        
-        # Paso 7: Limpiar redes huérfanas
-        echo "🧹 Limpiando redes huérfanas..."
-        docker network prune -f || true
-        
-        # Esperar un momento más para asegurar que todo esté limpio
-        sleep 3
-        
-        # Paso 8: Verificación final y eliminación forzada si es necesario
-        TEMP_FILE2=$(mktemp)
-        docker ps -a --format "{{.ID}}|{{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" > "$TEMP_FILE2" || true
-        if [ -s "$TEMP_FILE2" ]; then
-          echo "⚠️  Advertencia: Aún quedan contenedores después de la limpieza:"
-          cat "$TEMP_FILE2"
-          echo "🔄 Intentando eliminación forzada final..."
-          while IFS='|' read -r container_id container_name; do
-            if [ ! -z "$container_id" ]; then
-              echo "🗑️  Forzando eliminación de contenedor: $container_name (ID: $container_id)"
-              docker stop "$container_id" 2>/dev/null || true
-              docker rm -f "$container_id" 2>/dev/null || true
-              # Si aún existe, intentar con kill
-              if docker ps -a --format "{{.ID}}" 2>/dev/null | grep -q "^${container_id}$"; then
-                echo "💀 Matando contenedor: $container_id"
-                docker kill "$container_id" 2>/dev/null || true
-                docker rm -f "$container_id" 2>/dev/null || true
-              fi
-            fi
-          done < "$TEMP_FILE2"
-        else
-          echo "  ✅ Todos los contenedores eliminados correctamente"
-        fi
-        rm -f "$TEMP_FILE2" || true
-        
-        # Paso 9: Verificación final absoluta antes de continuar
+        # Verificación final
         sleep 2
-        TEMP_FILE3=$(mktemp)
-        docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" > "$TEMP_FILE3" || true
-        if [ -s "$TEMP_FILE3" ]; then
-          echo "❌ ERROR CRÍTICO: Aún existen contenedores que no se pudieron eliminar:"
-          cat "$TEMP_FILE3"
-          echo "🔄 Último intento de eliminación..."
-          docker ps -a --format "{{.ID}}|{{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" > "$TEMP_FILE3" || true
-          if [ -s "$TEMP_FILE3" ]; then
-            while IFS='|' read -r container_id container_name; do
-              if [ ! -z "$container_id" ]; then
-                docker kill "$container_id" 2>/dev/null || true
-                docker rm -f "$container_id" 2>/dev/null || true
-              fi
-            done < "$TEMP_FILE3"
-          fi
+        FINAL=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$FINAL" ]; then
+          echo "❌ ERROR: Aún existen contenedores: $FINAL"
+          echo "🔄 Último intento..."
+          for name in $FINAL; do
+            docker kill "$name" 2>/dev/null || true
+            docker rm -f "$name" 2>/dev/null || true
+          done
+        else
+          echo "✅ Todos los contenedores eliminados"
         fi
-        rm -f "$TEMP_FILE3" || true
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
