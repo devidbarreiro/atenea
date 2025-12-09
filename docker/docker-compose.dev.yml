@@ -43,7 +43,6 @@ services:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
-      - USE_SQLITE=False
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       - CHANNEL_REDIS_URL=${CHANNEL_REDIS_URL:-redis://redis:6379/1}
@@ -71,7 +70,6 @@ services:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
-      - USE_SQLITE=False
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     depends_on:
       db:
@@ -112,7 +110,6 @@ services:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
-      - USE_SQLITE=False
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
@@ -137,7 +134,6 @@ services:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
-      - USE_SQLITE=False
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
