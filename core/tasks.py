@@ -756,10 +756,31 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
     except Image.DoesNotExist:
         error_msg = f"Imagen {image_uuid} no encontrada"
         logger.error(error_msg)
+        
+        # Marcar imagen destino como fallida si existe
+        if new_image_uuid:
+            try:
+                new_image = Image.objects.get(uuid=new_image_uuid)
+                new_image.status = 'failed'
+                new_image.save(update_fields=['status'])
+                logger.warning(f"Imagen destino {new_image_uuid} marcada como fallida")
+            except Image.DoesNotExist:
+                pass
+        
         return {'success': False, 'error': error_msg}
         
     except Exception as exc:
         logger.error(f"Error removiendo fondo de imagen {image_uuid}: {exc}", exc_info=True)
+        
+        # Marcar imagen destino como fallida si existe
+        if new_image_uuid:
+            try:
+                new_image = Image.objects.get(uuid=new_image_uuid)
+                new_image.status = 'failed'
+                new_image.save(update_fields=['status'])
+                logger.warning(f"Imagen destino {new_image_uuid} marcada como fallida")
+            except Image.DoesNotExist:
+                pass
         
         # Crear notificación de error
         try:
