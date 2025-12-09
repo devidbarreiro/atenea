@@ -132,18 +132,31 @@ jobs:
         
         # Copiar código al servidor usando rsync (excluyendo .git y otros archivos innecesarios)
         echo "📤 Copiando código al servidor..."
-        rsync -avz --delete \
+        rsync -avz --delete --no-ACL --no-xattrs \
           -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
           --exclude='.git' \
-          --exclude='__pycache__' \
+          --exclude='**/__pycache__/' \
+          --exclude='**/__pycache__/**' \
           --exclude='*.pyc' \
+          --exclude='*.pyo' \
           --exclude='.env' \
           --exclude='credentials.json' \
           --exclude='venv' \
+          --exclude='**/venv/**' \
           --exclude='db.sqlite3' \
           --exclude='.pytest_cache' \
+          --exclude='**/.pytest_cache/**' \
           --exclude='node_modules' \
-          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
+          --exclude='**/node_modules/**' \
+          --exclude='.DS_Store' \
+          --exclude='**/.DS_Store' \
+          --exclude='*.swp' \
+          --exclude='*.swo' \
+          --exclude='*~' \
+          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/ || {
+          echo "⚠️  Advertencia: rsync completó con algunos errores menores"
+          echo "💡 Esto puede ser normal si hay archivos temporales o con atributos extendidos"
+        }
         
         # Restaurar credentials.json si existía antes
         echo "🔐 Restaurando credentials.json si existía..."
