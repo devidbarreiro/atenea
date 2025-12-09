@@ -265,24 +265,5 @@ python manage.py celery_status
 
 **Ver guía completa:** [🧹 Limpiar Celery](docs/guides/celery-cleanup.md)
 
-## 🎨 Quitar Fondo de Imágenes
-
-La aplicación integra **rembg** con **BiRefNet** para quitar fondos de imágenes de forma asincrónica.
-
-### Usar en UI
-1. Abrir detalles de una imagen completada
-2. Pulsar botón "Quitar fondo"
-3. ✅ Se muestra: "Imagen encolada para procesamiento"
-4. ⏳ Esperar notificación (2-10 minutos)
-5. 📬 Notificación: "Fondo removido - Ver imagen"
-
-### Configuración (automática)
-- Modelo: **BiRefNet** (mejor precisión de bordes)
-- Alpha matting: Activado para detalles
-- Resolución: 4096px (máxima calidad)
-- Sin post-procesamiento (preserva detalles)
-
-**Ver guía técnica:** [🎨 Remove Background](docs/guides/remove-background-integration.md)
-
 # Test deployment
 

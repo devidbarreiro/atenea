@@ -435,6 +435,7 @@ CELERY_TASK_ROUTES = {
     'core.tasks.poll_video_status_task': {'queue': 'default'},
     'core.tasks.poll_image_status_task': {'queue': 'default'},
     'core.tasks.poll_audio_status_task': {'queue': 'default'},
+    'core.tasks.remove_image_background_task': {'queue': 'image_generation'},
 }
 
 # Prioridades por tipo (dentro de cada cola)
@@ -451,6 +452,22 @@ CELERY_TASK_PRIORITY_MAP = {
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Pool Configuration: Condicional por SO
+# Windows: threading pool (multiprocessing tiene issues con billiard)
+# Linux/Mac: prefork pool (multiprocessing, mejor performance)
+import platform
+CURRENT_OS = platform.system()
+if CURRENT_OS == 'Windows':
+    # Windows: usa threading para evitar problemas de billiard con semáforos
+    CELERY_WORKER_POOL = 'threads'
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = None
+    CELERY_WORKER_CONCURRENCY = 4  # Threads: más conservador
+else:
+    # Linux/Mac: usa prefork (multiprocessing) para mejor performance
+    CELERY_WORKER_POOL = 'prefork'
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000  # Reciclaje de procesos cada 1000 tasks
+    CELERY_WORKER_CONCURRENCY = 4  # Procesos
 
 # Celery Beat Schedule (tareas periódicas)
 from celery.schedules import crontab
@@ -480,21 +497,12 @@ ASGI_APPLICATION = 'atenea.asgi.application'
 # En Docker, usar el nombre del servicio: redis://redis:6379/1
 channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
 
-# Parsear URL de Redis para channels-redis
-# channels-redis acepta URLs directamente o tuplas (host, port)
-# Para especificar database, usamos formato URL completo o dict con address
-from urllib.parse import urlparse
-parsed_url = urlparse(channel_redis_url)
-redis_host = parsed_url.hostname or _redis_host
-redis_port = parsed_url.port or 6379
-redis_db = int(parsed_url.path.lstrip('/')) if parsed_url.path and parsed_url.path != '/' else 1
-
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            # Usar formato dict para incluir database number
-            "hosts": [{"address": (redis_host, redis_port), "db": redis_db}],
+            # channels-redis requiere URLs string, no tuplas
+            "hosts": [channel_redis_url],
         },
     },
 }

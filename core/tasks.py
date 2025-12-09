@@ -12,6 +12,11 @@ from django.contrib.auth.models import User
 from core.models import GenerationTask, Video, Image, Audio, Scene
 from core.services import VideoService, ImageService, AudioService
 
+from rembg import new_session, remove
+from PIL import Image as PILImage
+from io import BytesIO
+from core.models import Notification
+
 logger = logging.getLogger(__name__)
 
 
@@ -641,3 +646,137 @@ def check_stuck_tasks():
     
     return stuck_tasks.count()
 
+
+@shared_task(bind=True, max_retries=2)
+def remove_image_background_task(self, image_uuid, new_image_uuid=None):
+    """
+    Tarea asíncrona para remover el fondo de una imagen usando rembg con BiRefNet
+    
+    Args:
+        image_uuid: UUID de la imagen original a procesar
+        new_image_uuid: UUID de la imagen destino (creada con status='processing')
+    
+    Returns:
+        dict con resultado: {'success': True/False, 'new_image_uuid': '...', 'error': '...'}
+    """
+    try:
+        import os
+        
+        # Configurar ONNXRuntime para usar solo CPU (sin CUDA)
+        os.environ['ONNXRUNTIME_EXECUTION_PROVIDERS'] = 'CPUExecutionProvider'
+        os.environ['ORT_CUDA_PATHS'] = ''  # Desactivar CUDA
+        
+        # Configurar Numba para usar TBB (thread-safe)
+        os.environ['NUMBA_THREADING_LAYER'] = 'tbb'
+        
+        # Obtener imagen original
+        image = Image.objects.get(uuid=image_uuid)
+        image_service = ImageService()
+        
+        logger.info(f"Iniciando remoción de fondo para imagen {image_uuid}: {image.title}")
+        
+        # Descargar imagen de GCS
+        image_data = image_service._download_image_from_gcs(image.gcs_path)
+        logger.info(f"Imagen descargada de GCS: {image.gcs_path}")
+        
+        # Procesar con rembg + BiRefNet (PIXEL PERFECT)
+        logger.info("Iniciando sesión BiRefNet...")
+        session = new_session('birefnet-general')
+        
+        output_image = remove(
+            image_data,
+            session=session,
+            alpha_matting=True,
+            alpha_matting_foreground_threshold=240,  # Strict: solo detalles claros
+            alpha_matting_background_threshold=10,   # Strict: solo fondo claro
+            alpha_matting_erode_size=1,              # Limpieza quirúrgica
+            alpha_matting_base_size=4096,            # Máxima resolución
+            post_process_mask=False                  # Preservar detalles microscópicos
+        )
+        logger.info("Fondo removido exitosamente")
+        
+        # Obtener dimensiones
+        pil_image = PILImage.open(BytesIO(output_image))
+        width = pil_image.width
+        height = pil_image.height
+        logger.info(f"Dimensiones de imagen procesada: {width}x{height}")
+        
+        # Obtener o crear la imagen destino
+        if new_image_uuid:
+            # La imagen ya fue creada desde la view con status='processing'
+            new_image = Image.objects.get(uuid=new_image_uuid)
+            logger.info(f"Usando imagen existente: {new_image.uuid}")
+        else:
+            # Fallback: crear nueva imagen si no se pasó UUID
+            new_image = Image.objects.create(
+                title=f"{image.title} (Sin Fondo)",
+                type='text_to_image',
+                prompt=f"Versión sin fondo de: {image.prompt}",
+                created_by=image.created_by,
+                project=image.project,
+                width=width,
+                height=height,
+                status='processing'
+            )
+            logger.info(f"Registro de imagen creado: {new_image.uuid}")
+        
+        # Actualizar dimensiones si es necesario
+        new_image.width = width
+        new_image.height = height
+        
+        # Guardar en GCS y marcar como completada
+        gcs_path = image_service._save_generated_image(
+            output_image,
+            project=image.project,
+            image_uuid=str(new_image.uuid)
+        )
+        new_image.gcs_path = gcs_path
+        new_image.status = 'completed'
+        new_image.save(update_fields=['gcs_path', 'status', 'width', 'height'])
+        logger.info(f"Imagen guardada en GCS: {gcs_path}")
+        
+        # Notificar usuario
+        Notification.create_notification(
+            user=image.created_by,
+            type='generation_completed',
+            title='Fondo removido',
+            message=f'Se creó versión sin fondo de "{image.title}"',
+            action_url=f'/projects/{image.project.uuid}/images/{new_image.uuid}/',
+            action_label='Ver imagen',
+            metadata={'item_type': 'image', 'item_uuid': str(new_image.uuid)}
+        )
+        
+        logger.info(f"Tarea completada exitosamente. Nueva imagen: {new_image.uuid}")
+        return {
+            'success': True,
+            'new_image_uuid': str(new_image.uuid),
+            'title': new_image.title
+        }
+        
+    except Image.DoesNotExist:
+        error_msg = f"Imagen {image_uuid} no encontrada"
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+        
+    except Exception as exc:
+        logger.error(f"Error removiendo fondo de imagen {image_uuid}: {exc}", exc_info=True)
+        
+        # Crear notificación de error
+        try:
+            image = Image.objects.get(uuid=image_uuid)
+            Notification.create_notification(
+                user=image.created_by,
+                type='generation_failed',
+                title='Error al remover fondo',
+                message=f'No se pudo procesar "{image.title}": {str(exc)[:100]}',
+                metadata={'item_type': 'image', 'item_uuid': str(image.uuid)}
+            )
+        except Exception:
+            pass  # Ignorar error si no se puede crear notificación
+        
+        # Reintentar si no se ha alcanzado el máximo
+        if self.request.retries < self.max_retries:
+            logger.info(f"Reintentando remoción de fondo en 60 segundos (intento {self.request.retries + 1}/{self.max_retries})")
+            raise self.retry(exc=exc, countdown=60)
+        
+        return {'success': False, 'error': str(exc)}
