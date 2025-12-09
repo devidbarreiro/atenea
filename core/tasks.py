@@ -761,7 +761,7 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
         if new_image_uuid:
             try:
                 new_image = Image.objects.get(uuid=new_image_uuid)
-                new_image.status = 'failed'
+                new_image.status = 'error'
                 new_image.save(update_fields=['status'])
                 logger.warning(f"Imagen destino {new_image_uuid} marcada como fallida")
             except Image.DoesNotExist:
@@ -776,7 +776,7 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
         if new_image_uuid:
             try:
                 new_image = Image.objects.get(uuid=new_image_uuid)
-                new_image.status = 'failed'
+                new_image.status = 'error'
                 new_image.save(update_fields=['status'])
                 logger.warning(f"Imagen destino {new_image_uuid} marcada como fallida")
             except Image.DoesNotExist:
