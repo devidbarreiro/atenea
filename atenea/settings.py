@@ -160,7 +160,22 @@ WSGI_APPLICATION = 'atenea.wsgi.application'
 
 # Database configuration
 # Use SQLite for development/CI, PostgreSQL for production
-if config('USE_SQLITE', default=True, cast=bool):
+# Si DATABASE_URL está presente, usarlo (PostgreSQL). Si no, usar SQLite si USE_SQLITE=True
+DATABASE_URL = config('DATABASE_URL', default='')
+USE_SQLITE = config('USE_SQLITE', default=True, cast=bool)
+
+if DATABASE_URL:
+    # Usar PostgreSQL si DATABASE_URL está configurado
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+elif USE_SQLITE:
+    # Usar SQLite solo si no hay DATABASE_URL y USE_SQLITE=True
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -168,15 +183,8 @@ if config('USE_SQLITE', default=True, cast=bool):
         }
     }
 else:
-    # Usar DATABASE_URL si está disponible
-    import dj_database_url
-    DATABASES = {
-        'default': dj_database_url.parse(
-            config('DATABASE_URL', default=''),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
+    # Si USE_SQLITE=False pero no hay DATABASE_URL, error
+    raise ValueError('DATABASE_URL must be set when USE_SQLITE=False')
 
 
 # Password validation
