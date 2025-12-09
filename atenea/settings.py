@@ -256,6 +256,7 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 FREEPIK_API_KEY = config('FREEPIK_API_KEY', default='')
 VUELA_AI_API_KEY = config('VUELA_AI_API_KEY', default='')
 ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
+SEEDREAM_API_KEY= config('SEEDREAM_API_KEY', default='')
 # Higgsfield
 HIGGSFIELD_API_KEY_ID = config('HIGGSFIELD_API_KEY_ID', default='')
 HIGGSFIELD_API_KEY = config('HIGGSFIELD_API_KEY', default='')
@@ -289,6 +290,73 @@ HEYGEN_DEFAULT_VOICE_ID = config('HEYGEN_DEFAULT_VOICE_ID', default='42a4920ccdb
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://redis-13128.c12.us-east-1-4.ec2.redns.redis-cloud.com:13128')
 REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+
+# Detectar automáticamente si estamos en Docker o desarrollo local
+# Intentamos resolver el hostname 'redis' (servicio Docker)
+# Si falla, usamos 'localhost' (desarrollo local)
+def get_redis_host():
+    """Detecta automáticamente el host de Redis según el entorno"""
+    import socket
+    try:
+        # Intentar resolver 'redis' (servicio Docker)
+        socket.gethostbyname('redis')
+        return 'redis'
+    except (socket.gaierror, OSError):
+        # Si falla, estamos en desarrollo local
+        return 'localhost'
+
+_redis_host = get_redis_host()
+
+# Cache Configuration (Redis)
+# Usar REDIS_URL si está disponible, sino construir URL con _redis_host
+_base_redis_url = config('REDIS_URL', default=None)
+_redis_password = config('REDIS_PASSWORD', default='')
+
+if _base_redis_url:
+    # Si tenemos REDIS_URL y password, inyectar la contraseña en la URL
+    if _redis_password and '://:' not in _base_redis_url and '@' not in _base_redis_url:
+        # URL sin auth: redis://host:port -> redis://:password@host:port
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(_base_redis_url)
+        cache_redis_url = urlunparse((
+            parsed.scheme,
+            f':{_redis_password}@{parsed.netloc}',
+            parsed.path or '/0',
+            parsed.params,
+            parsed.query,
+            parsed.fragment
+        ))
+    else:
+        cache_redis_url = _base_redis_url
+else:
+    # Si no hay REDIS_URL configurada, construir URL local con DB 2 para caché
+    cache_redis_url = f'redis://{_redis_host}:6379/2'
+
+# Cache Configuration (Redis)
+# Usar django-redis si está disponible, sino usar el backend nativo de Django
+try:
+    import django_redis
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': cache_redis_url,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'atenea_cache',
+            'TIMEOUT': 3600,  # 1 hora por defecto
+        }
+    }
+except ImportError:
+    # Fallback al backend nativo de Django si django-redis no está disponible
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': cache_redis_url,
+            'KEY_PREFIX': 'atenea_cache',
+            'TIMEOUT': 3600,  # 1 hora por defecto
+        }
+    }
 
 # Email Configuration
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
@@ -393,24 +461,10 @@ AGENT_RATE_LIMIT_GLOBAL = config('AGENT_RATE_LIMIT_GLOBAL', default=100, cast=in
 # CELERY CONFIGURATION
 # ====================================
 
-# Detectar automáticamente si estamos en Docker o desarrollo local
-# Intentamos resolver el hostname 'redis' (servicio Docker)
-# Si falla, usamos 'localhost' (desarrollo local)
-def get_redis_host():
-    """Detecta automáticamente el host de Redis según el entorno"""
-    import socket
-    try:
-        # Intentar resolver 'redis' (servicio Docker)
-        socket.gethostbyname('redis')
-        return 'redis'
-    except (socket.gaierror, OSError):
-        # Si falla, estamos en desarrollo local
-        return 'localhost'
-
 # Celery Configuration
 # En Docker, usar el nombre del servicio: redis://redis:6379/0
 # En desarrollo local, usar: redis://localhost:6379/0
-_redis_host = get_redis_host()
+# _redis_host ya está definido arriba para CACHES
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f'redis://{_redis_host}:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f'redis://{_redis_host}:6379/0')
 
@@ -480,21 +534,18 @@ ASGI_APPLICATION = 'atenea.asgi.application'
 # En Docker, usar el nombre del servicio: redis://redis:6379/1
 channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
 
-# Parsear URL de Redis para channels-redis
-# channels-redis acepta URLs directamente o tuplas (host, port)
-# Para especificar database, usamos formato URL completo o dict con address
-from urllib.parse import urlparse
-parsed_url = urlparse(channel_redis_url)
-redis_host = parsed_url.hostname or _redis_host
-redis_port = parsed_url.port or 6379
-redis_db = int(parsed_url.path.lstrip('/')) if parsed_url.path and parsed_url.path != '/' else 1
+# channels-redis acepta URLs directamente como cadena
+# Asegurarse de que sea una cadena, no una tupla
+if isinstance(channel_redis_url, tuple):
+    # Si por alguna razón viene como tupla, convertir a cadena
+    channel_redis_url = f'redis://{channel_redis_url[0]}:{channel_redis_url[1]}'
 
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            # Usar formato dict para incluir database number
-            "hosts": [{"address": (redis_host, redis_port), "db": redis_db}],
+            # Usar URL directamente como cadena (channels-redis la parsea internamente)
+            "hosts": [channel_redis_url],
         },
     },
 }

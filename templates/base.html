@@ -530,5 +530,194 @@
                 }
             });
          </script>
+         
+         {% if request.user.is_authenticated %}
+         <!-- Prefetch de datos del usuario para navegación instantánea -->
+         <script>
+         (function() {
+             const CACHE_DURATION = 300000; // 5 minutos
+             const HEYGEN_CACHE_DURATION = 600000; // 10 minutos para HeyGen (cambia menos)
+             
+             // === FUNCIONES GLOBALES PARA USO EN OTROS TEMPLATES ===
+             // Obtener avatares (desde caché o fetch)
+             window.getHeyGenAvatars = async function(forceRefresh = false) {
+                 const cacheKey = 'heygen_avatars';
+                 
+                 // Intentar caché primero
+                 if (!forceRefresh) {
+                     try {
+                         const cached = sessionStorage.getItem(cacheKey);
+                         const timestamp = sessionStorage.getItem(cacheKey + '_timestamp');
+                         if (cached && timestamp) {
+                             const age = Date.now() - parseInt(timestamp, 10);
+                             if (age < HEYGEN_CACHE_DURATION) {
+                                 return JSON.parse(cached);
+                             }
+                         }
+                     } catch (e) {}
+                 }
+                 
+                 // Fetch si no hay caché
+                 try {
+                     const response = await fetch('/api/avatars/');
+                     if (response.ok) {
+                         const data = await response.json();
+                         if (data.avatars) {
+                             sessionStorage.setItem(cacheKey, JSON.stringify(data.avatars));
+                             sessionStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
+                             return data.avatars;
+                         }
+                     }
+                 } catch (e) {
+                     console.error('Error fetching avatars:', e);
+                 }
+                 return [];
+             };
+             
+             // Obtener voces (desde caché o fetch)
+             window.getHeyGenVoices = async function(forceRefresh = false) {
+                 const cacheKey = 'heygen_voices';
+                 
+                 // Intentar caché primero
+                 if (!forceRefresh) {
+                     try {
+                         const cached = sessionStorage.getItem(cacheKey);
+                         const timestamp = sessionStorage.getItem(cacheKey + '_timestamp');
+                         if (cached && timestamp) {
+                             const age = Date.now() - parseInt(timestamp, 10);
+                             if (age < HEYGEN_CACHE_DURATION) {
+                                 return JSON.parse(cached);
+                             }
+                         }
+                     } catch (e) {}
+                 }
+                 
+                 // Fetch si no hay caché
+                 try {
+                     const response = await fetch('/api/voices/');
+                     if (response.ok) {
+                         const data = await response.json();
+                         if (data.voices) {
+                             sessionStorage.setItem(cacheKey, JSON.stringify(data.voices));
+                             sessionStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
+                             return data.voices;
+                         }
+                     }
+                 } catch (e) {
+                     console.error('Error fetching voices:', e);
+                 }
+                 return [];
+             };
+             
+             // === UTILIDADES DE CACHÉ ===
+             function isCacheValid(key, duration) {
+                 try {
+                     const timestamp = sessionStorage.getItem(key + '_timestamp');
+                     if (timestamp) {
+                         const age = Date.now() - parseInt(timestamp, 10);
+                         return age < duration;
+                     }
+                 } catch (e) {}
+                 return false;
+             }
+             
+             function saveToCache(key, data) {
+                 try {
+                     sessionStorage.setItem(key, JSON.stringify(data));
+                     sessionStorage.setItem(key + '_timestamp', Date.now().toString());
+                 } catch (e) {
+                     console.debug('Error guardando en caché:', e);
+                 }
+             }
+             
+            // === PREFETCH LIBRARY ITEMS ===
+            const PREFETCH_LIMIT = 20; // Cargar los primeros 20 items
+            
+            async function prefetchLibraryType(type) {
+                const cacheKey = `library_items_${type}_all`;
+                if (isCacheValid(cacheKey, CACHE_DURATION)) return;
+                
+                try {
+                    // include_urls=true para que el caché tenga URLs y se muestren los previews
+                    const response = await fetch(`/api/library/items/?type=${type}&limit=${PREFETCH_LIMIT}&offset=0&include_urls=true`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.items && Array.isArray(data.items)) {
+                            const items = data.items.filter(item => item && item.id);
+                            saveToCache(cacheKey, items);
+                            console.debug(`✅ Prefetch ${type}: ${items.length} items (de ${data.total || '?'})`);
+                        }
+                    }
+                } catch (e) {
+                    console.debug(`Error prefetching ${type}:`, e);
+                }
+            }
+             
+             // === PREFETCH HEYGEN AVATARS ===
+             async function prefetchAvatars() {
+                 const cacheKey = 'heygen_avatars';
+                 if (isCacheValid(cacheKey, HEYGEN_CACHE_DURATION)) return;
+                 
+                 try {
+                     const response = await fetch('/api/avatars/');
+                     if (response.ok) {
+                         const data = await response.json();
+                         if (data.avatars && Array.isArray(data.avatars)) {
+                             saveToCache(cacheKey, data.avatars);
+                             console.debug(`✅ Prefetch avatars: ${data.avatars.length} avatares`);
+                         }
+                     }
+                 } catch (e) {
+                     console.debug('Error prefetching avatars:', e);
+                 }
+             }
+             
+             // === PREFETCH HEYGEN VOICES ===
+             async function prefetchVoices() {
+                 const cacheKey = 'heygen_voices';
+                 if (isCacheValid(cacheKey, HEYGEN_CACHE_DURATION)) return;
+                 
+                 try {
+                     const response = await fetch('/api/voices/');
+                     if (response.ok) {
+                         const data = await response.json();
+                         if (data.voices && Array.isArray(data.voices)) {
+                             saveToCache(cacheKey, data.voices);
+                             console.debug(`✅ Prefetch voices: ${data.voices.length} voces`);
+                         }
+                     }
+                 } catch (e) {
+                     console.debug('Error prefetching voices:', e);
+                 }
+             }
+             
+             // === EJECUTAR PREFETCH ===
+             function startPrefetch() {
+                 // Pequeño delay para no competir con recursos críticos
+                 setTimeout(() => {
+                     // Fase 1: Library items (más importante para navegación)
+                     const libraryTypes = ['video', 'image', 'audio'];
+                     libraryTypes.forEach((type, index) => {
+                         setTimeout(() => prefetchLibraryType(type), index * 300);
+                     });
+                     
+                     // Fase 2: HeyGen data (después de library, con más delay)
+                     setTimeout(() => {
+                         prefetchAvatars();
+                         setTimeout(() => prefetchVoices(), 500);
+                     }, libraryTypes.length * 300 + 500);
+                     
+                 }, 800);
+             }
+             
+             // Usar requestIdleCallback si está disponible
+             if ('requestIdleCallback' in window) {
+                 requestIdleCallback(startPrefetch, { timeout: 3000 });
+             } else {
+                 window.addEventListener('load', startPrefetch);
+             }
+         })();
+         </script>
+         {% endif %}
     </body>
 </html>
