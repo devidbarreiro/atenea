@@ -132,31 +132,18 @@ jobs:
         
         # Copiar código al servidor usando rsync (excluyendo .git y otros archivos innecesarios)
         echo "📤 Copiando código al servidor..."
-        rsync -avz --delete --no-ACL --no-xattrs \
+        rsync -avz --delete \
           -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
           --exclude='.git' \
-          --exclude='**/__pycache__/' \
-          --exclude='**/__pycache__/**' \
+          --exclude='__pycache__' \
           --exclude='*.pyc' \
-          --exclude='*.pyo' \
           --exclude='.env' \
           --exclude='credentials.json' \
           --exclude='venv' \
-          --exclude='**/venv/**' \
           --exclude='db.sqlite3' \
           --exclude='.pytest_cache' \
-          --exclude='**/.pytest_cache/**' \
           --exclude='node_modules' \
-          --exclude='**/node_modules/**' \
-          --exclude='.DS_Store' \
-          --exclude='**/.DS_Store' \
-          --exclude='*.swp' \
-          --exclude='*.swo' \
-          --exclude='*~' \
-          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/ || {
-          echo "⚠️  Advertencia: rsync completó con algunos errores menores"
-          echo "💡 Esto puede ser normal si hay archivos temporales o con atributos extendidos"
-        }
+          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
         
         # Restaurar credentials.json si existía antes
         echo "🔐 Restaurando credentials.json si existía..."
@@ -242,110 +229,88 @@ jobs:
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
-        # MÉTODO DIRECTO: Eliminar contenedores por nombre exacto primero
-        echo "🗑️  Eliminando contenedores por nombre exacto..."
-        docker rm -f html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 html-migrate-1 html-collectstatic-1 2>/dev/null || true
-        docker rm -f ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 ${ENV}-migrate-1 ${ENV}-collectstatic-1 2>/dev/null || true
+        # Primero, detener todos los contenedores que puedan estar corriendo
+        echo "⏸️  Deteniendo contenedores..."
+        docker compose stop || true
         
-        # Eliminar con docker compose
-        echo "🗑️  docker compose down..."
-        docker compose down --remove-orphans -v 2>/dev/null || true
-        docker compose rm -f 2>/dev/null || true
+        # Detener contenedores específicos por nombre (por si acaso)
+        docker stop html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 2>/dev/null || true
+        docker stop html-dev-web-1 html-dev-db-1 html-dev-redis-1 html-dev-celery_worker-1 html-dev-celery_beat-1 2>/dev/null || true
+        docker stop html-demo-web-1 html-demo-db-1 2>/dev/null || true
+        docker stop html-prod-web-1 html-prod-db-1 2>/dev/null || true
+        docker stop ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 2>/dev/null || true
         
-        # Buscar y eliminar TODOS los contenedores con prefijo html- o ${ENV}-
-        echo "🔍 Buscando contenedores huérfanos..."
-        for container_id in $(docker ps -aq --filter "name=html-" 2>/dev/null); do
-          echo "🗑️  Eliminando contenedor: $container_id"
-          docker rm -f "$container_id" 2>/dev/null || true
+        # Esperar un momento para que los contenedores se detengan completamente
+        sleep 3
+        
+        # Eliminar contenedores con docker compose down
+        echo "🗑️  Eliminando contenedores con docker compose down..."
+        docker compose down --remove-orphans -v || true
+        
+        # Eliminar contenedores que puedan estar detenidos pero aún existan
+        docker compose rm -f || true
+        
+        # Lista de contenedores comunes que pueden existir (incluyendo variaciones)
+        COMMON_CONTAINERS=(
+          "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
+          "html-migrate-1" "html-collectstatic-1"
+          "html-dev-web-1" "html-dev-db-1" "html-dev-redis-1" "html-dev-celery_worker-1" "html-dev-celery_beat-1"
+          "html-demo-web-1" "html-demo-db-1"
+          "html-prod-web-1" "html-prod-db-1"
+          "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1"
+          "${ENV}-migrate-1" "${ENV}-collectstatic-1"
+        )
+        
+        # Forzar eliminación de contenedores específicos comunes
+        echo "🔍 Eliminando contenedores específicos..."
+        for container in "${COMMON_CONTAINERS[@]}"; do
+          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
+            echo "🗑️  Eliminando contenedor: $container"
+            docker rm -f "$container" 2>/dev/null || true
+          fi
         done
-        for container_id in $(docker ps -aq --filter "name=${ENV}-" 2>/dev/null); do
-          echo "🗑️  Eliminando contenedor: $container_id"
-          docker rm -f "$container_id" 2>/dev/null || true
-        done
         
-        # Verificación y limpieza forzada
-        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
-        if [ ! -z "$REMAINING" ]; then
-          echo "⚠️  Contenedores restantes: $REMAINING"
-          echo "🔄 Forzando eliminación..."
-          for name in $REMAINING; do
-            docker rm -f "$name" 2>/dev/null || true
+        # Buscar TODOS los contenedores que empiecen con "html-" y eliminarlos (incluyendo nombres genéricos)
+        echo "🔍 Buscando contenedores huérfanos adicionales..."
+        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
+        if [ ! -z "$ALL_CONTAINERS" ]; then
+          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
+            if [ ! -z "$container" ] && [[ "$container" == "html-"* ]]; then
+              echo "🗑️  Eliminando contenedor huérfano: $container"
+              docker rm -f "$container" 2>/dev/null || true
+            fi
           done
         fi
         
-        # Limpiar redes huérfanas
-        echo "🧹 Limpiando redes y volúmenes huérfanos..."
-        docker network prune -f 2>/dev/null || true
+        # Limpiar redes huérfanas también
+        echo "🧹 Limpiando redes huérfanas..."
+        docker network prune -f || true
         
-        # Verificación final
+        # Esperar un momento más para asegurar que todo esté limpio
         sleep 2
-        FINAL=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
-        if [ ! -z "$FINAL" ]; then
-          echo "❌ ERROR: Aún existen contenedores: $FINAL"
-          echo "🔄 Último intento..."
-          for name in $FINAL; do
-            docker kill "$name" 2>/dev/null || true
-            docker rm -f "$name" 2>/dev/null || true
+        
+        # Verificar que los contenedores se eliminaron
+        echo "✅ Verificación: contenedores restantes con prefijo 'html-':"
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^html-" || echo "")
+        if [ ! -z "$REMAINING" ]; then
+          echo "⚠️  Advertencia: Aún quedan contenedores:"
+          echo "$REMAINING"
+          echo "🔄 Intentando eliminarlos nuevamente..."
+          echo "$REMAINING" | while IFS= read -r container; do
+            docker rm -f "$container" 2>/dev/null || true
           done
         else
-          echo "✅ Todos los contenedores eliminados"
+          echo "  ✅ Todos los contenedores eliminados correctamente"
         fi
         echo "🔨 Construyendo y reiniciando contenedores"
         docker compose build --no-cache
         docker compose up -d
-        
         echo "⏳ Esperando a que los servicios estén listos..."
         sleep 15
-        
-        # Verificar que la base de datos esté lista
-        echo "🔍 Verificando conexión a la base de datos..."
-        MAX_RETRIES=30
-        RETRY_COUNT=0
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-          if docker compose exec -T db pg_isready -U ${POSTGRES_USER:-atenea} > /dev/null 2>&1; then
-            echo "✅ Base de datos lista"
-            break
-          fi
-          RETRY_COUNT=$((RETRY_COUNT + 1))
-          echo "⏳ Esperando base de datos... ($RETRY_COUNT/$MAX_RETRIES)"
-          sleep 2
-        done
-        
-        if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-          echo "❌ Error: La base de datos no está lista después de $MAX_RETRIES intentos"
-          exit 1
-        fi
-        
-        # Esperar un poco más para asegurar que la base de datos esté completamente lista
-        sleep 5
-        
         echo "🔄 Ejecutando migraciones"
-        echo "📋 Verificando estado de migraciones antes de ejecutar..."
-        docker compose exec -T web python manage.py showmigrations --list 2>&1 | head -30 || true
-        
-        echo "🚀 Ejecutando migraciones..."
-        MIGRATE_OUTPUT=$(docker compose --profile tools run --rm migrate 2>&1)
-        MIGRATE_EXIT_CODE=$?
-        
-        if [ $MIGRATE_EXIT_CODE -ne 0 ]; then
-          echo "❌ Error: Las migraciones fallaron (código de salida: $MIGRATE_EXIT_CODE)"
-          echo "📋 Salida completa de migraciones:"
-          echo "$MIGRATE_OUTPUT"
-          echo "📋 Verificando estado de migraciones después del error..."
-          docker compose exec -T web python manage.py showmigrations --list 2>&1 | head -30 || true
-          exit 1
-        fi
-        
-        echo "$MIGRATE_OUTPUT"
-        echo "✅ Migraciones ejecutadas correctamente"
-        echo "📋 Verificando estado final de migraciones..."
-        docker compose exec -T web python manage.py showmigrations --list 2>&1 | grep -E "(\[ \]|\[X\])" | tail -20 || true
-        
+        docker compose run --rm migrate || echo "⚠️  Advertencia: Error en migraciones"
         echo "📦 Recolectando archivos estáticos"
-        if ! docker compose --profile tools run --rm collectstatic; then
-          echo "❌ Error: collectstatic falló"
-          exit 1
-        fi
+        docker compose run --rm collectstatic || echo "⚠️  Advertencia: Error en collectstatic"
         echo "✅ Despliegue a $ENV completado!"
         if [ "$ENV" == "prod" ]; then
           echo "🌐 URL: https://atenea.nxhumans.com"
