@@ -243,15 +243,11 @@ jobs:
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
         # Primero, detener todos los contenedores que puedan estar corriendo
-        echo "⏸️  Deteniendo contenedores..."
+        echo "⏸️  Deteniendo contenedores con docker compose..."
         docker compose stop || true
         
-        # Detener contenedores específicos por nombre (por si acaso)
-        docker stop html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 2>/dev/null || true
-        docker stop ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 2>/dev/null || true
-        
         # Esperar un momento para que los contenedores se detengan completamente
-        sleep 3
+        sleep 2
         
         # Eliminar contenedores con docker compose down
         echo "🗑️  Eliminando contenedores con docker compose down..."
@@ -260,51 +256,60 @@ jobs:
         # Eliminar contenedores que puedan estar detenidos pero aún existan
         docker compose rm -f || true
         
-        # Lista de contenedores comunes que pueden existir (incluyendo variaciones)
-        COMMON_CONTAINERS=(
-          "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
-          "html-migrate-1" "html-collectstatic-1"
-          "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1"
-          "${ENV}-migrate-1" "${ENV}-collectstatic-1"
-        )
+        # Obtener lista de contenedores que empiecen con "html-" o "${ENV}-" y eliminarlos
+        echo "🔍 Buscando y eliminando contenedores con prefijo 'html-' o '${ENV}-'..."
         
-        # Forzar eliminación de contenedores específicos comunes
-        echo "🔍 Eliminando contenedores específicos..."
-        for container in "${COMMON_CONTAINERS[@]}"; do
-          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
-            echo "🗑️  Eliminando contenedor: $container"
-            docker rm -f "$container" 2>/dev/null || true
-          fi
-        done
+        # Crear array temporal con IDs de contenedores a eliminar
+        CONTAINER_IDS=$(docker ps -a --format "{{.ID}} {{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" | awk '{print $1}' || echo "")
         
-        # Buscar TODOS los contenedores que empiecen con "html-" o "${ENV}-" y eliminarlos
-        echo "🔍 Buscando contenedores huérfanos adicionales..."
-        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
-        if [ ! -z "$ALL_CONTAINERS" ]; then
-          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
-            if [ ! -z "$container" ] && ([[ "$container" == "html-"* ]] || [[ "$container" == "${ENV}-"* ]]); then
-              echo "🗑️  Eliminando contenedor huérfano: $container"
-              docker rm -f "$container" 2>/dev/null || true
+        if [ ! -z "$CONTAINER_IDS" ]; then
+          echo "📋 Contenedores encontrados para eliminar:"
+          docker ps -a --format "{{.ID}} {{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" || true
+          
+          # Eliminar cada contenedor por ID
+          for container_id in $CONTAINER_IDS; do
+            if [ ! -z "$container_id" ]; then
+              echo "🗑️  Eliminando contenedor ID: $container_id"
+              docker stop "$container_id" 2>/dev/null || true
+              docker rm -f "$container_id" 2>/dev/null || true
             fi
           done
         fi
+        
+        # También intentar eliminar por nombres específicos comunes
+        echo "🔍 Eliminando contenedores por nombres específicos..."
+        for name in "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1" \
+                    "html-migrate-1" "html-collectstatic-1" \
+                    "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1" \
+                    "${ENV}-migrate-1" "${ENV}-collectstatic-1"; do
+          CONTAINER_ID=$(docker ps -a --filter "name=^${name}$" --format "{{.ID}}" 2>/dev/null | head -1)
+          if [ ! -z "$CONTAINER_ID" ]; then
+            echo "🗑️  Eliminando contenedor por nombre: $name (ID: $CONTAINER_ID)"
+            docker stop "$CONTAINER_ID" 2>/dev/null || true
+            docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+          fi
+        done
         
         # Limpiar redes huérfanas también
         echo "🧹 Limpiando redes huérfanas..."
         docker network prune -f || true
         
         # Esperar un momento más para asegurar que todo esté limpio
-        sleep 2
+        sleep 3
         
-        # Verificar que los contenedores se eliminaron
-        echo "✅ Verificación: contenedores restantes con prefijo 'html-' o '${ENV}-':"
-        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
-        if [ ! -z "$REMAINING" ]; then
-          echo "⚠️  Advertencia: Aún quedan contenedores:"
-          echo "$REMAINING"
-          echo "🔄 Intentando eliminarlos nuevamente..."
-          echo "$REMAINING" | while IFS= read -r container; do
-            docker rm -f "$container" 2>/dev/null || true
+        # Verificación final antes de continuar
+        FINAL_CHECK=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" || echo "")
+        if [ ! -z "$FINAL_CHECK" ]; then
+          echo "⚠️  Advertencia: Aún quedan contenedores después de la limpieza:"
+          echo "$FINAL_CHECK"
+          echo "🔄 Intentando eliminación forzada final por ID..."
+          FINAL_IDS=$(docker ps -a --format "{{.ID}} {{.Names}}" 2>/dev/null | grep -E "(html-|${ENV}-)" | awk '{print $1}' || echo "")
+          for container_id in $FINAL_IDS; do
+            if [ ! -z "$container_id" ]; then
+              echo "🗑️  Forzando eliminación de contenedor ID: $container_id"
+              docker stop "$container_id" 2>/dev/null || true
+              docker rm -f "$container_id" 2>/dev/null || true
+            fi
           done
         else
           echo "  ✅ Todos los contenedores eliminados correctamente"
