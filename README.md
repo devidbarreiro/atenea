@@ -217,6 +217,10 @@ celery -A atenea worker --loglevel=info \
     --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks \
     --concurrency=4
 
+# linux sin comunicacion entre procesos (multiprocessing)
+./venv/Scripts/celery.exe -A atenea worker --loglevel=info --pool=solo \
+    --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks
+
 # Windows (PowerShell):
 celery -A atenea worker --loglevel=info `
     --queues=video_generation,image_generation,audio_generation,scene_processing,default,polling_tasks `

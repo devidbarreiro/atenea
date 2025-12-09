@@ -234,12 +234,25 @@
             <input type="file" name="start_image" accept="image/*" class="hidden" onchange="updateImagePreview(this, 'start-preview')">
             <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
                 <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
-                    <div class="absolute top-2 left-2">
+                    <div class="absolute top-2 left-2 flex items-center gap-1">
                         <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <rect x="2" y="2" width="10" height="10" rx="0.5" fill="none"/>
                             <rect x="6" y="6" width="10" height="10" rx="0.5" fill="none"/>
                             <path d="M9.5 7.5l3 2.5-3 2.5V7.5z" fill="currentColor"/>
                         </svg>
+                        <div class="relative group/info">
+                            <button type="button" class="text-gray-400 hover:text-gray-600 focus:outline-none" onclick="event.preventDefault();">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-200 pointer-events-none z-10">
+                                <p class="text-center">Para HeyGen Avatar IV, sube aquí la imagen del avatar que quieres usar.</p>
+                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                                    <div class="border-4 border-transparent border-t-gray-800"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <span class="text-xs font-medium text-gray-900 mt-auto">Start image</span>
                     <img id="start-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">

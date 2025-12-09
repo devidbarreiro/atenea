@@ -33,6 +33,18 @@ class LoginRequiredMiddleware:
         # Allow static and media during development
         if request.path.startswith('/static/') or request.path.startswith('/media/'):
             return self.get_response(request)
+        
+        # Allow django-browser-reload (hot reload en desarrollo)
+        if request.path.startswith('/__reload__/'):
+            return self.get_response(request)
+        
+        # Allow admin (tiene su propia autenticación)
+        if request.path.startswith('/admin/'):
+            return self.get_response(request)
+        
+        # Allow WebSocket connections (tienen su propia autenticación)
+        if request.path.startswith('/ws/'):
+            return self.get_response(request)
 
         # Allow exempt urls for everyone (important so logout isn't blocked for no-perm users)
         if request.path in exempt_urls:

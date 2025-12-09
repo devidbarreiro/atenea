@@ -433,37 +433,199 @@ def get_model_specific_fields(model_id, service):
     # HeyGen Avatar V2
     if model_id == 'heygen-avatar-v2':
         try:
-            api_key = getattr(settings, 'HEYGEN_API_KEY', None)
-            if not api_key:
-                raise ValueError('HEYGEN_API_KEY no está configurada en settings')
-            client = HeyGenClient(api_key=api_key)
-            avatars = client.list_avatars()
-            voices = client.list_voices()
+            # Usar APIService que tiene caché en Redis
+            from core.services import APIService
+            api_service = APIService()
             
-            logger.info(f"HeyGen V2: Cargados {len(avatars)} avatares y {len(voices)} voces")
+            # Obtener avatares y voces con caché (usa Redis automáticamente)
+            avatars = api_service.list_avatars(use_cache=True)
+            voices = api_service.list_voices(use_cache=True)
+            
+            logger.info(f"HeyGen V2: Cargados {len(avatars)} avatares y {len(voices)} voces (desde caché o API)")
             
             data['avatars'] = avatars
             data['voices'] = voices
             
-            # Generar HTML para avatar select
-            avatar_options = '<option value="">Selecciona un avatar</option>'
+            # Generar datos de avatares para el dropdown personalizado
+            import uuid
+            import json
+            unique_id = str(uuid.uuid4())[:8]
+            avatar_select_id = f'avatar_id_select_{unique_id}'
+            avatar_preview_id = f'avatar_preview_container_{unique_id}'
+            avatar_dropdown_id = f'avatar_dropdown_{unique_id}'
+            
+            # Preparar datos de avatares para JavaScript
+            avatars_data = []
             for avatar in avatars:
                 avatar_id = avatar.get("avatar_id") or avatar.get("id")
                 avatar_name = avatar.get("avatar_name") or avatar.get("name") or avatar_id
-                avatar_options += f'<option value="{avatar_id}">{avatar_name}</option>'
+                preview_image = avatar.get("preview_image_url") or avatar.get("avatar_image") or ''
+                preview_video = avatar.get("preview_video_url") or ''
+                avatars_data.append({
+                    'id': avatar_id,
+                    'name': avatar_name,
+                    'preview_image': preview_image,
+                    'preview_video': preview_video
+                })
+            
+            # Convertir a JSON y escapar correctamente para usar en data attribute HTML
+            # Usar comillas dobles en el JSON y escapar solo las comillas dobles
+            avatars_json = json.dumps(avatars_data, ensure_ascii=False)
+            # Escapar comillas dobles y backslashes para uso seguro en atributo HTML
+            avatars_json_escaped = avatars_json.replace('\\', '\\\\').replace('"', '&quot;')
             
             fields.append({
                 'name': 'avatar_id',
                 'label': 'Avatar',
                 'required': True,
                 'html': f'''
-                    <div class="mb-4">
+                    <div class="mb-4" 
+                         data-avatars="{avatars_json_escaped}"
+                         x-data="{{
+                            open: false,
+                            selectedAvatar: null,
+                            avatars: JSON.parse($el.dataset.avatars),
+                            searchTerm: '',
+                            visibleAvatars: 20,
+                            get filteredAvatars() {{
+                                if (!this.searchTerm) return this.avatars.slice(0, this.visibleAvatars);
+                                const term = this.searchTerm.toLowerCase();
+                                return this.avatars.filter(a => 
+                                    a.name.toLowerCase().includes(term) || 
+                                    a.id.toLowerCase().includes(term)
+                                ).slice(0, this.visibleAvatars);
+                            }},
+                            selectAvatar(avatar) {{
+                                this.selectedAvatar = avatar;
+                                this.open = false;
+                                const hiddenInput = document.getElementById('{avatar_select_id}');
+                                if (hiddenInput) hiddenInput.value = avatar.id;
+                            }},
+                            loadMore() {{
+                                this.visibleAvatars += 20;
+                            }}
+                         }}" 
+                         x-init="
+                            const dropdown = $el.querySelector('.avatar-dropdown-menu');
+                            if (dropdown) {{
+                                dropdown.addEventListener('scroll', function() {{
+                                    if (this.scrollTop + this.clientHeight >= this.scrollHeight - 100) {{
+                                        if (visibleAvatars < avatars.length) {{
+                                            visibleAvatars += 20;
+                                        }}
+                                    }}
+                                }});
+                            }}
+                         ">
                         <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
                             AVATAR <span class="text-red-500">*</span>
                         </label>
-                        <select name="avatar_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-                            {avatar_options}
-                        </select>
+                        
+                        <!-- Input hidden para el formulario -->
+                        <input type="hidden" name="avatar_id" id="{avatar_select_id}" x-bind:value="selectedAvatar ? selectedAvatar.id : ''" required>
+                        
+                        <!-- Botón selector -->
+                        <div class="relative">
+                            <button type="button" 
+                                    @click="open = !open"
+                                    class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:ring-2 focus:ring-black focus:border-black transition-all text-left flex items-center justify-between">
+                                <span x-text="selectedAvatar ? selectedAvatar.name : 'Selecciona un avatar'" 
+                                      class="text-gray-700"></span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            
+                            <!-- Dropdown menu -->
+                            <div x-show="open" 
+                                 @click.away="open = false"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 scale-100"
+                                 x-transition:leave-end="opacity-0 scale-95"
+                                 class="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-hidden"
+                                 style="display: none;">
+                                
+                                <!-- Search bar -->
+                                <div class="p-2 border-b border-gray-200">
+                                    <input type="text" 
+                                           x-model="searchTerm"
+                                           placeholder="Buscar avatar..."
+                                           class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-black focus:border-black">
+                                </div>
+                                
+                                <!-- Avatares grid -->
+                                <div class="avatar-dropdown-menu overflow-y-auto max-h-80 p-2">
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <template x-for="avatar in filteredAvatars" :key="avatar.id">
+                                            <div @click="selectAvatar(avatar)"
+                                                 class="avatar-item cursor-pointer rounded-lg border-2 transition-all hover:border-black p-1"
+                                                 :class="selectedAvatar && selectedAvatar.id === avatar.id ? 'border-black bg-gray-50' : 'border-gray-200'">
+                                                <!-- Preview thumbnail (lazy loading - solo imagen, no video) -->
+                                                <div class="aspect-video bg-gray-100 rounded overflow-hidden mb-1 relative">
+                                                    <img x-show="avatar.preview_image"
+                                                         :src="avatar.preview_image"
+                                                         :alt="avatar.name"
+                                                         loading="lazy"
+                                                         class="w-full h-full object-cover"
+                                                         @error="$el.style.display = 'none'">
+                                                    <!-- Indicador de video si tiene preview_video -->
+                                                    <div x-show="avatar.preview_video && avatar.preview_image" 
+                                                         class="absolute top-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path>
+                                                        </svg>
+                                                    </div>
+                                                    <div x-show="!avatar.preview_image" class="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                                                        No preview
+                                                    </div>
+                                                </div>
+                                                <!-- Nombre -->
+                                                <p class="text-xs font-medium text-gray-700 truncate px-1" x-text="avatar.name"></p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- Load more button -->
+                                    <div x-show="visibleAvatars < avatars.length && !searchTerm" class="mt-2 text-center">
+                                        <button @click="loadMore()" 
+                                                class="text-xs text-gray-600 hover:text-gray-900 px-3 py-1">
+                                            Cargar más...
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- No results -->
+                                    <div x-show="filteredAvatars.length === 0" class="text-center py-4 text-gray-500 text-sm">
+                                        No se encontraron avatares
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview grande del avatar seleccionado -->
+                        <div x-show="selectedAvatar" 
+                             x-transition
+                             class="mt-3 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 relative"
+                             style="width: 100%; aspect-ratio: 16/9; max-width: 400px;">
+                            <template x-if="selectedAvatar.preview_video">
+                                <video :src="selectedAvatar.preview_video" 
+                                       class="w-full h-full object-cover"
+                                       muted 
+                                       loop 
+                                       playsinline 
+                                       autoplay></video>
+                            </template>
+                            <template x-if="selectedAvatar.preview_image && !selectedAvatar.preview_video">
+                                <img :src="selectedAvatar.preview_image" 
+                                     :alt="selectedAvatar.name"
+                                     class="w-full h-full object-cover">
+                            </template>
+                            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+                                <p class="text-white font-semibold text-sm" x-text="selectedAvatar.name"></p>
+                            </div>
+                        </div>
                     </div>
                 '''
             })
@@ -491,6 +653,40 @@ def get_model_specific_fields(model_id, service):
                         <select name="voice_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
                             {voice_options}
                         </select>
+                    </div>
+                '''
+            })
+            
+            # Campos para background (opcional)
+            fields.append({
+                'name': 'has_background',
+                'label': 'Incluir Fondo',
+                'required': False,
+                'html': '''
+                    <div class="mb-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="has_background" value="true" class="w-4 h-4 text-black border-gray-300 rounded focus:ring-black">
+                            <span class="text-xs font-semibold text-gray-700 uppercase">Incluir Imagen de Fondo</span>
+                        </label>
+                        <p class="mt-1 text-xs text-gray-500">Activa esta opción para agregar una imagen de fondo al video</p>
+                    </div>
+                '''
+            })
+            
+            fields.append({
+                'name': 'background_url',
+                'label': 'URL del Fondo',
+                'required': False,
+                'html': '''
+                    <div class="mb-4">
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                            URL DEL FONDO
+                        </label>
+                        <input type="url" 
+                               name="background_url" 
+                               placeholder="https://ejemplo.com/imagen.jpg" 
+                               class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+                        <p class="mt-1 text-xs text-gray-500">URL de la imagen de fondo (solo si "Incluir Fondo" está activado)</p>
                     </div>
                 '''
             })
@@ -561,41 +757,94 @@ def get_model_specific_fields(model_id, service):
     # HeyGen Avatar IV
     elif model_id == 'heygen-avatar-iv':
         try:
-            api_key = getattr(settings, 'HEYGEN_API_KEY', None)
-            if not api_key:
-                raise ValueError('HEYGEN_API_KEY no está configurada en settings')
-            client = HeyGenClient(api_key=api_key)
-            # Listar assets de imagen usando el parámetro file_type
-            image_assets = client.list_assets(file_type='image')
-            voices = client.list_voices()
+            # Usar APIService que tiene caché en Redis
+            from core.services import APIService
+            api_service = APIService()
             
-            logger.info(f"HeyGen IV: Cargados {len(image_assets)} assets de imagen y {len(voices)} voces")
+            # Obtener image assets y voces con caché (usa Redis automáticamente)
+            image_assets = api_service.list_image_assets(use_cache=True)
+            voices = api_service.list_voices(use_cache=True)
+            
+            logger.info(f"HeyGen IV: Cargados {len(image_assets)} assets de imagen y {len(voices)} voces (desde caché o API)")
             
             data['image_assets'] = image_assets
             data['voices'] = voices
             
-            # Generar HTML para avatar image select
-            image_asset_options = '<option value="">Selecciona una imagen de avatar</option>'
-            for asset in image_assets:
-                asset_id = asset.get("asset_id") or asset.get("id")
-                asset_name = asset.get("asset_name") or asset.get("name") or asset_id
-                image_asset_options += f'<option value="{asset_id}">{asset_name}</option>'
-            
-            fields.append({
-                'name': 'avatar_image_id',
-                'label': 'Imagen de Avatar',
-                'required': True,
-                'html': f'''
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
-                            IMAGEN DE AVATAR <span class="text-red-500">*</span>
-                        </label>
-                        <select name="avatar_image_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-                            {image_asset_options}
-                        </select>
-                    </div>
-                '''
-            })
+            # Generar HTML para avatar image select (solo si hay assets disponibles)
+            # Si no hay assets, el usuario debe usar start_image para subir una imagen
+            if image_assets:
+                # Crear un diccionario de assets con sus previews para JavaScript
+                assets_data = {}
+                image_asset_options = '<option value="">Selecciona una imagen de avatar existente (opcional)</option>'
+                for asset in image_assets:
+                    asset_id = asset.get("asset_id") or asset.get("id")
+                    asset_name = asset.get("asset_name") or asset.get("name") or asset_id
+                    # Intentar obtener URL de preview de diferentes campos posibles
+                    preview_url = (
+                        asset.get("preview_url") or 
+                        asset.get("thumbnail_url") or 
+                        asset.get("url") or 
+                        asset.get("image_url") or
+                        asset.get("asset_url") or
+                        ''
+                    )
+                    image_asset_options += f'<option value="{asset_id}" data-preview-url="{preview_url}">{asset_name}</option>'
+                    if preview_url:
+                        assets_data[asset_id] = {
+                            'name': asset_name,
+                            'preview_url': preview_url
+                        }
+                
+                # Convertir assets_data a JSON para JavaScript
+                import json
+                assets_json = json.dumps(assets_data)
+                
+                fields.append({
+                    'name': 'avatar_image_id',
+                    'label': 'Imagen de Avatar Existente',
+                    'required': False,
+                    'html': f'''
+                        <div class="mb-4" x-data="{{
+                            selectedAssetId: '',
+                            assetsData: {assets_json},
+                            getPreviewUrl() {{
+                                return this.selectedAssetId && this.assetsData[this.selectedAssetId] 
+                                    ? this.assetsData[this.selectedAssetId].preview_url 
+                                    : null;
+                            }}
+                        }}">
+                            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                                IMAGEN DE AVATAR EXISTENTE (Opcional)
+                            </label>
+                            <select 
+                                name="avatar_image_id" 
+                                x-model="selectedAssetId"
+                                @change="selectedAssetId = $event.target.value"
+                                class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+                                {image_asset_options}
+                            </select>
+                            
+                            <!-- Preview de la imagen seleccionada -->
+                            <div x-show="getPreviewUrl()" class="mt-3 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                                <div class="aspect-video bg-gray-100 relative">
+                                    <img 
+                                        :src="getPreviewUrl()" 
+                                        :alt="selectedAssetId && assetsData[selectedAssetId] ? assetsData[selectedAssetId].name : 'Preview'"
+                                        class="w-full h-full object-cover"
+                                        @error="$el.style.display = 'none'">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+                                    <div class="absolute bottom-2 left-2 right-2">
+                                        <p class="text-white text-xs font-medium truncate" 
+                                           x-text="selectedAssetId && assetsData[selectedAssetId] ? assetsData[selectedAssetId].name : ''"
+                                           style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);"></p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <p class="mt-1 text-xs text-gray-500">O sube una nueva imagen usando el campo "Start Image" en Referencias</p>
+                        </div>
+                    '''
+                })
             
             voice_options = '<option value="">Selecciona una voz</option>'
             for voice in voices:

@@ -35,17 +35,17 @@ Parámetros esperados:
     <template x-if="!template || !template.preview_url">
         <div class="text-center text-gray-400 p-4">
             <i class="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-            <div class="text-sm font-medium uppercase tracking-wide" x-text="template ? template.name.toUpperCase() : 'GENERAL'"></div>
+            <div x-show="template" class="text-sm font-medium uppercase tracking-wide" x-text="template.name.toUpperCase()"></div>
         </div>
     </template>
     
     <!-- Texto sobre la imagen -->
-    <div class="absolute bottom-0 left-0 right-0 z-10"
+    <div x-show="template" class="absolute bottom-0 left-0 right-0 z-10"
          :class="size === 'small' ? 'pb-3 pl-3' : 'pb-4 pl-4'">
         <div class="text-white font-bold uppercase tracking-tight mb-1" 
              :class="size === 'small' ? 'text-sm' : 'text-lg'"
              style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
-             x-text="template ? template.name.toUpperCase() : 'GENERAL'"></div>
+             x-text="template.name.toUpperCase()"></div>
         <div x-show="template && template.recommended_service && (showServiceName !== false)" 
              class="text-gray-300 text-xs font-medium tracking-wide"
              style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);"
@@ -64,5 +64,7 @@ Parámetros esperados:
         </span>
     </template>
 </div>
+
+
 
 

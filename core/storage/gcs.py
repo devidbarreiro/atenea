@@ -163,17 +163,30 @@ class GCSStorageManager:
             logger.error(f"[GCS] ❌ Error al subir archivo Django: {str(e)}")
             raise
     
-    def get_signed_url(self, gcs_path: str, expiration: int = 3600) -> str:
+    def get_signed_url(self, gcs_path: str, expiration: int = 3600, use_cache: bool = True) -> str:
         """
-        Genera URL firmada para acceder a un archivo
+        Genera URL firmada para acceder a un archivo con caché opcional
         
         Args:
             gcs_path: Path en formato gs://bucket/path o path relativo
             expiration: Tiempo de expiración en segundos (default: 3600)
+            use_cache: Si True, usa caché de Redis para evitar regenerar URLs
         
         Returns:
             URL firmada
         """
+        # Intentar obtener del caché si está habilitado
+        if use_cache:
+            try:
+                from django.core.cache import cache
+                cache_key = f'gcs_signed_url:{gcs_path}:{expiration}'
+                cached_url = cache.get(cache_key)
+                if cached_url:
+                    logger.debug(f"[GCS] URL firmada obtenida del caché: {gcs_path}")
+                    return cached_url
+            except Exception as e:
+                # Si hay error con el caché, continuar sin caché
+                logger.debug(f"[GCS] Error al obtener del caché (continuando sin caché): {e}")
         try:
             # Parsear gcs_path: gs://bucket_name/path/to/file
             if gcs_path.startswith('gs://'):
@@ -204,6 +217,20 @@ class GCSStorageManager:
                 expiration=expiration,
                 method="GET"
             )
+            
+            # Guardar en caché si está habilitado (cachear por menos tiempo que la expiración)
+            if use_cache:
+                try:
+                    from django.core.cache import cache
+                    cache_key = f'gcs_signed_url:{gcs_path}:{expiration}'
+                    # Cachear por 90% del tiempo de expiración para evitar URLs expiradas
+                    cache_timeout = int(expiration * 0.9)
+                    cache.set(cache_key, url, cache_timeout)
+                    logger.debug(f"[GCS] URL firmada guardada en caché por {cache_timeout}s: {gcs_path}")
+                except Exception as e:
+                    # Si hay error con el caché, continuar sin caché
+                    logger.debug(f"[GCS] Error al guardar en caché (continuando sin caché): {e}")
+            
             return url
             
         except Exception as e:

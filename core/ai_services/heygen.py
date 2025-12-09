@@ -150,13 +150,42 @@ class HeyGenClient(BaseAIClient):
         }
         
         if has_background and background_url:
-            payload["video_inputs"][0]["background"] = {
-                "type": "image",
-                "url": background_url
-            }
+            # Según la documentación de HeyGen V2, el background debe usar:
+            # - type: "image" o "color"
+            # - src: URL de la imagen (para type: "image")
+            # - value: color hex/rgba (para type: "color")
+            
+            # Verificar si es una URL o un color
+            if background_url.startswith('http://') or background_url.startswith('https://'):
+                # Es una URL de imagen - usar directamente con "src"
+                logger.info(f"Usando imagen de fondo desde URL: {background_url}")
+                payload["video_inputs"][0]["background"] = {
+                    "type": "image",
+                    "src": background_url
+                }
+            elif background_url.startswith('#') or background_url.startswith('rgb'):
+                # Es un color
+                logger.info(f"Usando color de fondo: {background_url}")
+                payload["video_inputs"][0]["background"] = {
+                    "type": "color",
+                    "value": background_url
+                }
+            else:
+                # Podría ser un asset_id de HeyGen - intentar subirlo primero o usar como URL
+                # Si es un asset_id, HeyGen podría requerir subirlo como asset primero
+                logger.warning(f"background_url no es una URL válida ni un color: {background_url}")
+                logger.info(f"Intentando usar como URL directa...")
+                # Intentar construir una URL o usar como está
+                payload["video_inputs"][0]["background"] = {
+                    "type": "image",
+                    "src": background_url if background_url.startswith('http') else f"https://{background_url}"
+                }
         
         try:
             logger.info(f"Generando video en HeyGen: {title}")
+            logger.info(f"Payload completo: {payload}")
+            if has_background and background_url:
+                logger.info(f"Background configurado: {payload['video_inputs'][0].get('background', {})}")
             response = self.make_request('POST', '/v2/video/generate', json=payload)
             logger.info(f"Video creado. ID: {response.get('data', {}).get('video_id')}")
             return response

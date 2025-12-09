@@ -18,8 +18,10 @@ from django.contrib.auth.models import User
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
+from .ai_services.seedream import SeaDreamImageClient
 from .ai_services.sora import SoraClient
 from .storage.gcs import gcs_storage
+from core.utils.prompt_templates import apply_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -939,16 +941,22 @@ class VideoService:
         image_source = video.config.get('image_source', 'upload')
         
         if image_source == 'upload':
-            if not video.config.get('gcs_avatar_path'):
+            # Buscar imagen en diferentes ubicaciones posibles
+            # 1. gcs_avatar_path (formulario tradicional)
+            # 2. start_image (formulario dinámico)
+            gcs_path = video.config.get('gcs_avatar_path') or video.config.get('start_image')
+            
+            if not gcs_path:
                 raise ValidationException('Imagen de avatar es requerida')
             
             # Obtener URL firmada y subir a HeyGen
-            gcs_path = video.config['gcs_avatar_path']
             avatar_url = gcs_storage.get_signed_url(gcs_path, expiration=600)
             image_key = client.upload_asset_from_url(avatar_url)
             
-            # Guardar image_key para futuro uso
+            # Guardar image_key y normalizar gcs_avatar_path para futuro uso
             video.config['image_key'] = image_key
+            if not video.config.get('gcs_avatar_path') and video.config.get('start_image'):
+                video.config['gcs_avatar_path'] = video.config['start_image']
             video.save(update_fields=['config'])
             
             return image_key
@@ -1809,15 +1817,22 @@ class APIService:
     
     def _get_stale_cache(self, cache_key: str):
         """Obtiene datos obsoletos del caché (stale cache)"""
-        from django.core.cache import cache
-        stale_key = f"{cache_key}_stale"
-        return cache.get(stale_key)
+        try:
+            from django.core.cache import cache
+            stale_key = f"{cache_key}_stale"
+            return cache.get(stale_key)
+        except Exception as e:
+            logger.debug(f"Error al obtener stale cache (continuando sin caché): {e}")
+            return None
     
     def _set_stale_cache(self, cache_key: str, data: List[Dict]):
         """Guarda datos en el caché obsoleto (stale cache)"""
-        from django.core.cache import cache
-        stale_key = f"{cache_key}_stale"
-        cache.set(stale_key, data, self.STALE_CACHE_TTL)
+        try:
+            from django.core.cache import cache
+            stale_key = f"{cache_key}_stale"
+            cache.set(stale_key, data, self.STALE_CACHE_TTL)
+        except Exception as e:
+            logger.debug(f"Error al guardar stale cache (continuando sin caché): {e}")
     
     def list_avatars(self, use_cache: bool = True) -> List[Dict]:
         """
@@ -1838,10 +1853,14 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando avatares desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando avatares desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                # Si hay error con el caché, continuar sin caché
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1851,9 +1870,12 @@ class APIService:
             avatars = client.list_avatars()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, avatars, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, avatars)
-            logger.debug(f"Avatares guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, avatars, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, avatars)
+                logger.debug(f"Avatares guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return avatars
         except Exception as e:
@@ -1865,10 +1887,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando avatares en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando avatares en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de avatares disponibles (ni API ni caché)")
@@ -1893,10 +1918,13 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando voces desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando voces desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1906,9 +1934,12 @@ class APIService:
             voices = client.list_voices()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, voices, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, voices)
-            logger.debug(f"Voces guardadas en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, voices, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, voices)
+                logger.debug(f"Voces guardadas en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return voices
         except Exception as e:
@@ -1920,10 +1951,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando voces en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando voces en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de voces disponibles (ni API ni caché)")
@@ -1948,10 +1982,13 @@ class APIService:
         
         # Intentar obtener del caché fresco si está habilitado
         if use_cache:
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.debug("Usando image assets desde caché fresco")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.debug("Usando image assets desde caché fresco")
+                    return cached_data
+            except Exception as e:
+                logger.debug(f"Error al obtener del caché (continuando sin caché): {e}")
         
         # Intentar obtener datos obsoletos como fallback antes de hacer la petición
         stale_data = self._get_stale_cache(cache_key)
@@ -1961,9 +1998,12 @@ class APIService:
             image_assets = client.list_image_assets()
             
             # Guardar en caché fresco y obsoleto
-            cache.set(cache_key, image_assets, self.CACHE_TTL)
-            self._set_stale_cache(cache_key, image_assets)
-            logger.debug(f"Image assets guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            try:
+                cache.set(cache_key, image_assets, self.CACHE_TTL)
+                self._set_stale_cache(cache_key, image_assets)
+                logger.debug(f"Image assets guardados en caché (fresco: {self.CACHE_TTL}s, obsoleto: {self.STALE_CACHE_TTL}s)")
+            except Exception as cache_error:
+                logger.debug(f"Error al guardar en caché (continuando sin caché): {cache_error}")
             
             return image_assets
         except Exception as e:
@@ -1975,10 +2015,13 @@ class APIService:
                 return stale_data
             
             # Si no hay caché obsoleto, intentar obtener del caché fresco (por si acaso)
-            cached_data = cache.get(cache_key)
-            if cached_data is not None:
-                logger.warning("⚠️ Usando image assets en caché fresco como último recurso")
-                return cached_data
+            try:
+                cached_data = cache.get(cache_key)
+                if cached_data is not None:
+                    logger.warning("⚠️ Usando image assets en caché fresco como último recurso")
+                    return cached_data
+            except Exception:
+                pass  # Ignorar errores de caché
             
             # No hay datos disponibles en ningún caché
             logger.error("❌ No hay datos de image assets disponibles (ni API ni caché)")
@@ -1995,17 +2038,33 @@ class ImageService:
     def __init__(self):
         self.gemini_client = None
         self.higgsfield_client = None
+        self.seedream_client = None
     
-    def _get_gemini_client(self) -> GeminiImageClient:
-        """Lazy initialization de Gemini Image client"""
-        if not self.gemini_client:
-            if not settings.GEMINI_API_KEY:
-                raise ValidationException('GEMINI_API_KEY no está configurada')
-            self.gemini_client = GeminiImageClient(api_key=settings.GEMINI_API_KEY)
-        return self.gemini_client
+    # ----------------
+    # CLIENT GETTERS
+    # ----------------
+    
+    def _get_gemini_client(self, model_name: Optional[str] = None) -> GeminiImageClient:
+        """
+        Lazy initialization de Gemini Image client.
+        """
+        model_to_use = model_name or "gemini-2.5-flash-image"
+        
+        if self.gemini_client and self.gemini_client.model == model_to_use:
+            return self.gemini_client
+            
+        if not settings.GEMINI_API_KEY:
+            raise ValidationException('GEMINI_API_KEY no está configurada')
+            
+        client = GeminiImageClient(api_key=settings.GEMINI_API_KEY, model_name=model_to_use)
+        
+        if model_name is None or model_to_use == "gemini-2.5-flash-image":
+            self.gemini_client = client
+            
+        return client
     
     def _get_higgsfield_client(self):
-        """Lazy initialization de Higgsfield client"""
+        """Lazy initialization de Higgsfield client."""
         if not self.higgsfield_client:
             from .ai_services.higgsfield import HiggsfieldClient
             if not settings.HIGGSFIELD_API_KEY_ID or not settings.HIGGSFIELD_API_KEY:
@@ -2015,9 +2074,26 @@ class ImageService:
                 api_key_secret=settings.HIGGSFIELD_API_KEY
             )
         return self.higgsfield_client
+
+    def _get_seedream_client(self, model_name: Optional[str] = None) -> SeaDreamImageClient:
+        """Inicialización perezosa del cliente Seedream."""
+        model_to_use = model_name or "seedream-default-model"
+
+        if self.seedream_client and self.seedream_client.model == model_to_use:
+            return self.seedream_client
+
+        if not settings.SEEDREAM_API_KEY:
+            raise ValidationException('SEEDREAM_API_KEY no está configurada')
+            
+        client = SeaDreamImageClient(api_key=settings.SEEDREAM_API_KEY, model_name=model_to_use)
+        
+        if model_name is None or model_to_use == "seedream-default-model":
+            self.seedream_client = client
+        
+        return client
     
     # ----------------
-    # CREAR IMAGEN
+    # CREAR IMAGEN (se mantiene el original)
     # ----------------
     
     def create_image(
@@ -2031,17 +2107,6 @@ class ImageService:
     ) -> Image:
         """
         Crea una nueva imagen (sin generarla)
-        
-        Args:
-            title: Título de la imagen
-            image_type: Tipo de imagen (text_to_image, image_to_image, multi_image)
-            prompt: Prompt descriptivo
-            config: Configuración específica del tipo
-            created_by: Usuario que crea la imagen
-            project: Proyecto al que pertenece (opcional)
-        
-        Returns:
-            Image creada
         """
         image = Image.objects.create(
             project=project,
@@ -2056,7 +2121,7 @@ class ImageService:
         return image
     
     # ----------------
-    # SUBIR IMÁGENES DE ENTRADA
+    # SUBIR IMÁGENES DE ENTRADA (se mantienen los originales)
     # ----------------
     
     def upload_input_image(
@@ -2064,16 +2129,7 @@ class ImageService:
         image_file: UploadedFile,
         project: Project
     ) -> Dict[str, str]:
-        """
-        Sube imagen de entrada para image-to-image
-        
-        Args:
-            image_file: Archivo de imagen
-            project: Proyecto relacionado
-        
-        Returns:
-            Dict con 'gcs_path' y 'mime_type'
-        """
+        """Sube imagen de entrada para image-to-image"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             safe_filename = image_file.name.replace(' ', '_')
@@ -2095,16 +2151,7 @@ class ImageService:
         image_files: List[UploadedFile],
         project: Project
     ) -> List[Dict]:
-        """
-        Sube múltiples imágenes de entrada para composición
-        
-        Args:
-            image_files: Lista de archivos de imagen
-            project: Proyecto relacionado
-        
-        Returns:
-            Lista de dicts con datos de las imágenes subidas
-        """
+        """Sube múltiples imágenes de entrada para composición"""
         input_images = []
         
         for i, image_file in enumerate(image_files):
@@ -2130,24 +2177,12 @@ class ImageService:
         return input_images
     
     # ----------------
-    # GENERAR IMAGEN
+    # GENERAR IMAGEN (Router)
     # ----------------
     
     def generate_image(self, image: Image, skip_status_check: bool = False) -> str:
         """
         Genera una imagen usando el servicio apropiado según model_id
-        
-        Args:
-            image: Objeto Image a generar
-            skip_status_check: Si True, omite la validación de estado (útil cuando ya se validó antes)
-        
-        Returns:
-            Path de GCS de la imagen generada
-        
-        Raises:
-            ImageGenerationException: Si falla la generación
-            InsufficientCreditsException: Si no hay suficientes créditos
-            RateLimitExceededException: Si se excede el límite mensual
         """
         # Validar estado (solo si no se omite)
         if not skip_status_check and image.status in ['processing', 'completed']:
@@ -2163,19 +2198,17 @@ class ImageService:
         
         # Validar créditos ANTES de generar
         if image.created_by:
-            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            from core.services.credits import CreditService
             
             # Calcular costo según el servicio
             if service == 'higgsfield':
-                # Para Higgsfield, usar el costo específico del modelo
                 estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
             else:
                 estimated_cost = CreditService.estimate_image_cost()
             
             if not CreditService.has_enough_credits(image.created_by, estimated_cost):
                 raise InsufficientCreditsException(
-                    f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
-                    f"Créditos disponibles: {CreditService.get_or_create_user_credits(image.created_by).credits}"
+                    f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos."
                 )
             
             try:
@@ -2187,8 +2220,7 @@ class ImageService:
         image.mark_as_processing()
         
         try:
-            # Aplicar template de prompt si existe
-            from core.utils.prompt_templates import apply_prompt_template
+            # Aplicar template de prompt
             final_prompt = apply_prompt_template(
                 image.prompt,
                 image.config.get('prompt_template_id')
@@ -2196,61 +2228,19 @@ class ImageService:
             
             # Obtener configuración
             aspect_ratio = image.config.get('aspect_ratio', '1:1')
-            response_modalities = image.config.get('response_modalities')
             
-            # Usar el servicio apropiado según model_id
+            # --- Enrutamiento ---
             if service == 'higgsfield':
                 result = self._generate_higgsfield_image(image, model_id, aspect_ratio, final_prompt)
+                
+            elif service == 'seedream':
+                # Delegamos a la función específica de SeaDream
+                result = self._generate_seedream_image(image, model_id, aspect_ratio, final_prompt)
+            
             else:
                 # Por defecto, usar Gemini
-                client = self._get_gemini_client()
+                result = self._generate_gemini_image(image, model_id, aspect_ratio, final_prompt)
                 
-                # Generar según el tipo
-                if image.type == 'text_to_image':
-                    result = client.generate_image_from_text(
-                        prompt=final_prompt,
-                        aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
-                    )
-                
-                elif image.type == 'image_to_image':
-                    # Obtener imagen de entrada desde GCS
-                    input_gcs_path = image.config.get('input_image_gcs_path')
-                    if not input_gcs_path:
-                        raise ValidationException('Imagen de entrada es requerida para image-to-image')
-                    
-                    # Descargar imagen desde GCS
-                    input_image_data = self._download_image_from_gcs(input_gcs_path)
-                    
-                    result = client.generate_image_from_image(
-                        prompt=final_prompt,
-                        input_image_data=input_image_data,
-                        aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
-                    )
-                
-                elif image.type == 'multi_image':
-                    # Obtener imágenes de entrada desde GCS
-                    input_images_config = image.config.get('input_images', [])
-                    if not input_images_config:
-                        raise ValidationException('Imágenes de entrada son requeridas para multi_image')
-                    
-                    # Descargar imágenes desde GCS
-                    input_images_data = []
-                    for img_config in input_images_config:
-                        img_data = self._download_image_from_gcs(img_config['gcs_path'])
-                        input_images_data.append(img_data)
-                    
-                    result = client.generate_image_from_multiple_images(
-                        prompt=final_prompt,
-                        input_images_data=input_images_data,
-                        aspect_ratio=aspect_ratio,
-                        response_modalities=response_modalities
-                    )
-                
-                else:
-                    raise ValidationException(f'Tipo de imagen no soportado: {image.type}')
-            
             # Subir imagen generada a GCS
             gcs_path = self._save_generated_image(
                 image_data=result['image_data'],
@@ -2279,21 +2269,14 @@ class ImageService:
             logger.error(f"Error al generar imagen {image.id}: {e}")
             image.mark_as_error(str(e))
             raise ImageGenerationException(str(e))
-    
+
+    # ----------------
+    # GENERACIÓN ASÍNCRONA (AÑADIDO)
+    # ----------------
+
     def generate_image_async(self, image: Image, metadata: Dict = None) -> 'GenerationTask':
         """
         Encola la generación de una imagen usando el sistema de colas
-        
-        Args:
-            image: Objeto Image a generar
-            metadata: Metadata adicional (prompt, parámetros, etc.)
-        
-        Returns:
-            GenerationTask creada
-        
-        Raises:
-            ValidationException: Si hay error de validación
-            ValueError: Si se alcanza el límite de tareas simultáneas
         """
         from core.services.queue import QueueService
         
@@ -2303,25 +2286,19 @@ class ImageService:
         
         # Validar créditos ANTES de encolar
         if image.created_by:
-            from core.services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
+            from core.services.credits import CreditService
             
             model_id = image.config.get('model_id')
             from core.ai_services.model_config import get_model_capabilities
             capabilities = get_model_capabilities(model_id) if model_id else None
             service = capabilities.get('service') if capabilities else None
             
-            if service == 'higgsfield':
-                estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
-            else:
-                estimated_cost = CreditService.estimate_image_cost()
+            estimated_cost = CreditService.estimate_image_cost(model_id=model_id) if service == 'higgsfield' else CreditService.estimate_image_cost()
             
             # Solo verificar créditos si el costo es > 0 (algunos modelos son gratis)
             if estimated_cost > 0:
                 if not CreditService.has_enough_credits(image.created_by, estimated_cost):
-                    raise InsufficientCreditsException(
-                        f"No tienes suficientes créditos. Necesitas aproximadamente {estimated_cost} créditos. "
-                        f"Créditos disponibles: {CreditService.get_or_create_user_credits(image.created_by).credits}"
-                    )
+                    raise InsufficientCreditsException(f"Créditos insuficientes. Necesitas aproximadamente {estimated_cost} créditos.")
                 
                 try:
                     CreditService.check_rate_limit(image.created_by, estimated_cost)
@@ -2335,7 +2312,7 @@ class ImageService:
             'image_type': image.type,
             'model_id': image.config.get('model_id'),
             'title': image.title,
-            'item_id': image.id,  # Guardar id para búsqueda en tareas
+            'item_id': image.id,
         })
         
         # Encolar tarea
@@ -2346,71 +2323,144 @@ class ImageService:
             metadata=task_metadata
         )
         
-        # Marcar imagen como pending (no processing todavía, se marcará cuando Celery la procese)
+        # Marcar imagen como pending
         image.status = 'pending'
         image.save(update_fields=['status', 'updated_at'])
         
         logger.info(f"Imagen {image.id} encolada. Task UUID: {task.uuid}")
         return task
+
+    # ----------------
+    # DELEGATED GENERATION METHODS
+    # ----------------
     
-    def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str = None) -> dict:
-        """
-        Genera una imagen usando Higgsfield API
+    def _generate_gemini_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
+        """Genera imagen usando el cliente Gemini."""
+        client = self._get_gemini_client(model_name=model_id)
+        response_modalities = image.config.get('response_modalities')
+
+        if image.type == 'text_to_image':
+            return client.generate_image_from_text(
+                prompt=final_prompt,
+                aspect_ratio=aspect_ratio,
+                response_modalities=response_modalities,
+            )
+
+        elif image.type == 'image_to_image':
+            input_gcs_path = image.config.get('input_image_gcs_path')
+            if not input_gcs_path: raise ValidationException('Imagen de entrada es requerida.')
+            
+            input_image_data = self._download_image_from_gcs(input_gcs_path)
+            
+            return client.generate_image_from_image(
+                prompt=final_prompt,
+                input_image_data=input_image_data,
+                aspect_ratio=aspect_ratio,
+                response_modalities=response_modalities,
+            )
+
+        elif image.type == 'multi_image':
+            input_images_config = image.config.get('input_images', [])
+            if not input_images_config: raise ValidationException('Imágenes de entrada son requeridas.')
+
+            input_images_data = [self._download_image_from_gcs(img_config['gcs_path']) for img_config in input_images_config]
+            
+            return client.generate_image_from_multiple_images(
+                prompt=final_prompt,
+                input_images_data=input_images_data,
+                aspect_ratio=aspect_ratio,
+                response_modalities=response_modalities,
+            )
         
-        Args:
-            image: Objeto Image a generar
-            model_id: ID del modelo de Higgsfield
-            aspect_ratio: Relación de aspecto
-            final_prompt: Prompt final con template aplicado (si None, usa image.prompt)
+        raise ValidationException(f'Tipo de imagen {image.type} no soportado por Gemini.')
+
+
+    def _generate_seedream_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
+        """Genera imagen usando el cliente SeaDream (Síncrono)."""
+        client = self._get_seedream_client(model_name=model_id)
         
-        Returns:
-            dict con image_data, width, height, aspect_ratio
+        try:
+            if image.type == 'text_to_image':
+                return client.generate_image_from_text(
+                    prompt=final_prompt,
+                    aspect_ratio=aspect_ratio,
+                )
+            
+            elif image.type == 'image_to_image':
+                input_gcs_path = image.config.get('input_image_gcs_path')
+                if not input_gcs_path: raise ValidationException('Imagen de entrada es requerida.')
+                
+                # Descargar imagen desde GCS a bytes
+                input_image_data = self._download_image_from_gcs(input_gcs_path)
+                
+                return client.generate_image_from_image(
+                    prompt=final_prompt,
+                    input_image_data=input_image_data,
+                    aspect_ratio=aspect_ratio,
+                )
+            
+            elif image.type == 'multi_image':
+                input_images_config = image.config.get('input_images', [])
+                if not input_images_config: raise ValidationException('Imágenes de entrada son requeridas.')
+
+                # Descargar imágenes desde GCS a lista de bytes
+                input_images_data = [self._download_image_from_gcs(img_config['gcs_path']) for img_config in input_images_config]
+                
+                return client.generate_image_from_multiple_images(
+                    prompt=final_prompt,
+                    input_images_data=input_images_data,
+                    aspect_ratio=aspect_ratio,
+                )
+                
+            raise ValidationException(f'Tipo de imagen {image.type} no soportado por SeaDream.')
+
+        except Exception as e:
+            logger.error(f"[Seedream] Error al generar imagen: {e}")
+            raise ImageGenerationException(f"Error de la API de SeaDream: {str(e)}")
+
+
+    def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
         """
-        from .storage.gcs import gcs_storage
+        Genera una imagen usando Higgsfield API (Maneja el polling síncrono).
+        """
         import requests
         import time
         
         client = self._get_higgsfield_client()
         
-        # Para modelos text-to-image, usar generate_video sin image_url
-        # (Higgsfield usa el mismo endpoint para imágenes y videos)
         logger.info(f"Generando imagen con Higgsfield: {model_id}")
         
-        # Usar prompt final si se proporciona, sino usar el original
-        prompt = final_prompt if final_prompt else image.prompt
-        
-        response = client.generate_video(
-            model_id=model_id,
-            prompt=prompt,
-            image_url=None,  # Sin imagen de entrada para text-to-image
-            aspect_ratio=aspect_ratio,
-            resolution=None,
-            duration=None
-        )
-        
+        try:
+            response = client.generate_video(
+                model_id=model_id,
+                prompt=final_prompt,
+                image_url=None,  # T-t-I
+                aspect_ratio=aspect_ratio,
+                resolution=None,
+                duration=None
+            )
+        except Exception as e:
+            raise ImageGenerationException(f"Error al iniciar generación con Higgsfield: {str(e)}")
+
         request_id = response.get('request_id')
         if not request_id:
             raise ImageGenerationException("No se recibió request_id de Higgsfield")
         
-        # Guardar request_id en external_id para poder consultar el estado
         image.external_id = request_id
         image.save(update_fields=['external_id'])
-        
-        # Consultar estado hasta que esté completo
-        max_attempts = 60  # 5 minutos máximo (5 segundos por intento)
+
+        # Polling síncrono
+        max_attempts = 60
         attempt = 0
         
         while attempt < max_attempts:
-            time.sleep(5)  # Esperar 5 segundos entre consultas
+            time.sleep(5)
             attempt += 1
             
             status_data = client.get_request_status(request_id)
             status = status_data.get('status')
             
-            logger.info(f"Estado de imagen Higgsfield (intento {attempt}/{max_attempts}): {status}")
-            
             if status == 'completed':
-                # Obtener URL de la imagen generada
                 image_url = None
                 if 'images' in status_data.get('raw_response', {}) and status_data['raw_response']['images']:
                     image_url = status_data['raw_response']['images'][0].get('url')
@@ -2419,11 +2469,14 @@ class ImageService:
                     raise ImageGenerationException("No se encontró URL de imagen en la respuesta de Higgsfield")
                 
                 # Descargar imagen desde la URL
-                img_response = requests.get(image_url, timeout=30)
-                img_response.raise_for_status()
-                image_data = img_response.content
-                
-                # Determinar dimensiones (asumir según aspect_ratio)
+                try:
+                    img_response = requests.get(image_url, timeout=30)
+                    img_response.raise_for_status()
+                    image_data = img_response.content
+                except Exception as e:
+                    raise StorageException(f"Error al descargar imagen generada desde Higgsfield: {str(e)}")
+
+                # Determinar dimensiones (usando auxiliar)
                 width, height = self._get_dimensions_from_aspect_ratio(aspect_ratio)
                 
                 return {
@@ -2431,13 +2484,18 @@ class ImageService:
                     'width': width,
                     'height': height,
                     'aspect_ratio': aspect_ratio,
+                    'text_response': final_prompt
                 }
             
-            elif status in ['failed', 'error', 'cancelled']:
-                error_msg = status_data.get('raw_response', {}).get('error', 'Error desconocido')
+            elif status in ['failed', 'error', 'cancelled', 'nsfw']:
+                error_msg = status_data.get('error', 'Error desconocido')
                 raise ImageGenerationException(f"Error al generar imagen con Higgsfield: {error_msg}")
         
         raise ImageGenerationException("Timeout esperando respuesta de Higgsfield")
+
+    # ----------------
+    # AUXILIAR METHODS
+    # ----------------
     
     def _get_dimensions_from_aspect_ratio(self, aspect_ratio: str) -> tuple:
         """Obtiene dimensiones aproximadas según aspect_ratio"""
@@ -2453,15 +2511,12 @@ class ImageService:
     def _download_image_from_gcs(self, gcs_path: str) -> bytes:
         """Descarga imagen desde GCS y retorna bytes"""
         try:
-            # Extraer blob name del path
+            # Necesario para el cliente Gemini y SeaDream (Image-to-Image)
             blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
             blob = gcs_storage.bucket.blob(blob_name)
-            
-            # Descargar como bytes
             image_data = blob.download_as_bytes()
             logger.info(f"Imagen descargada desde GCS: {len(image_data)} bytes")
             return image_data
-            
         except Exception as e:
             logger.error(f"Error al descargar imagen desde GCS: {e}")
             raise StorageException(f"Error al descargar imagen: {str(e)}")
@@ -2469,14 +2524,13 @@ class ImageService:
     def _save_generated_image(
         self,
         image_data: bytes,
-        project: Project = None,
-        image_uuid: str = None
+        project: Optional[Project] = None,
+        image_uuid: Optional[str] = None
     ) -> str:
         """Guarda imagen generada en GCS"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
-            # Construir path usando UUID (no project.id para consistencia)
             if project:
                 gcs_destination = f"projects/{project.id}/images/{image_uuid}/{timestamp}_generated.png"
             else:

@@ -1,13 +1,47 @@
 {% load static %}
-
+<script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
 <script>
+// Función global para obtener caché instantáneamente (antes de Alpine)
+window._getLibraryCacheSync = function(activeTab, projectId) {
+    try {
+        const cacheKey = `library_items_${activeTab}_${projectId || 'all'}`;
+        const timestampKey = `library_items_timestamp_${activeTab}_${projectId || 'all'}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        const timestamp = sessionStorage.getItem(timestampKey);
+        
+        if (cached && timestamp) {
+            const age = Date.now() - parseInt(timestamp, 10);
+            // Usar caché si tiene menos de 5 minutos (300000ms)
+            if (age < 300000) {
+                return JSON.parse(cached);
+            }
+        }
+    } catch (e) {
+        console.debug('Error leyendo caché:', e);
+    }
+    return null;
+};
+
 document.addEventListener('alpine:init', () => {
-    Alpine.data('libraryPanel', () => ({
-        // Estado de la biblioteca
-        items: [],
-        loading: true,
-        activeTab: '{{ active_tab|default:"video" }}',
-        projectId: {% if project %}'{{ project.uuid }}'{% else %}null{% endif %},
+    Alpine.data('libraryPanel', () => {
+        // Leer caché ANTES de crear el estado
+        const activeTab = '{{ active_tab|default:"video" }}';
+        const projectId = {% if project %}'{{ project.uuid }}'{% else %}null{% endif %};
+        const cachedItems = window._getLibraryCacheSync(activeTab, projectId);
+        
+        return {
+        // Estado de la biblioteca - CARGAR DESDE CACHÉ INSTANTÁNEAMENTE
+        items: cachedItems || [],
+        loading: cachedItems ? false : true, // No loading si hay caché
+        activeTab: activeTab,
+        projectId: projectId,
+        
+        // === PAGINACIÓN ===
+        pageSize: 20,
+        offset: 0,
+        totalItems: 0,
+        hasMore: false,
+        loadingMore: false,
         
         // Item inicial (si venimos de una URL directa como /images/20/)
         initialItemType: '{{ initial_item_type|default:"" }}',
@@ -30,7 +64,13 @@ document.addEventListener('alpine:init', () => {
         selectedItems: [], 
 
         init() {
-            this.loadItems();
+            // Si ya tenemos datos del caché, solo actualizar en segundo plano
+            if (this.items.length > 0) {
+                this._refreshItemsInBackground();
+            } else {
+                // Si no hay caché, cargar normalmente
+                this.loadItems(true);
+            }
             
             // Si hay un item inicial, abrirlo directamente
             if (this.initialItemId && this.initialItemType) {
@@ -45,16 +85,29 @@ document.addEventListener('alpine:init', () => {
                     this.activeTab = e.detail.tab;
                     this.selectedItem = null;
                     this.resetBulkActionMode(); // Resetear al cambiar de tab
-                    this.loadItems();
+                    
+                    // Intentar cargar desde caché instantáneamente
+                    const cachedItems = window._getLibraryCacheSync(this.activeTab, this.projectId);
+                    if (cachedItems && cachedItems.length > 0) {
+                        this.items = cachedItems;
+                        this.loading = false;
+                        // Actualizar en segundo plano
+                        this._refreshItemsInBackground();
+                    } else {
+                        // Si no hay caché, cargar normalmente
+                        this.loadItems(true);
+                    }
                 },
                 itemCreated: () => {
-                    this.loadItems();
+                    // Forzar refresh cuando se crea un nuevo item
+                    this.loadItems(true);
                 },
                 videoStatusChanged: (e) => {
                     if (this.activeTab === 'video') {
                         // Pequeño delay para asegurar que el estado se guardó en BD
+                        // Forzar refresh cuando cambia el estado de un video
                         setTimeout(() => {
-                            this.loadItems();
+                            this.loadItems(true);
                         }, 500);
                     }
                 },
@@ -119,19 +172,77 @@ document.addEventListener('alpine:init', () => {
             this._cleanupAllPolling();
         },
         
-        async loadItems() {
+        // Sistema de caché en memoria del navegador
+        _getCacheKey() {
+            return `library_items_${this.activeTab}_${this.projectId || 'all'}`;
+        },
+        
+        _getCacheTimestampKey() {
+            return `library_items_timestamp_${this.activeTab}_${this.projectId || 'all'}`;
+        },
+        
+        _getCachedItems() {
+            // Usar la función global que tiene 5 minutos de caché
+            return window._getLibraryCacheSync(this.activeTab, this.projectId);
+        },
+        
+        _setCachedItems(items) {
+            try {
+                const cacheKey = this._getCacheKey();
+                const timestampKey = this._getCacheTimestampKey();
+                sessionStorage.setItem(cacheKey, JSON.stringify(items));
+                sessionStorage.setItem(timestampKey, Date.now().toString());
+            } catch (e) {
+                console.debug('Error guardando en caché:', e);
+            }
+        },
+        
+        async loadItems(forceRefresh = false) {
+            // Reset paginación
+            this.offset = 0;
+            this.hasMore = false;
+            
+            // Si no es refresh forzado, intentar cargar desde caché primero
+            if (!forceRefresh) {
+                const cachedItems = this._getCachedItems();
+                if (cachedItems && cachedItems.length > 0) {
+                    // Mostrar datos del caché inmediatamente
+                    this.items = cachedItems;
+                    this.loading = false;
+                    this.hasMore = cachedItems.length >= this.pageSize;
+                    this.offset = cachedItems.length;
+                    
+                    // Actualizar en segundo plano sin bloquear la UI
+                    this._refreshItemsInBackground();
+                    return;
+                }
+            }
+            
+            // Si no hay caché o es refresh forzado, cargar con URLs
             this.loading = true;
             try {
-                const params = new URLSearchParams({ type: this.activeTab });
+                const params = new URLSearchParams({ 
+                    type: this.activeTab,
+                    limit: this.pageSize,
+                    offset: 0,
+                    include_urls: 'true'  // Incluir URLs para mostrar previews
+                });
                 if (this.projectId) {
                     params.append('project_uuid', this.projectId);
                 }
                 const response = await fetch('/api/library/items/?' + params);
                 const data = await response.json();
                 if (data.items && Array.isArray(data.items)) {
-                    this.items = data.items.filter(item => item && item.id);
+                    const filteredItems = data.items.filter(item => item && item.id);
+                    this.items = filteredItems;
+                    this.totalItems = data.total || filteredItems.length;
+                    this.hasMore = data.has_more || false;
+                    this.offset = filteredItems.length;
+                    // Guardar en caché
+                    this._setCachedItems(filteredItems);
                 } else {
                     this.items = [];
+                    this._setCachedItems([]);
                 }
                 // Emitir evento cuando cambien los items
                 window.dispatchEvent(new CustomEvent('library-items-updated', {
@@ -139,20 +250,162 @@ document.addEventListener('alpine:init', () => {
                 }));
             } catch (error) {
                 console.error('Error loading items:', error);
-                this.items = [];
+                // Si hay error pero tenemos caché, usar el caché
+                const cachedItems = this._getCachedItems();
+                if (cachedItems) {
+                    this.items = cachedItems;
+                } else {
+                    this.items = [];
+                }
             } finally {
                 this.loading = false;
+            }
+        },
+        
+        // Cargar URLs en segundo plano para items que no las tienen
+        async _loadUrlsInBackground() {
+            // Identificar items completados sin URL
+            const itemsNeedingUrls = this.items.filter(item => 
+                item.has_media && !item.signed_url
+            );
+            if (itemsNeedingUrls.length === 0) return;
+            
+            try {
+                // Cargar con URLs incluidas
+                const params = new URLSearchParams({ 
+                    type: this.activeTab,
+                    limit: this.pageSize,
+                    offset: 0,
+                    include_urls: 'true'
+                });
+                if (this.projectId) {
+                    params.append('project_uuid', this.projectId);
+                }
+                const response = await fetch('/api/library/items/?' + params);
+                const data = await response.json();
+                if (data.items && Array.isArray(data.items)) {
+                    // Actualizar URLs en los items existentes
+                    const urlMap = new Map(data.items.map(i => [i.id, i.signed_url]));
+                    this.items = this.items.map(item => {
+                        if (!item.signed_url && urlMap.has(item.id)) {
+                            return { ...item, signed_url: urlMap.get(item.id) };
+                        }
+                        return item;
+                    });
+                    // Actualizar caché
+                    this._setCachedItems(this.items);
+                }
+            } catch (e) {
+                console.debug('Error loading URLs in background:', e);
+            }
+        },
+        
+        // Cargar más items (paginación)
+        async loadMoreItems() {
+            if (this.loadingMore || !this.hasMore) return;
+            
+            this.loadingMore = true;
+            try {
+                const params = new URLSearchParams({ 
+                    type: this.activeTab,
+                    limit: this.pageSize,
+                    offset: this.offset,
+                    include_urls: 'true'  // Incluir URLs para "load more"
+                });
+                if (this.projectId) {
+                    params.append('project_uuid', this.projectId);
+                }
+                const response = await fetch('/api/library/items/?' + params);
+                const data = await response.json();
+                if (data.items && Array.isArray(data.items)) {
+                    const newItems = data.items.filter(item => item && item.id);
+                    // Añadir nuevos items al final
+                    this.items = [...this.items, ...newItems];
+                    this.totalItems = data.total || this.items.length;
+                    this.hasMore = data.has_more || false;
+                    this.offset += newItems.length;
+                    // Actualizar caché con todos los items
+                    this._setCachedItems(this.items);
+                }
+            } catch (error) {
+                console.error('Error loading more items:', error);
+            } finally {
+                this.loadingMore = false;
+            }
+        },
+        
+        async _refreshItemsInBackground() {
+            // Actualizar en segundo plano sin mostrar loading
+            try {
+                const params = new URLSearchParams({ 
+                    type: this.activeTab,
+                    limit: this.pageSize,
+                    offset: 0,
+                    include_urls: 'true'  // Incluir URLs en refresh background
+                });
+                if (this.projectId) {
+                    params.append('project_uuid', this.projectId);
+                }
+                const response = await fetch('/api/library/items/?' + params);
+                const data = await response.json();
+                if (data.items && Array.isArray(data.items)) {
+                    const filteredItems = data.items.filter(item => item && item.id);
+                    // Actualizar IDs o URLs que faltan
+                    const currentIds = new Set(this.items.slice(0, this.pageSize).map(i => i.id));
+                    const newIds = new Set(filteredItems.map(i => i.id));
+                    const idsChanged = currentIds.size !== newIds.size || 
+                                      [...currentIds].some(id => !newIds.has(id));
+                    
+                    if (idsChanged) {
+                        // Si cambiaron los IDs, reemplazar los primeros items
+                        this.items = [...filteredItems, ...this.items.slice(this.pageSize)];
+                    } else {
+                        // Si no cambiaron IDs, solo actualizar URLs
+                        const urlMap = new Map(filteredItems.map(i => [i.id, i.signed_url]));
+                        this.items = this.items.map(item => {
+                            if (!item.signed_url && urlMap.has(item.id)) {
+                                return { ...item, signed_url: urlMap.get(item.id) };
+                            }
+                            return item;
+                        });
+                    }
+                    this.totalItems = data.total || this.items.length;
+                    this.hasMore = data.has_more || false;
+                    this._setCachedItems(this.items);
+                    
+                    // Emitir evento para notificar cambios
+                    window.dispatchEvent(new CustomEvent('library-items-updated', {
+                        detail: { items: this.items, activeTab: this.activeTab }
+                    }));
+                }
+            } catch (error) {
+                console.debug('Error refreshing items in background:', error);
+                // Ignorar errores en background refresh
             }
         },
         
         async openItem(item) {
             if (!item || !item.id) return;
             
-            this.loadingDetail = true;
-            this.selectedItem = null;
+            // OPTIMIZACIÓN: Mostrar datos básicos inmediatamente desde la lista
+            const localItem = this.items.find(i => i.id === item.id);
+            if (localItem) {
+                // Mostrar datos locales inmediatamente (sin esperar API)
+                this.selectedItem = { ...localItem, loading_full: true };
+                this.loadingDetail = false;
+                
+                // Actualizar URL inmediatamente
+                const detailUrl = this.projectId 
+                    ? '/projects/' + this.projectId + '/' + item.type + 's/' + item.id + '/'
+                    : '/' + item.type + 's/' + item.id + '/';
+                history.pushState({ itemId: item.id }, '', detailUrl);
+            } else {
+                this.loadingDetail = true;
+                this.selectedItem = null;
+            }
             
             try {
-                // Pasar project_id a la API para filtrar navegación correctamente
+                // Cargar datos completos de la API en segundo plano
                 let apiUrl = '/api/items/' + item.type + '/' + item.id + '/';
                 if (this.projectId) {
                     apiUrl += '?project_uuid=' + this.projectId;
@@ -163,15 +416,19 @@ document.addEventListener('alpine:init', () => {
                 const data = await response.json();
                 
                 if (data.item) {
+                    // Actualizar con datos completos (incluyendo signed_url actualizada)
                     this.selectedItem = data.item;
                     this.navigation = data.navigation || null;
-                    // Actualizar URL manteniendo contexto del proyecto
-                    const detailUrl = this.projectId 
-                        ? '/projects/' + this.projectId + '/' + item.type + 's/' + item.id + '/'
-                        : '/' + item.type + 's/' + item.id + '/';
-                    history.pushState({ itemId: item.id }, '', detailUrl);
                     // Actualizar breadcrumbs
                     this.updateBreadcrumbs(data.item);
+                    
+                    // También actualizar el item en la lista local si tiene nueva URL
+                    if (data.item.signed_url) {
+                        const idx = this.items.findIndex(i => i.id === item.id);
+                        if (idx >= 0) {
+                            this.items[idx] = { ...this.items[idx], signed_url: data.item.signed_url };
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error loading item:', error);
@@ -253,6 +510,13 @@ document.addEventListener('alpine:init', () => {
             div.textContent = text;
             return div.innerHTML;
         },
+        
+        restoreBreadcrumbs() {
+            const breadcrumbsNav = document.querySelector('#breadcrumbs-nav');
+            if (breadcrumbsNav) {
+                breadcrumbsNav.classList.add('hidden');
+            }
+        },
 
         closeDetail() {
             // Limpiar polling antes de cerrar
@@ -271,33 +535,6 @@ document.addEventListener('alpine:init', () => {
             } else {
                 history.back();
             }
-        },
-
-        async navigateTo(direction) {
-            // 1. Validación básica
-            if (!this.navigation || !this.navigation[direction]) return;
-            
-            // 2. Obtener el objeto o valor de navegación
-            const navData = this.navigation[direction];
-            
-            // 3. Buscar 'uuid''. 
-            const nextId = (typeof navData === 'object') ? (navData.uuid ) : navData;
-        
-            // 4. Validación de seguridad del ID
-            if (!nextId) {
-                console.error("Error de navegación: ID/UUID no encontrado en:", navData);
-                return;
-            }
-            // 5. Determinar el tipo (usando fallback a activeTab)
-            let nextType = this.activeTab; // Valor por defecto
-            
-            if (typeof navData === 'object' && navData.type) {
-                nextType = navData.type;
-            } else if (this.selectedItem && this.selectedItem.type) {
-                nextType = this.selectedItem.type;
-            }
-            
-            breadcrumbsContainer.innerHTML = html;
         },
         
         async navigateTo(direction) {
@@ -344,7 +581,8 @@ document.addEventListener('alpine:init', () => {
                 
                 this.deleteModal = { open: false, item: null };
                 this.resetBulkActionMode();
-                this.loadItems();
+                // Forzar refresh después de eliminar
+                this.loadItems(true);
                 
             } catch (error) {
                 console.error('Error deleting item(s):', error);
@@ -447,15 +685,54 @@ document.addEventListener('alpine:init', () => {
                 
                 this.moveModal = { open: false, item: null };
                 this.resetBulkActionMode();
-                this.loadItems();
+                // Forzar refresh después de mover
+                this.loadItems(true);
 
             } catch (error) {
                 console.error('Error moving item:', error);
                 alert('Error al mover los items');
             }
         }
+    }}); // Cierre del return y Alpine.data para libraryPanel
+    
+    // Componente para zoom de imágenes
+    Alpine.data('imageZoom', () => ({
+        pz: null,
+
+        initZoom() {
+            if (this.pz) { this.pz.destroy(); }
+
+            const imageEl = this.$refs.zoomImage;
+            const containerEl = this.$refs.zoomContainer;
+
+            if (!imageEl || !containerEl) return;
+
+            this.pz = Panzoom(imageEl, {
+                maxScale: 6,
+                minScale: 0.75,
+                contain: 'outside',
+                startScale: 1,
+                cursor: 'default'
+            });
+
+            containerEl.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
+        },
+
+        handleWheel(e) {
+            if (!this.pz) return;
+            this.pz.zoomWithWheel(e);
+        },
+
+        zoomIn() { this.pz && this.pz.zoomIn(); },
+        zoomOut() { this.pz && this.pz.zoomOut(); },
+        reset() { this.pz && this.pz.reset(); },
+
+        destroy() {
+            if (this.pz) this.pz.destroy();
+        }
     }));
 });
+
 </script>
 
 <div x-data="libraryPanel()" class="h-full flex flex-col bg-white relative">
@@ -692,6 +969,29 @@ document.addEventListener('alpine:init', () => {
                     </template>
                 </div>
                 
+                <!-- Botón Cargar Más -->
+                <div x-show="!loading && items.length > 0 && hasMore" class="mt-6 mb-4 text-center">
+                    <button @click="loadMoreItems()"
+                            :disabled="loadingMore"
+                            class="inline-flex items-center gap-2 px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <template x-if="loadingMore">
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </template>
+                        <template x-if="!loadingMore">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </template>
+                        <span x-text="loadingMore ? 'Cargando...' : 'Cargar más'"></span>
+                        <span x-show="!loadingMore && totalItems > 0" class="text-gray-500">
+                            (<span x-text="items.length"></span> de <span x-text="totalItems"></span>)
+                        </span>
+                    </button>
+                </div>
+                
                 <!-- Empty State -->
                 <div x-show="!loading && items.length === 0" class="text-center py-16">
                     <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -716,7 +1016,7 @@ document.addEventListener('alpine:init', () => {
     <template x-if="selectedItem && !loadingDetail">
         <div class="h-full flex">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative">
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative overflow-hidden">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
                         class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
@@ -749,9 +1049,23 @@ document.addEventListener('alpine:init', () => {
                        class="max-w-full max-h-full rounded-lg shadow-lg"></video>
                 
                 <!-- Image -->
-                <img x-show="selectedItem.type === 'image' && selectedItem.signed_url"
-                     :src="selectedItem.signed_url" 
-                     class="max-w-full max-h-full rounded-lg shadow-lg object-contain">
+                <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
+                    <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
+                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
+                         x-data="imageZoom" 
+                         x-key="selectedItem.id"> 
+
+                        <div x-ref="zoomContainer" 
+                             class="w-full h-full max-w-[800px] max-h-full relative flex items-center justify-center rounded-lg">
+
+                            <img x-ref="zoomImage"
+                                 :src="selectedItem.signed_url" 
+                                 @load="initZoom()" 
+                                 class="w-auto h-auto cursor-default"
+                                 alt="Visualización detallada">
+                        </div>
+                    </div>
+                </div>
                 
                 <!-- Audio -->
                 <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">
