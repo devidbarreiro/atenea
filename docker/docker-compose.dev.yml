@@ -5,6 +5,8 @@
 # Este archivo se copia a ~/dev/html/docker-compose.yml durante el deploy
 # Ejecutar desde: ~/dev/html/ con: docker compose [comando]
 
+name: html-dev
+
 services:
   db:
     image: postgres:15-alpine

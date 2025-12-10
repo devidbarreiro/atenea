@@ -3,6 +3,8 @@
 # URL: demo.atenea.nxhumans.com
 # Código en: ~/demo/html/
 
+name: html-demo
+
 services:
   db:
     image: postgres:15-alpine

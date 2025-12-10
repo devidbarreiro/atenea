@@ -252,22 +252,23 @@ jobs:
           echo "✅ DATABASE_URL configurado: postgresql://${POSTGRES_USER}:***@db:5432/${POSTGRES_DB}"
         fi
         
-        # Asegurar que USE_SQLITE=False en entornos de producción/demo (no en dev local)
-        if [ "$ENV" == "prod" ] || [ "$ENV" == "demo" ]; then
-          echo "🔍 Verificando USE_SQLITE para entorno $ENV..."
-          if grep -q "^USE_SQLITE=" .env 2>/dev/null; then
-            USE_SQLITE_VALUE=$(grep "^USE_SQLITE=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
-            if [ "$USE_SQLITE_VALUE" == "true" ]; then
-              echo "⚠️  USE_SQLITE=True detectado en entorno $ENV, cambiando a False..."
-              sed -i "s|^USE_SQLITE=.*|USE_SQLITE=False|" .env
-              echo "✅ USE_SQLITE actualizado a False"
-            fi
+        # Asegurar que USE_SQLITE=False en todos los entornos (todos usan PostgreSQL)
+        echo "🔍 Verificando USE_SQLITE para entorno $ENV..."
+        if grep -q "^USE_SQLITE=" .env 2>/dev/null; then
+          USE_SQLITE_VALUE=$(grep "^USE_SQLITE=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
+          if [ "$USE_SQLITE_VALUE" == "true" ]; then
+            echo "⚠️  USE_SQLITE=True detectado en entorno $ENV, cambiando a False..."
+            sed -i "s|^USE_SQLITE=.*|USE_SQLITE=False|" .env
+            echo "✅ USE_SQLITE actualizado a False"
           else
-            echo "🔧 Agregando USE_SQLITE=False al .env"
-            echo "" >> .env
-            echo "# Use PostgreSQL in production/demo environments" >> .env
-            echo "USE_SQLITE=False" >> .env
+            echo "✅ USE_SQLITE ya está en False"
           fi
+        else
+          echo "🔧 Agregando USE_SQLITE=False al .env"
+          echo "" >> .env
+          echo "# Use PostgreSQL in all environments" >> .env
+          echo "USE_SQLITE=False" >> .env
+          echo "✅ USE_SQLITE=False agregado al .env"
         fi
         
         # Mostrar información del .env (sin mostrar valores sensibles)
@@ -276,80 +277,92 @@ jobs:
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
-        # Primero, detener todos los contenedores que puedan estar corriendo
-        echo "⏸️  Deteniendo contenedores..."
-        docker compose stop || true
+        # Función para eliminar contenedores de forma agresiva
+        cleanup_containers() {
+          local pattern=$1
+          echo "🔍 Buscando contenedores con patrón: $pattern"
+          local containers=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^${pattern}" || echo "")
+          if [ ! -z "$containers" ]; then
+            echo "$containers" | while IFS= read -r container; do
+              if [ ! -z "$container" ]; then
+                echo "🛑 Deteniendo contenedor: $container"
+                docker stop "$container" 2>/dev/null || true
+                echo "🗑️  Eliminando contenedor: $container"
+                docker rm -f "$container" 2>/dev/null || true
+              fi
+            done
+          fi
+        }
         
-        # Detener contenedores específicos por nombre (por si acaso)
-        docker stop html-web-1 html-db-1 html-redis-1 html-celery_worker-1 html-celery_beat-1 2>/dev/null || true
-        docker stop html-dev-web-1 html-dev-db-1 html-dev-redis-1 html-dev-celery_worker-1 html-dev-celery_beat-1 2>/dev/null || true
-        docker stop html-demo-web-1 html-demo-db-1 2>/dev/null || true
-        docker stop html-prod-web-1 html-prod-db-1 2>/dev/null || true
-        docker stop ${ENV}-web-1 ${ENV}-db-1 ${ENV}-redis-1 ${ENV}-celery_worker-1 ${ENV}-celery_beat-1 2>/dev/null || true
+        # Establecer nombre de proyecto único para evitar conflictos
+        export COMPOSE_PROJECT_NAME="html-${ENV}"
         
-        # Esperar un momento para que los contenedores se detengan completamente
-        sleep 3
+        # Paso 1: Detener y eliminar usando docker compose (si estamos en el directorio correcto)
+        echo "⏸️  Deteniendo contenedores con docker compose (proyecto: html-${ENV})..."
+        docker compose stop 2>/dev/null || true
+        docker compose down --remove-orphans 2>/dev/null || true
+        docker compose rm -f 2>/dev/null || true
         
-        # Eliminar contenedores con docker compose down
-        echo "🗑️  Eliminando contenedores con docker compose down..."
-        docker compose down --remove-orphans -v || true
+        # Paso 2: Eliminar TODOS los contenedores que empiecen con "html-" (más agresivo)
+        echo "🔍 Eliminando todos los contenedores con prefijo 'html-'..."
+        cleanup_containers "html-"
         
-        # Eliminar contenedores que puedan estar detenidos pero aún existan
-        docker compose rm -f || true
+        # Paso 3: Eliminar contenedores específicos del entorno actual
+        echo "🔍 Eliminando contenedores del entorno ${ENV}..."
+        cleanup_containers "${ENV}-"
         
-        # Lista de contenedores comunes que pueden existir (incluyendo variaciones)
+        # Paso 4: Eliminar contenedores específicos comunes por nombre exacto
+        echo "🔍 Eliminando contenedores específicos conocidos..."
         COMMON_CONTAINERS=(
           "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
           "html-migrate-1" "html-collectstatic-1"
           "html-dev-web-1" "html-dev-db-1" "html-dev-redis-1" "html-dev-celery_worker-1" "html-dev-celery_beat-1"
-          "html-demo-web-1" "html-demo-db-1"
-          "html-prod-web-1" "html-prod-db-1"
-          "${ENV}-web-1" "${ENV}-db-1" "${ENV}-redis-1" "${ENV}-celery_worker-1" "${ENV}-celery_beat-1"
-          "${ENV}-migrate-1" "${ENV}-collectstatic-1"
+          "html-demo-web-1" "html-demo-db-1" "html-demo-redis-1"
+          "html-prod-web-1" "html-prod-db-1" "html-prod-redis-1"
         )
         
-        # Forzar eliminación de contenedores específicos comunes
-        echo "🔍 Eliminando contenedores específicos..."
         for container in "${COMMON_CONTAINERS[@]}"; do
           if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
-            echo "🗑️  Eliminando contenedor: $container"
+            echo "🛑 Forzando eliminación de: $container"
+            docker stop "$container" 2>/dev/null || true
             docker rm -f "$container" 2>/dev/null || true
           fi
         done
         
-        # Buscar TODOS los contenedores que empiecen con "html-" y eliminarlos (incluyendo nombres genéricos)
-        echo "🔍 Buscando contenedores huérfanos adicionales..."
-        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
-        if [ ! -z "$ALL_CONTAINERS" ]; then
-          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
-            if [ ! -z "$container" ] && [[ "$container" == "html-"* ]]; then
-              echo "🗑️  Eliminando contenedor huérfano: $container"
+        # Esperar un momento para que Docker procese las eliminaciones
+        sleep 3
+        
+        # Paso 5: Limpiar redes huérfanas
+        echo "🧹 Limpiando redes huérfanas..."
+        docker network prune -f 2>/dev/null || true
+        
+        # Paso 6: Verificar y eliminar cualquier contenedor restante que pueda causar conflictos
+        echo "🔍 Verificación final: buscando contenedores restantes..."
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$REMAINING" ]; then
+          echo "⚠️  Aún quedan contenedores, eliminando forzadamente:"
+          echo "$REMAINING"
+          echo "$REMAINING" | while IFS= read -r container; do
+            if [ ! -z "$container" ]; then
+              echo "🗑️  Eliminando forzadamente: $container"
+              docker stop "$container" 2>/dev/null || true
               docker rm -f "$container" 2>/dev/null || true
             fi
           done
+          sleep 2
+        else
+          echo "  ✅ Todos los contenedores conflictivos eliminados"
         fi
         
-        # Limpiar redes huérfanas también
-        echo "🧹 Limpiando redes huérfanas..."
-        docker network prune -f || true
-        
-        # Esperar un momento más para asegurar que todo esté limpio
-        sleep 2
-        
-        # Verificar que los contenedores se eliminaron
-        echo "✅ Verificación: contenedores restantes con prefijo 'html-':"
-        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^html-" || echo "")
-        if [ ! -z "$REMAINING" ]; then
-          echo "⚠️  Advertencia: Aún quedan contenedores:"
-          echo "$REMAINING"
-          echo "🔄 Intentando eliminarlos nuevamente..."
-          echo "$REMAINING" | while IFS= read -r container; do
-            docker rm -f "$container" 2>/dev/null || true
-          done
-        else
-          echo "  ✅ Todos los contenedores eliminados correctamente"
+        # Verificación final
+        FINAL_CHECK=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        if [ ! -z "$FINAL_CHECK" ]; then
+          echo "⚠️  Advertencia: Algunos contenedores aún existen pero continuando..."
+          echo "$FINAL_CHECK"
         fi
         echo "🔨 Construyendo y reiniciando contenedores"
+        # Establecer nombre de proyecto único para evitar conflictos
+        export COMPOSE_PROJECT_NAME="html-${ENV}"
         docker compose build --no-cache
         docker compose up -d
         echo "⏳ Esperando a que los servicios estén listos..."
@@ -357,25 +370,100 @@ jobs:
         
         # Verificar que la base de datos esté accesible antes de ejecutar migraciones
         echo "🔍 Verificando conexión a la base de datos..."
-        if docker compose exec -T db pg_isready -U "${POSTGRES_USER}" > /dev/null 2>&1; then
-          echo "✅ Base de datos accesible"
+        MAX_RETRIES=10
+        RETRY_COUNT=0
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          if docker compose exec -T db pg_isready -U "${POSTGRES_USER}" > /dev/null 2>&1; then
+            echo "✅ Base de datos accesible"
+            break
+          else
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "⏳ Esperando a que la base de datos esté lista... (intento $RETRY_COUNT/$MAX_RETRIES)"
+            sleep 3
+          fi
+        done
+        
+        if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+          echo "❌ Error: No se puede conectar a la base de datos después de $MAX_RETRIES intentos"
+          exit 1
+        fi
+        
+        # Verificar que la base de datos existe, si no, crearla
+        echo "🔍 Verificando que la base de datos existe..."
+        DB_EXISTS=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -lqt 2>/dev/null | cut -d \| -f 1 | grep -w "${POSTGRES_DB}" | wc -l || echo "0")
+        if [ "$DB_EXISTS" == "0" ]; then
+          echo "⚠️  La base de datos ${POSTGRES_DB} no existe, creándola..."
+          docker compose exec -T db psql -U "${POSTGRES_USER}" -c "CREATE DATABASE ${POSTGRES_DB};" postgres || {
+            echo "❌ Error al crear la base de datos"
+            exit 1
+          }
+          echo "✅ Base de datos ${POSTGRES_DB} creada"
         else
-          echo "⏳ Esperando a que la base de datos esté lista..."
+          echo "✅ Base de datos ${POSTGRES_DB} existe"
+        fi
+        
+        # Asegurar que COMPOSE_PROJECT_NAME esté configurado para las operaciones siguientes
+        export COMPOSE_PROJECT_NAME="html-${ENV}"
+        
+        echo "🔄 Ejecutando migraciones"
+        echo "📋 Verificando migraciones pendientes..."
+        MIGRATION_OUTPUT=$(docker compose run --rm migrate 2>&1)
+        MIGRATION_EXIT_CODE=$?
+        
+        echo "$MIGRATION_OUTPUT"
+        
+        if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
+          echo "✅ Migraciones ejecutadas correctamente"
+        else
+          echo "❌ Error: Las migraciones fallaron con código $MIGRATION_EXIT_CODE"
+          echo "🔍 Verificando estado de la base de datos..."
+          docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "\dt" || true
+          echo "🔄 Intentando ejecutar migraciones nuevamente..."
           sleep 5
-          if ! docker compose exec -T db pg_isready -U "${POSTGRES_USER}" > /dev/null 2>&1; then
-            echo "❌ Error: No se puede conectar a la base de datos"
+          if docker compose run --rm migrate; then
+            echo "✅ Migraciones ejecutadas correctamente en el segundo intento"
+          else
+            echo "❌ Error: Las migraciones fallaron nuevamente"
             exit 1
           fi
         fi
         
-        echo "🔄 Ejecutando migraciones"
-        if docker compose run --rm migrate; then
-          echo "✅ Migraciones ejecutadas correctamente"
+        # Verificar que las tablas principales de Django existen
+        echo "🔍 Verificando que las tablas principales existen..."
+        REQUIRED_TABLES=("django_migrations" "django_session" "auth_user" "core_project")
+        MISSING_TABLES=()
+        
+        for table in "${REQUIRED_TABLES[@]}"; do
+          TABLE_EXISTS=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='${table}');" 2>/dev/null | tr -d '[:space:]' || echo "f")
+          if [ "$TABLE_EXISTS" != "t" ]; then
+            MISSING_TABLES+=("$table")
+          fi
+        done
+        
+        if [ ${#MISSING_TABLES[@]} -gt 0 ]; then
+          echo "⚠️  Advertencia: Faltan las siguientes tablas: ${MISSING_TABLES[*]}"
+          echo "🔄 Ejecutando migraciones nuevamente para crear las tablas faltantes..."
+          sleep 5
+          if docker compose run --rm migrate; then
+            echo "✅ Migraciones ejecutadas nuevamente"
+            # Verificar nuevamente
+            for table in "${MISSING_TABLES[@]}"; do
+              TABLE_EXISTS=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='${table}');" 2>/dev/null | tr -d '[:space:]' || echo "f")
+              if [ "$TABLE_EXISTS" == "t" ]; then
+                echo "✅ Tabla ${table} creada correctamente"
+              else
+                echo "❌ Error: La tabla ${table} aún no existe después de las migraciones"
+                exit 1
+              fi
+            done
+          else
+            echo "❌ Error: No se pudieron crear las tablas faltantes"
+            echo "📋 Estado actual de la base de datos:"
+            docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "\dt" || true
+            exit 1
+          fi
         else
-          echo "❌ Error: Las migraciones fallaron"
-          echo "🔍 Verificando estado de la base de datos..."
-          docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "\dt" || true
-          exit 1
+          echo "✅ Todas las tablas principales existen"
         fi
         
         echo "📦 Recolectando archivos estáticos"

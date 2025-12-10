@@ -3,6 +3,8 @@
 # URL: atenea.nxhumans.com (o prod.atenea.nxhumans.com)
 # Código en: ~/prod/html/
 
+name: html-prod
+
 services:
   db:
     image: postgres:15-alpine
