@@ -397,6 +397,27 @@ jobs:
         
         # Paso 2: Eliminar contenedores específicos por nombre exacto (más agresivo)
         echo "🔍 Eliminando contenedores específicos del proyecto html-${ENV}..."
+        # Lista de nombres de contenedores que pueden existir
+        CONTAINER_NAMES=(
+          "html-${ENV}-web-1"
+          "html-${ENV}-db-1"
+          "html-${ENV}-redis-1"
+          "html-${ENV}-celery_worker-1"
+          "html-${ENV}-celery_beat-1"
+          "html-${ENV}-migrate-1"
+          "html-${ENV}-collectstatic-1"
+        )
+        
+        # Eliminar por nombre exacto primero
+        for container_name in "${CONTAINER_NAMES[@]}"; do
+          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
+            echo "🛑 Eliminando contenedor específico: $container_name"
+            docker stop "$container_name" 2>/dev/null || true
+            docker rm -f "$container_name" 2>/dev/null || true
+          fi
+        done
+        
+        # También buscar por patrones (por si hay variaciones)
         CONTAINER_PATTERNS=(
           "html-${ENV}-web-"
           "html-${ENV}-db-"
