@@ -382,7 +382,61 @@ jobs:
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
-        # Función para eliminar contenedores de forma agresiva
+        # Establecer nombre de proyecto único para evitar conflictos
+        export COMPOSE_PROJECT_NAME="html-${ENV}"
+        
+        # Paso 1: Detener y eliminar usando docker compose (MÁS AGRESIVO)
+        echo "⏸️  Deteniendo contenedores con docker compose (proyecto: html-${ENV})..."
+        # Usar --volumes para eliminar volúmenes también si es necesario
+        docker compose down --remove-orphans --volumes 2>/dev/null || true
+        docker compose stop 2>/dev/null || true
+        docker compose rm -f 2>/dev/null || true
+        
+        # Esperar un momento para que Docker procese las eliminaciones
+        sleep 2
+        
+        # Paso 2: Eliminar contenedores específicos por nombre exacto (más agresivo)
+        echo "🔍 Eliminando contenedores específicos del proyecto html-${ENV}..."
+        CONTAINER_PATTERNS=(
+          "html-${ENV}-web-"
+          "html-${ENV}-db-"
+          "html-${ENV}-redis-"
+          "html-${ENV}-celery_worker-"
+          "html-${ENV}-celery_beat-"
+          "html-${ENV}-migrate-"
+          "html-${ENV}-collectstatic-"
+        )
+        
+        for pattern in "${CONTAINER_PATTERNS[@]}"; do
+          CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^${pattern}" || echo "")
+          if [ ! -z "$CONTAINERS" ]; then
+            echo "$CONTAINERS" | while IFS= read -r container; do
+              if [ ! -z "$container" ]; then
+                echo "🛑 Forzando eliminación de: $container"
+                docker stop "$container" 2>/dev/null || true
+                docker rm -f "$container" 2>/dev/null || true
+              fi
+            done
+          fi
+        done
+        
+        # Paso 3: Eliminar contenedores huérfanos que puedan tener nombres similares
+        echo "🔍 Eliminando contenedores huérfanos..."
+        ALL_CONTAINERS=$(docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
+        if [ ! -z "$ALL_CONTAINERS" ]; then
+          echo "$ALL_CONTAINERS" | while IFS= read -r container; do
+            if [ ! -z "$container" ]; then
+              # Buscar contenedores que coincidan con el patrón del entorno
+              if echo "$container" | grep -qE "^(html-${ENV}-|html-.*-${ENV}-)"; then
+                echo "🛑 Eliminando contenedor huérfano: $container"
+                docker stop "$container" 2>/dev/null || true
+                docker rm -f "$container" 2>/dev/null || true
+              fi
+            fi
+          done
+        fi
+        
+        # Función para eliminar contenedores de forma agresiva (legacy, por si acaso)
         cleanup_containers() {
           local pattern=$1
           echo "🔍 Buscando contenedores con patrón: $pattern"
@@ -399,51 +453,23 @@ jobs:
           fi
         }
         
-        # Establecer nombre de proyecto único para evitar conflictos
-        export COMPOSE_PROJECT_NAME="html-${ENV}"
-        
-        # Paso 1: Detener y eliminar usando docker compose (si estamos en el directorio correcto)
-        echo "⏸️  Deteniendo contenedores con docker compose (proyecto: html-${ENV})..."
-        docker compose stop 2>/dev/null || true
-        docker compose down --remove-orphans 2>/dev/null || true
-        docker compose rm -f 2>/dev/null || true
-        
-        # Paso 2: Eliminar TODOS los contenedores que empiecen con "html-" (más agresivo)
-        echo "🔍 Eliminando todos los contenedores con prefijo 'html-'..."
-        cleanup_containers "html-"
-        
-        # Paso 3: Eliminar contenedores específicos del entorno actual
-        echo "🔍 Eliminando contenedores del entorno ${ENV}..."
-        cleanup_containers "${ENV}-"
-        
-        # Paso 4: Eliminar contenedores específicos comunes por nombre exacto
-        echo "🔍 Eliminando contenedores específicos conocidos..."
-        COMMON_CONTAINERS=(
-          "html-web-1" "html-db-1" "html-redis-1" "html-celery_worker-1" "html-celery_beat-1"
-          "html-migrate-1" "html-collectstatic-1"
-          "html-dev-web-1" "html-dev-db-1" "html-dev-redis-1" "html-dev-celery_worker-1" "html-dev-celery_beat-1"
-          "html-demo-web-1" "html-demo-db-1" "html-demo-redis-1"
-          "html-prod-web-1" "html-prod-db-1" "html-prod-redis-1"
-        )
-        
-        for container in "${COMMON_CONTAINERS[@]}"; do
-          if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${container}$"; then
-            echo "🛑 Forzando eliminación de: $container"
-            docker stop "$container" 2>/dev/null || true
-            docker rm -f "$container" 2>/dev/null || true
-          fi
-        done
-        
-        # Esperar un momento para que Docker procese las eliminaciones
-        sleep 3
-        
-        # Paso 5: Limpiar redes huérfanas
+        # Paso 4: Limpiar redes huérfanas (especialmente las del proyecto)
         echo "🧹 Limpiando redes huérfanas..."
+        # Eliminar redes específicas del proyecto primero
+        NETWORK_NAME="html-${ENV}_atenea-${ENV}-network"
+        if docker network ls --format "{{.Name}}" 2>/dev/null | grep -q "^${NETWORK_NAME}$"; then
+          echo "🗑️  Eliminando red: $NETWORK_NAME"
+          docker network rm "$NETWORK_NAME" 2>/dev/null || true
+        fi
+        # Limpiar todas las redes huérfanas
         docker network prune -f 2>/dev/null || true
         
-        # Paso 6: Verificar y eliminar cualquier contenedor restante que pueda causar conflictos
-        echo "🔍 Verificación final: buscando contenedores restantes..."
-        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        # Paso 5: Verificación final y eliminación de cualquier contenedor restante
+        echo "🔍 Verificación final: buscando contenedores restantes del proyecto..."
+        sleep 2  # Esperar un momento más para que Docker procese
+        
+        # Buscar contenedores que puedan causar conflictos
+        REMAINING=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-${ENV}-|html-.*-${ENV}-)" || echo "")
         if [ ! -z "$REMAINING" ]; then
           echo "⚠️  Aún quedan contenedores, eliminando forzadamente:"
           echo "$REMAINING"
@@ -454,20 +480,46 @@ jobs:
               docker rm -f "$container" 2>/dev/null || true
             fi
           done
-          sleep 2
+          sleep 3
         else
           echo "  ✅ Todos los contenedores conflictivos eliminados"
         fi
         
-        # Verificación final
-        FINAL_CHECK=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-|${ENV}-)" || echo "")
+        # Verificación final antes de continuar
+        FINAL_CHECK=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-${ENV}-web-|html-${ENV}-db-|html-${ENV}-redis-|html-${ENV}-celery)" || echo "")
         if [ ! -z "$FINAL_CHECK" ]; then
-          echo "⚠️  Advertencia: Algunos contenedores aún existen pero continuando..."
+          echo "❌ ERROR: Aún existen contenedores que causarán conflictos:"
           echo "$FINAL_CHECK"
+          echo "🔄 Intentando eliminación final..."
+          echo "$FINAL_CHECK" | while IFS= read -r container; do
+            if [ ! -z "$container" ]; then
+              docker stop "$container" 2>/dev/null || true
+              docker rm -f "$container" 2>/dev/null || true
+            fi
+          done
+          sleep 2
+        else
+          echo "✅ Verificación final: No hay contenedores conflictivos"
         fi
         echo "🔨 Construyendo y reiniciando contenedores"
         # Establecer nombre de proyecto único para evitar conflictos
         export COMPOSE_PROJECT_NAME="html-${ENV}"
+        
+        # Verificar una vez más que no hay contenedores conflictivos antes de construir
+        echo "🔍 Verificación pre-build: buscando contenedores conflictivos..."
+        CONFLICT_CHECK=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -E "^(html-${ENV}-web-|html-${ENV}-db-|html-${ENV}-redis-|html-${ENV}-celery)" || echo "")
+        if [ ! -z "$CONFLICT_CHECK" ]; then
+          echo "⚠️  Advertencia: Encontrados contenedores conflictivos antes del build:"
+          echo "$CONFLICT_CHECK"
+          echo "🔄 Eliminando..."
+          echo "$CONFLICT_CHECK" | while IFS= read -r container; do
+            if [ ! -z "$container" ]; then
+              docker stop "$container" 2>/dev/null || true
+              docker rm -f "$container" 2>/dev/null || true
+            fi
+          done
+          sleep 2
+        fi
         
         # Limpiar imágenes huérfanas antes de construir
         echo "🧹 Limpiando imágenes huérfanas..."
@@ -477,9 +529,9 @@ jobs:
         echo "🔨 Construyendo imágenes Docker..."
         docker compose build --no-cache
         
-        # Iniciar servicios
+        # Iniciar servicios (usar --force-recreate para asegurar que se recrean)
         echo "🚀 Iniciando servicios..."
-        docker compose up -d
+        docker compose up -d --force-recreate --remove-orphans
         
         echo "⏳ Esperando a que los servicios estén listos..."
         sleep 20
