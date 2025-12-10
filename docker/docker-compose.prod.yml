@@ -2,6 +2,7 @@
 # Puerto: 8082
 # URL: atenea.nxhumans.com (o prod.atenea.nxhumans.com)
 # Código en: ~/prod/html/
+# .env debe estar en: ~/prod/html/.env
 
 name: html-prod
 
