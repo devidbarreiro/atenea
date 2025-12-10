@@ -2,6 +2,7 @@
 # Puerto: 8081
 # URL: demo.atenea.nxhumans.com
 # Código en: ~/demo/html/
+# .env debe estar en: ~/demo/html/.env
 
 name: html-demo
 

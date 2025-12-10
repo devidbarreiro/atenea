@@ -325,9 +325,60 @@ jobs:
           echo "✅ USE_SQLITE=False agregado al .env"
         fi
         
+        # Asegurar que CELERY_BROKER_URL y CELERY_RESULT_BACKEND usen redis interno de Docker
+        echo "🔍 Verificando configuración de Celery/Redis..."
+        if grep -q "^CELERY_BROKER_URL=" .env 2>/dev/null; then
+          CELERY_BROKER=$(grep "^CELERY_BROKER_URL=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+          if [[ ! "$CELERY_BROKER" == redis://redis:* ]] && [[ ! "$CELERY_BROKER" == redis://localhost:* ]]; then
+            echo "⚠️  CELERY_BROKER_URL no usa redis interno, actualizando..."
+            sed -i "s|^CELERY_BROKER_URL=.*|CELERY_BROKER_URL=redis://redis:6379/0|" .env || echo "CELERY_BROKER_URL=redis://redis:6379/0" >> .env
+            echo "✅ CELERY_BROKER_URL actualizado a redis://redis:6379/0"
+          fi
+        else
+          echo "🔧 Agregando CELERY_BROKER_URL al .env"
+          echo "CELERY_BROKER_URL=redis://redis:6379/0" >> .env
+          echo "✅ CELERY_BROKER_URL agregado"
+        fi
+        
+        if grep -q "^CELERY_RESULT_BACKEND=" .env 2>/dev/null; then
+          CELERY_RESULT=$(grep "^CELERY_RESULT_BACKEND=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+          if [[ ! "$CELERY_RESULT" == redis://redis:* ]] && [[ ! "$CELERY_RESULT" == redis://localhost:* ]]; then
+            echo "⚠️  CELERY_RESULT_BACKEND no usa redis interno, actualizando..."
+            sed -i "s|^CELERY_RESULT_BACKEND=.*|CELERY_RESULT_BACKEND=redis://redis:6379/0|" .env || echo "CELERY_RESULT_BACKEND=redis://redis:6379/0" >> .env
+            echo "✅ CELERY_RESULT_BACKEND actualizado a redis://redis:6379/0"
+          fi
+        else
+          echo "🔧 Agregando CELERY_RESULT_BACKEND al .env"
+          echo "CELERY_RESULT_BACKEND=redis://redis:6379/0" >> .env
+          echo "✅ CELERY_RESULT_BACKEND agregado"
+        fi
+        
+        # Asegurar que CHANNEL_REDIS_URL esté configurado para Django Channels
+        if ! grep -q "^CHANNEL_REDIS_URL=" .env 2>/dev/null; then
+          echo "🔧 Agregando CHANNEL_REDIS_URL al .env"
+          echo "CHANNEL_REDIS_URL=redis://redis:6379/1" >> .env
+          echo "✅ CHANNEL_REDIS_URL agregado"
+        fi
+        
+        # Validar variables críticas antes de continuar
+        echo "🔍 Validando variables críticas..."
+        MISSING_VARS=()
+        for var in SECRET_KEY POSTGRES_PASSWORD POSTGRES_USER POSTGRES_DB GCS_BUCKET_NAME GCS_PROJECT_ID; do
+          if ! grep -q "^${var}=" .env 2>/dev/null; then
+            MISSING_VARS+=("$var")
+          fi
+        done
+        
+        if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+          echo "❌ Error: Faltan las siguientes variables críticas en .env:"
+          printf '  - %s\n' "${MISSING_VARS[@]}"
+          exit 1
+        fi
+        echo "✅ Todas las variables críticas están presentes"
+        
         # Mostrar información del .env (sin mostrar valores sensibles)
-        echo "📋 Variables definidas en .env (primeras 10):"
-        grep -E "^[A-Z_]+=" .env | sed 's/=.*/=***/' | head -10 || echo "⚠️  No se pudieron leer las variables del .env"
+        echo "📋 Variables definidas en .env (primeras 15):"
+        grep -E "^[A-Z_]+=" .env | sed 's/=.*/=***/' | head -15 || echo "⚠️  No se pudieron leer las variables del .env"
         
         echo "🛑 Deteniendo y eliminando contenedores existentes"
         
@@ -417,10 +468,37 @@ jobs:
         echo "🔨 Construyendo y reiniciando contenedores"
         # Establecer nombre de proyecto único para evitar conflictos
         export COMPOSE_PROJECT_NAME="html-${ENV}"
+        
+        # Limpiar imágenes huérfanas antes de construir
+        echo "🧹 Limpiando imágenes huérfanas..."
+        docker image prune -f 2>/dev/null || true
+        
+        # Construir imágenes
+        echo "🔨 Construyendo imágenes Docker..."
         docker compose build --no-cache
+        
+        # Iniciar servicios
+        echo "🚀 Iniciando servicios..."
         docker compose up -d
+        
         echo "⏳ Esperando a que los servicios estén listos..."
-        sleep 15
+        sleep 20
+        
+        # Verificar que los contenedores están corriendo
+        echo "🔍 Verificando estado de contenedores..."
+        RUNNING_CONTAINERS=$(docker compose ps --format json 2>/dev/null | jq -r '.[] | select(.State == "running") | .Name' 2>/dev/null || docker compose ps --format "{{.Name}}" | grep -v "^$" || echo "")
+        if [ -z "$RUNNING_CONTAINERS" ]; then
+          echo "⚠️  Advertencia: No se detectaron contenedores corriendo, verificando logs..."
+          docker compose ps
+          docker compose logs --tail=50 web 2>/dev/null || true
+        else
+          echo "✅ Contenedores corriendo:"
+          echo "$RUNNING_CONTAINERS" | while IFS= read -r container; do
+            if [ ! -z "$container" ]; then
+              echo "  - $container"
+            fi
+          done
+        fi
         
         # Verificar que la base de datos esté accesible antes de ejecutar migraciones
         echo "🔍 Verificando conexión a la base de datos..."
@@ -609,10 +687,82 @@ jobs:
         else
           echo "⚠️  Advertencia: Error en collectstatic (no crítico, continuando...)"
         fi
-        echo "✅ Despliegue a $ENV completado!"
-        if [ "$ENV" == "prod" ]; then
-          echo "🌐 URL: https://atenea.nxhumans.com"
+        
+        # Verificar que los servicios críticos están funcionando
+        echo "🔍 Verificando servicios críticos..."
+        
+        # Verificar Redis
+        echo "  🔍 Verificando Redis..."
+        if docker compose exec -T redis redis-cli ping > /dev/null 2>&1; then
+          echo "  ✅ Redis está funcionando"
         else
-          echo "🌐 URL: https://$ENV.atenea.nxhumans.com"
+          echo "  ⚠️  Advertencia: Redis no responde (puede necesitar más tiempo)"
         fi
+        
+        # Verificar PostgreSQL
+        echo "  🔍 Verificando PostgreSQL..."
+        if docker compose exec -T db pg_isready -U "${POSTGRES_USER}" > /dev/null 2>&1; then
+          echo "  ✅ PostgreSQL está funcionando"
+        else
+          echo "  ⚠️  Advertencia: PostgreSQL no responde (puede necesitar más tiempo)"
+        fi
+        
+        # Verificar Celery Worker
+        echo "  🔍 Verificando Celery Worker..."
+        CELERY_WORKER=$(docker compose ps --format "{{.Name}}" | grep celery_worker || echo "")
+        if [ ! -z "$CELERY_WORKER" ]; then
+          if docker compose ps --format "{{.State}}" | grep -q "running" | grep celery_worker; then
+            echo "  ✅ Celery Worker está corriendo"
+          else
+            echo "  ⚠️  Advertencia: Celery Worker no está corriendo"
+          fi
+        else
+          echo "  ⚠️  Advertencia: No se encontró contenedor de Celery Worker"
+        fi
+        
+        # Verificar Celery Beat
+        echo "  🔍 Verificando Celery Beat..."
+        CELERY_BEAT=$(docker compose ps --format "{{.Name}}" | grep celery_beat || echo "")
+        if [ ! -z "$CELERY_BEAT" ]; then
+          if docker compose ps --format "{{.State}}" | grep -q "running" | grep celery_beat; then
+            echo "  ✅ Celery Beat está corriendo"
+          else
+            echo "  ⚠️  Advertencia: Celery Beat no está corriendo"
+          fi
+        else
+          echo "  ⚠️  Advertencia: No se encontró contenedor de Celery Beat"
+        fi
+        
+        # Verificar Web
+        echo "  🔍 Verificando Web..."
+        WEB_CONTAINER=$(docker compose ps --format "{{.Name}}" | grep -E "^html-.*-web-" || echo "")
+        if [ ! -z "$WEB_CONTAINER" ]; then
+          WEB_STATE=$(docker compose ps --format "{{.State}}" | head -1 || echo "")
+          if echo "$WEB_STATE" | grep -q "running"; then
+            echo "  ✅ Web está corriendo"
+          else
+            echo "  ⚠️  Advertencia: Web no está corriendo (estado: $WEB_STATE)"
+            echo "  📋 Últimas líneas de logs de web:"
+            docker compose logs --tail=20 web 2>/dev/null || true
+          fi
+        else
+          echo "  ⚠️  Advertencia: No se encontró contenedor de Web"
+        fi
+        
+        echo ""
+        echo "✅ Despliegue a $ENV completado!"
+        echo ""
+        echo "📊 Resumen del despliegue:"
+        echo "  - Entorno: $ENV"
+        echo "  - Base de datos: ${POSTGRES_DB}"
+        echo "  - Usuario DB: ${POSTGRES_USER}"
+        echo "  - Directorio: $ENV_DIR/html"
+        if [ "$ENV" == "prod" ]; then
+          echo "  - URL: https://atenea.nxhumans.com"
+        else
+          echo "  - URL: https://$ENV.atenea.nxhumans.com"
+        fi
+        echo ""
+        echo "💡 Para ver logs: cd $ENV_DIR/html && docker compose logs -f"
+        echo "💡 Para ver estado: cd $ENV_DIR/html && docker compose ps"
         DEPLOY_SCRIPT
