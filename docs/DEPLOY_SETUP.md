@@ -12,6 +12,15 @@ Esta guía explica cómo configurar correctamente los archivos `.env` para cada 
 
 **IMPORTANTE:** Cada entorno debe tener su propio `.env` en `~/ENV/html/.env` (donde ENV es dev, demo o prod).
 
+### Templates de Ejemplo
+
+En el repositorio encontrarás templates de ejemplo para cada entorno:
+- `env.dev.example` → Usar como referencia para `~/dev/html/.env`
+- `env.demo.example` → Usar como referencia para `~/demo/html/.env`
+- `env.prod.example` → Usar como referencia para `~/prod/html/.env`
+
+Estos archivos NO contienen valores reales, solo la estructura y comentarios explicativos.
+
 ## Flujo de Deploy Automático
 
 El deploy se ejecuta automáticamente cuando haces push a las siguientes ramas:
