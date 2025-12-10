@@ -2687,8 +2687,8 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            updateProcessingStatus('✓ Guión enviado. Esperando procesamiento de n8n...');
-            // Polling para esperar a que n8n procese
+            updateProcessingStatus('✓ Guión enviado. Procesando con agentes de IA...');
+            // Polling para esperar a que los agentes procesen
             pollScriptStatus(data.script_id);
         } else {
             alert('Error: ' + data.message);
