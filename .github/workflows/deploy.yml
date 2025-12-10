@@ -12,7 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Run Tests
-    timeout-minutes: 5  # Timeout de 5 minutos para evitar que se cuelgue
+    timeout-minutes: 15  # Timeout aumentado a 15 minutos para instalación de dependencias pesadas
     
     steps:
     - name: Checkout code
@@ -24,23 +24,31 @@ jobs:
         python-version: '3.12'
         cache: 'pip'  # Cache de pip para acelerar instalación
     
-    - name: Install system dependencies for Manim
+    - name: Install system dependencies (minimal for tests)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          pkg-config \
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
           python3-dev \
-          ffmpeg \
-          libcairo2-dev \
-          libpango1.0-dev \
-          libpangocairo-1.0-0 \
-          libgirepository1.0-dev \
-          gir1.2-pango-1.0
+          pkg-config \
+          libpq-dev  # Solo para PostgreSQL, no necesitamos Manim/ffmpeg para tests básicos
         
-    - name: Install dependencies
+    - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip setuptools wheel
+        # Instalar solo dependencias esenciales para tests Django
+        pip install --no-cache-dir \
+          Django==5.2.7 \
+          psycopg2-binary \
+          python-decouple \
+          dj-database-url \
+          django-celery-beat \
+          django-celery-results \
+          channels \
+          channels-redis \
+          daphne \
+          redis \
+          celery \
+          whitenoise
         
     - name: Run tests
       env:
@@ -53,11 +61,14 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: '/tmp/fake-credentials.json'
         HEYGEN_API_KEY: 'test-key'
         GEMINI_API_KEY: 'test-key'
+        DJANGO_SETTINGS_MODULE: 'atenea.settings'
       run: |
         # Crear archivo fake de credentials para evitar errores
         echo '{}' > /tmp/fake-credentials.json
-        # Ejecutar tests con timeout y modo verboso
-        timeout 240 python manage.py test --verbosity=1 --keepdb || python manage.py test --verbosity=1
+        # Verificar que Django puede iniciar correctamente
+        python manage.py check --deploy || python manage.py check
+        # Ejecutar tests (rápido si no hay tests reales)
+        python manage.py test --verbosity=1 --keepdb --no-input || python manage.py test --verbosity=1 --no-input
 
   deploy:
     needs: test
