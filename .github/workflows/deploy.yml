@@ -416,6 +416,89 @@ jobs:
         # Asegurar que COMPOSE_PROJECT_NAME esté configurado para las operaciones siguientes
         export COMPOSE_PROJECT_NAME="html-${ENV}"
         
+        # ============================================
+        # LIMPIEZA Y NORMALIZACIÓN DE MIGRACIONES
+        # ============================================
+        echo "🔍 Verificando estado de migraciones de core..."
+        
+        # Verificar si existe la tabla django_migrations
+        TABLE_EXISTS=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='django_migrations');" 2>/dev/null | tr -d '[:space:]' || echo "f")
+        
+        if [ "$TABLE_EXISTS" == "t" ]; then
+          # Detectar estado actual
+          HAS_0001_INITIAL=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT COUNT(*) FROM django_migrations WHERE app='core' AND name='0001_initial';" 2>/dev/null | tr -d '[:space:]' || echo "0")
+          HAS_SQUASHED=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT COUNT(*) FROM django_migrations WHERE app='core' AND name LIKE '0001_initial_squashed%';" 2>/dev/null | tr -d '[:space:]' || echo "0")
+          HAS_0030=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT COUNT(*) FROM django_migrations WHERE app='core' AND name='0030_remove_unique_from_task_id';" 2>/dev/null | tr -d '[:space:]' || echo "0")
+          
+          echo "  Migración 0001_initial individual: $HAS_0001_INITIAL"
+          echo "  Migración squashed: $HAS_SQUASHED"
+          echo "  Migración 0030 individual: $HAS_0030"
+          
+          # Caso 1: Solo migraciones individuales (sin squashed)
+          if [ "$HAS_0001_INITIAL" -gt 0 ] && [ "$HAS_SQUASHED" -eq 0 ]; then
+            echo "⚠️  Detectado: Migraciones individuales sin squashed"
+            echo "🔧 Aplicando migración squashed con --fake (tablas ya existen)..."
+            if docker compose run --rm web python manage.py migrate core 0001_initial_squashed_0030_remove_unique_from_task_id --fake; then
+              echo "✅ Migración squashed marcada como aplicada"
+            else
+              echo "⚠️  Advertencia: No se pudo aplicar squashed con --fake (continuando...)"
+            fi
+          fi
+          
+          # Caso 2: Estado mixto (individuales + squashed)
+          if [ "$HAS_0001_INITIAL" -gt 0 ] && [ "$HAS_SQUASHED" -gt 0 ]; then
+            echo "⚠️  Detectado: Estado mixto (migraciones individuales + squashed)"
+            echo "🔧 Limpiando migraciones individuales duplicadas (0001-0030)..."
+            
+            docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "
+            DELETE FROM django_migrations 
+            WHERE app='core' 
+            AND name IN (
+                '0001_initial',
+                '0002_alter_video_type',
+                '0003_image',
+                '0004_alter_video_type',
+                '0005_script',
+                '0006_script_desired_duration_min',
+                '0007_script_agent_flow_script_final_video_scene',
+                '0008_script_video_config',
+                '0009_scene_image_source_freepik',
+                '0010_update_heygen_services',
+                '0011_scene_audio_duration_scene_audio_error_message_and_more',
+                '0012_scene_visual_prompt_alter_scene_script_text',
+                '0013_music',
+                '0014_add_project_sharing',
+                '0015_assign_project_owners',
+                '0016_alter_audio_project_alter_image_project_and_more',
+                '0017_audio_created_by_image_created_by_music_created_by_and_more',
+                '0018_usercredits_credittransaction_serviceusage',
+                '0019_add_permission_groups',
+                '0020_increase_video_type_max_length',
+                '0021_alter_scene_ai_service',
+                '0022_add_generation_task',
+                '0023_add_notification',
+                '0024_rename_core_genera_user_id_idx_generation__user_id_7f7fbf_idx_and_more',
+                '0025_fix_generation_task_task_id_nullable',
+                '0026_add_uuid_to_video_image_audio',
+                '0027_add_uuid_to_project',
+                '0028_unify_audio_music',
+                '0029_unify_audio_music',
+                '0030_remove_unique_from_task_id'
+            )
+            AND name NOT LIKE '%squashed%';
+            " 2>/dev/null && echo "✅ Migraciones individuales duplicadas eliminadas" || echo "⚠️  Advertencia: No se pudieron eliminar migraciones duplicadas (continuando...)"
+          fi
+          
+          # Caso 3: Instalación nueva (sin migraciones)
+          if [ "$HAS_0001_INITIAL" -eq 0 ] && [ "$HAS_SQUASHED" -eq 0 ]; then
+            echo "✅ Instalación nueva detectada - se aplicarán migraciones normalmente"
+          fi
+          
+          echo "✅ Estado de migraciones verificado y normalizado"
+        else
+          echo "ℹ️  Tabla django_migrations no existe - instalación nueva"
+        fi
+        
         echo "🔄 Ejecutando migraciones"
         echo "📋 Verificando migraciones pendientes..."
         MIGRATION_OUTPUT=$(docker compose run --rm migrate 2>&1)
