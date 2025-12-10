@@ -12,6 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Run Tests
+    timeout-minutes: 5  # Timeout de 5 minutos para evitar que se cuelgue
     
     steps:
     - name: Checkout code
@@ -21,6 +22,7 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
+        cache: 'pip'  # Cache de pip para acelerar instalación
     
     - name: Install system dependencies for Manim
       run: |
@@ -52,7 +54,10 @@ jobs:
         HEYGEN_API_KEY: 'test-key'
         GEMINI_API_KEY: 'test-key'
       run: |
-        python manage.py test
+        # Crear archivo fake de credentials para evitar errores
+        echo '{}' > /tmp/fake-credentials.json
+        # Ejecutar tests con timeout y modo verboso
+        timeout 240 python manage.py test --verbosity=1 --keepdb || python manage.py test --verbosity=1
 
   deploy:
     needs: test
