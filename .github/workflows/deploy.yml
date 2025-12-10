@@ -132,10 +132,11 @@ jobs:
         
         # Copiar código al servidor usando rsync (excluyendo .git y otros archivos innecesarios)
         echo "📤 Copiando código al servidor..."
-        rsync -avz --delete \
+        rsync -avz --delete --no-perms --no-owner --no-group \
           -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
           --exclude='.git' \
           --exclude='__pycache__' \
+          --exclude='**/__pycache__' \
           --exclude='*.pyc' \
           --exclude='.env' \
           --exclude='credentials.json' \
@@ -143,7 +144,17 @@ jobs:
           --exclude='db.sqlite3' \
           --exclude='.pytest_cache' \
           --exclude='node_modules' \
-          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/
+          --exclude='.DS_Store' \
+          --exclude='*.swp' \
+          ./ $SSH_USER@$SSH_HOST:$ENV_DIR_REMOTE/html/ || {
+            RSYNC_EXIT=$?
+            if [ $RSYNC_EXIT -eq 23 ]; then
+              echo "⚠️  rsync completó con algunos archivos no transferidos (código 23), continuando..."
+            else
+              echo "❌ rsync falló con código $RSYNC_EXIT"
+              exit $RSYNC_EXIT
+            fi
+          }
         
         # Restaurar credentials.json si existía antes
         echo "🔐 Restaurando credentials.json si existía..."
