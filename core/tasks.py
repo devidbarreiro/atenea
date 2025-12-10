@@ -737,12 +737,18 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
         logger.info(f"Imagen guardada en GCS: {gcs_path}")
         
         # Notificar usuario
+        # Construir URL según si la imagen tiene proyecto o no
+        if image.project:
+            action_url = f'/projects/{image.project.uuid}/images/{new_image.uuid}/'
+        else:
+            action_url = f'/images/{new_image.uuid}/'
+        
         Notification.create_notification(
             user=image.created_by,
             type='generation_completed',
             title='Fondo removido',
             message=f'Se creó versión sin fondo de "{image.title}"',
-            action_url=f'/projects/{image.project.uuid}/images/{new_image.uuid}/',
+            action_url=action_url,
             action_label='Ver imagen',
             metadata={'item_type': 'image', 'item_uuid': str(new_image.uuid)}
         )
