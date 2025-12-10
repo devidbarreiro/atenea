@@ -9,13 +9,11 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 from django.contrib.auth.models import User
-from core.models import GenerationTask, Video, Image, Audio, Scene
+from core.models import GenerationTask, Video, Image, Audio, Scene, Notification
 from core.services import VideoService, ImageService, AudioService
 
-from rembg import new_session, remove
-from PIL import Image as PILImage
-from io import BytesIO
-from core.models import Notification
+# rembg imports are done lazily inside the task to avoid CI failures
+# (rembg requires onnxruntime which is heavy and not needed for tests)
 
 logger = logging.getLogger(__name__)
 
@@ -661,6 +659,9 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
     """
     try:
         import os
+        from io import BytesIO
+        from PIL import Image as PILImage
+        from rembg import new_session, remove
         
         # Configurar ONNXRuntime para usar solo CPU (sin CUDA)
         os.environ['ONNXRUNTIME_EXECUTION_PROVIDERS'] = 'CPUExecutionProvider'

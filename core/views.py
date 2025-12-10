@@ -27,7 +27,10 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
-from core.tasks import remove_image_background_task
+# Lazy import to avoid CI failures (rembg requires onnxruntime)
+def get_remove_image_background_task():
+    from core.tasks import remove_image_background_task
+    return remove_image_background_task
 
 from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
@@ -4224,7 +4227,8 @@ class ImageRemoveBackgroundView(LoginRequiredMixin, ServiceMixin, View):
             
             # Encolar tarea de procesamiento
             logger.info(f"Encolando tarea de remove-bg para imagen {image_uuid} -> {new_image.uuid}")
-            task = remove_image_background_task.delay(
+            remove_bg_task = get_remove_image_background_task()
+            task = remove_bg_task.delay(
                 str(image_uuid),
                 str(new_image.uuid)  # Pasar UUID de imagen destino
             )
