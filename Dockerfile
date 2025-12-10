@@ -29,8 +29,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar gunicorn para producción
+# Instalar gunicorn y daphne para producción
+# Gunicorn se mantiene para compatibilidad, pero Daphne es necesario para WebSockets y ASGI
 RUN pip install gunicorn==21.2.0
+# Daphne ya está en requirements.txt, pero lo mencionamos aquí para claridad
 
 # Copiar el proyecto
 COPY . .

@@ -121,6 +121,14 @@ class ScriptAgent:
         logger.info(f"   Formato: {state.get('video_format', 'educational')}")
         logger.info(f"   Texto: {len(state['script_text'])} caracteres")
         
+        # Mostrar el guión completo o una muestra si es muy largo
+        script_text = state['script_text']
+        if len(script_text) > 500:
+            logger.info(f"   Guión (primeros 500 caracteres):\n{script_text[:500]}...")
+            logger.info(f"   Guión (últimos 200 caracteres):\n...{script_text[-200:]}")
+        else:
+            logger.info(f"   Guión completo:\n{script_text}")
+        
         # Calcular duración en segundos
         duration_min = state['duration_min']
         duration_seconds = state.get('duration_seconds', int(duration_min * 60))
@@ -134,9 +142,15 @@ class ScriptAgent:
             tipo_video=state.get('video_type', 'general')
         )
         
+        # Log del contenido que se envía al LLM
+        logger.debug(f"📤 Mensajes a enviar al LLM:")
+        for i, msg in enumerate(messages):
+            content_preview = msg.content[:300] if len(msg.content) > 300 else msg.content
+            logger.debug(f"   Mensaje {i+1} ({type(msg).__name__}): {content_preview}{'...' if len(msg.content) > 300 else ''}")
+        
         # Invocar LLM
         try:
-            logger.debug(f"📤 Invocando LLM ({self.llm_provider}/{self.llm_model or 'default'})")
+            logger.info(f"📤 Invocando LLM ({self.llm_provider}/{self.llm_model or 'default'})")
             response = self.llm.invoke(messages)
             response_text = response.content if hasattr(response, 'content') else str(response)
             

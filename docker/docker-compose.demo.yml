@@ -29,7 +29,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: gunicorn atenea.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+    command: daphne -b 0.0.0.0 -p 8000 atenea.asgi:application
     volumes:
       - .:/app
       - demo_static_volume:/app/staticfiles
@@ -43,13 +43,83 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_demo}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - CHANNEL_REDIS_URL=${CHANNEL_REDIS_URL:-redis://redis:6379/1}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
       - DEBUG=${DEBUG:-False}
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - atenea-demo-network
+    restart: always
+
+  # Celery Worker para procesamiento asíncrono
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A atenea worker --loglevel=info --concurrency=4 --queues=video_generation,image_generation,audio_generation,scene_processing,default
+    volumes:
+      - .:/app
+      - demo_media_volume:/app/media
+      - demo_logs_volume:/app/logs
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_demo}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      - db
+      - redis
+    networks:
+      - atenea-demo-network
+    restart: always
+
+  # Celery Beat para tareas periódicas
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A atenea beat --loglevel=info
+    volumes:
+      - .:/app
+      - demo_logs_volume:/app/logs
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_demo}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      - db
+      - redis
+    networks:
+      - atenea-demo-network
+    restart: always
+
+  # Redis como broker y backend de resultados para Celery y Channels
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6380:6379"  # Puerto diferente al de DEV (6379) para evitar conflictos
+    volumes:
+      - demo_redis_data:/data
+    networks:
+      - atenea-demo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   # Servicio para ejecutar migraciones (ejecutar manualmente)
@@ -99,4 +169,5 @@ volumes:
   demo_static_volume:
   demo_media_volume:
   demo_logs_volume:
+  demo_redis_data:
 
