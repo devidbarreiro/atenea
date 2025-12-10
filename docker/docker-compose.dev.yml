@@ -2,6 +2,7 @@
 # Puerto: 8080
 # URL: dev.atenea.nxhumans.com
 # Código en: ~/dev/html/
+# .env debe estar en: ~/dev/html/.env
 # Este archivo se copia a ~/dev/html/docker-compose.yml durante el deploy
 # Ejecutar desde: ~/dev/html/ con: docker compose [comando]
 
@@ -37,12 +38,12 @@ services:
       - dev_static_volume:/app/staticfiles
       - dev_media_volume:/app/media
       - dev_logs_volume:/app/logs
-      # Credenciales de GCS desde el servidor (usar ruta absoluta para evitar que Docker cree un directorio)
-      - ${GCS_CREDENTIALS_PATH:-/home/ubuntu/dev/html/credentials.json}:/app/credentials.json:ro
+      # Credenciales de GCS desde el servidor
+      - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     ports:
       - "8080:8000"
     env_file:
-      - ../.env
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
@@ -69,7 +70,7 @@ services:
       - .:/app
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - ../.env
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
@@ -91,7 +92,7 @@ services:
       - .:/app
       - dev_static_volume:/app/staticfiles
     env_file:
-      - ../.env
+      - .env
     networks:
       - atenea-dev-network
     profiles:
@@ -109,7 +110,7 @@ services:
       - dev_logs_volume:/app/logs
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - ../.env
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
@@ -133,7 +134,7 @@ services:
       - dev_logs_volume:/app/logs
       - ${GCS_CREDENTIALS_PATH:-./credentials.json}:/app/credentials.json:ro
     env_file:
-      - ../.env
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-atenea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-atenea_dev}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
