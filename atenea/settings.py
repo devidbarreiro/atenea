@@ -497,6 +497,7 @@ CELERY_TASK_ROUTES = {
     'core.tasks.poll_video_status_task': {'queue': 'default'},
     'core.tasks.poll_image_status_task': {'queue': 'default'},
     'core.tasks.poll_audio_status_task': {'queue': 'default'},
+    'core.tasks.remove_image_background_task': {'queue': 'image_generation'},
 }
 
 # Prioridades por tipo (dentro de cada cola)
@@ -513,6 +514,22 @@ CELERY_TASK_PRIORITY_MAP = {
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Pool Configuration: Condicional por SO
+# Windows: threading pool (multiprocessing tiene issues con billiard)
+# Linux/Mac: prefork pool (multiprocessing, mejor performance)
+import platform
+CURRENT_OS = platform.system()
+if CURRENT_OS == 'Windows':
+    # Windows: usa threading para evitar problemas de billiard con semáforos
+    CELERY_WORKER_POOL = 'threads'
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = None
+    CELERY_WORKER_CONCURRENCY = 4  # Threads: más conservador
+else:
+    # Linux/Mac: usa prefork (multiprocessing) para mejor performance
+    CELERY_WORKER_POOL = 'prefork'
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000  # Reciclaje de procesos cada 1000 tasks
+    CELERY_WORKER_CONCURRENCY = 4  # Procesos
 
 # Celery Beat Schedule (tareas periódicas)
 from celery.schedules import crontab
@@ -542,17 +559,11 @@ ASGI_APPLICATION = 'atenea.asgi.application'
 # En Docker, usar el nombre del servicio: redis://redis:6379/1
 channel_redis_url = config('CHANNEL_REDIS_URL', default=f'redis://{_redis_host}:6379/1')
 
-# channels-redis acepta URLs directamente como cadena
-# Asegurarse de que sea una cadena, no una tupla
-if isinstance(channel_redis_url, tuple):
-    # Si por alguna razón viene como tupla, convertir a cadena
-    channel_redis_url = f'redis://{channel_redis_url[0]}:{channel_redis_url[1]}'
-
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            # Usar URL directamente como cadena (channels-redis la parsea internamente)
+            # channels-redis requiere URLs string, no tuplas
             "hosts": [channel_redis_url],
         },
     },
