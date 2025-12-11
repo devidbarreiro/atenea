@@ -264,6 +264,9 @@
 
 <script>
 (function() {
+    // Constantes de configuración
+    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB - debe coincidir con el backend
+    
     const modal = document.getElementById('upload-modal');
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('modal-file');
@@ -319,10 +322,20 @@
 
     function updateFileInfo(file) {
         if (file) {
-            // Validar tamaño (500MB máximo)
-            const maxSize = 500 * 1024 * 1024;
-            if (file.size > maxSize) {
-                alert('El archivo es demasiado grande. Máximo permitido: 500MB');
+            // Validar tamaño usando constante
+            if (file.size > MAX_FILE_SIZE) {
+                const maxSizeMB = (MAX_FILE_SIZE / (1024 * 1024)).toFixed(0);
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                alert(`El archivo es demasiado grande (${fileSizeMB}MB). Máximo permitido: ${maxSizeMB}MB`);
+                fileInput.value = '';
+                return;
+            }
+            
+            // Validar tipo de archivo
+            const allowedTypes = ['video/', 'image/', 'audio/'];
+            const isValidType = allowedTypes.some(type => file.type.startsWith(type));
+            if (!isValidType) {
+                alert('Tipo de archivo no soportado. Solo se permiten videos, imágenes y audios.');
                 fileInput.value = '';
                 return;
             }

@@ -9771,6 +9771,7 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
         """Procesa la subida del archivo"""
         from core.storage.gcs import gcs_storage
         from django.utils.crypto import get_random_string
+        import mimetypes
 
         try:
             # Obtener el archivo del request
@@ -9785,102 +9786,122 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
                 messages.error(request, f'El archivo es demasiado grande. Máximo permitido: 500MB. Archivo actual: {uploaded_file.size / (1024*1024):.1f}MB')
                 return redirect('core:library')
 
+            # Validar nombre de archivo (seguridad básica)
+            if not uploaded_file.name or len(uploaded_file.name) > 255:
+                messages.error(request, 'Nombre de archivo inválido')
+                return redirect('core:library')
+
             # Determinar el tipo de archivo basado en content_type
-            content_type = uploaded_file.content_type.lower()
+            content_type = uploaded_file.content_type.lower() if uploaded_file.content_type else ''
+            
+            # Mapeo explícito de tipos MIME permitidos para seguridad
+            ALLOWED_VIDEO_TYPES = {
+                'video/mp4': 'mp4',
+                'video/webm': 'webm',
+                'video/quicktime': 'mov',
+                'video/x-msvideo': 'avi',
+                'video/x-matroska': 'mkv',
+            }
+            
+            ALLOWED_IMAGE_TYPES = {
+                'image/jpeg': 'jpg',
+                'image/png': 'png',
+                'image/gif': 'gif',
+                'image/webp': 'webp',
+            }
+            
+            ALLOWED_AUDIO_TYPES = {
+                'audio/mpeg': 'mp3',
+                'audio/wav': 'wav',
+                'audio/ogg': 'ogg',
+                'audio/mp4': 'm4a',
+                'audio/x-m4a': 'm4a',
+            }
+            
             file_type = None
             model_class = None
             file_extension = None
 
-            if content_type.startswith('video/'):
+            # Validar contra listas blancas explícitas
+            if content_type in ALLOWED_VIDEO_TYPES:
                 file_type = 'video'
                 model_class = Video
-                # Extensiones comunes de video
-                if content_type == 'video/mp4':
-                    file_extension = 'mp4'
-                elif content_type == 'video/webm':
-                    file_extension = 'webm'
-                elif content_type == 'video/quicktime':
-                    file_extension = 'mov'
-                elif content_type == 'video/x-msvideo':
-                    file_extension = 'avi'
-                else:
-                    file_extension = 'mp4'  # default
-
-            elif content_type.startswith('image/'):
+                file_extension = ALLOWED_VIDEO_TYPES[content_type]
+            elif content_type in ALLOWED_IMAGE_TYPES:
                 file_type = 'image'
                 model_class = Image
-                # Extensiones comunes de imagen
-                if content_type == 'image/jpeg':
-                    file_extension = 'jpg'
-                elif content_type == 'image/png':
-                    file_extension = 'png'
-                elif content_type == 'image/gif':
-                    file_extension = 'gif'
-                elif content_type == 'image/webp':
-                    file_extension = 'webp'
-                else:
-                    file_extension = 'jpg'  # default
-
-            elif content_type.startswith('audio/'):
+                file_extension = ALLOWED_IMAGE_TYPES[content_type]
+            elif content_type in ALLOWED_AUDIO_TYPES:
                 file_type = 'audio'
                 model_class = Audio
-                # Extensiones comunes de audio
-                if content_type == 'audio/mpeg':
-                    file_extension = 'mp3'
-                elif content_type == 'audio/wav':
-                    file_extension = 'wav'
-                elif content_type == 'audio/ogg':
-                    file_extension = 'ogg'
-                elif content_type == 'audio/mp4':
-                    file_extension = 'm4a'
-                else:
-                    file_extension = 'mp3'  # default
+                file_extension = ALLOWED_AUDIO_TYPES[content_type]
 
             if not file_type:
-                messages.error(request, f'Tipo de archivo no soportado: {content_type}. Solo se permiten videos, imágenes y audios.')
+                messages.error(request, f'Tipo de archivo no soportado: {content_type}. Solo se permiten videos (MP4, WebM, MOV, AVI), imágenes (JPG, PNG, GIF, WebP) y audios (MP3, WAV, OGG, M4A).')
                 return redirect('core:library')
 
             # Generar nombre único para el archivo
             random_suffix = get_random_string(8)
             filename = f"{file_type}s/{request.user.id}/{timezone.now().strftime('%Y%m%d_%H%M%S')}_{random_suffix}.{file_extension}"
-            gcs_path = gcs_storage.upload_django_file(uploaded_file, filename)
+            
+            # Subir a GCS con manejo de errores específico
+            try:
+                gcs_path = gcs_storage.upload_django_file(uploaded_file, filename)
+                logger.info(f"Archivo subido a GCS: {gcs_path} por usuario {request.user.id}")
+            except Exception as gcs_error:
+                logger.error(f"Error al subir a GCS: {gcs_error}", exc_info=True)
+                messages.error(request, 'Error al subir el archivo al almacenamiento. Por favor, intenta de nuevo.')
+                return redirect('core:library')
 
             # Crear el registro en la base de datos
             item_data = {
                 'created_by': request.user,
-                'title': uploaded_file.name,
+                'title': uploaded_file.name[:255],  # Truncar a longitud máxima
                 'status': 'completed',
                 'gcs_path': gcs_path,
                 'completed_at': timezone.now(),
             }
 
-            # Campos específicos por tipo
+            # Campos específicos por tipo con validación
             if file_type == 'video':
                 item_data.update({
-                    'type': 'uploaded_video',  # Tipo especial para videos subidos
+                    'type': 'uploaded_video',
                     'script': '',  # Campo requerido, vacío para uploads
-                    'duration': None,  # Podría calcularse después si es necesario
+                    'duration': None,
+                    'config': {},  # Asegurar que config existe
                 })
             elif file_type == 'image':
                 item_data.update({
-                    'type': 'uploaded_image',  # Tipo especial para imágenes subidas
+                    'type': 'uploaded_image',
                     'prompt': '',  # Campo requerido, vacío para uploads
-                    'width': None,  # Podría obtenerse de los metadatos
+                    'width': None,
                     'height': None,
+                    'config': {},
                 })
             elif file_type == 'audio':
                 item_data.update({
-                    'type': 'uploaded_audio',  # Tipo especial para audios subidos
-                    'duration': None,  # Podría calcularse después si es necesario
+                    'type': 'uploaded_audio',
+                    'duration': None,
                 })
 
-            # Crear el objeto
-            item = model_class.objects.create(**item_data)
-
-            messages.success(request, f'{file_type.title()} "{uploaded_file.name}" subido correctamente a tu biblioteca.')
-            return redirect('core:library')
+            # Crear el objeto con manejo de errores
+            try:
+                item = model_class.objects.create(**item_data)
+                logger.info(f"{file_type.title()} creado: ID={item.id}, usuario={request.user.id}")
+                messages.success(request, f'{file_type.title()} "{uploaded_file.name}" subido correctamente a tu biblioteca.')
+                return redirect('core:library')
+            except Exception as db_error:
+                logger.error(f"Error al crear registro en BD: {db_error}", exc_info=True)
+                # Intentar eliminar archivo de GCS si falla la creación en BD
+                try:
+                    gcs_storage.delete_file(gcs_path)
+                    logger.info(f"Archivo eliminado de GCS tras error en BD: {gcs_path}")
+                except:
+                    pass
+                messages.error(request, 'Error al guardar el archivo en la base de datos.')
+                return redirect('core:library')
 
         except Exception as e:
-            logger.error(f"Error al subir archivo: {e}", exc_info=True)
-            messages.error(request, f'Error al subir el archivo: {str(e)}')
+            logger.error(f"Error inesperado al subir archivo: {e}", exc_info=True)
+            messages.error(request, 'Error inesperado al subir el archivo. Por favor, contacta al soporte.')
             return redirect('core:library')
