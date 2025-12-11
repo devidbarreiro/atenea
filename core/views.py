@@ -182,7 +182,7 @@ def send_invitation_email(request, invitation):
         invitation: ProjectInvitation a enviar
     """
     from .models import ProjectInvitation
-    from django.core.mail import send_mail
+    from django.core.mail import EmailMultiAlternatives
     
     try:
         # Construir URL de aceptación
@@ -199,19 +199,21 @@ def send_invitation_email(request, invitation):
             'role_display': invitation.get_role_display(),
         }
         
-        # Renderizar mensaje
+        # Renderizar mensajes (texto plano y HTML)
         subject = f'Invitación para unirte al proyecto "{invitation.project.name}"'
-        message = render_to_string('projects/invitation_email.txt', context)
+        text_content = render_to_string('projects/invitation_email.txt', context)
+        html_content = render_to_string('projects/invitation_email.html', context)
         
-        # Enviar email
+        # Enviar email con HTML
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-        send_mail(
+        email = EmailMultiAlternatives(
             subject,
-            message,
+            text_content,
             from_email,
-            [invitation.email],
-            fail_silently=False
+            [invitation.email]
         )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
         
         logger.info(f"Email de invitación enviado a {invitation.email} para proyecto {invitation.project.id}")
         
@@ -7602,12 +7604,21 @@ class UserMenuView(View):
 
                 # Send activation email
                 try:
+                    from django.core.mail import EmailMultiAlternatives
                     context = {'user': user, 'activation_url': activation_url}
                     subject = 'Activa tu cuenta en Atenea'
-                    message = render_to_string('users/activation_email.txt', context)
+                    text_content = render_to_string('users/activation_email.txt', context)
+                    html_content = render_to_string('users/activation_email.html', context)
                     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-                    from django.core.mail import send_mail
-                    send_mail(subject, message, from_email, [user.email], fail_silently=False)
+                    
+                    email = EmailMultiAlternatives(
+                        subject,
+                        text_content,
+                        from_email,
+                        [user.email]
+                    )
+                    email.attach_alternative(html_content, "text/html")
+                    email.send(fail_silently=False)
                 except Exception as e:
                     logger.error(f"Error enviando email de activación a {user.email}: {e}")
 

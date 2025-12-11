@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activa tu cuenta</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 40px 0;">
+        <tr>
+            <td align="center">
+                <!-- Contenedor principal -->
+                <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    
+                    <!-- Header con gradiente -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1f2937 0%, #374151 100%); padding: 40px 30px; text-align: center;">
+                            <!-- Logo -->
+                            <img src="https://i.imgur.com/your-logo.png" alt="Atenea" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 16px; background: white; padding: 8px;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Atenea</h1>
+                            <p style="color: #d1d5db; margin: 8px 0 0 0; font-size: 14px;">Plataforma de Creación con IA</p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Contenido -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <!-- Ícono de bienvenida -->
+                            <div style="text-align: center; margin-bottom: 24px;">
+                                <div style="display: inline-block; width: 80px; height: 80px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; line-height: 80px; font-size: 40px;">
+                                    👋
+                                </div>
+                            </div>
+                            
+                            <h2 style="color: #111827; margin: 0 0 16px 0; font-size: 24px; font-weight: 600; text-align: center;">¡Bienvenido/a, {{ user.username }}!</h2>
+                            
+                            <p style="color: #6b7280; line-height: 1.6; margin: 0 0 24px 0; font-size: 16px; text-align: center;">
+                                Tu cuenta en Atenea ha sido creada. Solo falta un paso más para empezar a crear contenido increíble con IA.
+                            </p>
+                            
+                            <!-- Beneficios -->
+                            <div style="background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                                <h3 style="color: #111827; margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">¿Qué puedes hacer en Atenea?</h3>
+                                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                    <tr>
+                                        <td style="padding: 8px 0;">
+                                            <span style="color: #10b981; font-size: 18px; margin-right: 12px;">🎥</span>
+                                            <span style="color: #4b5563; font-size: 15px;">Genera videos con IA</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0;">
+                                            <span style="color: #3b82f6; font-size: 18px; margin-right: 12px;">🖼️</span>
+                                            <span style="color: #4b5563; font-size: 15px;">Crea imágenes impresionantes</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0;">
+                                            <span style="color: #f59e0b; font-size: 18px; margin-right: 12px;">🎵</span>
+                                            <span style="color: #4b5563; font-size: 15px;">Produce audio y música</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0;">
+                                            <span style="color: #8b5cf6; font-size: 18px; margin-right: 12px;">🤖</span>
+                                            <span style="color: #4b5563; font-size: 15px;">Colabora con agentes IA</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <p style="color: #6b7280; line-height: 1.6; margin: 0 0 24px 0; font-size: 15px; text-align: center;">
+                                Haz clic en el botón de abajo para activar tu cuenta y establecer tu contraseña:
+                            </p>
+                            
+                            <!-- Botón CTA -->
+                            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 8px 0;">
+                                        <a href="{{ activation_url }}" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 10px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);">
+                                            Activar Mi Cuenta
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Información adicional -->
+                            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                                <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin: 0; text-align: center;">
+                                    💡 <strong style="color: #6b7280;">Consejo:</strong> Elige una contraseña segura con al menos 8 caracteres
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin: 0 0 12px 0;">
+                                Si no solicitaste esta cuenta, puedes ignorar este correo de forma segura.
+                            </p>
+                            <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin: 0;">
+                                © 2025 Atenea. Todos los derechos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
