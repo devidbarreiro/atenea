@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Constantes para choices
 VIDEO_TYPES = [
+    ('uploaded_video', 'Video Subido'),
     ('heygen_avatar_v2', 'HeyGen Avatar V2'),
     ('heygen_avatar_iv', 'HeyGen Avatar IV'),
     ('gemini_veo', 'Gemini Veo'),
@@ -61,6 +62,7 @@ VIDEO_ORIENTATIONS = [
 ]
 
 IMAGE_TYPES = [
+    ('uploaded_image', 'Imagen Subida'),
     ('text_to_image', 'Texto a Imagen'),
     ('image_to_image', 'Imagen a Imagen (Edición)'),
     ('multi_image', 'Múltiples Imágenes (Composición)'),
@@ -513,6 +515,7 @@ class Audio(models.Model):
     AUDIO_TYPE_CHOICES = [
         ('tts', 'Text-to-Speech'),
         ('music', 'Música Generada'),
+        ('uploaded_audio', 'Audio Subido'),
     ]
     
     uuid = models.UUIDField(
