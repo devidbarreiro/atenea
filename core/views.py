@@ -9760,7 +9760,7 @@ class PromptTemplateFavoriteAPIView(LoginRequiredMixin, View):
             }, status=500)
 
 
-class UploadItemView(ServiceMixin, View):
+class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
     """Vista para subir archivos desde el dispositivo a la biblioteca"""
 
     def get(self, request):
