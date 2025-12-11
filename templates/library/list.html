@@ -17,6 +17,14 @@
 .animate-fade-in {
     animation: fadeIn 0.3s ease-out;
 }
+/* Forzar esquinas redondeadas en el modal */
+#upload-modal {
+    border-radius: 0 !important;
+}
+#upload-modal .modal-box {
+    border-radius: 1.5rem !important;
+    overflow: hidden !important;
+}
 </style>
 {% endblock %}
 
@@ -164,7 +172,7 @@
 
 <!-- Modal de Subida de Archivos -->
 <dialog id="upload-modal" class="modal backdrop:bg-black backdrop:bg-opacity-50">
-    <div class="modal-box w-full max-w-xl bg-white rounded-3xl p-0 shadow-2xl overflow-hidden">
+    <div class="modal-box w-full max-w-3xl bg-white rounded-3xl p-0 shadow-2xl overflow-hidden">
         <!-- Header del modal -->
         <div class="flex items-center justify-between px-6 py-5 border-b border-gray-200 bg-gray-50 rounded-t-3xl">
             <h3 class="text-2xl font-bold text-gray-900">Subir Archivo</h3>
@@ -180,7 +188,7 @@
             {% csrf_token %}
             
             <!-- Contenedor con altura fija para mantener tamaño constante -->
-            <div class="relative" style="min-height: 380px;">
+            <div class="relative" style="min-height: 320px;">
                 <!-- Zona de drop -->
                 <div id="drop-zone" class="absolute inset-0 border-2 border-gray-300 border-dashed rounded-xl flex flex-col items-center justify-center text-center hover:border-gray-400 hover:bg-gray-50 transition-all cursor-pointer">
                     <svg class="h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
@@ -239,10 +247,14 @@
             
             <!-- Botones -->
             <div class="flex gap-3 mt-6">
-                <button type="submit" id="modal-submit-btn" disabled class="flex-1 bg-black text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base">
-                    Subir Archivo
+                <button type="submit" id="modal-submit-btn" disabled class="flex-1 bg-black text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base flex items-center justify-center gap-2">
+                    <span id="submit-btn-text">Subir Archivo</span>
+                    <svg id="submit-btn-loader" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
                 </button>
-                <button type="button" onclick="document.getElementById('upload-modal').close()" class="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold text-base">
+                <button type="button" id="modal-cancel-btn" onclick="document.getElementById('upload-modal').close()" class="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold text-base">
                     Cancelar
                 </button>
             </div>
@@ -261,6 +273,26 @@
     const fileIcon = document.getElementById('modal-file-icon');
     const submitBtn = document.getElementById('modal-submit-btn');
     const removeBtn = document.getElementById('modal-remove-file');
+    const submitBtnText = document.getElementById('submit-btn-text');
+    const submitBtnLoader = document.getElementById('submit-btn-loader');
+    const cancelBtn = document.getElementById('modal-cancel-btn');
+    const form = modal.querySelector('form');
+
+    // Manejar submit del formulario para mostrar loader
+    form.addEventListener('submit', (e) => {
+        // Mostrar loader
+        submitBtnText.textContent = 'Subiendo...';
+        submitBtnLoader.classList.remove('hidden');
+        submitBtn.disabled = true;
+        cancelBtn.disabled = true;
+        cancelBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        
+        // Deshabilitar la zona de drop y el botón de remover
+        dropZone.style.pointerEvents = 'none';
+        if (removeBtn) {
+            removeBtn.style.pointerEvents = 'none';
+        }
+    });
 
     // Cerrar modal al hacer clic fuera de él
     modal.addEventListener('click', (e) => {
@@ -402,6 +434,16 @@
     modal.addEventListener('close', () => {
         fileInput.value = '';
         updateFileInfo(null);
+        
+        // Resetear estado del botón de submit
+        submitBtnText.textContent = 'Subir Archivo';
+        submitBtnLoader.classList.add('hidden');
+        cancelBtn.disabled = false;
+        cancelBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        dropZone.style.pointerEvents = 'auto';
+        if (removeBtn) {
+            removeBtn.style.pointerEvents = 'auto';
+        }
     });
     
     // Limpiar recursos al cerrar/recargar página
