@@ -14,6 +14,7 @@ urlpatterns = [
     
     # Library
     path('library/', views.LibraryView.as_view(), name='library'),
+    path('library/upload/', views.UploadItemView.as_view(), name='library_upload'),
     
     # Projects
     path('projects/', views.ProjectsListView.as_view(), name='projects_list'),
