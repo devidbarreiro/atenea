@@ -200,7 +200,8 @@ document.addEventListener('alpine:init', () => {
                 
                 // Cargar campos dinámicos vía HTMX
                 if (typeof htmx !== 'undefined') {
-                    htmx.ajax('GET', '/videos/form-fields/?model_id=' + this.selectedModel, {
+                    const url = '/videos/form-fields/?model_id=' + this.selectedModel;
+                    htmx.ajax('GET', url, {
                         target: '#dynamic-fields-container',
                         swap: 'innerHTML'
                     });

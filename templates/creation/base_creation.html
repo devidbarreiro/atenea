@@ -59,7 +59,7 @@
             
             <!-- Contenido (cargado vía HTMX) -->
             <div id="notification-panel-content-creation" 
-                 class="flex-1 overflow-y-auto bg-white"
+                 class="flex-1 overflow-y-auto bg-white flex flex-col"
                  hx-get="{% url 'core:notifications_panel' %}"
                  hx-trigger="load, refreshNotifications from:body"
                  hx-swap="innerHTML">
