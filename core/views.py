@@ -2500,6 +2500,15 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             if default_template:
                 default_template_id = str(default_template.uuid)
         
+        # Obtener resoluciones disponibles para modelos de imagen
+        image_resolutions = {}
+        if capabilities.get('type') == 'image':
+            from core.ai_services.gemini_image import GeminiImageClient
+            if model_id in GeminiImageClient.MODEL_CONFIGS:
+                model_config = GeminiImageClient.MODEL_CONFIGS[model_id]
+                if 'resolutions' in model_config:
+                    image_resolutions = model_config['resolutions']
+        
         # Renderizar template con los campos
         context = {
             'model_id': model_id,
@@ -2512,11 +2521,17 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             'has_references': has_references,
             'recommended_service': recommended_service_for_template,  # Para el selector de templates
             'default_template_id': default_template_id,  # Template "General" por defecto
+            'image_resolutions': image_resolutions,  # Resoluciones disponibles para modelos de imagen
         }
         
         logger.debug(f"DynamicFormFieldsView: Contexto para {model_id}: supports.references = {supports.get('references')}")
         
-        return render(request, 'videos/_dynamic_fields.html', context)
+        # Renderizar template según el tipo
+        item_type = capabilities.get('type', 'video')
+        if item_type == 'image':
+            return render(request, 'images/_dynamic_fields.html', context)
+        else:
+            return render(request, 'videos/_dynamic_fields.html', context)
 
 
 class LibraryItemsAPIView(ServiceMixin, View):

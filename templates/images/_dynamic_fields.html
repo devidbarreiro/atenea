@@ -1,0 +1,98 @@
+{% load static %}
+
+{# Campos dinámicos según capacidades del modelo de imagen #}
+
+{# Contenedor para botones de configuración horizontal #}
+{% if supports.aspect_ratio %}
+<div class="mb-4">
+    <div class="flex flex-wrap gap-1.5">
+        {# Aspect Ratio / Resolución con dimensiones exactas #}
+        {% if supports.aspect_ratio and supports.aspect_ratio|length > 0 %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }">
+            <button type="button" @click="open = !open" @click.away="open = false"
+                    class="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <svg class="w-3 h-3 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" id="aspect-display">
+                    {% if image_resolutions %}
+                        {% for ar, dims in image_resolutions.items %}
+                            {% if forloop.first %}
+                                {{ ar }} ({{ dims.width }}×{{ dims.height }})
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% for ar in supports.aspect_ratio %}
+                            {% if forloop.first %}{{ ar }}{% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </span>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[240px] py-1 max-h-96 overflow-y-auto">
+                {% if image_resolutions %}
+                    {% for ar, dims in image_resolutions.items %}
+                    <button type="button" 
+                            @click="document.getElementById('aspect-input').value = '{{ ar }}'; document.getElementById('aspect-display').textContent = '{{ ar }} ({{ dims.width }}×{{ dims.height }})'; open = false;"
+                            class="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-100 flex items-center justify-between group">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {% if ar == "1:1" %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                                {% elif ar == "16:9" or ar == "4:3" or ar == "3:2" or ar == "5:4" or ar == "21:9" %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                                {% else %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                                {% endif %}
+                            </svg>
+                            <div class="flex flex-col">
+                                <span class="font-medium text-gray-900">{{ ar }}</span>
+                                <span class="text-xs text-gray-500">{{ dims.width }} × {{ dims.height }} px</span>
+                            </div>
+                        </div>
+                        <span class="text-xs text-gray-400 group-hover:text-gray-600">
+                            {% if ar == "1:1" %}Square
+                            {% elif ar == "16:9" %}Widescreen
+                            {% elif ar == "4:3" %}Classic
+                            {% elif ar == "9:16" %}Story
+                            {% elif ar == "21:9" %}Ultra Wide
+                            {% else %}{{ ar }}
+                            {% endif %}
+                        </span>
+                    </button>
+                    {% endfor %}
+                {% else %}
+                    {% for ar in supports.aspect_ratio %}
+                    <button type="button" 
+                            @click="document.getElementById('aspect-input').value = '{{ ar }}'; document.getElementById('aspect-display').textContent = '{{ ar }}'; open = false;"
+                            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-3">
+                        <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {% if ar == "1:1" %}
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                            {% elif ar == "16:9" or ar == "4:3" or ar == "3:2" or ar == "5:4" %}
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                            {% else %}
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path>
+                            {% endif %}
+                        </svg>
+                        <span>{{ ar }}</span>
+                    </button>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <input type="hidden" name="aspect_ratio" id="aspect-input" value="{% if image_resolutions %}{% for ar, dims in image_resolutions.items %}{% if forloop.first %}{{ ar }}{% endif %}{% endfor %}{% else %}{% for ar in supports.aspect_ratio %}{% if forloop.first %}{{ ar }}{% endif %}{% endfor %}{% endif %}">
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{# Otros campos específicos del modelo de imagen #}
+{% if model_specific_fields %}
+<div class="space-y-4">
+    {% for field in model_specific_fields %}
+        {% include field.template with field=field %}
+    {% endfor %}
+</div>
+{% endif %}
+
