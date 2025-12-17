@@ -69,6 +69,11 @@ document.addEventListener('alpine:init', () => {
         videoDuration: 8,
         videoAspectRatio: '16:9',
         
+        // Modal de escalar imagen
+        upscaleModal: { open: false, item: null, loading: false },
+        upscaleFactor: 'x4',
+        outputMimeType: 'image/png',
+        
         async openCreateVideoModal(item) {
             this.createVideoModal = { open: true, item: item, loading: false };
             this.selectedVideoModel = null;
@@ -787,10 +792,12 @@ document.addEventListener('alpine:init', () => {
         
         downloadItem(item, e) {
             e.stopPropagation();
-            if (item.signed_url) {
+            if (item.signed_url && item.type && item.id) {
+                // Usar el endpoint de descarga que fuerza la descarga
+                const downloadUrl = '/api/items/' + item.type + '/' + item.id + '/download/';
                 const a = document.createElement('a');
-                a.href = item.signed_url;
-                a.download = item.title || 'download';
+                a.href = downloadUrl;
+                a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -1398,11 +1405,14 @@ document.addEventListener('alpine:init', () => {
                 <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                     <span class="text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
                     <div class="flex items-center gap-1">
-                        <a :href="selectedItem.signed_url" download class="p-2 hover:bg-gray-100 rounded-lg" title="Descargar">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
-                        </a>
+                         <a x-bind:href="'/api/items/' + selectedItem.type + '/' + selectedItem.id + '/download/'" 
+                            class="p-2 hover:bg-gray-100 rounded-lg" 
+                            title="Descargar"
+                            x-show="selectedItem.signed_url">
+                             <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                             </svg>
+                         </a>
                         <button @click="closeDetail()" class="p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
                             <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -1556,17 +1566,17 @@ document.addEventListener('alpine:init', () => {
                                 Recrear
                             </button>
                         </form>
-                        {# TODO: Implementar funcionalidad de escalado de imágenes #}
-                        <!-- Escalar (deshabilitado) -->
-                        <div x-show="selectedItem.type === 'image'" class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-400 opacity-50 cursor-not-allowed">
+                        <!-- Escalar imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="upscaleModal = { open: true, item: selectedItem, loading: false }; upscaleFactor = 'x4'; outputMimeType = 'image/png'"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
                             <div class="flex items-center gap-3">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
                                 </svg>
                                 Escalar
                             </div>
-                            <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
-                        </div>
+                        </button>
                         <!-- Crear video desde imagen -->
                         <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
                                 @click="openCreateVideoModal(selectedItem)"
@@ -2088,6 +2098,129 @@ document.addEventListener('alpine:init', () => {
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                             Creando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== MODAL DE ESCALAR IMAGEN ========== -->
+    <div x-show="upscaleModal.open && upscaleModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="upscaleModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Escalar Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="upscaleModal.item ? ('Escalar: ' + (upscaleModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="upscaleModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="upscaleImageForm" method="post" x-bind:action="'/images/' + upscaleModal.item.id + '/upscale/'" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Vista previa de imagen -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="upscaleModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="upscaleModal.item.signed_url" 
+                                     x-bind:alt="upscaleModal.item.title"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Factor de escalado -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Factor de Escalado <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="upscale_factor" 
+                                required
+                                x-model="upscaleFactor"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="x2">x2 (2x más grande)</option>
+                                <option value="x3">x3 (3x más grande)</option>
+                                <option value="x4" selected>x4 (4x más grande) - Recomendado</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Mayor factor = mejor calidad pero más tiempo de procesamiento.</p>
+                        </div>
+                        
+                        <!-- Formato de salida -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Formato de Salida
+                            </label>
+                            <select 
+                                name="output_mime_type" 
+                                x-model="outputMimeType"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="image/png">PNG (sin pérdida, recomendado)</option>
+                                <option value="image/jpeg">JPEG (con pérdida, más pequeño)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                </svg>
+                                <div class="text-sm text-blue-800">
+                                    <p class="font-medium mb-1">Nota importante:</p>
+                                    <p>La imagen escalada se guardará como una nueva imagen en tu biblioteca. El proceso puede tardar varios minutos dependiendo del tamaño y factor de escalado.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="upscaleModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="upscaleModal.loading = true; document.getElementById('upscaleImageForm').submit();"
+                            x-bind:disabled="upscaleModal.loading"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!upscaleModal.loading">Escalar Imagen</span>
+                        <span x-show="upscaleModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Escalando...
                         </span>
                     </button>
                 </div>

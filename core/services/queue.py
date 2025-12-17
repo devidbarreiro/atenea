@@ -41,6 +41,11 @@ class QueueService:
             'queue': 'scene_processing',
             'priority': 5,
         },
+        'image_upscale': {
+            'task': 'core.tasks.upscale_image_task',
+            'queue': 'image_generation',
+            'priority': 5,
+        },
     }
     
     @classmethod

@@ -221,9 +221,143 @@ def generate_image_task(self, task_uuid, image_uuid, user_id, **kwargs):
         if task and task.retry_count < task.max_retries:
             task.retry_count += 1
             task.save(update_fields=['retry_count'])
-            raise self.retry(exc=exc, countdown=60 * (2 ** task.retry_count))
+            # Backoff exponencial: 60s, 120s, 240s
+            countdown = 60 * (2 ** (task.retry_count - 1))
+            logger.info(f"Reintentando generate_image_task (intento {task.retry_count}/{task.max_retries}) en {countdown}s")
+            raise self.retry(exc=exc, countdown=countdown)
         
-        return {'status': 'failed', 'error': str(exc)}
+        return {'status': 'failed', 'error': str(exc), 'image_uuid': str(image_uuid)}
+
+
+@shared_task(bind=True, max_retries=3)
+def upscale_image_task(self, task_uuid, image_uuid, user_id, **kwargs):
+    """
+    Tarea para escalar una imagen usando Vertex AI Imagen Upscale
+    
+    Args:
+        task_uuid: UUID de la GenerationTask
+        image_uuid: UUID de la Image escalada (la nueva imagen creada)
+        user_id: ID del usuario
+        **kwargs: Parámetros adicionales
+    """
+    try:
+        task = GenerationTask.objects.get(uuid=task_uuid)
+        task.mark_as_processing()
+        
+        user = User.objects.get(id=user_id)
+        
+        # Buscar imagen escalada: primero por UUID desde metadata, luego por UUID de la tarea
+        item_uuid = task.metadata.get('item_uuid') or task.metadata.get('upscaled_image_uuid')
+        if item_uuid:
+            upscaled_image = Image.objects.filter(uuid=item_uuid).first()
+        else:
+            upscaled_image = Image.objects.filter(uuid=image_uuid).first()
+        
+        # Si la imagen no existe, marcar tarea como fallida sin reintentar
+        if not upscaled_image:
+            error_msg = f"Imagen escalada no encontrada (UUID: {item_uuid or image_uuid}). Puede haber sido eliminada."
+            logger.warning(f"[upscale_image_task] {error_msg}")
+            task.mark_as_failed(error_msg)
+            return {'status': 'failed', 'error': error_msg, 'image_uuid': str(item_uuid or image_uuid)}
+        
+        # Obtener imagen original desde metadata
+        original_image_uuid = task.metadata.get('original_image_uuid')
+        if not original_image_uuid:
+            raise ValueError("No se encontró UUID de imagen original en metadata")
+        
+        original_image = Image.objects.filter(uuid=original_image_uuid).first()
+        if not original_image:
+            raise ValueError(f"Imagen original no encontrada: {original_image_uuid}")
+        
+        # Obtener parámetros desde metadata
+        upscale_factor = task.metadata.get('upscale_factor', 'x4')
+        output_mime_type = task.metadata.get('output_mime_type', 'image/png')
+        
+        # Validar parámetros
+        if upscale_factor not in ['x2', 'x3', 'x4']:
+            raise ValueError(f"upscale_factor inválido: {upscale_factor}")
+        if output_mime_type not in ['image/png', 'image/jpeg']:
+            raise ValueError(f"output_mime_type inválido: {output_mime_type}")
+        
+        # Marcar imagen como processing
+        if upscaled_image.status != 'processing':
+            upscaled_image.status = 'processing'
+            upscaled_image.save(update_fields=['status', 'updated_at'])
+        
+        # Ejecutar upscale
+        image_service = ImageService()
+        upscaled_gcs_path = image_service.upscale_image(
+            image=original_image,
+            upscale_factor=upscale_factor,
+            output_mime_type=output_mime_type
+        )
+        
+        # Actualizar imagen escalada con el resultado
+        upscaled_image.gcs_path = upscaled_gcs_path
+        upscaled_image.mark_as_completed(gcs_path=upscaled_gcs_path)
+        
+        task.mark_as_completed()
+        
+        # Crear notificación de éxito
+        Notification.create_notification(
+            user=user,
+            type='generation_completed',
+            title='Imagen escalada',
+            message=f'Tu imagen "{upscaled_image.title}" está lista',
+            action_url=f'/images/{upscaled_image.uuid}/',
+            action_label='Ver imagen',
+            metadata={'item_type': 'image', 'item_uuid': str(upscaled_image.uuid)}
+        )
+        
+        logger.info(f"Imagen escalada {upscaled_image.uuid} completada exitosamente. GCS Path: {upscaled_gcs_path}")
+        return {'status': 'completed', 'image_uuid': str(upscaled_image.uuid), 'gcs_path': upscaled_gcs_path}
+        
+    except Exception as exc:
+        logger.error(f"Error escalando imagen {image_uuid}: {exc}", exc_info=True)
+        task = None
+        try:
+            task = GenerationTask.objects.get(uuid=task_uuid)
+            task.mark_as_failed(str(exc))
+            
+            # Obtener título de imagen si está disponible
+            image_title = "sin título"
+            try:
+                item_uuid = task.metadata.get('item_uuid') or task.metadata.get('upscaled_image_uuid')
+                if item_uuid:
+                    img = Image.objects.filter(uuid=item_uuid).first()
+                    if img:
+                        image_title = img.title
+                        # Marcar imagen como error
+                        img.mark_as_error(str(exc))
+            except Exception:
+                pass
+            
+            # Crear notificación de error solo si no se va a reintentar
+            if task.retry_count >= task.max_retries:
+                try:
+                    user = User.objects.get(id=user_id)
+                    Notification.create_notification(
+                        user=user,
+                        type='generation_failed',
+                        title='Error al escalar imagen',
+                        message=f'No se pudo escalar la imagen "{image_title}": {str(exc)[:100]}',
+                        metadata={'item_type': 'image', 'item_uuid': str(image_uuid), 'error': str(exc)}
+                    )
+                except User.DoesNotExist:
+                    pass
+        except Exception as inner_exc:
+            logger.error(f"Error adicional al manejar fallo: {inner_exc}")
+        
+        # Solo reintentar si pudimos obtener la task
+        if task and task.retry_count < task.max_retries:
+            task.retry_count += 1
+            task.save(update_fields=['retry_count'])
+            # Backoff exponencial: 60s, 120s, 240s
+            countdown = 60 * (2 ** (task.retry_count - 1))
+            logger.info(f"Reintentando upscale_image_task (intento {task.retry_count}/{task.max_retries}) en {countdown}s")
+            raise self.retry(exc=exc, countdown=countdown)
+        
+        return {'status': 'failed', 'error': str(exc), 'image_uuid': str(image_uuid)}
 
 
 @shared_task(bind=True, max_retries=3)

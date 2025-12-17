@@ -4,6 +4,7 @@ from .base import BaseAIClient
 from .heygen import HeyGenClient
 from .gemini_image import GeminiImageClient
 from .gemini_veo import GeminiVeoClient
+from .gemini_imagen_upscale import GeminiImagenUpscaleClient
 from .openai_image import OpenAIImageClient
 from .sora import SoraClient
 from .freepik import FreepikClient, FreepikContentType, FreepikOrientation
@@ -22,6 +23,7 @@ __all__ = [
     'HeyGenClient',
     'GeminiImageClient',
     'GeminiVeoClient',
+    'GeminiImagenUpscaleClient',
     'OpenAIImageClient',
     'SoraClient',
     'FreepikClient',

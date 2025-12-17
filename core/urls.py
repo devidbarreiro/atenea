@@ -53,6 +53,7 @@ urlpatterns = [
     path('images/<uuid:image_uuid>/recreate/', views.ImageRecreateView.as_view(), name='image_recreate'),
     path('images/<uuid:image_uuid>/edit/', views.ImageEditView.as_view(), name='image_edit'),
     path('images/<uuid:image_uuid>/create-video/', views.ImageToVideoView.as_view(), name='image_to_video'),
+    path('images/<uuid:image_uuid>/upscale/', views.ImageUpscaleView.as_view(), name='image_upscale'),
     path('images/<uuid:image_uuid>/remove-bg/', views.ImageRemoveBackgroundView.as_view(), name='image_remove_bg'),
     
     # Audios (nueva vista unificada - creación + biblioteca)
@@ -88,6 +89,7 @@ urlpatterns = [
     path('videos/form-fields/', views.DynamicFormFieldsView.as_view(), name='dynamic_form_fields'),
     path('api/library/items/', views.LibraryItemsAPIView.as_view(), name='api_library_items'),
     path('api/items/<str:item_type>/<str:item_id>/', views.ItemDetailAPIView.as_view(), name='api_item_detail'),
+    path('api/items/<str:item_type>/<str:item_id>/download/', views.ItemDownloadView.as_view(), name='api_item_download'),
     path('api/items/create/', views.CreateItemAPIView.as_view(), name='api_create_item'),
     path('api/avatars/', views.ListAvatarsView.as_view(), name='api_list_avatars'),
     path('api/voices/', views.ListVoicesView.as_view(), name='api_list_voices'),
