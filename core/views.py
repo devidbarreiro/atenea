@@ -4726,6 +4726,72 @@ class ImageToVideoView(LoginRequiredMixin, ServiceMixin, View):
             return redirect('core:image_detail', image_uuid=image_uuid)
 
 
+class ImageUpscaleView(LoginRequiredMixin, ServiceMixin, View):
+    """View para escalar imágenes usando Vertex AI Imagen Upscale"""
+    
+    def post(self, request, image_uuid):
+        """
+        Escala una imagen usando Vertex AI Imagen Upscale
+        
+        Args:
+            image_uuid: UUID de la imagen a escalar
+        """
+        from core.models import Image
+        from core.services import ImageService
+        from django.contrib import messages
+        
+        try:
+            # Obtener imagen
+            original_image = Image.objects.get(uuid=image_uuid)
+            
+            # Verificar permisos
+            if original_image.project:
+                if not ProjectService.user_has_access(original_image.project, request.user):
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('No tienes acceso a esta imagen')
+            else:
+                if not original_image.created_by or original_image.created_by != request.user:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('No tienes acceso a esta imagen')
+            
+            # Verificar que la imagen tenga archivo
+            if not original_image.gcs_path:
+                messages.error(request, 'La imagen no tiene archivo disponible para escalar')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Obtener parámetros del formulario
+            upscale_factor = request.POST.get('upscale_factor', 'x4')
+            output_mime_type = request.POST.get('output_mime_type', 'image/png')
+            
+            # Validar upscale_factor
+            if upscale_factor not in ['x2', 'x3', 'x4']:
+                messages.error(request, 'Factor de escalado inválido. Debe ser x2, x3 o x4')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Encolar upscale de forma asíncrona
+            image_service = ImageService()
+            task = image_service.upscale_image_async(
+                original_image=original_image,
+                upscale_factor=upscale_factor,
+                output_mime_type=output_mime_type
+            )
+            
+            messages.success(
+                request,
+                f'Upscale de imagen encolado ({upscale_factor}). La nueva imagen se generará en breve y aparecerá en tu biblioteca.'
+            )
+            
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        
+        except Image.DoesNotExist:
+            messages.error(request, 'Imagen no encontrada')
+            return redirect('core:image_list')
+        except Exception as e:
+            logger.error(f"Error al escalar imagen: {e}", exc_info=True)
+            messages.error(request, f'Error al escalar imagen: {str(e)}')
+            return redirect('core:image_detail', image_uuid=image_uuid)
+
+
 class ImageRemoveBackgroundView(LoginRequiredMixin, ServiceMixin, View):
     """Vista para encolar una tarea de remoción de fondo usando rembg + BiRefNet"""
     
@@ -9439,6 +9505,142 @@ class StockVideoProxyView(LoginRequiredMixin, View):
         except Exception as e:
             logger.error(f"Error inesperado en proxy de video: {e}", exc_info=True)
             return HttpResponse('Error interno', status=500)
+
+
+class ItemDownloadView(LoginRequiredMixin, ServiceMixin, View):
+    """View para descargar archivos de items (video, image, audio) forzando descarga"""
+    
+    def get(self, request, item_type, item_id):
+        """
+        Descarga un archivo desde GCS forzando la descarga (no abrir en navegador)
+        
+        Args:
+            item_type: 'video', 'image', 'audio'
+            item_id: UUID del item
+        """
+        from django.http import HttpResponse, Http404
+        from django.db.models import Q
+        import uuid as uuid_module
+        
+        # Validar y convertir item_id a UUID
+        try:
+            item_uuid = uuid_module.UUID(item_id)
+        except (ValueError, TypeError):
+            raise Http404('ID de item inválido')
+        
+        user = request.user
+        user_projects = ProjectService.get_user_projects(user)
+        user_project_ids = [p.id for p in user_projects]
+        
+        # Obtener el item según el tipo
+        if item_type == 'video':
+            from core.models import Video
+            item = get_object_or_404(Video, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a este video')
+                
+        elif item_type == 'image':
+            from core.models import Image
+            item = get_object_or_404(Image, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a esta imagen')
+                
+        elif item_type == 'audio':
+            from core.models import Audio
+            item = get_object_or_404(Audio, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a este audio')
+        else:
+            raise Http404('Tipo de item inválido')
+        
+        # Verificar que el item tenga archivo
+        if not gcs_path:
+            raise Http404('El item no tiene archivo disponible')
+        
+        # Verificar que el archivo esté completado
+        if item.status != 'completed':
+            raise Http404('El archivo aún no está disponible para descarga')
+        
+        try:
+            # Descargar archivo desde GCS
+            from core.storage.gcs import gcs_storage
+            
+            blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+            blob = gcs_storage.bucket.blob(blob_name)
+            
+            if not blob.exists():
+                raise Http404('El archivo no existe en GCS')
+            
+            # Descargar contenido
+            file_content = blob.download_as_bytes()
+            
+            # Obtener content type del blob
+            content_type = blob.content_type or 'application/octet-stream'
+            
+            # Determinar extensión y nombre de archivo
+            import os
+            filename = item.title or 'download'
+            # Limpiar nombre de archivo
+            safe_filename = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_filename = safe_filename.replace(' ', '_')[:50]  # Limitar longitud
+            
+            # Determinar extensión según content type o tipo de item
+            extension_map = {
+                'image/png': '.png',
+                'image/jpeg': '.jpg',
+                'image/jpg': '.jpg',
+                'image/webp': '.webp',
+                'image/gif': '.gif',
+                'video/mp4': '.mp4',
+                'video/webm': '.webm',
+                'video/quicktime': '.mov',
+                'audio/mpeg': '.mp3',
+                'audio/wav': '.wav',
+                'audio/ogg': '.ogg',
+                'audio/mp4': '.m4a',
+            }
+            
+            extension = extension_map.get(content_type, '')
+            if not extension:
+                # Fallback según tipo de item
+                if item_type == 'image':
+                    extension = '.png'
+                elif item_type == 'video':
+                    extension = '.mp4'
+                elif item_type == 'audio':
+                    extension = '.mp3'
+            
+            # Asegurar que el nombre tenga extensión
+            if not safe_filename.endswith(extension):
+                safe_filename += extension
+            
+            # Crear respuesta con headers de descarga
+            response = HttpResponse(file_content, content_type=content_type)
+            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+            response['Content-Length'] = len(file_content)
+            
+            logger.info(f"Descarga de {item_type} {item_uuid}: {safe_filename} ({len(file_content)} bytes)")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error al descargar {item_type} {item_uuid}: {e}", exc_info=True)
+            raise Http404('Error al descargar el archivo')
 
 
 class StockDownloadView(LoginRequiredMixin, View):

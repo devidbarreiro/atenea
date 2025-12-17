@@ -18,6 +18,7 @@ from django.contrib.auth.models import User
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
+from .ai_services.gemini_imagen_upscale import GeminiImagenUpscaleClient
 from .ai_services.seedream import SeaDreamImageClient
 from .ai_services.openai_image import OpenAIImageClient
 from .ai_services.sora import SoraClient
@@ -2727,6 +2728,136 @@ class ImageService:
                 logger.error(f"Error al generar URLs firmadas para imágenes de entrada: {e}")
         
         return result
+    
+    # ----------------
+    # UPSCALE IMAGE
+    # ----------------
+    
+    def upscale_image(
+        self,
+        image: Image,
+        upscale_factor: str = "x4",
+        output_mime_type: str = "image/png"
+    ) -> str:
+        """
+        Escala una imagen usando Vertex AI Imagen Upscale
+        
+        Args:
+            image: Imagen a escalar (debe tener gcs_path)
+            upscale_factor: Factor de escalado ("x2", "x3", "x4")
+            output_mime_type: Tipo MIME de salida ("image/png", "image/jpeg")
+        
+        Returns:
+            GCS path de la imagen escalada
+        
+        Raises:
+            ValidationException: Si la imagen no tiene gcs_path
+            ImageGenerationException: Si falla el upscale
+        """
+        if not image.gcs_path:
+            raise ValidationException('La imagen no tiene archivo disponible para escalar')
+        
+        if upscale_factor not in ["x2", "x3", "x4"]:
+            raise ValidationException(f"upscale_factor debe ser 'x2', 'x3' o 'x4', recibido: {upscale_factor}")
+        
+        try:
+            from .ai_services.gemini_imagen_upscale import GeminiImagenUpscaleClient
+            
+            # Inicializar cliente
+            client = GeminiImagenUpscaleClient()
+            
+            # Preparar directorio de salida
+            project_id = image.project.id if image.project else 'none'
+            output_directory = f"gs://{settings.GCS_BUCKET_NAME}/projects/{project_id}/images/{image.uuid}/upscaled/"
+            
+            logger.info(f"Escalando imagen: {image.gcs_path}")
+            logger.info(f"Factor: {upscale_factor}, Output directory: {output_directory}")
+            
+            # Llamar al cliente de upscale
+            result = client.upscale_image(
+                input_gcs_uri=image.gcs_path,
+                output_gcs_directory=output_directory,
+                upscale_factor=upscale_factor,
+                output_mime_type=output_mime_type
+            )
+            
+            output_gcs_uri = result.get('output_gcs_uri')
+            if not output_gcs_uri:
+                raise ImageGenerationException("No se recibió URI de salida del upscale")
+            
+            logger.info(f"✅ Upscale completado: {output_gcs_uri}")
+            return output_gcs_uri
+            
+        except Exception as e:
+            logger.error(f"Error al escalar imagen: {e}", exc_info=True)
+            raise ImageGenerationException(f"Error al escalar imagen: {str(e)}")
+    
+    def upscale_image_async(
+        self,
+        original_image: Image,
+        upscale_factor: str = "x4",
+        output_mime_type: str = "image/png"
+    ) -> 'GenerationTask':
+        """
+        Encola el upscale de una imagen usando el sistema de colas
+        
+        Args:
+            original_image: Imagen original a escalar
+            upscale_factor: Factor de escalado ("x2", "x3", "x4")
+            output_mime_type: Tipo MIME de salida ("image/png", "image/jpeg")
+        
+        Returns:
+            GenerationTask creada
+        """
+        from core.services.queue import QueueService
+        
+        # Validar que la imagen tenga archivo
+        if not original_image.gcs_path:
+            raise ValidationException('La imagen no tiene archivo disponible para escalar')
+        
+        if upscale_factor not in ["x2", "x3", "x4"]:
+            raise ValidationException(f"upscale_factor debe ser 'x2', 'x3' o 'x4', recibido: {upscale_factor}")
+        
+        # Crear nueva imagen para el resultado del upscale
+        from datetime import datetime
+        upscaled_image = Image.objects.create(
+            project=original_image.project,
+            title=f"{original_image.title} (Escalada {upscale_factor})",
+            type='text_to_image',  # Tipo base
+            prompt=original_image.prompt or f"Escalada {upscale_factor} de {original_image.title}",
+            config={
+                'upscaled_from': str(original_image.uuid),
+                'upscale_factor': upscale_factor,
+                'original_title': original_image.title,
+                'original_gcs_path': original_image.gcs_path,
+                'output_mime_type': output_mime_type,
+            },
+            created_by=original_image.created_by,
+            status='pending',  # Se procesará de forma asíncrona
+            aspect_ratio=original_image.aspect_ratio,  # Mantener el mismo aspect ratio
+        )
+        
+        # Preparar metadata para la tarea
+        task_metadata = {
+            'original_image_uuid': str(original_image.uuid),
+            'upscaled_image_uuid': str(upscaled_image.uuid),
+            'upscale_factor': upscale_factor,
+            'output_mime_type': output_mime_type,
+            'title': upscaled_image.title,
+            'item_id': upscaled_image.id,
+            'item_uuid': str(upscaled_image.uuid),
+        }
+        
+        # Encolar tarea
+        task = QueueService.enqueue_generation(
+            item=upscaled_image,
+            user=original_image.created_by,
+            task_type='image_upscale',
+            metadata=task_metadata
+        )
+        
+        logger.info(f"Upscale de imagen {original_image.uuid} encolado. Nueva imagen: {upscaled_image.uuid}. Task UUID: {task.uuid}")
+        return task
 
 
 # ====================
