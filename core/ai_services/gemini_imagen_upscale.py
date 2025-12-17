@@ -38,10 +38,22 @@ class GeminiImagenUpscaleClient:
         logger.info(f"Modelo: {self.model_name}")
     
     def _get_access_token(self) -> str:
-        """Obtiene un access token válido de Google Cloud"""
-        if not self.credentials.valid:
-            self.credentials.refresh(Request())
-        return self.credentials.token
+        """
+        Obtiene un access token válido de Google Cloud
+        
+        Returns:
+            str: Access token válido
+            
+        Raises:
+            Exception: Si no se puede obtener el token
+        """
+        try:
+            if not self.credentials.valid:
+                self.credentials.refresh(Request())
+            return self.credentials.token
+        except Exception as e:
+            logger.error(f"Error al obtener access token: {e}")
+            raise Exception(f"No se pudo obtener access token de Google Cloud: {str(e)}")
     
     def upscale_image(
         self,
@@ -121,11 +133,13 @@ class GeminiImagenUpscaleClient:
         logger.info(f"   Factor: {upscale_factor}")
         
         try:
+            # Timeout aumentado a 10 minutos para imágenes grandes con factor x4
+            # Vertex AI puede tardar varios minutos en procesar imágenes grandes
             response = requests.post(
                 endpoint,
                 json=body,
                 headers=headers,
-                timeout=300  # 5 minutos timeout (upscale puede tardar)
+                timeout=600  # 10 minutos timeout (upscale puede tardar mucho)
             )
             
             logger.info(f"📥 Response status: {response.status_code}")
@@ -140,8 +154,27 @@ class GeminiImagenUpscaleClient:
                 
                 prediction = predictions[0]
                 
-                # El output URI está en la respuesta
-                output_gcs_uri = prediction.get('gcsUri') or prediction.get('outputGcsUri')
+                # El output URI puede estar en diferentes campos según la versión de la API
+                # Intentar múltiples campos posibles
+                output_gcs_uri = (
+                    prediction.get('gcsUri') or 
+                    prediction.get('outputGcsUri') or 
+                    prediction.get('outputUri') or
+                    prediction.get('uri')
+                )
+                
+                if not output_gcs_uri:
+                    # Si no encontramos el URI, intentar buscar en la estructura completa
+                    logger.warning(f"No se encontró output URI en campos estándar. Respuesta completa: {json.dumps(prediction, indent=2)}")
+                    # Buscar cualquier campo que contenga 'gs://'
+                    for key, value in prediction.items():
+                        if isinstance(value, str) and value.startswith('gs://'):
+                            output_gcs_uri = value
+                            logger.info(f"Encontrado URI en campo '{key}': {output_gcs_uri}")
+                            break
+                
+                if not output_gcs_uri:
+                    raise Exception("No se encontró URI de salida en la respuesta de Vertex AI")
                 
                 logger.info(f"✅ Upscale completado exitosamente!")
                 logger.info(f"   Output URI: {output_gcs_uri}")
@@ -165,13 +198,46 @@ class GeminiImagenUpscaleClient:
             raise
     
     def _parse_error(self, response: requests.Response) -> str:
-        """Parsea el error de la respuesta de Vertex AI"""
+        """
+        Parsea el error de la respuesta de Vertex AI
+        
+        Args:
+            response: Response object de requests
+            
+        Returns:
+            str: Mensaje de error formateado
+        """
         try:
             error_data = response.json()
+            
+            # Vertex AI puede devolver errores en diferentes estructuras
             error_info = error_data.get('error', {})
-            message = error_info.get('message', 'Error desconocido')
-            code = error_info.get('code', 'UNKNOWN')
+            
+            # Intentar obtener mensaje de diferentes campos
+            message = (
+                error_info.get('message') or 
+                error_info.get('status') or 
+                error_data.get('message') or
+                'Error desconocido'
+            )
+            
+            # Intentar obtener código de error
+            code = (
+                error_info.get('code') or 
+                error_info.get('statusCode') or
+                str(response.status_code)
+            )
+            
+            # Si hay detalles adicionales, incluirlos
+            details = error_info.get('details', [])
+            if details:
+                detail_messages = [d.get('message', str(d)) for d in details if isinstance(d, dict)]
+                if detail_messages:
+                    message += f" | Detalles: {'; '.join(detail_messages)}"
+            
             return f"[{code}] {message}"
-        except Exception:
-            return f"Error HTTP {response.status_code}: {response.text[:500]}"
+        except Exception as e:
+            # Si no podemos parsear JSON, devolver texto plano
+            error_text = response.text[:500] if hasattr(response, 'text') else str(response)
+            return f"Error HTTP {response.status_code}: {error_text}"
 

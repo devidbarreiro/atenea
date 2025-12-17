@@ -2818,6 +2818,11 @@ class ImageService:
         if upscale_factor not in ["x2", "x3", "x4"]:
             raise ValidationException(f"upscale_factor debe ser 'x2', 'x3' o 'x4', recibido: {upscale_factor}")
         
+        # Validar output_mime_type
+        valid_mime_types = ['image/png', 'image/jpeg']
+        if output_mime_type not in valid_mime_types:
+            raise ValidationException(f"output_mime_type debe ser uno de {valid_mime_types}, recibido: {output_mime_type}")
+        
         # Crear nueva imagen para el resultado del upscale
         from datetime import datetime
         upscaled_image = Image.objects.create(

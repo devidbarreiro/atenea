@@ -4768,6 +4768,12 @@ class ImageUpscaleView(LoginRequiredMixin, ServiceMixin, View):
                 messages.error(request, 'Factor de escalado inválido. Debe ser x2, x3 o x4')
                 return redirect('core:image_detail', image_uuid=image_uuid)
             
+            # Validar output_mime_type
+            valid_mime_types = ['image/png', 'image/jpeg']
+            if output_mime_type not in valid_mime_types:
+                messages.error(request, f'Formato de salida inválido. Debe ser uno de: {", ".join(valid_mime_types)}')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
             # Encolar upscale de forma asíncrona
             image_service = ImageService()
             task = image_service.upscale_image_async(
