@@ -19,6 +19,7 @@ class QuoteAnimation(BaseManimAnimation):
         quote = self._get_config_value('text', '')
         author = self._get_config_value('author')
         duration = self._get_config_value('duration')
+        display_time = self._get_config_value('display_time')
         
         # Validar y reparar encoding si es necesario
         if not quote or not quote.strip():
@@ -37,6 +38,16 @@ class QuoteAnimation(BaseManimAnimation):
                     duration = None
             if duration is not None and duration <= 0:
                 raise ValueError(f"Duración debe ser positiva, recibido: {duration}")
+        
+        # Validar display_time si se proporciona
+        if display_time is not None:
+            if isinstance(display_time, str):
+                try:
+                    display_time = float(display_time)
+                except ValueError:
+                    display_time = None
+            if display_time is not None and display_time <= 0:
+                display_time = None
         
         # Si author es None o string vacío, convertirlo
         if author == "None" or author == "" or not author:
@@ -120,72 +131,63 @@ class QuoteAnimation(BaseManimAnimation):
             quote_text.move_to(card.get_center())
             self._ensure_text_only(card, quote_text, card_width, card_height)
         
-        # === CALCULAR DURACIÓN AUTOMÁTICA ===
-        if duration is None:
-            text_length = len(quote.replace('\n', '').replace(' ', ''))
-            base_duration = 8.0
-            char_duration = 0.05
-            auto_duration = base_duration + (text_length * char_duration)
-            duration = max(8.0, min(15.0, auto_duration))
+        # === CALCULAR TIEMPOS DE ANIMACIÓN ===
+        text_length = len(quote.replace('\n', '').replace(' ', ''))
         
-        # Calcular tiempos de animación
-        total_time = duration
-        card_fade_time = 0.3
-        card_move_time = min(1.5, total_time * 0.15)
-        text_write_time = min(4.0, total_time * 0.35)
+        # Tiempo de entrada: escalado desde esquina inferior izquierda
+        card_scale_time = 0.8
+        
+        # Tiempo de escritura del texto (basado en longitud)
+        text_write_time = min(4.0, max(1.5, text_length * 0.04))
+        
+        # Tiempo de escritura del autor
         author_write_time = 1.2 if has_author else 0
-        wait_before_read = 0.7
-        read_time = max(2.0, total_time * 0.25)
-        fade_out_time = min(1.5, total_time * 0.15)
         
-        if total_time < 10:
-            scale = total_time / 10.0
-            text_write_time *= scale
-            read_time *= scale
-            fade_out_time *= scale
+        # Pequeña pausa antes de mostrar el autor
+        wait_before_author = 0.3
+        
+        # === CALCULAR TIEMPO DE VISUALIZACIÓN ===
+        if display_time is not None:
+            # Si se especificó display_time, usarlo directamente
+            read_time = display_time
+        elif duration is not None:
+            # Si se especificó duración total, calcular read_time como el resto
+            time_used = card_scale_time + 0.2 + text_write_time + wait_before_author + author_write_time
+            read_time = max(1.0, duration - time_used)
+        else:
+            # Cálculo automático basado en longitud del texto
+            base_read_time = 3.0
+            char_read_time = 0.03
+            read_time = max(2.0, min(8.0, base_read_time + (text_length * char_read_time)))
         
         # === ANIMACIONES ===
-        card.shift(LEFT * 15)
-        self.play(FadeIn(card), run_time=card_fade_time)
-        
+        # Entrada: escalado desde esquina inferior izquierda
+        scale_point = card.get_corner(DOWN + LEFT)
         self.play(
-            card.animate.shift(RIGHT * 15),
-            run_time=card_move_time,
+            GrowFromPoint(card, scale_point),
+            run_time=card_scale_time,
             rate_func=smooth
         )
         
-        self.wait(0.5)
+        self.wait(0.2)
         
+        # Escritura del texto letra por letra
         self.play(
             AddTextLetterByLetter(quote_text),
             run_time=text_write_time,
             rate_func=linear
         )
         
-        self.wait(wait_before_read)
+        self.wait(wait_before_author)
         
+        # Escritura del autor si existe
         if has_author:
             self.play(Write(author_text), run_time=author_write_time)
         
+        # Tiempo de visualización en pantalla
         self.wait(read_time)
         
-        if has_author:
-            self.play(
-                FadeOut(card, shift=UP),
-                FadeOut(quote_text, shift=UP),
-                FadeOut(author_text, shift=UP),
-                run_time=fade_out_time,
-                rate_func=smooth
-            )
-        else:
-            self.play(
-                FadeOut(card, shift=UP),
-                FadeOut(quote_text, shift=UP),
-                run_time=fade_out_time,
-                rate_func=smooth
-            )
-        
-        self.wait(0.5)
+        # Salida: corte directo (sin animación, el video simplemente termina)
     
     def _create_quote_text(self, quote, text_color="#FFFFFF", font_family="normal"):
         """Crea el texto de la cita con ajuste automático"""

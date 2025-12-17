@@ -1271,6 +1271,7 @@ class VideoService:
         container_color = video.config.get('container_color')  # Color del contenedor
         text_color = video.config.get('text_color')  # Color del texto
         font_family = video.config.get('font_family')  # Tipo de fuente
+        display_time = video.config.get('display_time')  # Tiempo de visualización en pantalla
         
         # Generar video localmente
         # Usar video.id como unique_id para evitar colisiones entre renders simultáneos
@@ -1282,6 +1283,7 @@ class VideoService:
             container_color=container_color,
             text_color=text_color,
             font_family=font_family,
+            display_time=display_time,
             unique_id=str(video.id)  # ID único por video para evitar colisiones
         )
         

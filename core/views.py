@@ -1814,6 +1814,14 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 # Si no se puede parsear, dejar que la animación calcule automáticamente
                 pass
         
+        # Tiempo de visualización opcional (segundos que permanece en pantalla)
+        display_time = request.POST.get('display_time')
+        if display_time:
+            try:
+                config['display_time'] = float(display_time)
+            except (ValueError, TypeError):
+                pass
+        
         return config
 
 
