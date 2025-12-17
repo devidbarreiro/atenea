@@ -100,7 +100,6 @@ class OpenAIImageClient:
                 'prompt': prompt,
                 'n': n,
                 'size': size,
-                'response_format': 'b64_json',  # Siempre usar base64 para consistencia
             }
             
             # Agregar parámetros opcionales
@@ -117,30 +116,36 @@ class OpenAIImageClient:
             # Generar imagen
             response = self.client.images.generate(**params)
             
-            # Extraer la primera imagen (si n=1) o todas
-            if n == 1:
-                image_base64 = response.data[0].b64_json
-                image_bytes = base64.b64decode(image_base64)
-                
-                result = {
-                    'image_data': image_bytes,
-                    'width': dims['width'],
-                    'height': dims['height'],
-                    'aspect_ratio': aspect_ratio,
-                }
-            else:
-                # Múltiples imágenes - retornar la primera por ahora
-                # TODO: Considerar retornar todas las imágenes
-                image_base64 = response.data[0].b64_json
-                image_bytes = base64.b64decode(image_base64)
-                
-                result = {
-                    'image_data': image_bytes,
-                    'width': dims['width'],
-                    'height': dims['height'],
-                    'aspect_ratio': aspect_ratio,
-                    'all_images': [base64.b64decode(img.b64_json) for img in response.data],
-                }
+            # Validar que la respuesta tenga datos
+            if not response.data or len(response.data) == 0:
+                raise ValueError("La API de OpenAI no devolvió ninguna imagen")
+            
+            # Extraer la primera imagen
+            first_image = response.data[0]
+            
+            # Verificar que tenga b64_json (GPT Image siempre lo tiene)
+            if not hasattr(first_image, 'b64_json') or not first_image.b64_json:
+                raise ValueError("La respuesta de OpenAI no contiene datos de imagen en base64")
+            
+            image_base64 = first_image.b64_json
+            image_bytes = base64.b64decode(image_base64)
+            
+            logger.info(f"[OpenAI Image] Imagen decodificada: {len(image_bytes)} bytes")
+            
+            result = {
+                'image_data': image_bytes,
+                'width': dims['width'],
+                'height': dims['height'],
+                'aspect_ratio': aspect_ratio,
+            }
+            
+            # Si hay múltiples imágenes, agregarlas al resultado
+            if n > 1 and len(response.data) > 1:
+                result['all_images'] = [
+                    base64.b64decode(img.b64_json) 
+                    for img in response.data 
+                    if hasattr(img, 'b64_json') and img.b64_json
+                ]
             
             logger.info(f"[OpenAI Image] ✅ Imagen generada exitosamente")
             return result
@@ -199,7 +204,6 @@ class OpenAIImageClient:
                 'image': BytesIO(input_image_data),
                 'prompt': prompt,
                 'size': size,
-                'response_format': 'b64_json',
             }
             
             # Agregar máscara si se proporciona
@@ -220,9 +224,19 @@ class OpenAIImageClient:
             # Editar imagen
             response = self.client.images.edit(**params)
             
+            # Validar respuesta
+            if not response.data or len(response.data) == 0:
+                raise ValueError("La API de OpenAI no devolvió ninguna imagen editada")
+            
+            first_image = response.data[0]
+            if not hasattr(first_image, 'b64_json') or not first_image.b64_json:
+                raise ValueError("La respuesta de OpenAI no contiene datos de imagen en base64")
+            
             # Extraer imagen
-            image_base64 = response.data[0].b64_json
+            image_base64 = first_image.b64_json
             image_bytes = base64.b64decode(image_base64)
+            
+            logger.info(f"[OpenAI Image] Imagen editada decodificada: {len(image_bytes)} bytes")
             
             result = {
                 'image_data': image_bytes,
@@ -292,7 +306,6 @@ class OpenAIImageClient:
                 'image': image_files,  # Lista de imágenes
                 'prompt': prompt,
                 'size': size,
-                'response_format': 'b64_json',
             }
             
             # Agregar parámetros opcionales
@@ -309,9 +322,19 @@ class OpenAIImageClient:
             # Generar imagen compuesta
             response = self.client.images.edit(**params)
             
+            # Validar respuesta
+            if not response.data or len(response.data) == 0:
+                raise ValueError("La API de OpenAI no devolvió ninguna imagen compuesta")
+            
+            first_image = response.data[0]
+            if not hasattr(first_image, 'b64_json') or not first_image.b64_json:
+                raise ValueError("La respuesta de OpenAI no contiene datos de imagen en base64")
+            
             # Extraer imagen
-            image_base64 = response.data[0].b64_json
+            image_base64 = first_image.b64_json
             image_bytes = base64.b64decode(image_base64)
+            
+            logger.info(f"[OpenAI Image] Imagen compuesta decodificada: {len(image_bytes)} bytes")
             
             result = {
                 'image_data': image_bytes,
