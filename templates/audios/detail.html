@@ -61,11 +61,19 @@
             </div>
             {% endif %}
 
-            <!-- Texto -->
+            <!-- Texto / Prompt -->
             <div class="bg-white shadow-md rounded-lg p-6 mb-6">
-                <h2 class="text-xl font-bold mb-4">Texto</h2>
+                <h2 class="text-xl font-bold mb-4">
+                    {% if audio.type == 'music' %}Prompt{% else %}Texto{% endif %}
+                </h2>
                 <div class="prose max-w-none">
-                    <p class="whitespace-pre-wrap">{{ audio.text }}</p>
+                    <p class="whitespace-pre-wrap">
+                        {% if audio.type == 'music' %}
+                            {{ audio.prompt|default:"Sin prompt" }}
+                        {% else %}
+                            {{ audio.text|default:"Sin texto" }}
+                        {% endif %}
+                    </p>
                 </div>
             </div>
         </div>
@@ -102,18 +110,31 @@
             <div class="bg-white shadow-md rounded-lg p-6">
                 <h2 class="text-xl font-bold mb-4">Información</h2>
                 <dl class="space-y-3">
+                    {% if audio.type == 'tts' %}
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Voz</dt>
-                        <dd class="text-sm text-gray-900">{{ audio.voice_name }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Modelo</dt>
-                        <dd class="text-sm text-gray-900">{{ audio.model_id }}</dd>
+                        <dd class="text-sm text-gray-900">{{ audio.voice_name|default:"No especificada" }}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Idioma</dt>
-                        <dd class="text-sm text-gray-900">{{ audio.language_code|upper }}</dd>
+                        <dd class="text-sm text-gray-900">{{ audio.language_code|upper|default:"ES" }}</dd>
                     </div>
+                    {% endif %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Modelo</dt>
+                        <dd class="text-sm text-gray-900 flex items-center gap-2">
+                            {% if model_info.logo %}
+                                <img src="{{ model_info.logo }}" alt="{{ model_info.name }}" class="w-5 h-5 object-contain">
+                            {% endif %}
+                            <span>{{ model_info.name|default:audio.model_id }}</span>
+                        </dd>
+                    </div>
+                    {% if audio.type == 'music' %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Tipo</dt>
+                        <dd class="text-sm text-gray-900">Música Generada</dd>
+                    </div>
+                    {% endif %}
                     {% if audio.duration %}
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Duración</dt>
