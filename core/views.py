@@ -19,6 +19,7 @@ from django.contrib.auth.decorators import permission_required, login_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
+from datetime import datetime
 from django.db.models import Max, Q, Sum, Count
 from django.contrib.auth import authenticate, login, logout
 import os
@@ -2296,6 +2297,69 @@ class ModelCapabilitiesAPIView(View):
             }, status=500)
 
 
+class VideoModelsAPIView(View):
+    """API endpoint para obtener modelos de video que soporten image-to-video"""
+    
+    def get(self, request):
+        """
+        Retorna modelos de video que soporten image-to-video
+        
+        Query params:
+            image_to_video: Si es 'true', solo retorna modelos que soporten image-to-video
+        """
+        from .ai_services.model_config import get_models_by_type
+        
+        try:
+            image_to_video_only = request.GET.get('image_to_video', 'false').lower() == 'true'
+            
+            # Obtener todos los modelos de video (retorna lista de diccionarios)
+            video_models = get_models_by_type('video')
+            
+            # Filtrar por image_to_video si se solicita
+            if image_to_video_only:
+                filtered_models = []
+                excluded_services = ['heygen']  # Excluir servicios que requieren flujo especial
+                
+                for model_info in video_models:
+                    model_id = model_info.get('id', '')
+                    service = model_info.get('service', '')
+                    supports = model_info.get('supports', {})
+                    
+                    # Excluir modelos HeyGen (requieren avatar, no imagen genérica)
+                    if service in excluded_services or 'heygen' in model_id.lower():
+                        continue
+                    
+                    # Solo incluir modelos que realmente soporten image-to-video genérico
+                    if supports.get('image_to_video') or supports.get('references', {}).get('start_image'):
+                        filtered_models.append(model_info)
+                
+                video_models = filtered_models
+            
+            # Formatear respuesta (ya viene con 'id' incluido desde get_models_by_type)
+            models_list = []
+            for model_info in video_models:
+                models_list.append({
+                    'id': model_info.get('id', ''),
+                    'name': model_info.get('name', model_info.get('id', '')),
+                    'description': model_info.get('description', ''),
+                    'service': model_info.get('service', ''),
+                    'logo': model_info.get('logo', ''),
+                    'supports': model_info.get('supports', {}),
+                })
+            
+            return JsonResponse({
+                'models': models_list,
+                'count': len(models_list)
+            })
+        except Exception as e:
+            logger.error(f"Error al obtener modelos de video: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al cargar modelos de video',
+                'error_detail': str(e),
+                'models': []
+            }, status=500)
+
+
 class EstimateCostAPIView(LoginRequiredMixin, View):
     """API endpoint para calcular costo estimado de generación"""
     
@@ -2352,7 +2416,14 @@ class EstimateCostAPIView(LoginRequiredMixin, View):
                 )
                     
             elif item_type == 'image':
-                cost = CreditService.estimate_image_cost()
+                model_id = data.get('model_id')
+                image_type = data.get('image_type', 'text_to_image')
+                quality = data.get('config', {}).get('quality', 'medium')
+                cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
                 
             elif item_type == 'audio':
                 cost = CreditService.estimate_audio_cost(text)
@@ -3298,6 +3369,12 @@ class CreateItemAPIView(ServiceMixin, View):
             # Obtener avatar_id y voice_id (requeridos)
             config['avatar_id'] = settings.get('avatar_id') if 'avatar_id' in settings else data.get('avatar_id')
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
+            
+            # Validar campos requeridos ANTES de crear el video
+            if not config.get('avatar_id'):
+                raise ValidationException('El campo Avatar es requerido para HeyGen Avatar V2. Por favor selecciona un avatar.')
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar V2. Por favor selecciona una voz.')
             # Convertir has_background a boolean correctamente
             has_bg_setting = settings.get('has_background', False)
             has_bg_data = data.get('has_background', False)
@@ -3330,6 +3407,10 @@ class CreateItemAPIView(ServiceMixin, View):
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
             config['video_orientation'] = settings.get('video_orientation') if 'video_orientation' in settings else data.get('video_orientation', 'portrait')
             config['fit'] = settings.get('fit') if 'fit' in settings else data.get('fit', 'cover')
+            
+            # Validar voice_id requerido ANTES de crear el video
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar IV. Por favor selecciona una voz.')
             
             # Manejar imagen de avatar: puede venir como start_image (formulario dinámico) o avatar_image_id (select)
             # start_image se procesará más abajo en el código, aquí solo manejamos avatar_image_id
@@ -3433,6 +3514,20 @@ class CreateItemAPIView(ServiceMixin, View):
             gcs_path = gcs_storage.upload_django_file(end_file, gcs_destination)
             config['end_image'] = gcs_path
             logger.info(f"✅ Imagen final subida: {gcs_path}")
+        
+        # Validación adicional para HeyGen Avatar IV: requiere imagen de avatar
+        if video_type == 'heygen_avatar_iv':
+            has_avatar_image = (
+                config.get('start_image') or 
+                config.get('gcs_avatar_path') or 
+                config.get('existing_image_id')
+            )
+            if not has_avatar_image:
+                raise ValidationException(
+                    'HeyGen Avatar IV requiere una imagen de avatar. '
+                    'Por favor sube una imagen usando el campo "Start Image" en Referencias, '
+                    'o selecciona una imagen existente.'
+                )
         
         # Crear video
         video = video_service.create_video(
@@ -4200,6 +4295,435 @@ class ImageRecreateView(ServiceMixin, View):
             logger.error(f'Error al recrear imagen: {e}', exc_info=True)
             messages.error(request, f'Error inesperado: {str(e)}')
             return redirect('core:image_detail', image_uuid=original_image.uuid)
+
+
+class ImageEditView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para editar una imagen existente con nuevo prompt"""
+    
+    def get(self, request, image_uuid):
+        """Muestra formulario para editar imagen"""
+        from django.shortcuts import render
+        from core.ai_services.model_config import get_models_by_type
+        
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        # Obtener modelos de imagen disponibles (solo OpenAI Image para edición)
+        image_models = [
+            model for model in get_models_by_type('image')
+            if model.get('service') == 'openai_image'
+        ]
+        
+        # Obtener URL firmada de la imagen original
+        from core.storage.gcs import gcs_storage
+        original_image_url = None
+        if original_image.gcs_path:
+            try:
+                original_image_url = gcs_storage.get_signed_url(original_image.gcs_path, expiration=3600)
+            except Exception as e:
+                logger.warning(f"No se pudo obtener URL firmada: {e}")
+        
+        project = original_image.project
+        context = {
+            'original_image': original_image,
+            'original_image_url': original_image_url,
+            'image_models': image_models,
+            'project': project,
+        }
+        
+        # Agregar contexto del proyecto si existe
+        if project:
+            context['user_role'] = project.get_user_role(request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
+        
+        return render(request, 'images/edit.html', context)
+    
+    def post(self, request, image_uuid):
+        """Procesa la edición de imagen"""
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        image_service = self.get_image_service()
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        try:
+            # Obtener datos del formulario
+            # Valores por defecto automáticos:
+            title = request.POST.get('title', f'{original_image.title} (editada)')
+            prompt = request.POST.get('prompt', '')
+            model_id = request.POST.get('model_id', 'gpt-image-1.5')
+            aspect_ratio = request.POST.get('aspect_ratio', original_image.aspect_ratio or '1:1')
+            quality = request.POST.get('quality', 'medium')
+            format_type = request.POST.get('format', 'png')  # Siempre PNG por defecto
+            background = request.POST.get('background', 'opaque')  # Siempre opaque por defecto
+            input_fidelity = request.POST.get('input_fidelity', 'low')
+            
+            if not prompt:
+                messages.error(request, 'El prompt es requerido')
+                return redirect('core:image_edit', image_uuid=image_uuid)
+            
+            # Determinar tipo de edición según archivos subidos
+            mask_file = request.FILES.get('mask')
+            reference_images = request.FILES.getlist('reference_images')
+            
+            # Siempre usar image_to_image o multi_image (siempre hay imagen original)
+            if reference_images and len(reference_images) > 0:
+                # Multi-image: imagen original + imágenes de referencia adicionales
+                image_type = 'multi_image'
+            else:
+                # Image-to-image: imagen original + máscara opcional
+                image_type = 'image_to_image'
+            
+            # Construir configuración
+            config = {
+                'model_id': model_id,
+                'aspect_ratio': aspect_ratio,
+                'quality': quality,
+                'format': format_type,
+                'background': background,
+                'input_fidelity': input_fidelity,
+            }
+            
+            # Si es image_to_image o multi_image, necesitamos la imagen original
+            if image_type in ['image_to_image', 'multi_image']:
+                # Usar la imagen original como primera imagen de entrada
+                if original_image.gcs_path:
+                    config['input_image_gcs_path'] = original_image.gcs_path
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_edit', image_uuid=image_uuid)
+            
+            # Si hay máscara, subirla
+            if mask_file:
+                mask_result = image_service.upload_input_image(mask_file, original_image.project)
+                config['mask_gcs_path'] = mask_result['gcs_path']
+            
+            # Si hay imágenes de referencia, subirlas
+            if reference_images and len(reference_images) > 0:
+                reference_results = image_service.upload_multiple_input_images(
+                    reference_images, 
+                    original_image.project
+                )
+                # La primera imagen es la original, luego las referencias
+                input_images = [{'gcs_path': config['input_image_gcs_path']}]
+                input_images.extend(reference_results)
+                config['input_images'] = input_images
+            
+            # Crear nueva imagen
+            new_image = image_service.create_image(
+                title=title,
+                image_type=image_type,
+                prompt=prompt,
+                config=config,
+                created_by=request.user,
+                project=original_image.project
+            )
+            
+            # Generar la imagen automáticamente
+            task = image_service.generate_image_async(new_image)
+            
+            messages.success(
+                request,
+                f'Imagen "{title}" creada y encolada para generación.'
+            )
+            
+            # Redirigir a la nueva imagen
+            if new_image.project:
+                return redirect('core:project_image_detail', project_uuid=new_image.project.uuid, image_uuid=new_image.uuid)
+            else:
+                return redirect('core:image_detail', image_uuid=new_image.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except Exception as e:
+            logger.error(f'Error al editar imagen: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:image_edit', image_uuid=image_uuid)
+
+
+class ImageToVideoView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para crear un video desde una imagen existente"""
+    
+    def post(self, request, image_uuid):
+        """Crea un video desde una imagen"""
+        from django.contrib import messages
+        from core.ai_services.model_config import get_model_capabilities, get_video_type_from_model_id
+        
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        video_service = self.get_video_service()
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        try:
+            # Obtener datos del formulario
+            prompt = request.POST.get('prompt', '')
+            model_id = request.POST.get('model_id', 'veo-3.1-generate-preview')
+            duration = request.POST.get('duration')
+            aspect_ratio = request.POST.get('aspect_ratio')
+            
+            if not prompt:
+                messages.error(request, 'El prompt es requerido')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Validar que el modelo soporte image-to-video
+            capabilities = get_model_capabilities(model_id)
+            if not capabilities:
+                messages.error(request, f'Modelo {model_id} no encontrado')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            supports = capabilities.get('supports', {})
+            if not supports.get('image_to_video') and not supports.get('references', {}).get('start_image'):
+                messages.error(request, f'El modelo {model_id} no soporta image-to-video')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Obtener tipo de video desde model_id
+            video_type = get_video_type_from_model_id(model_id)
+            if not video_type:
+                messages.error(request, f'No se pudo determinar el tipo de video para el modelo {model_id}')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Determinar aspect ratio final
+            final_aspect_ratio = aspect_ratio or original_image.aspect_ratio or '16:9'
+            
+            # Construir configuración del video
+            config = {
+                'model_id': model_id,
+                'aspect_ratio': final_aspect_ratio,
+            }
+            
+            # Duración del formulario o por defecto según el modelo
+            if duration:
+                try:
+                    config['duration'] = int(duration)
+                except (ValueError, TypeError):
+                    # Si no se puede convertir, usar valor por defecto del modelo
+                    duration_config = supports.get('duration', {})
+                    if duration_config.get('fixed'):
+                        config['duration'] = duration_config['fixed']
+                    elif duration_config.get('options'):
+                        config['duration'] = duration_config['options'][0]
+                    elif duration_config.get('min'):
+                        config['duration'] = duration_config['min']
+                    else:
+                        config['duration'] = 8
+            else:
+                # Usar valor por defecto del modelo (fallback si no viene del formulario)
+                duration_config = supports.get('duration', {})
+                if duration_config.get('fixed'):
+                    config['duration'] = duration_config['fixed']
+                elif duration_config.get('options'):
+                    config['duration'] = duration_config['options'][0]
+                elif duration_config.get('min'):
+                    config['duration'] = duration_config['min']
+                else:
+                    config['duration'] = 8
+            
+            # Configurar imagen de entrada según el tipo de video
+            if video_type == 'gemini_veo':
+                # Veo usa input_image_gcs_uri
+                if original_image.gcs_path:
+                    config['input_image_gcs_uri'] = original_image.gcs_path
+                    config['input_image_mime_type'] = 'image/png'  # Por defecto PNG
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            elif video_type == 'sora':
+                # Sora usa input_reference_gcs_path
+                # Redimensionar y subir la imagen a GCS ANTES de crear el video
+                if original_image.gcs_path:
+                    from core.storage.gcs import gcs_storage
+                    from PIL import Image as PILImage
+                    from io import BytesIO
+                    try:
+                        # Mapear aspect ratio a tamaño de Sora
+                        size_map = {
+                            '16:9': (1280, 720),
+                            '9:16': (720, 1280),
+                            '1:1': (1024, 1024),
+                        }
+                        target_size = size_map.get(final_aspect_ratio, (1280, 720))
+                        
+                        # Descargar imagen desde GCS
+                        blob_name = original_image.gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                        blob = gcs_storage.bucket.blob(blob_name)
+                        image_data = blob.download_as_bytes()
+                        
+                        # Redimensionar imagen al tamaño requerido por Sora
+                        pil_image = PILImage.open(BytesIO(image_data))
+                        original_size = pil_image.size
+                        
+                        # Redimensionar manteniendo aspect ratio y luego recortar/rellenar si es necesario
+                        pil_image = pil_image.resize(target_size, PILImage.Resampling.LANCZOS)
+                        
+                        # Convertir a RGB si es necesario (Sora requiere RGB)
+                        if pil_image.mode in ('RGBA', 'LA', 'P'):
+                            rgb_image = PILImage.new('RGB', pil_image.size, (255, 255, 255))
+                            if pil_image.mode == 'P':
+                                pil_image = pil_image.convert('RGBA')
+                            rgb_image.paste(pil_image, mask=pil_image.split()[-1] if pil_image.mode == 'RGBA' else None)
+                            pil_image = rgb_image
+                        elif pil_image.mode != 'RGB':
+                            pil_image = pil_image.convert('RGB')
+                        
+                        # Guardar imagen redimensionada en bytes
+                        output = BytesIO()
+                        pil_image.save(output, format='PNG', quality=95)
+                        resized_image_data = output.getvalue()
+                        
+                        logger.info(f"Imagen redimensionada de {original_size} a {target_size} para Sora")
+                        
+                        # Subir a GCS como input_reference ANTES de crear el video
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        gcs_destination = f"projects/{original_image.project.id if original_image.project else 'none'}/videos/temp_input_reference_{timestamp}.png"
+                        gcs_path = gcs_storage.upload_from_bytes(
+                            file_content=resized_image_data,
+                            destination_path=gcs_destination,
+                            content_type='image/png'
+                        )
+                        
+                        # Guardar path en config (no los bytes)
+                        config['input_reference_gcs_path'] = gcs_path
+                        config['input_reference_mime_type'] = 'image/png'
+                        config['use_input_reference'] = True
+                    except Exception as e:
+                        logger.error(f"Error procesando imagen para Sora: {e}", exc_info=True)
+                        messages.error(request, 'Error al procesar la imagen para Sora')
+                        return redirect('core:image_detail', image_uuid=image_uuid)
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            else:
+                # Otros servicios (Higgsfield, Kling, etc.)
+                if original_image.gcs_path:
+                    # Obtener URL firmada para otros servicios
+                    from core.storage.gcs import gcs_storage
+                    try:
+                        image_url = gcs_storage.get_signed_url(original_image.gcs_path, expiration=3600)
+                        config['image_url'] = image_url
+                    except Exception as e:
+                        logger.error(f"Error obteniendo URL firmada: {e}")
+                        messages.error(request, 'Error al obtener URL de la imagen')
+                        return redirect('core:image_detail', image_uuid=image_uuid)
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Duración por defecto según el modelo
+            duration_config = supports.get('duration', {})
+            if duration_config:
+                if duration_config.get('fixed'):
+                    config['duration'] = duration_config['fixed']
+                elif duration_config.get('options'):
+                    config['duration'] = duration_config['options'][0]
+                elif duration_config.get('min'):
+                    config['duration'] = duration_config['min']
+                else:
+                    config['duration'] = 8
+            else:
+                config['duration'] = 8
+            
+            # Crear video
+            video_title = f"Video desde {original_image.title}"
+            new_video = video_service.create_video(
+                created_by=request.user,
+                project=original_image.project,
+                title=video_title,
+                video_type=video_type,
+                script=prompt,
+                config=config
+            )
+            
+            # Para Sora, mover el archivo temporal a la ubicación final del video
+            if video_type == 'sora' and config.get('input_reference_gcs_path'):
+                from core.storage.gcs import gcs_storage
+                try:
+                    # Mover de temp a la ubicación final del video
+                    old_path = config['input_reference_gcs_path']
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    new_gcs_destination = f"projects/{new_video.project.id if new_video.project else 'none'}/videos/{new_video.id}/input_reference_{timestamp}.png"
+                    
+                    # Copiar el archivo a la nueva ubicación
+                    old_blob_name = old_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                    new_blob_name = new_gcs_destination.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                    
+                    old_blob = gcs_storage.bucket.blob(old_blob_name)
+                    new_blob = gcs_storage.bucket.blob(new_blob_name)
+                    new_blob.upload_from_string(old_blob.download_as_bytes(), content_type='image/png')
+                    
+                    # Actualizar config con la nueva ruta
+                    new_gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{new_gcs_destination}"
+                    config['input_reference_gcs_path'] = new_gcs_path
+                    new_video.config = config
+                    new_video.save(update_fields=['config'])
+                    
+                    # Eliminar archivo temporal
+                    try:
+                        old_blob.delete()
+                    except Exception:
+                        pass  # Ignorar si no se puede eliminar
+                except Exception as e:
+                    logger.error(f"Error moviendo input_reference para Sora: {e}")
+                    # Continuar de todas formas, el path temporal también funciona
+            
+            # Generar el video automáticamente
+            task = video_service.generate_video_async(new_video)
+            
+            messages.success(
+                request,
+                f'Video "{video_title}" creado y encolado para generación.'
+            )
+            
+            # Redirigir al nuevo video
+            if new_video.project:
+                return redirect('core:project_video_detail', project_uuid=new_video.project.uuid, video_uuid=new_video.uuid)
+            else:
+                return redirect('core:video_detail', video_uuid=new_video.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except Exception as e:
+            logger.error(f'Error al crear video desde imagen: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:image_detail', image_uuid=image_uuid)
 
 
 class ImageRemoveBackgroundView(LoginRequiredMixin, ServiceMixin, View):

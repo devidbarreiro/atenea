@@ -57,6 +57,75 @@ document.addEventListener('alpine:init', () => {
         
         // Modal de mover
         moveModal: { open: false, item: null },
+        
+        // Modal de editar imagen
+        editModal: { open: false, item: null, loading: false },
+        
+        // Modal de crear video desde imagen
+        createVideoModal: { open: false, item: null, loading: false },
+        videoModels: [], // Se cargará dinámicamente
+        selectedVideoModel: null,
+        selectedModelCapabilities: null,
+        videoDuration: 8,
+        videoAspectRatio: '16:9',
+        
+        async openCreateVideoModal(item) {
+            this.createVideoModal = { open: true, item: item, loading: false };
+            this.selectedVideoModel = null;
+            this.selectedModelCapabilities = null;
+            this.videoDuration = 8;
+            this.videoAspectRatio = '16:9';
+            // Cargar modelos cuando se abre el modal
+            try {
+                const response = await fetch('/api/video-models/?image_to_video=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.videoModels = data.models || [];
+                    // Seleccionar primer modelo por defecto si hay modelos
+                    if (this.videoModels.length > 0) {
+                        this.selectVideoModel(this.videoModels[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('Error cargando modelos:', error);
+                this.videoModels = [];
+            }
+        },
+        
+        async selectVideoModel(modelId) {
+            this.selectedVideoModel = modelId;
+            // Cargar capacidades del modelo
+            try {
+                const response = await fetch(`/api/models/${modelId}/capabilities/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.selectedModelCapabilities = data.capabilities?.supports || {};
+                    
+                    // Establecer valores por defecto según el modelo
+                    const supports = this.selectedModelCapabilities;
+                    
+                    // Duración por defecto
+                    if (supports.duration) {
+                        if (supports.duration.fixed) {
+                            this.videoDuration = supports.duration.fixed;
+                        } else if (supports.duration.options && supports.duration.options.length > 0) {
+                            this.videoDuration = supports.duration.options[0];
+                        } else if (supports.duration.min) {
+                            this.videoDuration = supports.duration.min;
+                        }
+                    }
+                    
+                    // Aspect ratio por defecto
+                    if (supports.aspect_ratio && supports.aspect_ratio.length > 0) {
+                        this.videoAspectRatio = supports.aspect_ratio[0];
+                    }
+                }
+            } catch (error) {
+                console.error('Error cargando capacidades del modelo:', error);
+                this.selectedModelCapabilities = null;
+            }
+        },
+        
         projects: [{% for p in projects %}{ id: {{ p.id }}, uuid: '{{ p.uuid }}', name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
         
         // === ESTADO DE SELECCIÓN MASIVA ===
@@ -1498,17 +1567,17 @@ document.addEventListener('alpine:init', () => {
                             </div>
                             <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
                         </div>
-                        {# TODO: Implementar funcionalidad de crear video desde imagen #}
-                        <!-- Crear video (deshabilitado) -->
-                        <div x-show="selectedItem.type === 'image'" class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-400 opacity-50 cursor-not-allowed">
+                        <!-- Crear video desde imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="openCreateVideoModal(selectedItem)"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
                             <div class="flex items-center gap-3">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                 </svg>
                                 Crear video
                             </div>
-                            <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
-                        </div>
+                        </button>
                         {# TODO: Implementar funcionalidad de variaciones (para videos e imágenes) #}
                         <!-- Variaciones (deshabilitado) -->
                         <div class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-400 opacity-50 cursor-not-allowed">
@@ -1520,18 +1589,22 @@ document.addEventListener('alpine:init', () => {
                             </div>
                             <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
                         </div>
+                        <!-- Editar imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="editModal = { open: true, item: selectedItem, loading: false }"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                                Editar
+                            </div>
+                        </button>
                     </div>
                 </div>
                 
                 <div class="p-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
                     <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + 'x' + selectedItem.height + ' px' : ''"></span>
-                    <button x-show="selectedItem.type === 'image'" 
-                            class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                        </svg>
-                        Editar
-                    </button>
                 </div>
             </div>
         </div>
@@ -1648,4 +1721,450 @@ document.addEventListener('alpine:init', () => {
             </div>
         </div>
     </div>
+    
+    <!-- ========== MODAL DE EDITAR IMAGEN ========== -->
+    <div x-show="editModal.open && editModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="editModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-2xl transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Editar Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="editModal.item ? ('Editando: ' + (editModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="editModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="editImageForm" method="post" x-bind:action="'/images/' + editModal.item.id + '/edit/'" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Campos ocultos con valores por defecto -->
+                        <input type="hidden" name="title" x-bind:value="editModal.item.title + ' (editada)'">
+                        <input type="hidden" name="aspect_ratio" x-bind:value="editModal.item.aspect_ratio || '1:1'">
+                        <input type="hidden" name="format" value="png">
+                        <input type="hidden" name="background" value="opaque">
+                        
+                        <!-- Vista previa de imagen original -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="editModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="editModal.item.signed_url" 
+                                     x-bind:alt="editModal.item.title"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-64 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Modelo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Modelo <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="model_id" 
+                                required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="gpt-image-1.5" selected>GPT Image 1.5 - Modelo más avanzado, 4x más rápido</option>
+                                <option value="gpt-image-1">GPT Image 1 - Modelo estándar de alta calidad</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Prompt -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Instrucciones de Edición <span class="text-red-500">*</span>
+                            </label>
+                            <textarea 
+                                name="prompt" 
+                                rows="4" 
+                                required 
+                                placeholder="Describe las modificaciones que deseas hacer a la imagen..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                            ></textarea>
+                            <p class="text-xs text-gray-500 mt-1">Sé específico sobre qué quieres cambiar, agregar o modificar.</p>
+                        </div>
+                        
+                        <!-- Calidad y Fidelidad (en fila) -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Calidad</label>
+                                <select 
+                                    name="quality" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                >
+                                    <option value="low">Low - Más rápido</option>
+                                    <option value="medium" selected>Medium - Balance</option>
+                                    <option value="high">High - Máxima calidad</option>
+                                    <option value="auto">Auto</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Fidelidad</label>
+                                <select 
+                                    name="input_fidelity" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                >
+                                    <option value="low" selected>Low - Más creativo</option>
+                                    <option value="high">High - Más fiel</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Referencias - Diseño mejorado como dynamic form -->
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold text-gray-700 uppercase mb-3">REFERENCIAS (Opcional)</label>
+                            <div class="grid grid-cols-2 gap-2" id="edit-reference-images-container">
+                                <!-- Máscara para Inpainting -->
+                                <label class="relative group cursor-pointer" for="mask-input">
+                                    <input 
+                                        type="file" 
+                                        id="mask-input"
+                                        name="mask" 
+                                        accept="image/png,image/jpeg"
+                                        class="hidden" 
+                                        onchange="updateImagePreview(this, 'mask-preview')"
+                                    >
+                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                                        <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                                            <div class="absolute top-2 left-2">
+                                                <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <path d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.648 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"/>
+                                                </svg>
+                                            </div>
+                                            <span class="text-xs font-medium text-gray-900 mt-auto">Máscara</span>
+                                            <img id="mask-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                                        </div>
+                                    </div>
+                                </label>
+                                
+                                <!-- Imágenes de Referencia -->
+                                <label class="relative group cursor-pointer" for="reference-images-input">
+                                    <input 
+                                        type="file" 
+                                        id="reference-images-input"
+                                        name="reference_images" 
+                                        accept="image/*"
+                                        multiple
+                                        class="hidden" 
+                                        onchange="updateMultipleImagePreviews(this, 'reference-preview-container')"
+                                    >
+                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                                        <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                                            <div class="absolute top-2 left-2">
+                                                <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <path d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25h2.25A2.25 2.25 0 0121 10.5v8.25a2.25 2.25 0 01-2.25 2.25H16.5m-9-8.25h8.25m0 0V12m0-3.75v3.75m0 0v3.75m0-3.75h8.25"/>
+                                                </svg>
+                                            </div>
+                                            <span class="text-xs font-medium text-gray-900 mt-auto">Referencias</span>
+                                            <div id="reference-preview-container" class="hidden absolute inset-0 w-full h-full rounded overflow-hidden"></div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                <strong>Máscara:</strong> PNG con canal alpha para inpainting. <strong>Referencias:</strong> Múltiples imágenes para composición.
+                            </p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="editModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="editModal.loading = true; document.getElementById('editImageForm').submit();"
+                            x-bind:disabled="editModal.loading"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!editModal.loading">Generar Edición</span>
+                        <span x-show="editModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Generando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== MODAL DE CREAR VIDEO DESDE IMAGEN ========== -->
+    <div x-show="createVideoModal.open && createVideoModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="createVideoModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Crear Video desde Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="createVideoModal.item ? ('Desde: ' + (createVideoModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="createVideoModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="createVideoForm" method="post" x-bind:action="'/images/' + createVideoModal.item.id + '/create-video/'" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Vista previa de imagen -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="createVideoModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Entrada</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="createVideoModal.item.signed_url" 
+                                     x-bind:alt="createVideoModal.item.title"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Modelo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Modelo <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="model_id" 
+                                required
+                                x-model="selectedVideoModel"
+                                @change="selectVideoModel($event.target.value)"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                x-show="videoModels.length > 0"
+                            >
+                                <template x-for="model in videoModels" :key="model.id">
+                                    <option :value="model.id" x-text="model.name + (model.description ? ' - ' + model.description : '')"></option>
+                                </template>
+                            </select>
+                            <div x-show="videoModels.length === 0" class="text-sm text-gray-500 italic">
+                                Cargando modelos...
+                            </div>
+                        </div>
+                        
+                        <!-- Duración y Aspect Ratio (en fila) -->
+                        <div class="grid grid-cols-2 gap-4 mb-4" x-show="selectedModelCapabilities">
+                            <!-- Duración -->
+                            <div x-show="selectedModelCapabilities.duration">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Duración
+                                </label>
+                                <!-- Duración fija -->
+                                <div x-show="selectedModelCapabilities.duration.fixed" 
+                                     class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
+                                    <span x-text="selectedModelCapabilities.duration.fixed + 's (fija)'"></span>
+                                    <input type="hidden" name="duration" :value="selectedModelCapabilities.duration.fixed">
+                                </div>
+                                <!-- Duración con opciones -->
+                                <select 
+                                    name="duration" 
+                                    x-model="videoDuration"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && selectedModelCapabilities.duration.options"
+                                >
+                                    <template x-for="opt in selectedModelCapabilities.duration.options" :key="opt">
+                                        <option :value="opt" x-text="opt + 's'"></option>
+                                    </template>
+                                </select>
+                                <!-- Duración con min/max (input numérico) -->
+                                <input 
+                                    type="number" 
+                                    name="duration" 
+                                    x-model="videoDuration"
+                                    :min="selectedModelCapabilities.duration.min || 4"
+                                    :max="selectedModelCapabilities.duration.max || 12"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && !selectedModelCapabilities.duration.options && selectedModelCapabilities.duration.min"
+                                >
+                            </div>
+                            
+                            <!-- Aspect Ratio -->
+                            <div x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 0">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Aspect Ratio
+                                    <span class="text-xs text-gray-500 font-normal" x-show="selectedVideoModel && selectedVideoModel.includes('sora')">
+                                        (la imagen se redimensionará automáticamente)
+                                    </span>
+                                </label>
+                                <select 
+                                    name="aspect_ratio" 
+                                    x-model="videoAspectRatio"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 1"
+                                >
+                                    <template x-for="ar in selectedModelCapabilities.aspect_ratio" :key="ar">
+                                        <option :value="ar" x-text="ar + (ar === '1:1' ? ' (Cuadrado)' : ar === '16:9' ? ' (Horizontal)' : ar === '9:16' ? ' (Vertical)' : '')"></option>
+                                    </template>
+                                </select>
+                                <div x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length === 1" 
+                                     class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
+                                    <span x-text="selectedModelCapabilities.aspect_ratio[0] + ' (único disponible)'"></span>
+                                    <input type="hidden" name="aspect_ratio" :value="selectedModelCapabilities.aspect_ratio[0]">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Prompt -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Descripción del Video <span class="text-red-500">*</span>
+                            </label>
+                            <textarea 
+                                name="prompt" 
+                                rows="4" 
+                                required 
+                                placeholder="Describe cómo quieres que se anime la imagen..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+                            ></textarea>
+                            <p class="text-xs text-gray-500 mt-1">Describe el movimiento, animación o acción que quieres que ocurra en el video.</p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="createVideoModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="createVideoModal.loading = true; document.getElementById('createVideoForm').submit();"
+                            x-bind:disabled="createVideoModal.loading || videoModels.length === 0"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!createVideoModal.loading">Crear Video</span>
+                        <span x-show="createVideoModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Creando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+// Funciones para preview de imágenes en el modal de edición
+function updateImagePreview(input, previewId) {
+    const preview = document.getElementById(previewId);
+    const label = input.closest('label');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+            // Ocultar el icono y el texto cuando hay preview
+            const icon = label.querySelector('.absolute.top-2');
+            const text = label.querySelector('span.text-xs');
+            if (icon) icon.style.display = 'none';
+            if (text) text.style.display = 'none';
+        };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        // Si se elimina la imagen, restaurar preview
+        preview.classList.add('hidden');
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = '';
+        if (text) text.style.display = '';
+    }
+}
+
+function updateMultipleImagePreviews(input, containerId) {
+    const container = document.getElementById(containerId);
+    const label = input.closest('label');
+    if (input.files && input.files.length > 0) {
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+        
+        // Mostrar hasta 4 imágenes en grid
+        const maxPreviews = Math.min(input.files.length, 4);
+        for (let i = 0; i < maxPreviews; i++) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'w-full h-full object-cover';
+                img.style.width = `${100 / maxPreviews}%`;
+                img.style.display = 'inline-block';
+                container.appendChild(img);
+            };
+            reader.readAsDataURL(input.files[i]);
+        }
+        
+        // Si hay más de 4 imágenes, mostrar indicador
+        if (input.files.length > 4) {
+            const indicator = document.createElement('div');
+            indicator.className = 'absolute bottom-0 right-0 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-tl';
+            indicator.textContent = `+${input.files.length - 4}`;
+            container.appendChild(indicator);
+        }
+        
+        // Ocultar icono y texto
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = 'none';
+        if (text) text.style.display = 'none';
+    } else {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = '';
+        if (text) text.style.display = '';
+    }
+}
+</script>
