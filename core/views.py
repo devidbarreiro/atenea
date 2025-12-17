@@ -3290,6 +3290,12 @@ class CreateItemAPIView(ServiceMixin, View):
             # Obtener avatar_id y voice_id (requeridos)
             config['avatar_id'] = settings.get('avatar_id') if 'avatar_id' in settings else data.get('avatar_id')
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
+            
+            # Validar campos requeridos ANTES de crear el video
+            if not config.get('avatar_id'):
+                raise ValidationException('El campo Avatar es requerido para HeyGen Avatar V2. Por favor selecciona un avatar.')
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar V2. Por favor selecciona una voz.')
             # Convertir has_background a boolean correctamente
             has_bg_setting = settings.get('has_background', False)
             has_bg_data = data.get('has_background', False)
@@ -3322,6 +3328,10 @@ class CreateItemAPIView(ServiceMixin, View):
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
             config['video_orientation'] = settings.get('video_orientation') if 'video_orientation' in settings else data.get('video_orientation', 'portrait')
             config['fit'] = settings.get('fit') if 'fit' in settings else data.get('fit', 'cover')
+            
+            # Validar voice_id requerido ANTES de crear el video
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar IV. Por favor selecciona una voz.')
             
             # Manejar imagen de avatar: puede venir como start_image (formulario dinámico) o avatar_image_id (select)
             # start_image se procesará más abajo en el código, aquí solo manejamos avatar_image_id
@@ -3425,6 +3435,20 @@ class CreateItemAPIView(ServiceMixin, View):
             gcs_path = gcs_storage.upload_django_file(end_file, gcs_destination)
             config['end_image'] = gcs_path
             logger.info(f"✅ Imagen final subida: {gcs_path}")
+        
+        # Validación adicional para HeyGen Avatar IV: requiere imagen de avatar
+        if video_type == 'heygen_avatar_iv':
+            has_avatar_image = (
+                config.get('start_image') or 
+                config.get('gcs_avatar_path') or 
+                config.get('existing_image_id')
+            )
+            if not has_avatar_image:
+                raise ValidationException(
+                    'HeyGen Avatar IV requiere una imagen de avatar. '
+                    'Por favor sube una imagen usando el campo "Start Image" en Referencias, '
+                    'o selecciona una imagen existente.'
+                )
         
         # Crear video
         video = video_service.create_video(

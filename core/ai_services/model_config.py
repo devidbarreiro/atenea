@@ -786,6 +786,47 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/seedream.png',
     },
+    
+    # ==================== OPENAI GPT IMAGE ====================
+    'gpt-image-1': {
+        'service': 'openai_image',
+        'name': 'GPT Image 1',
+        'description': 'Generación de imágenes de alta calidad con OpenAI',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_image': True,  # Soportado vía Edits endpoint
+            'multi_image': True,  # Soportado vía Edits endpoint con múltiples imágenes
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '16:9', '9:16'],
+            'quality': ['low', 'medium', 'high', 'auto'],
+            'format': ['png', 'jpeg', 'webp'],
+            'background': ['transparent', 'opaque'],
+            'input_fidelity': ['low', 'high'],
+        },
+        'logo': '/static/img/logos/openai.svg',
+    },
+    'gpt-image-1.5': {
+        'service': 'openai_image',
+        'name': 'GPT Image 1.5',
+        'description': 'Modelo más avanzado, 4x más rápido que GPT Image 1',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_image': True,  # Soportado vía Edits endpoint
+            'multi_image': True,  # Soportado vía Edits endpoint con múltiples imágenes
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '16:9', '9:16'],
+            'quality': ['low', 'medium', 'high', 'auto'],
+            'format': ['png', 'jpeg', 'webp'],
+            'background': ['transparent', 'opaque'],
+            'input_fidelity': ['low', 'high'],
+        },
+        'logo': '/static/img/logos/openai.svg',
+    },
+    
     # ==================== ELEVENLABS ====================
     'elevenlabs': {
         'service': 'elevenlabs',

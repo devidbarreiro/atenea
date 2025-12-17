@@ -19,6 +19,7 @@ from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
 from .ai_services.seedream import SeaDreamImageClient
+from .ai_services.openai_image import OpenAIImageClient
 from .ai_services.sora import SoraClient
 from .storage.gcs import gcs_storage
 from core.utils.prompt_templates import apply_prompt_template
@@ -2039,6 +2040,7 @@ class ImageService:
         self.gemini_client = None
         self.higgsfield_client = None
         self.seedream_client = None
+        self.openai_image_client = None
     
     # ----------------
     # CLIENT GETTERS
@@ -2089,6 +2091,23 @@ class ImageService:
         
         if model_name is None or model_to_use == "seedream-default-model":
             self.seedream_client = client
+        
+        return client
+    
+    def _get_openai_image_client(self, model_name: Optional[str] = None) -> OpenAIImageClient:
+        """Inicialización perezosa del cliente OpenAI Image."""
+        model_to_use = model_name or "gpt-image-1.5"
+        
+        if self.openai_image_client and self.openai_image_client.model == model_to_use:
+            return self.openai_image_client
+        
+        if not settings.OPENAI_API_KEY:
+            raise ValidationException('OPENAI_API_KEY no está configurada')
+        
+        client = OpenAIImageClient(api_key=settings.OPENAI_API_KEY, model_name=model_to_use)
+        
+        if model_name is None or model_to_use == "gpt-image-1.5":
+            self.openai_image_client = client
         
         return client
     
@@ -2236,6 +2255,10 @@ class ImageService:
             elif service == 'seedream':
                 # Delegamos a la función específica de SeaDream
                 result = self._generate_seedream_image(image, model_id, aspect_ratio, final_prompt)
+            
+            elif service == 'openai_image':
+                # Delegamos a la función específica de OpenAI Image
+                result = self._generate_openai_image(image, model_id, aspect_ratio, final_prompt)
             
             else:
                 # Por defecto, usar Gemini
@@ -2418,6 +2441,75 @@ class ImageService:
             logger.error(f"[Seedream] Error al generar imagen: {e}")
             raise ImageGenerationException(f"Error de la API de SeaDream: {str(e)}")
 
+    def _generate_openai_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
+        """Genera imagen usando el cliente OpenAI Image."""
+        client = self._get_openai_image_client(model_name=model_id)
+        
+        # Obtener parámetros opcionales del config
+        quality = image.config.get('quality')
+        format_type = image.config.get('format')
+        background = image.config.get('background')
+        input_fidelity = image.config.get('input_fidelity')
+        
+        try:
+            if image.type == 'text_to_image':
+                return client.generate_image_from_text(
+                    prompt=final_prompt,
+                    aspect_ratio=aspect_ratio,
+                    quality=quality,
+                    format=format_type,
+                    background=background,
+                )
+            
+            elif image.type == 'image_to_image':
+                input_gcs_path = image.config.get('input_image_gcs_path')
+                if not input_gcs_path:
+                    raise ValidationException('Imagen de entrada es requerida para image-to-image.')
+                
+                # Descargar imagen desde GCS a bytes
+                input_image_data = self._download_image_from_gcs(input_gcs_path)
+                
+                # Obtener máscara si existe
+                mask_gcs_path = image.config.get('mask_gcs_path')
+                mask_data = None
+                if mask_gcs_path:
+                    mask_data = self._download_image_from_gcs(mask_gcs_path)
+                
+                return client.generate_image_from_image(
+                    prompt=final_prompt,
+                    input_image_data=input_image_data,
+                    aspect_ratio=aspect_ratio,
+                    mask_data=mask_data,
+                    quality=quality,
+                    format=format_type,
+                    input_fidelity=input_fidelity,
+                )
+            
+            elif image.type == 'multi_image':
+                input_images_config = image.config.get('input_images', [])
+                if not input_images_config:
+                    raise ValidationException('Imágenes de entrada son requeridas para multi-image.')
+                
+                # Descargar imágenes desde GCS a lista de bytes
+                input_images_data = [
+                    self._download_image_from_gcs(img_config['gcs_path'])
+                    for img_config in input_images_config
+                ]
+                
+                return client.generate_image_from_multiple_images(
+                    prompt=final_prompt,
+                    input_images_data=input_images_data,
+                    aspect_ratio=aspect_ratio,
+                    quality=quality,
+                    format=format_type,
+                    input_fidelity=input_fidelity,
+                )
+            
+            raise ValidationException(f'Tipo de imagen {image.type} no soportado por OpenAI GPT Image.')
+            
+        except Exception as e:
+            logger.error(f"[OpenAI Image] Error al generar imagen: {e}")
+            raise ImageGenerationException(f"Error de la API de OpenAI Image: {str(e)}")
 
     def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
         """
