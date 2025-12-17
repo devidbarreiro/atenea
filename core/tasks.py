@@ -143,9 +143,17 @@ def generate_image_task(self, task_uuid, image_uuid, user_id, **kwargs):
         # Buscar imagen: primero por UUID desde metadata, luego por UUID de la tarea
         item_uuid = task.metadata.get('item_uuid')
         if item_uuid:
-            image = Image.objects.get(uuid=item_uuid)
+            image = Image.objects.filter(uuid=item_uuid).first()
         else:
-            image = Image.objects.get(uuid=image_uuid)
+            image = Image.objects.filter(uuid=image_uuid).first()
+        
+        # Si la imagen no existe, marcar tarea como fallida sin reintentar
+        if not image:
+            error_msg = f"Imagen no encontrada (UUID: {item_uuid or image_uuid}). Puede haber sido eliminada."
+            logger.warning(f"[generate_image_task] {error_msg}")
+            task.mark_as_failed(error_msg)
+            # No crear notificación porque la imagen ya no existe
+            return {'status': 'failed', 'error': error_msg, 'image_uuid': str(item_uuid or image_uuid)}
         
         # Marcar imagen como processing ANTES de generar (para evitar doble procesamiento)
         if image.status != 'processing':

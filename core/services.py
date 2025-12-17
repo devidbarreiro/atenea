@@ -1068,7 +1068,15 @@ class VideoService:
         # Obtener configuración
         model = video.config.get('sora_model', 'sora-2')
         duration = int(video.config.get('duration', 8))  # Asegurar que es int
-        size = video.config.get('size', '1280x720')
+        aspect_ratio = video.config.get('aspect_ratio', '16:9')
+        
+        # Mapear aspect ratio a tamaño de Sora
+        size_map = {
+            '16:9': '1280x720',
+            '9:16': '720x1280',
+            '1:1': '1024x1024',
+        }
+        size = size_map.get(aspect_ratio, '1280x720')
         use_input_reference = video.config.get('use_input_reference', False)
         
         # Log de configuración antes de generar
@@ -2222,6 +2230,14 @@ class ImageService:
             # Calcular costo según el servicio
             if service == 'higgsfield':
                 estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            elif service == 'openai_image':
+                image_type = image.type
+                quality = image.config.get('quality', 'medium')
+                estimated_cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
             else:
                 estimated_cost = CreditService.estimate_image_cost()
             
@@ -2316,7 +2332,18 @@ class ImageService:
             capabilities = get_model_capabilities(model_id) if model_id else None
             service = capabilities.get('service') if capabilities else None
             
-            estimated_cost = CreditService.estimate_image_cost(model_id=model_id) if service == 'higgsfield' else CreditService.estimate_image_cost()
+            if service == 'higgsfield':
+                estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            elif service == 'openai_image':
+                image_type = image.type
+                quality = image.config.get('quality', 'medium')
+                estimated_cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
+            else:
+                estimated_cost = CreditService.estimate_image_cost()
             
             # Solo verificar créditos si el costo es > 0 (algunos modelos son gratis)
             if estimated_cost > 0:

@@ -273,13 +273,13 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'type': 'video',
         'supports': {
             'text_to_video': True,
-            'image_to_video': False,
+            'image_to_video': True,
             'duration': {'min': 4, 'max': 12, 'options': [4, 8, 12]},
             'aspect_ratio': ['16:9', '9:16', '1:1'],
             'resolution': ['720p', '1080p'],  # Basado en sizes: 1280x720, 720x1280, 1024x1024
             'audio': False,
             'references': {
-                'start_image': False,
+                'start_image': True,  # Soporta image-to-video
                 'end_image': False,
                 'style_image': False,
                 'asset_image': False,
@@ -297,13 +297,13 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'type': 'video',
         'supports': {
             'text_to_video': True,
-            'image_to_video': False,
+            'image_to_video': True,
             'duration': {'min': 4, 'max': 12, 'options': [4, 8, 12]},
             'aspect_ratio': ['16:9', '9:16', '1:1'],
             'resolution': ['720p', '1080p'],
             'audio': False,
             'references': {
-                'start_image': False,
+                'start_image': True,  # Soporta image-to-video
                 'end_image': False,
                 'style_image': False,
                 'asset_image': False,

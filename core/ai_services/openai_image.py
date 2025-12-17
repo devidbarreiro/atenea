@@ -7,6 +7,38 @@ import base64
 
 logger = logging.getLogger(__name__)
 
+
+def detect_image_mime_type(image_data: bytes) -> str:
+    """
+    Detecta el tipo MIME de una imagen basándose en su contenido (magic bytes)
+    
+    Args:
+        image_data: Bytes de la imagen
+        
+    Returns:
+        Content-Type apropiado (image/jpeg, image/png, image/webp)
+    """
+    # Detectar por magic bytes (primeros bytes del archivo)
+    if image_data.startswith(b'\xFF\xD8\xFF'):
+        return 'image/jpeg'
+    elif image_data.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    elif image_data.startswith(b'RIFF') and len(image_data) > 12 and image_data[8:12] == b'WEBP':
+        return 'image/webp'
+    else:
+        # Por defecto, asumir PNG (más común para máscaras y ediciones)
+        logger.warning(f"No se pudo detectar el tipo de imagen, usando image/png por defecto")
+        return 'image/png'
+
+
+class NamedBytesIO(BytesIO):
+    """
+    BytesIO con atributo 'name' para que el SDK de OpenAI pueda detectar el tipo MIME
+    """
+    def __init__(self, content: bytes, filename: str):
+        super().__init__(content)
+        self.name = filename
+
 # --- Configuración de Modelos de Imagen de OpenAI GPT Image ---
 
 OPENAI_IMAGE_MODELS = {
@@ -162,7 +194,7 @@ class OpenAIImageClient:
         mask_data: Optional[bytes] = None,
         size: Optional[str] = None,
         quality: Optional[str] = None,
-        format: Optional[str] = None,
+        format: Optional[str] = None,  # No usado en edit(), solo para compatibilidad
         input_fidelity: Optional[str] = None,
         **kwargs
     ) -> Dict:
@@ -177,7 +209,7 @@ class OpenAIImageClient:
             mask_data: Bytes de la máscara (opcional, para inpainting)
             size: Tamaño específico
             quality: Calidad ('low', 'medium', 'high', o 'auto')
-            format: Formato de salida ('png', 'jpeg', 'webp')
+            format: Formato de salida (ignorado - edit() no soporta este parámetro)
             input_fidelity: Fidelidad de entrada ('low' o 'high')
             **kwargs: Parámetros adicionales
         
@@ -198,23 +230,28 @@ class OpenAIImageClient:
         try:
             logger.info(f"[OpenAI Image] Editando imagen image-to-image ({self.model})")
             
-            # Preparar parámetros
+            # Detectar tipo MIME de la imagen de entrada
+            input_mime_type = detect_image_mime_type(input_image_data)
+            input_ext = '.png' if 'png' in input_mime_type else ('.jpg' if 'jpeg' in input_mime_type else '.webp')
+            
+            # Preparar parámetros con BytesIO que tenga nombre para que OpenAI detecte el tipo MIME
             params = {
                 'model': self.model,
-                'image': BytesIO(input_image_data),
+                'image': NamedBytesIO(input_image_data, f'input_image{input_ext}'),
                 'prompt': prompt,
                 'size': size,
             }
             
-            # Agregar máscara si se proporciona
+            # Agregar máscara si se proporciona (debe ser PNG con canal alpha)
             if mask_data:
-                params['mask'] = BytesIO(mask_data)
+                mask_mime_type = detect_image_mime_type(mask_data)
+                mask_ext = '.png' if 'png' in mask_mime_type else ('.jpg' if 'jpeg' in mask_mime_type else '.webp')
+                params['mask'] = NamedBytesIO(mask_data, f'mask{mask_ext}')
             
             # Agregar parámetros opcionales
+            # Nota: 'format' no está disponible en images.edit(), solo en images.generate()
             if quality:
                 params['quality'] = quality
-            if format:
-                params['format'] = format
             if input_fidelity:
                 params['input_fidelity'] = input_fidelity
             
@@ -259,7 +296,7 @@ class OpenAIImageClient:
         aspect_ratio: str = '1:1',
         size: Optional[str] = None,
         quality: Optional[str] = None,
-        format: Optional[str] = None,
+        format: Optional[str] = None,  # No usado en edit(), solo para compatibilidad
         input_fidelity: Optional[str] = None,
         **kwargs
     ) -> Dict:
@@ -273,7 +310,7 @@ class OpenAIImageClient:
             aspect_ratio: Aspect ratio deseado
             size: Tamaño específico
             quality: Calidad ('low', 'medium', 'high', o 'auto')
-            format: Formato de salida ('png', 'jpeg', 'webp')
+            format: Formato de salida (ignorado - edit() no soporta este parámetro)
             input_fidelity: Fidelidad de entrada ('low' o 'high')
             **kwargs: Parámetros adicionales
         
@@ -298,8 +335,12 @@ class OpenAIImageClient:
             logger.info(f"[OpenAI Image] Generando imagen compuesta desde {len(input_images_data)} imágenes ({self.model})")
             
             # Preparar parámetros
-            # OpenAI Edits acepta múltiples imágenes como lista de BytesIO
-            image_files = [BytesIO(img_data) for img_data in input_images_data]
+            # OpenAI Edits acepta múltiples imágenes como lista de BytesIO con nombres para detectar tipo MIME
+            image_files = []
+            for i, img_data in enumerate(input_images_data):
+                mime_type = detect_image_mime_type(img_data)
+                ext = '.png' if 'png' in mime_type else ('.jpg' if 'jpeg' in mime_type else '.webp')
+                image_files.append(NamedBytesIO(img_data, f'reference_image_{i}{ext}'))
             
             params = {
                 'model': self.model,
@@ -309,10 +350,9 @@ class OpenAIImageClient:
             }
             
             # Agregar parámetros opcionales
+            # Nota: 'format' no está disponible en images.edit(), solo en images.generate()
             if quality:
                 params['quality'] = quality
-            if format:
-                params['format'] = format
             if input_fidelity:
                 params['input_fidelity'] = input_fidelity
             
