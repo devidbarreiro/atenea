@@ -159,6 +159,41 @@
                 <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ video.prompt }}</p>
             </div>
             {% endif %}
+
+            <!-- Acciones -->
+            {% if video.status == 'completed' %}
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Acciones</h3>
+                <div class="space-y-2">
+                    <!-- Botón Recrear -->
+                    <div class="opacity-50 cursor-not-allowed">
+                        <div class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                <span class="text-sm text-gray-500">Recrear</span>
+                            </div>
+                            <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Próximamente</span>
+                        </div>
+                    </div>
+                    
+                    {# TODO: Implementar funcionalidad de variaciones de video #}
+                    <!-- Botón Variaciones -->
+                    <div class="opacity-50 cursor-not-allowed">
+                        <div class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                                </svg>
+                                <span class="text-sm text-gray-500">Variaciones</span>
+                            </div>
+                            <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Próximamente</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
