@@ -840,6 +840,26 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/elevenlabs.png',
     },
+    
+    # ==================== GOOGLE LYRIA ====================
+    'lyria-002': {
+        'service': 'google_lyria',
+        'name': 'Lyria 2',
+        'description': 'Generación de música instrumental de alta calidad',
+        'type': 'audio',
+        'supports': {
+            'text_to_music': True,
+            'prompt': True,
+            'negative_prompt': True,
+            'seed': True,
+            'sample_count': True,
+            'duration': {'fixed': 30},  # Siempre 30 segundos
+            'format': 'wav',
+            'sample_rate': 48000,
+            'instrumental_only': True,
+        },
+        'logo': '/static/img/logos/google.png',
+    },
 }
 
 
@@ -891,7 +911,7 @@ def get_supported_fields(model_id: str) -> List[str]:
     fields = []
     
     # Campos básicos
-    if supports.get('text_to_video') or supports.get('text_to_image') or supports.get('text_to_speech'):
+    if supports.get('text_to_video') or supports.get('text_to_image') or supports.get('text_to_speech') or supports.get('text_to_music'):
         fields.append('prompt')
     
     if supports.get('image_to_video') or supports.get('references', {}).get('start_image'):
@@ -924,6 +944,10 @@ def get_supported_fields(model_id: str) -> List[str]:
     
     if supports.get('seed'):
         fields.append('seed')
+    
+    # Campos específicos de música
+    if supports.get('sample_count'):
+        fields.append('sample_count')
     
     # Campos específicos
     if supports.get('avatar_id'):
@@ -1069,12 +1093,21 @@ def get_model_info_for_item(item_type: str, model_key: str = None) -> Dict:
         }
     
     elif item_type == 'audio':
-        # Audios usan ElevenLabs
+        # Si model_key está en MODEL_CAPABILITIES, usarlo directamente
+        if model_key and model_key in MODEL_CAPABILITIES:
+            model = MODEL_CAPABILITIES[model_key]
+            return {
+                'name': model.get('name', 'Modelo desconocido'),
+                'logo': model.get('logo', '/static/img/logos/default.png'),
+                'service': model.get('service', 'unknown'),
+                'model_id': model_key
+            }
+        # Fallback: Audios por defecto usan ElevenLabs
         return {
             'name': 'ElevenLabs TTS',
             'logo': '/static/img/logos/elevenlabs.png',
             'service': 'elevenlabs',
-            'model_id': 'elevenlabs-tts'
+            'model_id': 'elevenlabs'
         }
     
     return default_info

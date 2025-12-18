@@ -2742,6 +2742,10 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 audios = queryset[offset:offset + limit]
                 audio_service = self.get_audio_service()
                 for audio in audios:
+                    # Obtener info del modelo usando el model_id del audio
+                    model_id = audio.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+                    model_info = get_model_info_for_item('audio', model_key=model_id)
+                    
                     item_data = {
                         'id': str(audio.uuid),
                         'type': 'audio',
@@ -2754,6 +2758,8 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'has_media': audio.status == 'completed' and bool(audio.gcs_path),
                         'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
+                        'model': model_info,  # Información del modelo (nombre, logo, servicio)
+                        'audio_type': audio.type,  # 'tts' o 'music'
                     }
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and audio.status == 'completed' and audio.gcs_path:
@@ -3115,8 +3121,9 @@ class ItemDetailAPIView(ServiceMixin, View):
                     created_at__gt=audio.created_at
                 ).order_by('created_at').first()
                 
-                # Obtener info del modelo
-                model_info = get_model_info_for_item('audio')
+                # Obtener info del modelo usando el model_id del audio
+                model_id = audio.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+                model_info = get_model_info_for_item('audio', model_key=model_id)
                 
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_uuid:
@@ -3143,7 +3150,7 @@ class ItemDetailAPIView(ServiceMixin, View):
                             'name': audio.project.name if audio.project else None,
                         },
                         'text': audio.text,
-                        'prompt': audio.text,  # Para consistencia con otros tipos
+                        'prompt': audio.prompt if audio.type == 'music' else audio.text,  # Para música usar prompt, para TTS usar text
                         'error_message': audio.error_message,
                         'signed_url': audio_data.get('signed_url'),
                         'detail_url': detail_url,
@@ -3660,24 +3667,71 @@ class CreateItemAPIView(ServiceMixin, View):
         return JsonResponse(response_data)
     
     def _create_audio(self, request, data, project, settings):
-        """Crear audio"""
+        """Crear audio (TTS o Música)"""
         from decouple import config as get_config
         
         title = data.get('title')
-        text = data.get('text') or data.get('prompt', '')
-        # voice_id puede venir de settings, data, o usar el default
-        voice_id = settings.get('voice_id') or settings.get('voice') or data.get('voice_id') or get_config('ELEVENLABS_DEFAULT_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+        audio_type = data.get('type', 'tts') or 'tts'  # 'tts' o 'music'
+        model_id = data.get('model_id', '')
         
         audio_service = self.get_audio_service()
         
-        # Crear audio con los parámetros correctos
-        audio = audio_service.create_audio(
-            title=title,
-            text=text,
-            voice_id=voice_id,
-            created_by=request.user,
-            project=project
+        # Determinar si es música basándose en type o model_id
+        is_music = (
+            audio_type == 'music' or 
+            model_id.startswith('lyria-') or 
+            model_id in ['lyria-002']
         )
+        
+        if is_music:
+            # Crear audio de música con Lyria
+            prompt = data.get('prompt') or data.get('text', '')
+            if not prompt:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'El prompt es requerido para generar música'
+                }, status=400)
+            
+            negative_prompt = data.get('negative_prompt')
+            seed = data.get('seed')
+            sample_count = data.get('sample_count')
+            
+            # Convertir seed y sample_count a int si vienen como string
+            if seed is not None:
+                try:
+                    seed = int(seed) if not isinstance(seed, int) else seed
+                except (ValueError, TypeError):
+                    seed = None
+            
+            if sample_count is not None:
+                try:
+                    sample_count = int(sample_count) if not isinstance(sample_count, int) else sample_count
+                except (ValueError, TypeError):
+                    sample_count = None
+            
+            audio = audio_service.create_music_audio(
+                title=title,
+                prompt=prompt,
+                created_by=request.user,
+                model_id=model_id or 'lyria-002',
+                negative_prompt=negative_prompt,
+                seed=seed,
+                sample_count=sample_count,
+                project=project
+            )
+        else:
+            # Crear audio TTS con ElevenLabs
+            text = data.get('text') or data.get('prompt', '')
+            # voice_id puede venir de settings, data, o usar el default
+            voice_id = settings.get('voice_id') or settings.get('voice') or data.get('voice_id') or get_config('ELEVENLABS_DEFAULT_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+            
+            audio = audio_service.create_audio(
+                title=title,
+                text=text,
+                voice_id=voice_id,
+                created_by=request.user,
+                project=project
+            )
         
         # Encolar generación automáticamente
         try:
@@ -3685,10 +3739,11 @@ class CreateItemAPIView(ServiceMixin, View):
             generate_status = 'started'
             audio.refresh_from_db()
             # Mostrar toast de que se encoló la tarea
+            audio_preview = audio.text[:50] if audio.text else (audio.prompt[:50] if audio.prompt else audio.title)
             toast_message = {
                 'type': 'info',
                 'title': 'Audio encolado',
-                'message': f'El audio "{audio.text[:50]}..." está en cola y comenzará a generarse pronto',
+                'message': f'El audio "{audio_preview}..." está en cola y comenzará a generarse pronto',
                 'auto_close': 5
             }
         except Exception as e:
@@ -4973,6 +5028,11 @@ class AudioDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Detai
         context['active_tab'] = 'audio'
         context['initial_item_type'] = 'audio'
         context['initial_item_id'] = str(self.object.uuid)
+        
+        # Obtener información del modelo usado
+        model_id = self.object.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+        model_info = get_model_info_for_item('audio', model_key=model_id)
+        context['model_info'] = model_info
         if project:
             context['project'] = project
             context['user_role'] = project.get_user_role(self.request.user)

@@ -1770,21 +1770,21 @@ document.addEventListener('alpine:init', () => {
 
                 <!-- Contenido del formulario (scrollable) -->
                 <div class="flex-1 overflow-y-auto px-6 py-4">
-                    <form id="editImageForm" method="post" x-bind:action="'/images/' + editModal.item.id + '/edit/'" enctype="multipart/form-data">
+                    <form id="editImageForm" method="post" x-bind:action="editModal.item ? ('/images/' + editModal.item.id + '/edit/') : ''" enctype="multipart/form-data">
                         {% csrf_token %}
                         
                         <!-- Campos ocultos con valores por defecto -->
-                        <input type="hidden" name="title" x-bind:value="editModal.item.title + ' (editada)'">
-                        <input type="hidden" name="aspect_ratio" x-bind:value="editModal.item.aspect_ratio || '1:1'">
+                        <input type="hidden" name="title" x-bind:value="editModal.item ? (editModal.item.title + ' (editada)') : ''">
+                        <input type="hidden" name="aspect_ratio" x-bind:value="editModal.item ? (editModal.item.aspect_ratio || '1:1') : '1:1'">
                         <input type="hidden" name="format" value="png">
                         <input type="hidden" name="background" value="opaque">
                         
                         <!-- Vista previa de imagen original -->
-                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="editModal.item.signed_url">
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="editModal.item && editModal.item.signed_url">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
                             <div class="relative w-full max-w-md mx-auto">
-                                <img x-bind:src="editModal.item.signed_url" 
-                                     x-bind:alt="editModal.item.title"
+                                <img x-bind:src="editModal.item ? editModal.item.signed_url : ''" 
+                                     x-bind:alt="editModal.item ? editModal.item.title : ''"
                                      class="w-full h-auto rounded-lg shadow-md max-h-64 object-contain">
                             </div>
                         </div>
@@ -1966,15 +1966,15 @@ document.addEventListener('alpine:init', () => {
 
                 <!-- Contenido del formulario (scrollable) -->
                 <div class="flex-1 overflow-y-auto px-6 py-4">
-                    <form id="createVideoForm" method="post" x-bind:action="'/images/' + createVideoModal.item.id + '/create-video/'" enctype="multipart/form-data">
+                    <form id="createVideoForm" method="post" x-bind:action="createVideoModal.item ? ('/images/' + createVideoModal.item.id + '/create-video/') : ''" enctype="multipart/form-data">
                         {% csrf_token %}
                         
                         <!-- Vista previa de imagen -->
-                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="createVideoModal.item.signed_url">
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="createVideoModal.item && createVideoModal.item.signed_url">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Entrada</label>
                             <div class="relative w-full max-w-md mx-auto">
-                                <img x-bind:src="createVideoModal.item.signed_url" 
-                                     x-bind:alt="createVideoModal.item.title"
+                                <img x-bind:src="createVideoModal.item ? createVideoModal.item.signed_url : ''" 
+                                     x-bind:alt="createVideoModal.item ? createVideoModal.item.title : ''"
                                      class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
                             </div>
                         </div>
@@ -2004,24 +2004,24 @@ document.addEventListener('alpine:init', () => {
                         <!-- Duración y Aspect Ratio (en fila) -->
                         <div class="grid grid-cols-2 gap-4 mb-4" x-show="selectedModelCapabilities">
                             <!-- Duración -->
-                            <div x-show="selectedModelCapabilities.duration">
+                            <div x-show="selectedModelCapabilities && selectedModelCapabilities.duration">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
                                     Duración
                                 </label>
                                 <!-- Duración fija -->
-                                <div x-show="selectedModelCapabilities.duration.fixed" 
+                                <div x-show="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.fixed" 
                                      class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
-                                    <span x-text="selectedModelCapabilities.duration.fixed + 's (fija)'"></span>
-                                    <input type="hidden" name="duration" :value="selectedModelCapabilities.duration.fixed">
+                                    <span x-text="selectedModelCapabilities && selectedModelCapabilities.duration ? (selectedModelCapabilities.duration.fixed + 's (fija)') : ''"></span>
+                                    <input type="hidden" name="duration" :value="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.fixed ? selectedModelCapabilities.duration.fixed : ''">
                                 </div>
                                 <!-- Duración con opciones -->
                                 <select 
                                     name="duration" 
                                     x-model="videoDuration"
                                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                                    x-show="selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && selectedModelCapabilities.duration.options"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && selectedModelCapabilities.duration.options && selectedModelCapabilities.duration.options.length > 0"
                                 >
-                                    <template x-for="opt in selectedModelCapabilities.duration.options" :key="opt">
+                                    <template x-for="opt in (selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.options ? selectedModelCapabilities.duration.options : [])" :key="opt">
                                         <option :value="opt" x-text="opt + 's'"></option>
                                     </template>
                                 </select>
@@ -2030,15 +2030,15 @@ document.addEventListener('alpine:init', () => {
                                     type="number" 
                                     name="duration" 
                                     x-model="videoDuration"
-                                    :min="selectedModelCapabilities.duration.min || 4"
-                                    :max="selectedModelCapabilities.duration.max || 12"
+                                    :min="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.min ? selectedModelCapabilities.duration.min : 4"
+                                    :max="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.max ? selectedModelCapabilities.duration.max : 12"
                                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                                    x-show="selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && !selectedModelCapabilities.duration.options && selectedModelCapabilities.duration.min"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && (!selectedModelCapabilities.duration.options || selectedModelCapabilities.duration.options.length === 0) && selectedModelCapabilities.duration.min"
                                 >
                             </div>
                             
                             <!-- Aspect Ratio -->
-                            <div x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 0">
+                            <div x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 0">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
                                     Aspect Ratio
                                     <span class="text-xs text-gray-500 font-normal" x-show="selectedVideoModel && selectedVideoModel.includes('sora')">
@@ -2049,16 +2049,16 @@ document.addEventListener('alpine:init', () => {
                                     name="aspect_ratio" 
                                     x-model="videoAspectRatio"
                                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                                    x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 1"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 1"
                                 >
-                                    <template x-for="ar in selectedModelCapabilities.aspect_ratio" :key="ar">
+                                    <template x-for="ar in (selectedModelCapabilities && selectedModelCapabilities.aspect_ratio ? selectedModelCapabilities.aspect_ratio : [])" :key="ar">
                                         <option :value="ar" x-text="ar + (ar === '1:1' ? ' (Cuadrado)' : ar === '16:9' ? ' (Horizontal)' : ar === '9:16' ? ' (Vertical)' : '')"></option>
                                     </template>
                                 </select>
-                                <div x-show="selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length === 1" 
+                                <div x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length === 1" 
                                      class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
-                                    <span x-text="selectedModelCapabilities.aspect_ratio[0] + ' (único disponible)'"></span>
-                                    <input type="hidden" name="aspect_ratio" :value="selectedModelCapabilities.aspect_ratio[0]">
+                                    <span x-text="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio[0] ? (selectedModelCapabilities.aspect_ratio[0] + ' (único disponible)') : ''"></span>
+                                    <input type="hidden" name="aspect_ratio" :value="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio[0] ? selectedModelCapabilities.aspect_ratio[0] : ''">
                                 </div>
                             </div>
                         </div>
@@ -2143,15 +2143,15 @@ document.addEventListener('alpine:init', () => {
 
                 <!-- Contenido del formulario (scrollable) -->
                 <div class="flex-1 overflow-y-auto px-6 py-4">
-                    <form id="upscaleImageForm" method="post" x-bind:action="'/images/' + upscaleModal.item.id + '/upscale/'" enctype="multipart/form-data">
+                    <form id="upscaleImageForm" method="post" x-bind:action="upscaleModal.item ? ('/images/' + upscaleModal.item.id + '/upscale/') : ''" enctype="multipart/form-data">
                         {% csrf_token %}
                         
                         <!-- Vista previa de imagen -->
-                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="upscaleModal.item.signed_url">
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="upscaleModal.item && upscaleModal.item.signed_url">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
                             <div class="relative w-full max-w-md mx-auto">
-                                <img x-bind:src="upscaleModal.item.signed_url" 
-                                     x-bind:alt="upscaleModal.item.title"
+                                <img x-bind:src="upscaleModal.item ? upscaleModal.item.signed_url : ''" 
+                                     x-bind:alt="upscaleModal.item ? upscaleModal.item.title : ''"
                                      class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
                             </div>
                         </div>

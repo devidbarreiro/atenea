@@ -17,6 +17,7 @@ from .vuela_ai import (
     VuelaVoiceStyle
 )
 from .elevenlabs import ElevenLabsClient
+from .google_lyria import GoogleLyriaClient
 
 __all__ = [
     'BaseAIClient',
@@ -36,4 +37,5 @@ __all__ = [
     'VuelaMediaType',
     'VuelaVoiceStyle',
     'ElevenLabsClient',
+    'GoogleLyriaClient',
 ]

@@ -727,7 +727,9 @@ class Audio(models.Model):
                     
                     # Verificar si ya se cobraron créditos
                     if not self.metadata.get('credits_charged'):
-                        logger.info(f"Cobrando créditos para audio {self.id} (caracteres: {len(self.text)})")
+                        # Para música usar prompt, para TTS usar text
+                        text_length = len(self.prompt) if self.type == 'music' and self.prompt else (len(self.text) if self.text else 0)
+                        logger.info(f"Cobrando créditos para audio {self.id} (tipo: {self.type}, caracteres: {text_length})")
                         CreditService.deduct_credits_for_audio(self.created_by, self)
                     else:
                         logger.info(f"Créditos ya cobrados para audio {self.id}")

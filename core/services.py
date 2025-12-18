@@ -2885,6 +2885,20 @@ class AudioService:
         return ElevenLabsClient(api_key=api_key)
     
     @staticmethod
+    def _get_lyria_client(model_name: str = "lyria-002"):
+        """Obtiene cliente de Google Lyria"""
+        from .ai_services import GoogleLyriaClient
+        from django.conf import settings
+        
+        location = getattr(settings, 'GCP_LOCATION', 'us-central1')
+        project_id = getattr(settings, 'GCS_PROJECT_ID', None)
+        
+        if not project_id:
+            raise ServiceException('GCS_PROJECT_ID no configurada')
+        
+        return GoogleLyriaClient(project_id=project_id, location=location, model_name=model_name)
+    
+    @staticmethod
     def _get_default_voice_settings():
         """Obtiene configuración de voz por defecto desde settings"""
         from django.conf import settings
@@ -2901,7 +2915,7 @@ class AudioService:
     def create_audio(title: str, text: str, voice_id: str, created_by, voice_name: str = None, 
                      voice_settings: Dict = None, project = None):
         """
-        Crea un nuevo audio (sin generarlo aún)
+        Crea un nuevo audio TTS (sin generarlo aún)
         
         Args:
             title: Título del audio
@@ -2934,10 +2948,79 @@ class AudioService:
             language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
             voice_settings=voice_settings,
             status='pending',
+            type='tts',
             created_by=created_by
         )
         
-        logger.info(f"Audio creado: {audio.id} - {audio.title}")
+        logger.info(f"Audio TTS creado: {audio.id} - {audio.title}")
+        return audio
+    
+    @staticmethod
+    def create_music_audio(
+        title: str,
+        prompt: str,
+        created_by,
+        model_id: str = 'lyria-002',
+        negative_prompt: str = None,
+        seed: int = None,
+        sample_count: int = None,
+        project = None,
+        metadata: Dict = None
+    ):
+        """
+        Crea un nuevo audio de música (sin generarlo aún)
+        
+        Args:
+            title: Título del audio
+            prompt: Descripción de texto en inglés (en-us) del audio a generar
+            created_by: Usuario que crea el audio
+            model_id: ID del modelo de Lyria (default: 'lyria-002')
+            negative_prompt: Descripción de lo que se debe excluir (opcional)
+            seed: Semilla para generación determinista (opcional)
+            sample_count: Número de muestras a generar (opcional, no compatible con seed)
+            project: Proyecto al que pertenece (opcional)
+            metadata: Metadata adicional (opcional)
+            
+        Returns:
+            Objeto Audio creado con type='music'
+        """
+        from .models import Audio
+        
+        # Validar parámetros mutuamente excluyentes
+        if seed is not None and sample_count is not None:
+            raise ValidationException("No se puede usar 'seed' y 'sample_count' al mismo tiempo")
+        
+        # Preparar song_metadata
+        song_metadata = {
+            'negative_prompt': negative_prompt,
+            'seed': seed,
+            'sample_count': sample_count,
+        }
+        
+        # Preparar metadata general
+        audio_metadata = metadata or {}
+        audio_metadata.update({
+            'negative_prompt': negative_prompt,
+            'seed': seed,
+            'sample_count': sample_count,
+        })
+        
+        # Crear audio de música
+        audio = Audio.objects.create(
+            project=project,
+            title=title,
+            prompt=prompt,
+            type='music',
+            model_id=model_id,
+            song_metadata=song_metadata,
+            metadata=audio_metadata,
+            status='pending',
+            created_by=created_by
+        )
+        
+        logger.info(f"Audio música creado: {audio.id} - {audio.title}")
+        logger.info(f"  Modelo: {model_id}, Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+        
         return audio
     
     @staticmethod
@@ -2964,23 +3047,32 @@ class AudioService:
         if audio.status in ['processing', 'completed']:
             raise ValidationException(f'El audio ya está en estado: {audio.get_status_display()}')
         
-        # Verificar tipo de audio
+        # Verificar tipo de audio y model_id para determinar el servicio
         audio_type = getattr(audio, 'type', 'tts') or 'tts'
+        model_id = getattr(audio, 'model_id', None) or ''
         
-        if audio_type == 'music':
-            # La generación de música requiere implementación separada
-            raise ValidationException('La generación de música aún no está implementada en este flujo')
-        
-        # Para TTS, validar campos requeridos
-        if not audio.text:
-            raise ValidationException('El texto es requerido para audio TTS')
-        if not audio.voice_id:
-            raise ValidationException('La voz es requerida para audio TTS')
+        # Determinar si es Lyria basándose en type O model_id
+        is_lyria = (
+            audio_type == 'music' or 
+            model_id.startswith('lyria-') or 
+            model_id in ['lyria-002']
+        )
         
         # Marcar como procesando
         audio.mark_as_processing()
         
         try:
+            if is_lyria:
+                # Generación de música con Google Lyria
+                logger.info(f"Detectado servicio Lyria (type={audio_type}, model_id={model_id})")
+                return AudioService._generate_lyria_music(audio)
+            
+            # Para TTS, validar campos requeridos
+            if not audio.text:
+                raise ValidationException('El texto es requerido para audio TTS')
+            if not audio.voice_id:
+                raise ValidationException('La voz es requerida para audio TTS')
+            
             client = AudioService._get_elevenlabs_client()
             
             # Obtener configuración de voz
@@ -3086,6 +3178,153 @@ class AudioService:
             raise ServiceException(f"Error al generar audio: {str(e)}")
     
     @staticmethod
+    def _generate_lyria_music(audio):
+        """
+        Genera música usando Google Lyria
+        
+        Args:
+            audio: Objeto Audio con type='music'
+            
+        Returns:
+            GCS path del audio generado
+        """
+        from .storage.gcs import gcs_storage
+        import tempfile
+        import os
+        
+        # Validar campos requeridos para música
+        if not audio.prompt:
+            raise ValidationException('El prompt es requerido para generar música')
+        
+        # Obtener modelo desde config o usar default
+        # Si model_id no está configurado o no es de Lyria, usar default
+        model_id = audio.model_id or 'lyria-002'
+        
+        # Asegurar que el model_id es de Lyria
+        if not model_id.startswith('lyria-') and model_id not in ['lyria-002']:
+            logger.warning(f"Model ID '{model_id}' no es de Lyria, usando 'lyria-002' por defecto")
+            model_id = 'lyria-002'
+        
+        try:
+            client = AudioService._get_lyria_client(model_name=model_id)
+            
+            logger.info(f"Generando música con Lyria para: {audio.title}")
+            logger.info(f"  Modelo: {model_id}")
+            prompt_preview = audio.prompt[:100] if audio.prompt else ''
+            logger.info(f"  Prompt: {prompt_preview}{'...' if len(audio.prompt or '') > 100 else ''}")
+            
+            # Obtener parámetros desde config o metadata
+            config = audio.metadata or {}
+            negative_prompt = audio.metadata.get('negative_prompt') if audio.metadata else None
+            seed = audio.metadata.get('seed') if audio.metadata else None
+            sample_count = audio.metadata.get('sample_count') if audio.metadata else None
+            
+            # También verificar en song_metadata si existe
+            if audio.song_metadata:
+                negative_prompt = negative_prompt or audio.song_metadata.get('negative_prompt')
+                seed = seed if seed is not None else audio.song_metadata.get('seed')
+                sample_count = sample_count if sample_count is not None else audio.song_metadata.get('sample_count')
+            
+            # Generar música
+            result = client.generate_music(
+                prompt=audio.prompt,
+                negative_prompt=negative_prompt,
+                seed=seed,
+                sample_count=sample_count,
+            )
+            
+            # Obtener el primer audio sample (o el seleccionado si hay múltiples)
+            audio_samples = result.get('audio_samples', [])
+            if not audio_samples:
+                raise ServiceException('No se generaron muestras de audio')
+            
+            # Usar el primer sample por defecto
+            selected_sample = audio_samples[0]
+            audio_data = selected_sample['audio_data']
+            mime_type = selected_sample['mime_type']
+            
+            # Determinar extensión del archivo
+            file_extension = 'wav'  # Lyria siempre devuelve WAV
+            content_type = mime_type or 'audio/wav'
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_file:
+                tmp_file.write(audio_data)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Subir a GCS
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_title = audio.title.replace(' ', '_').replace('/', '_')
+                if audio.project:
+                    gcs_path = f"projects/{audio.project.id}/audios/{audio.uuid}/{timestamp}_{safe_title}.{file_extension}"
+                else:
+                    gcs_path = f"audios/{audio.uuid}/{timestamp}_{safe_title}.{file_extension}"
+                
+                with open(tmp_path, 'rb') as f:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=f.read(),
+                        destination_path=gcs_path,
+                        content_type=content_type
+                    )
+                
+                # Obtener duración del audio usando ffprobe
+                duration = AudioService._get_audio_duration(tmp_path)
+                file_size = os.path.getsize(tmp_path)
+                
+                # Preparar metadata completa
+                metadata = {
+                    'model_id': model_id,
+                    'model_display_name': result.get('model_display_name', 'Lyria 2'),
+                    'duration_seconds': result.get('duration_seconds', 30),
+                    'sample_rate': result.get('sample_rate', 48000),
+                    'format': result.get('format', 'wav'),
+                    'file_size': file_size,
+                    'sample_count': len(audio_samples),
+                    'selected_sample_index': selected_sample.get('index', 0),
+                    'negative_prompt': negative_prompt,
+                    'seed': seed,
+                    'sample_count_requested': sample_count,
+                }
+                
+                # Guardar song_metadata si no existe
+                if not audio.song_metadata:
+                    audio.song_metadata = {
+                        'negative_prompt': negative_prompt,
+                        'seed': seed,
+                        'sample_count': sample_count,
+                    }
+                
+                # Marcar como completado
+                audio.mark_as_completed(
+                    gcs_path=gcs_full_path,
+                    duration=duration,
+                    metadata=metadata,
+                    alignment=None  # La música no tiene alignment como TTS
+                )
+                
+                audio.file_size = file_size
+                audio.format = file_extension
+                audio.sample_rate = result.get('sample_rate', 48000)
+                audio.duration_ms = int(duration * 1000) if duration else None
+                audio.save(update_fields=['file_size', 'format', 'sample_rate', 'duration_ms', 'song_metadata'])
+                
+                logger.info(f"✓ Música generada: {gcs_full_path}")
+                logger.info(f"  Duración: {duration}s, Tamaño: {file_size} bytes, Formato: {file_extension}")
+                
+                return gcs_full_path
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            logger.error(f"Error al generar música: {e}")
+            audio.mark_as_error(str(e))
+            raise ServiceException(f"Error al generar música: {str(e)}")
+    
+    @staticmethod
     def generate_audio_async(audio, metadata: Dict = None, with_timestamps: bool = False) -> 'GenerationTask':
         """
         Encola la generación de un audio usando el sistema de colas
@@ -3127,8 +3366,27 @@ class AudioService:
                 'model_id': audio.model_id,
             })
         elif audio_type == 'music':
+            # Obtener parámetros desde metadata o song_metadata
+            negative_prompt = None
+            seed = None
+            sample_count = None
+            
+            if audio.metadata:
+                negative_prompt = audio.metadata.get('negative_prompt')
+                seed = audio.metadata.get('seed')
+                sample_count = audio.metadata.get('sample_count')
+            
+            if audio.song_metadata:
+                negative_prompt = negative_prompt or audio.song_metadata.get('negative_prompt')
+                seed = seed if seed is not None else audio.song_metadata.get('seed')
+                sample_count = sample_count if sample_count is not None else audio.song_metadata.get('sample_count')
+            
             task_metadata.update({
                 'prompt': audio.prompt,
+                'model_id': audio.model_id or 'lyria-002',
+                'negative_prompt': negative_prompt,
+                'seed': seed,
+                'sample_count': sample_count,
                 'duration_ms': audio.duration_ms,
             })
         
