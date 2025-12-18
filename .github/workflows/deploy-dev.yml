@@ -1,0 +1,98 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Dev Environment
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to server
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+          
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << 'ENDSSH'
+            set -e
+            cd ~/dev || { echo "Error: No existe el directorio ~/dev"; exit 1; }
+            
+            echo "📥 Actualizando código desde branch dev"
+            if [ -d "html/.git" ]; then
+              cd html
+              git fetch origin
+              git checkout dev
+              git pull origin dev
+              cd ..
+            else
+              echo "⚠️  El directorio html no es un repo git, clonando..."
+              rm -rf html
+              git clone -b dev https://github.com/${{ github.repository }}.git html || {
+                echo "Error: No se pudo clonar el repositorio"
+                exit 1
+              }
+            fi
+            
+            echo "📋 Copiando docker-compose.yml a html/"
+            cp html/docker/docker-compose.dev.yml html/docker-compose.yml || {
+              echo "Error: No se encontró docker/docker-compose.dev.yml en el repositorio"
+              exit 1
+            }
+            
+            echo "🔨 Construyendo contenedores (desde html/)"
+            cd html
+            docker compose build --no-cache
+            
+            echo "🛑 Deteniendo contenedores antiguos"
+            docker compose down || true
+            
+            echo "🚀 Iniciando contenedores"
+            docker compose up -d
+            
+            echo "⏳ Esperando a que los servicios estén listos..."
+            timeout=60
+            elapsed=0
+            while [ $elapsed -lt $timeout ]; do
+              if docker compose exec -T db pg_isready -U atenea > /dev/null 2>&1; then
+                echo "✅ Base de datos lista"
+                break
+              fi
+              echo "⏳ Esperando base de datos... ($elapsed/$timeout segundos)"
+              sleep 2
+              elapsed=$((elapsed + 2))
+            done
+            
+            if [ $elapsed -ge $timeout ]; then
+              echo "❌ Error: La base de datos no está lista después de $timeout segundos"
+              exit 1
+            fi
+            
+            echo "🔄 Ejecutando migraciones"
+            if ! docker compose --profile tools run --rm migrate; then
+              echo "❌ Error: Falló la ejecución de migraciones"
+              exit 1
+            fi
+            
+            echo "📦 Recolectando archivos estáticos"
+            if ! docker compose --profile tools run --rm collectstatic; then
+              echo "❌ Error: Falló la recolección de archivos estáticos"
+              exit 1
+            fi
+            
+            echo "✅ Despliegue completado!"
+            echo "🌐 URL: https://dev.atenea.nxhumans.com"
+          ENDSSH
+
