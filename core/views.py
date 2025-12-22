@@ -1736,6 +1736,8 @@ class VideoCreatePartialView(ServiceMixin, FormView):
             config = self._build_sora_config(request, project, video_service)
         elif video_type == 'manim_quote':
             config = self._build_manim_quote_config(request)
+        elif video_type == 'manim_intro_slide':
+            config = self._build_manim_intro_slide_config(request)
         return config
     
     def _build_heygen_v2_config(self, request):
@@ -1816,6 +1818,38 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 pass
         
         # Tiempo de visualización opcional (segundos que permanece en pantalla)
+        display_time = request.POST.get('display_time')
+        if display_time:
+            try:
+                config['display_time'] = float(display_time)
+            except (ValueError, TypeError):
+                pass
+        
+        return config
+    
+    def _build_manim_intro_slide_config(self, request):
+        """Configuración para Manim Intro Slide"""
+        config = {
+            'title_text': request.POST.get('title_text') or request.POST.get('title', ''),
+            'central_text': request.POST.get('central_text', ''),
+            'footer': request.POST.get('footer', ''),
+            'quality': request.POST.get('quality', 'k'),
+            'bg_color': request.POST.get('bg_color', '#E5E5E5'),
+            'title_color': request.POST.get('title_color', '#1A1A1A'),
+            'central_text_color': request.POST.get('central_text_color', '#1A1A1A'),
+            'footer_color': request.POST.get('footer_color', '#666666'),
+            'circle_color': request.POST.get('circle_color', '#D0D0D0'),
+        }
+        
+        # Duración opcional
+        duration = request.POST.get('duration')
+        if duration:
+            try:
+                config['duration'] = float(duration)
+            except (ValueError, TypeError):
+                config['duration'] = 6.0  # Default
+        
+        # Tiempo de visualización opcional
         display_time = request.POST.get('display_time')
         if display_time:
             try:
@@ -2539,6 +2573,11 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
                             video_type = 'higgsfield_kling_v2_1_pro'
                     elif 'vuela' in model_id:
                         video_type = 'vuela_ai'
+                    elif 'manim' in model_id:
+                        if 'intro-slide' in model_id or 'intro_slide' in model_id:
+                            video_type = 'manim_intro_slide'
+                        else:
+                            video_type = 'manim_quote'
                 
                 if video_type:
                     config = {}
@@ -3370,6 +3409,25 @@ class CreateItemAPIView(ServiceMixin, View):
                     config['duration'] = duration
                 except (ValueError, TypeError):
                     pass
+        
+        # Para Manim Intro Slide, añadir campos específicos
+        if video_type == 'manim_intro_slide':
+            config['title_text'] = settings.get('title_text') or data.get('title_text') or title
+            config['central_text'] = settings.get('central_text') or data.get('central_text', '')
+            config['footer'] = settings.get('footer') or data.get('footer', '')
+            config['quality'] = settings.get('quality') or data.get('quality', 'k')
+            config['bg_color'] = settings.get('bg_color') or data.get('bg_color', '#E5E5E5')
+            config['title_color'] = settings.get('title_color') or data.get('title_color', '#1A1A1A')
+            config['central_text_color'] = settings.get('central_text_color') or data.get('central_text_color', '#1A1A1A')
+            config['footer_color'] = settings.get('footer_color') or data.get('footer_color', '#666666')
+            config['circle_color'] = settings.get('circle_color') or data.get('circle_color', '#D0D0D0')
+            # Si duration viene como string desde el formulario, convertir a float
+            if duration:
+                try:
+                    duration = float(duration)
+                    config['duration'] = duration
+                except (ValueError, TypeError):
+                    config['duration'] = 6.0  # Default
         
         # Para HeyGen Avatar V2, añadir campos específicos
         if video_type == 'heygen_avatar_v2':

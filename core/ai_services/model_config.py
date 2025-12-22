@@ -25,6 +25,7 @@ VIDEO_TYPE_TO_MODEL_ID = {
     'heygen_avatar_iv': 'heygen-avatar-iv',
     'vuela_ai': 'vuela-ai',
     'manim_quote': 'manim-quote',
+    'manim_intro_slide': 'manim-intro-slide',
 }
 
 # Configuración completa de capacidades de modelos
@@ -726,6 +727,41 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'video_type': 'manim_quote',
     },
     
+    # ==================== MANIM INTRO SLIDE ====================
+    'manim-intro-slide': {
+        'service': 'manim',
+        'name': 'Manim Intro Slide',
+        'description': 'Genera cortinillas de entrada estilo presentación educativa',
+        'type': 'video',
+        'supports': {
+            'text_to_video': True,
+            'image_to_video': False,
+            'duration': {'min': 3, 'max': 10, 'variable': True},
+            'aspect_ratio': ['16:9'],
+            'resolution': False,
+            'audio': False,
+            'references': {
+                'start_image': False,
+                'end_image': False,
+                'style_image': False,
+                'asset_image': False,
+            },
+            'negative_prompt': False,
+            'seed': False,
+            'quality': ['l', 'm', 'h', 'k'],
+            'title': True,  # Título de la cortinilla
+            'central_text': True,  # Texto central (pregunta o mensaje principal)
+            'footer': True,  # Footer (opcional)
+            'bg_color': True,  # Color de fondo (hex)
+            'title_color': True,  # Color del título (hex)
+            'central_text_color': True,  # Color del texto central (hex)
+            'footer_color': True,  # Color del footer (hex)
+            'circle_color': True,  # Color del círculo sutil (hex)
+        },
+        'logo': '/static/img/logos/manim.png',
+        'video_type': 'manim_intro_slide',
+    },
+    
     # ==================== GEMINI IMAGE ====================
     'gemini-2.5-flash-image': {
         'service': 'gemini image',
@@ -1018,6 +1054,8 @@ def get_video_type_from_model_id(model_id: str) -> Optional[str]:
     elif 'vuela' in model_id:
         return 'vuela_ai'
     elif 'manim' in model_id:
+        if 'intro-slide' in model_id or 'intro_slide' in model_id:
+            return 'manim_intro_slide'
         return 'manim_quote'
     
     return None

@@ -259,7 +259,7 @@ class DynamicVideoForm(forms.Form):
                 label='Autor',
             )
         
-        # Calidad (para Manim Quote)
+        # Calidad (para Manim Quote e Intro Slide)
         if supports.get('quality'):
             quality_labels = {
                 'l': 'Baja (480p)',
@@ -277,6 +277,102 @@ class DynamicVideoForm(forms.Form):
                 label='Calidad',
                 required=False
             )
+        
+        # Campos específicos para Manim Intro Slide
+        if supports.get('title'):
+            self.fields['title_text'] = forms.CharField(
+                required=True,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                    'placeholder': 'Tema 1 - LA ESTRATEGIA Y LA DIRECCIÓN ESTRATÉGICA',
+                }),
+                label='Título',
+                help_text='Título que aparecerá en la parte superior de la cortinilla'
+            )
+        
+        if supports.get('central_text'):
+            self.fields['central_text'] = forms.CharField(
+                required=False,
+                widget=forms.Textarea(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none',
+                    'rows': 3,
+                    'placeholder': '¿Qué es la estrategia y por qué es esencial en la empresa?',
+                }),
+                label='Texto Central',
+                help_text='Pregunta o mensaje principal que aparecerá en el centro (opcional)'
+            )
+        
+        if supports.get('footer'):
+            self.fields['footer'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                    'placeholder': 'Avatar y lección original de Ana Martínez - EDITADO CON IA',
+                }),
+                label='Footer',
+                help_text='Texto que aparecerá en la parte inferior (opcional)'
+            )
+        
+        # Colores personalizables para Intro Slide
+        if supports.get('bg_color'):
+            self.fields['bg_color'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                    'type': 'color',
+                    'value': '#E5E5E5',
+                }),
+                label='Color de Fondo',
+                initial='#E5E5E5',
+            )
+        
+        if supports.get('title_color'):
+            self.fields['title_color'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                    'type': 'color',
+                    'value': '#1A1A1A',
+                }),
+                label='Color del Título',
+                initial='#1A1A1A',
+            )
+        
+        if supports.get('central_text_color'):
+            self.fields['central_text_color'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                    'type': 'color',
+                    'value': '#1A1A1A',
+                }),
+                label='Color del Texto Central',
+                initial='#1A1A1A',
+            )
+        
+        if supports.get('footer_color'):
+            self.fields['footer_color'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                    'type': 'color',
+                    'value': '#666666',
+                }),
+                label='Color del Footer',
+                initial='#666666',
+            )
+        
+        if supports.get('circle_color'):
+            self.fields['circle_color'] = forms.CharField(
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500',
+                    'type': 'color',
+                    'value': '#D0D0D0',
+                }),
+                label='Color del Círculo',
+                initial='#D0D0D0',
+            )
     
     def _customize_script_field(self, model_id):
         """Personaliza el campo script según el modelo"""
@@ -285,6 +381,13 @@ class DynamicVideoForm(forms.Form):
             self.fields['script'].label = 'Texto de la cita'
             self.fields['script'].widget.attrs['placeholder'] = 'Escribe el texto de la cita que quieres animar...'
             self.fields['script'].widget.attrs['rows'] = 4
+        elif model_id == 'manim-intro-slide':
+            # Para Intro Slide, el script no se usa directamente, pero lo mantenemos para compatibilidad
+            # Los campos reales son title_text, central_text y footer
+            self.fields['script'].label = 'Notas / Descripción'
+            self.fields['script'].widget.attrs['placeholder'] = 'Descripción opcional del video (no se usa en la animación)'
+            self.fields['script'].widget.attrs['rows'] = 2
+            self.fields['script'].required = False
     
     def clean(self):
         """

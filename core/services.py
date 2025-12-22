@@ -822,6 +822,8 @@ class VideoService:
                 external_id = self._generate_kling_video(video)
             elif video.type == 'manim_quote':
                 external_id = self._generate_manim_quote_video(video)
+            elif video.type == 'manim_intro_slide':
+                external_id = self._generate_manim_intro_slide_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -1386,7 +1388,7 @@ class VideoService:
                 status_data = self._check_higgsfield_status(video)
             elif video.type.startswith('kling_'):
                 status_data = self._check_kling_status(video)
-            elif video.type == 'manim_quote':
+            elif video.type in ['manim_quote', 'manim_intro_slide']:
                 # Manim genera síncronamente, así que si está aquí es porque ya está completado
                 status_data = {'status': video.status}
             else:
