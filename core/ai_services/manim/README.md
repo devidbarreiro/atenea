@@ -129,6 +129,7 @@ result = client.generate_video(
 
 ### Gráficas y Visualizaciones
 - ✅ Quotes (citas)
+- ✅ Intro Slide (cortinillas de entrada)
 - ⏳ Bar Chart (gráficas de barras)
 - ⏳ Line Chart (gráficas de líneas)
 - ⏳ Pie Chart (gráficas de pastel)
@@ -145,6 +146,7 @@ result = client.generate_video(
 
 ### Texto y Tipografía
 - ✅ Quotes (ya implementado)
+- ✅ Intro Slide (cortinillas de entrada estilo presentación)
 - ⏳ Animated Text (texto con efectos)
 - ⏳ Titles and Credits (títulos y créditos)
 
