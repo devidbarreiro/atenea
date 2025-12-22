@@ -1,0 +1,266 @@
+{% load static %}
+<!-- Modal de Subida de Archivos -->
+<dialog id="upload-modal" class="modal backdrop:bg-black backdrop:bg-opacity-50">
+    <div class="modal-box w-full max-w-3xl bg-white rounded-3xl p-0 shadow-2xl overflow-hidden">
+        <!-- Header del modal -->
+        <div class="flex items-center justify-between px-6 py-5 border-b border-gray-200 bg-gray-50 rounded-t-3xl">
+            <h3 class="text-2xl font-bold text-gray-900">Subir Archivo</h3>
+            <button type="button" onclick="document.getElementById('upload-modal').close()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Contenido del modal con altura fija -->
+        <form method="post" action="{% url 'core:library_upload' %}" enctype="multipart/form-data" class="p-6">
+            {% csrf_token %}
+            
+            <!-- Contenedor con altura fija para mantener tamaño constante -->
+            <div class="relative" style="min-height: 320px;">
+                <!-- Zona de drop -->
+                <div id="drop-zone" class="absolute inset-0 border-2 border-gray-300 border-dashed rounded-xl flex flex-col items-center justify-center text-center hover:border-gray-400 hover:bg-gray-50 transition-all cursor-pointer">
+                    <svg class="h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                    <div class="mb-3">
+                        <label for="modal-file" class="font-semibold text-black hover:text-gray-700 cursor-pointer text-lg">
+                            Haz clic para seleccionar
+                        </label>
+                        <p class="text-gray-600 mt-1">o arrastra y suelta</p>
+                    </div>
+                    <p class="text-sm text-gray-500">Videos, imágenes o audios hasta 500MB</p>
+                    <input id="modal-file" name="file" type="file" accept="video/*,image/*,audio/*" class="hidden" required>
+                </div>
+                
+                <!-- Preview del archivo seleccionado -->
+                <div id="modal-file-info" class="absolute inset-0 hidden">
+                    <div class="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm h-full flex flex-col">
+                        <!-- Preview visual -->
+                        <div class="relative flex-1 bg-gray-100 flex items-center justify-center overflow-hidden group">
+                            <span id="modal-file-type-badge" class="absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-semibold z-10 bg-gray-800 text-white">
+                                Archivo
+                            </span>
+                            
+                            <button type="button" id="modal-remove-file" class="absolute top-2 right-2 z-20 p-1.5 bg-white bg-opacity-90 rounded-md hover:bg-opacity-100 transition-all opacity-0 group-hover:opacity-100">
+                                <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                            
+                            <!-- Preview de video -->
+                            <video id="modal-video-preview" class="hidden w-full h-full object-cover" preload="metadata"></video>
+                            
+                            <!-- Preview de imagen -->
+                            <img id="modal-image-preview" class="hidden w-full h-full object-cover" alt="Preview">
+                            
+                            <!-- Icono para audio -->
+                            <div id="modal-audio-icon" class="hidden w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                                <svg class="w-16 h-16 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                </svg>
+                                <span class="text-xs text-gray-600 font-medium">Audio</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Info del archivo -->
+                        <div class="p-4 flex-shrink-0">
+                            <h3 id="modal-file-name" class="font-semibold text-gray-900 mb-1 truncate"></h3>
+                            <div class="flex items-center justify-between">
+                                <div id="modal-file-size" class="text-xs text-gray-500"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Botones -->
+            <div class="flex gap-3 mt-6">
+                <button type="submit" id="modal-submit-btn" disabled class="flex-1 bg-black text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base flex items-center justify-center gap-2">
+                    <span id="submit-btn-text">Subir Archivo</span>
+                    <svg id="submit-btn-loader" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+                <button type="button" id="modal-cancel-btn" onclick="document.getElementById('upload-modal').close()" class="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold text-base">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+(function() {
+    const modal = document.getElementById('upload-modal');
+    if (!modal) return;
+    
+    // Evitar inicialización duplicada
+    if (modal.dataset.initialized) return;
+    modal.dataset.initialized = 'true';
+    
+    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+    
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('modal-file');
+    const fileInfo = document.getElementById('modal-file-info');
+    const fileName = document.getElementById('modal-file-name');
+    const fileSize = document.getElementById('modal-file-size');
+    const submitBtn = document.getElementById('modal-submit-btn');
+    const removeBtn = document.getElementById('modal-remove-file');
+    const submitBtnText = document.getElementById('submit-btn-text');
+    const submitBtnLoader = document.getElementById('submit-btn-loader');
+    const cancelBtn = document.getElementById('modal-cancel-btn');
+    const form = modal.querySelector('form');
+
+    // Manejar submit del formulario para mostrar loader
+    form.addEventListener('submit', (e) => {
+        submitBtnText.textContent = 'Subiendo...';
+        submitBtnLoader.classList.remove('hidden');
+        submitBtn.disabled = true;
+        cancelBtn.disabled = true;
+        cancelBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        dropZone.style.pointerEvents = 'none';
+        if (removeBtn) removeBtn.style.pointerEvents = 'none';
+    });
+
+    // Cerrar modal al hacer clic fuera
+    modal.addEventListener('click', (e) => {
+        const modalBox = modal.querySelector('.modal-box');
+        if (e.target === modal && !modalBox.contains(e.target)) {
+            modal.close();
+        }
+    });
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function updateFileInfo(file) {
+        if (file) {
+            if (file.size > MAX_FILE_SIZE) {
+                const maxSizeMB = (MAX_FILE_SIZE / (1024 * 1024)).toFixed(0);
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                alert(`El archivo es demasiado grande (${fileSizeMB}MB). Máximo permitido: ${maxSizeMB}MB`);
+                fileInput.value = '';
+                return;
+            }
+            
+            const allowedTypes = ['video/', 'image/', 'audio/'];
+            const isValidType = allowedTypes.some(type => file.type.startsWith(type));
+            if (!isValidType) {
+                alert('Tipo de archivo no soportado. Solo se permiten videos, imágenes y audios.');
+                fileInput.value = '';
+                return;
+            }
+            
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            
+            const videoPreview = document.getElementById('modal-video-preview');
+            const imagePreview = document.getElementById('modal-image-preview');
+            const audioIcon = document.getElementById('modal-audio-icon');
+            const typeBadge = document.getElementById('modal-file-type-badge');
+            
+            videoPreview.classList.add('hidden');
+            imagePreview.classList.add('hidden');
+            audioIcon.classList.add('hidden');
+            
+            const fileURL = URL.createObjectURL(file);
+            
+            if (file.type.startsWith('video/')) {
+                typeBadge.textContent = 'Video';
+                videoPreview.src = fileURL;
+                videoPreview.classList.remove('hidden');
+                
+                const container = videoPreview.parentElement;
+                container.addEventListener('mouseenter', () => videoPreview.play().catch(() => {}));
+                container.addEventListener('mouseleave', () => {
+                    videoPreview.pause();
+                    videoPreview.currentTime = 0;
+                });
+                
+            } else if (file.type.startsWith('image/')) {
+                typeBadge.textContent = 'Imagen';
+                imagePreview.src = fileURL;
+                imagePreview.classList.remove('hidden');
+                
+            } else if (file.type.startsWith('audio/')) {
+                typeBadge.textContent = 'Audio';
+                audioIcon.classList.remove('hidden');
+            }
+            
+            fileInfo.classList.remove('hidden');
+            submitBtn.disabled = false;
+            dropZone.style.display = 'none';
+        } else {
+            const videoPreview = document.getElementById('modal-video-preview');
+            const imagePreview = document.getElementById('modal-image-preview');
+            
+            if (videoPreview.src) URL.revokeObjectURL(videoPreview.src);
+            if (imagePreview.src) URL.revokeObjectURL(imagePreview.src);
+            
+            videoPreview.src = '';
+            imagePreview.src = '';
+            
+            fileInfo.classList.add('hidden');
+            submitBtn.disabled = true;
+            dropZone.style.display = 'flex';
+        }
+    }
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => updateFileInfo(e.target.files[0]));
+    removeBtn.addEventListener('click', () => {
+        fileInput.value = '';
+        updateFileInfo(null);
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('border-black', 'bg-gray-50'));
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-black', 'bg-gray-50'));
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            updateFileInfo(files[0]);
+        }
+    });
+
+    modal.addEventListener('close', () => {
+        fileInput.value = '';
+        updateFileInfo(null);
+        submitBtnText.textContent = 'Subir Archivo';
+        submitBtnLoader.classList.add('hidden');
+        cancelBtn.disabled = false;
+        cancelBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        dropZone.style.pointerEvents = 'auto';
+        if (removeBtn) removeBtn.style.pointerEvents = 'auto';
+    });
+    
+    window.addEventListener('beforeunload', () => {
+        const videoPreview = document.getElementById('modal-video-preview');
+        const imagePreview = document.getElementById('modal-image-preview');
+        if (videoPreview && videoPreview.src) URL.revokeObjectURL(videoPreview.src);
+        if (imagePreview && imagePreview.src) URL.revokeObjectURL(imagePreview.src);
+    });
+})();
+</script>
+

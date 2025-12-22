@@ -94,17 +94,7 @@
     <!-- Main Editor Card -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <!-- Toolbar -->
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-            <div class="flex items-center gap-2">
-                <button id="btn-generate" 
-                        class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                    </svg>
-                    Generar Video
-                </button>
-            </div>
-            
+        <div class="flex items-center justify-end px-4 py-3 border-b border-gray-100 bg-gray-50/50">
             <!-- Legend -->
             <div class="flex items-center gap-3">
                 <span class="legend-badge heygen">
@@ -123,6 +113,17 @@
              class="script-editor" 
              contenteditable="true"
              data-placeholder="Escribe tu guión aquí..."></div>
+    </div>
+    
+    <!-- Generate Button -->
+    <div class="flex justify-end mt-4">
+        <button id="btn-generate" 
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            Generar Video
+        </button>
     </div>
 
     <!-- Selection Toolbar (appears on text selection) -->
@@ -300,6 +301,34 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
         document.execCommand('insertText', false, text);
+    });
+    
+    // Sync segments with DOM - remove from list if deleted from editor
+    function syncSegments() {
+        const existingIds = new Set();
+        editor.querySelectorAll('.segment-mark[data-segment-id]').forEach(span => {
+            existingIds.add(span.getAttribute('data-segment-id'));
+        });
+        
+        const before = segments.length;
+        segments = segments.filter(seg => existingIds.has(seg.id));
+        
+        if (segments.length !== before) {
+            renderSegments();
+        }
+    }
+    
+    // Watch for changes in editor content
+    const observer = new MutationObserver(() => {
+        // Debounce sync
+        clearTimeout(observer._timeout);
+        observer._timeout = setTimeout(syncSegments, 100);
+    });
+    
+    observer.observe(editor, {
+        childList: true,
+        subtree: true,
+        characterData: true
     });
 });
 </script>

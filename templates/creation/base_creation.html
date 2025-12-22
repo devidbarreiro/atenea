@@ -103,20 +103,29 @@
                     {% endif %}
                     {% endfor %}
                 </nav>
-                <!-- Contador de items -->
-                <div class="text-sm text-gray-500">
-                    {% if items_count %}
-                        {{ items_count }}
-                    {% else %}
-                        0
-                    {% endif %}
-                    {% if active_tab == 'video' %}
-                        videos
-                    {% elif active_tab == 'image' %}
-                        imágenes
-                    {% elif active_tab == 'audio' %}
-                        audios
-                    {% endif %}
+                <!-- Botón subir + Contador de items -->
+                <div class="flex items-center gap-3">
+                    <button onclick="document.getElementById('upload-modal').showModal()" 
+                            class="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Subir archivo">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                    </button>
+                    <div class="text-sm text-gray-500">
+                        {% if items_count %}
+                            {{ items_count }}
+                        {% else %}
+                            0
+                        {% endif %}
+                        {% if active_tab == 'video' %}
+                            videos
+                        {% elif active_tab == 'image' %}
+                            imágenes
+                        {% elif active_tab == 'audio' %}
+                            audios
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -127,6 +136,9 @@
             {% include 'includes/library_panel.html' %}
         </div>
     </main>
+    
+    <!-- Modal de Subida de Archivos -->
+    {% include 'includes/upload_modal.html' %}
 </div>
 {% endblock %}
 
