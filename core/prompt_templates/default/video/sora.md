@@ -3,6 +3,7 @@ name: General
 description: Template general para videos con Sora. Estilo cinematográfico y profesional siguiendo las mejores prácticas de OpenAI.
 recommended_service: sora
 is_public: true
+preview_url: gs://vertex-devid/previews/sora.mp4
 ---
 
 {Describe the scene in plain language with specific, concrete visual details. Include characters, costumes, scenery, weather, and setting. Use precise descriptions (e.g., "wet asphalt, zebra crosswalk, neon signs reflecting in puddles" instead of vague terms). Anchor your subject with distinctive details to keep it recognizable.}
