@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Editor de Guiones - Atenea{% endblock %}
+
+{% block extra_css %}
+/* Editor Styles */
+.script-editor {
+    outline: none;
+    min-height: 200px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 1rem;
+    font-size: 1rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+}
+
+.script-editor:focus {
+    outline: none;
+}
+
+.script-editor:empty::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+}
+
+/* Segment marks */
+.segment-mark {
+    background-color: rgba(99, 102, 241, 0.2);
+    border-radius: 3px;
+    padding: 1px 2px;
+    margin: 0 1px;
+}
+
+.segment-mark.heygen {
+    background-color: rgba(236, 72, 153, 0.2);
+    border-bottom: 2px solid #ec4899;
+}
+
+.segment-mark.grafismo {
+    background-color: rgba(99, 102, 241, 0.2);
+    border-bottom: 2px solid #6366f1;
+}
+
+/* Selection toolbar */
+.selection-toolbar {
+    position: fixed;
+    transform: translateX(-50%);
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.selection-toolbar.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Legend badges */
+.legend-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.legend-badge.heygen {
+    background-color: rgba(236, 72, 153, 0.1);
+    color: #db2777;
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.legend-badge.grafismo {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: #4f46e5;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-8 px-4">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Editor de Guiones</h1>
+        <p class="mt-2 text-gray-600">Selecciona el texto para marcarlo como HeyGen o Grafismo</p>
+    </div>
+
+    <!-- Main Editor Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+            <div class="flex items-center gap-2">
+                <button id="btn-generate" 
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    Generar Video
+                </button>
+            </div>
+            
+            <!-- Legend -->
+            <div class="flex items-center gap-3">
+                <span class="legend-badge heygen">
+                    <span class="w-2 h-2 rounded-full bg-pink-500"></span>
+                    HeyGen
+                </span>
+                <span class="legend-badge grafismo">
+                    <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    Grafismo
+                </span>
+            </div>
+        </div>
+        
+        <!-- Editor Container -->
+        <div id="editor" 
+             class="script-editor" 
+             contenteditable="true"
+             data-placeholder="Escribe tu guión aquí..."></div>
+    </div>
+
+    <!-- Selection Toolbar (appears on text selection) -->
+    <div id="selection-toolbar" class="selection-toolbar bg-gray-900 text-white rounded-xl shadow-xl px-2 py-1.5 flex items-center gap-1">
+        <button id="btn-mark-heygen" 
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            HeyGen
+        </button>
+        <button id="btn-mark-grafismo" 
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Grafismo
+        </button>
+        <button id="btn-close-toolbar" 
+                class="p-1.5 rounded-lg hover:bg-white/10 transition-colors ml-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Segments List -->
+    <div id="segments-container" class="mt-6 hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-sm font-semibold text-gray-900 mb-4">Segmentos marcados</h3>
+            <div id="segments-list" class="space-y-2"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // State
+    let segments = [];
+    
+    // DOM Elements
+    const editor = document.getElementById('editor');
+    const selectionToolbar = document.getElementById('selection-toolbar');
+    const segmentsContainer = document.getElementById('segments-container');
+    const segmentsList = document.getElementById('segments-list');
+    
+    // Show toolbar on text selection
+    function showToolbar() {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !editor.contains(selection.anchorNode)) {
+            selectionToolbar.classList.remove('visible');
+            return;
+        }
+        
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        selectionToolbar.style.left = `${rect.left + rect.width / 2}px`;
+        selectionToolbar.style.top = `${rect.top - 50 + window.scrollY}px`;
+        selectionToolbar.classList.add('visible');
+    }
+    
+    // Mark selected text - SIMPLE VERSION
+    function markSelection(type) {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return;
+        
+        const selectedText = selection.toString();
+        if (!selectedText.trim()) return;
+        
+        // Use execCommand to wrap selection (preserves undo history)
+        const segmentId = `seg_${Date.now()}`;
+        
+        // Create a temporary class name
+        document.execCommand('insertHTML', false, 
+            `<span class="segment-mark ${type}" data-segment-id="${segmentId}" data-type="${type}">${escapeHtml(selectedText)}</span>`
+        );
+        
+        // Add to segments list
+        segments.push({ id: segmentId, type, text: selectedText });
+        renderSegments();
+        
+        selectionToolbar.classList.remove('visible');
+    }
+    
+    // Remove segment
+    window.removeSegment = function(segmentId) {
+        const span = editor.querySelector(`[data-segment-id="${segmentId}"]`);
+        if (span) {
+            // Replace with text content
+            const text = document.createTextNode(span.textContent);
+            span.parentNode.replaceChild(text, span);
+            editor.normalize();
+        }
+        segments = segments.filter(s => s.id !== segmentId);
+        renderSegments();
+    };
+    
+    // Render segments list
+    function renderSegments() {
+        if (segments.length === 0) {
+            segmentsContainer.classList.add('hidden');
+            return;
+        }
+        
+        segmentsContainer.classList.remove('hidden');
+        segmentsList.innerHTML = segments.map(seg => `
+            <div class="flex items-center justify-between p-3 rounded-xl ${seg.type === 'heygen' ? 'bg-pink-50 border border-pink-100' : 'bg-indigo-50 border border-indigo-100'}">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <span class="w-2 h-2 rounded-full flex-shrink-0 ${seg.type === 'heygen' ? 'bg-pink-500' : 'bg-indigo-500'}"></span>
+                    <span class="truncate text-sm text-gray-700">${escapeHtml(seg.text)}</span>
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full ${seg.type === 'heygen' ? 'bg-pink-100 text-pink-700' : 'bg-indigo-100 text-indigo-700'}">
+                        ${seg.type === 'heygen' ? 'HeyGen' : 'Grafismo'}
+                    </span>
+                </div>
+                <button onclick="removeSegment('${seg.id}')" class="p-1.5 rounded-lg hover:bg-white/50 text-gray-400 hover:text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+    }
+    
+    // Escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Event Listeners
+    document.getElementById('btn-mark-heygen').addEventListener('click', () => markSelection('heygen'));
+    document.getElementById('btn-mark-grafismo').addEventListener('click', () => markSelection('grafismo'));
+    document.getElementById('btn-close-toolbar').addEventListener('click', () => selectionToolbar.classList.remove('visible'));
+    
+    document.getElementById('btn-generate').addEventListener('click', () => {
+        if (segments.length === 0) {
+            window.ToastManager?.show('Por favor, marca al menos un segmento', 'warning');
+            return;
+        }
+        console.log('Segments:', segments);
+        console.log('HTML:', editor.innerHTML);
+        window.ToastManager?.show(`Generación iniciada con ${segments.length} segmentos`, 'success');
+    });
+    
+    // Selection listener
+    document.addEventListener('selectionchange', () => setTimeout(showToolbar, 10));
+    
+    // Hide toolbar on outside click
+    document.addEventListener('mousedown', (e) => {
+        if (!editor.contains(e.target) && !selectionToolbar.contains(e.target)) {
+            selectionToolbar.classList.remove('visible');
+        }
+    });
+    
+    // Keyboard shortcuts
+    editor.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        
+        if (mod && key === 'a') {
+            e.preventDefault();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            setTimeout(showToolbar, 50);
+        }
+    });
+    
+    // Paste as plain text
+    editor.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        document.execCommand('insertText', false, text);
+    });
+});
+</script>
+{% endblock %}

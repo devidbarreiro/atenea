@@ -10731,3 +10731,15 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
             logger.error(f"Error inesperado al subir archivo: {e}", exc_info=True)
             messages.error(request, 'Error inesperado al subir el archivo. Por favor, contacta al soporte.')
             return redirect('core:library')
+
+
+# ====================
+# PILLS (Script Editor with Segments)
+# ====================
+
+class PillsEditorView(LoginRequiredMixin, View):
+    """Vista para el editor de guiones con segmentos HeyGen/Grafismo"""
+    template_name = 'pills/editor.html'
+    
+    def get(self, request):
+        return render(request, self.template_name)

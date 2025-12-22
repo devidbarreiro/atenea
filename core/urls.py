@@ -204,5 +204,8 @@ urlpatterns = [
     path('api/prompt-templates/<uuid:template_uuid>/', views.PromptTemplateDetailAPIView.as_view(), name='api_prompt_template_detail'),
     path('api/prompt-templates/<uuid:template_uuid>/vote/', views.PromptTemplateVoteAPIView.as_view(), name='api_prompt_template_vote'),
     path('api/prompt-templates/<uuid:template_uuid>/favorite/', views.PromptTemplateFavoriteAPIView.as_view(), name='api_prompt_template_favorite'),
+    
+    # Pills (Script Editor)
+    path('pills/', views.PillsEditorView.as_view(), name='pills_editor'),
 ]
 

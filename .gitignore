@@ -42,6 +42,9 @@ Thumbs.db
 !package-lock.json
 !tsconfig.json
 
+# Node.js
+node_modules/
+
 # Docker
 .dockerignore
 docker-compose.override.yml
