@@ -7080,22 +7080,14 @@ class SceneUploadCustomImageView(View):
             
             image_file = request.FILES['image_file']
             
-            # Validar tipo de archivo
+            # Validaciones de tipo y tamaño...
             allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
             file_ext = os.path.splitext(image_file.name)[1].lower()
             if file_ext not in allowed_extensions:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': f'Formato no soportado. Use: {", ".join(allowed_extensions)}'
-                }, status=400)
+                return JsonResponse({'status': 'error', 'message': 'Formato no soportado'}, status=400)
             
-            # Validar tamaño (max 10MB)
-            max_size = 10 * 1024 * 1024  # 10MB
-            if image_file.size > max_size:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'La imagen es demasiado grande. Tamaño máximo: 10MB'
-                }, status=400)
+            if image_file.size > 10 * 1024 * 1024:
+                return JsonResponse({'status': 'error', 'message': 'Imagen demasiado grande'}, status=400)
             
             # Subir a GCS
             from .storage.gcs import gcs_storage
@@ -7103,16 +7095,28 @@ class SceneUploadCustomImageView(View):
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             safe_filename = os.path.basename(image_file.name)
-            gcs_destination = f"projects/{scene.project.id}/scenes/{scene.id}/custom_preview_{timestamp}_{safe_filename}"
+            
+            # Manejo de Standalone vs Proyecto
+            project_id_str = scene.project.id if scene.project else 'standalone'
+            gcs_destination = f"projects/{project_id_str}/scenes/{scene.id}/custom_preview_{timestamp}_{safe_filename}"
             
             logger.info(f"Subiendo imagen personalizada a GCS: {safe_filename}")
             gcs_path = gcs_storage.upload_django_file(image_file, gcs_destination)
             
-            # Establecer como preview de la escena
-            scene.preview_image_path = gcs_path
-            scene.save()
+            # --- CORRECCIÓN AQUÍ ---
+            # 1. Guardar la ruta en el campo correcto (asegúrate que tu modelo usa preview_image_gcs_path)
+            scene.preview_image_gcs_path = gcs_path
             
-            logger.info(f"✓ Imagen personalizada subida para escena {scene.id}: {gcs_path}")
+            # 2. IMPORTANTE: Marcar el estado como completado para que el HTML lo muestre
+            scene.preview_image_status = 'completed'
+            
+            # 3. Opcional: Marcar la fuente para mostrar el badge "Subida"
+            scene.image_source = 'user_upload'
+            
+            scene.save()
+            # -----------------------
+            
+            logger.info(f"✓ Imagen personalizada subida y activada para escena {scene.id}")
             
             return JsonResponse({
                 'status': 'success',
@@ -7126,7 +7130,6 @@ class SceneUploadCustomImageView(View):
                 'status': 'error',
                 'message': f'Error: {str(e)}'
             }, status=500)
-
 
 class SceneUpdateConfigView(View):
     """Actualizar configuración de una escena"""
@@ -7740,8 +7743,9 @@ class FreepikSetSceneImageView(View):
             
             try:
                 # Subir a GCS
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/preview_freepik.jpg"
-                
+                project_id_str = scene.project.id if scene.project else 'standalone'
+                gcs_path = f"projects/{project_id_str}/scenes/{scene.id}/preview_freepik.jpg"   
+                             
                 with open(tmp_path, 'rb') as image_file:
                     gcs_full_path = gcs_storage.upload_from_bytes(
                         file_content=image_file.read(),
