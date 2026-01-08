@@ -852,7 +852,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': video.created_at,
                 'project': video.project,
                 'signed_url': None,
-                'detail_url': reverse('core:video_detail', args=[video.uuid]),
+                'detail_url': reverse('core:project_video_detail', args=[self.object.uuid, video.uuid]),
                 'delete_url': reverse('core:video_delete', args=[video.uuid]),
             }
             if video.status == 'completed' and video.gcs_path:
@@ -876,7 +876,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': image.created_at,
                 'project': image.project,
                 'signed_url': None,
-                'detail_url': reverse('core:image_detail', args=[image.uuid]),
+                'detail_url': reverse('core:project_image_detail', args=[self.object.uuid, image.uuid]),
                 'delete_url': reverse('core:image_delete', args=[image.uuid]),
             }
             if image.status == 'completed' and image.gcs_path:
@@ -900,7 +900,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': audio.created_at,
                 'project': audio.project,
                 'signed_url': None,
-                'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
+                'detail_url': reverse('core:project_audio_detail', args=[self.object.uuid, audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
             if audio.status == 'completed' and audio.gcs_path:
@@ -2633,7 +2633,9 @@ class LibraryItemsAPIView(ServiceMixin, View):
         from django.db.models import Q
         
         item_type = request.GET.get('type', 'video')
+        # Aceptar tanto project_id como project_uuid para compatibilidad
         project_id = request.GET.get('project_id')
+        project_uuid = request.GET.get('project_uuid')
         user = request.user
         
         # Incluir URLs (para carga rápida, puede ser false)
@@ -2657,8 +2659,17 @@ class LibraryItemsAPIView(ServiceMixin, View):
         # Construir filtro base
         base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
         
-        # Si hay project_id específico, filtrar por ese proyecto
-        if project_id:
+        # Si hay project_uuid o project_id específico, filtrar por ese proyecto
+        project = None
+        if project_uuid:
+            try:
+                project = get_object_or_404(Project, uuid=project_uuid)
+                if not ProjectService.user_has_access(project, user):
+                    return JsonResponse({'error': 'No tienes acceso a este proyecto'}, status=403)
+                base_filter = Q(project_id=project.id)
+            except (ValueError, Project.DoesNotExist):
+                return JsonResponse({'error': 'Proyecto no encontrado'}, status=404)
+        elif project_id:
             try:
                 project_id_int = int(project_id)
                 if project_id_int in user_project_ids:
@@ -2682,6 +2693,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 videos = queryset[offset:offset + limit]
                 video_service = self.get_video_service()
                 for video in videos:
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_video_detail', args=[project.uuid, video.uuid])
+                    else:
+                        detail_url = reverse('core:video_detail', args=[video.uuid])
+                    
                     item_data = {
                         'id': str(video.uuid),
                         'type': 'video',
@@ -2694,7 +2711,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'script': video.script[:100] if video.script else '',
                         'signed_url': None,
                         'has_media': video.status == 'completed' and bool(video.gcs_path),
-                        'detail_url': reverse('core:video_detail', args=[video.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:video_delete', args=[video.uuid]),
                     }
                     # Solo generar signed URLs si se pide explícitamente
@@ -2712,6 +2729,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 images = queryset[offset:offset + limit]
                 image_service = self.get_image_service()
                 for image in images:
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_image_detail', args=[project.uuid, image.uuid])
+                    else:
+                        detail_url = reverse('core:image_detail', args=[image.uuid])
+                    
                     item_data = {
                         'id': str(image.uuid),
                         'type': 'image',
@@ -2724,7 +2747,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'prompt': image.prompt[:100] if image.prompt else '',
                         'signed_url': None,
                         'has_media': image.status == 'completed' and bool(image.gcs_path),
-                        'detail_url': reverse('core:image_detail', args=[image.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:image_delete', args=[image.uuid]),
                     }
                     # Solo generar signed URLs si se pide explícitamente
@@ -2746,6 +2769,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     model_id = audio.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
                     model_info = get_model_info_for_item('audio', model_key=model_id)
                     
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_audio_detail', args=[project.uuid, audio.uuid])
+                    else:
+                        detail_url = reverse('core:audio_detail', args=[audio.uuid])
+                    
                     item_data = {
                         'id': str(audio.uuid),
                         'type': 'audio',
@@ -2756,7 +2785,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'project': audio.project.name if audio.project else None,
                         'signed_url': None,
                         'has_media': audio.status == 'completed' and bool(audio.gcs_path),
-                        'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
                         'model': model_info,  # Información del modelo (nombre, logo, servicio)
                         'audio_type': audio.type,  # 'tts' o 'music'

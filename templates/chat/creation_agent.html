@@ -90,7 +90,7 @@
                             </template>
                             <template x-if="message.role === 'assistant'">
                                 <div>
-                                    <div x-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none text-sm"></div>
+                                    <div x-html="message.renderedContent || renderMarkdown(message.content)" class="prose prose-sm max-w-none text-sm"></div>
                                     
                                     <!-- Tool Results -->
                                     <template x-if="message.tool_results && message.tool_results.length > 0">
@@ -244,23 +244,6 @@ function chatApp() {
         loading: false,
         
         init() {
-            // Usar sessionStorage para prevenir duplicación
-            const storageKey = 'chat_initialized_' + window.location.pathname;
-            const wasInitialized = sessionStorage.getItem(storageKey);
-            
-            if (!wasInitialized) {
-                // Agregar mensaje de bienvenida solo una vez
-                this.messages = [{
-                    id: 'welcome-' + Date.now(),
-                    role: 'assistant',
-                    content: '¡Hola! 👋 Soy tu asistente de creación con IA.\n\nPuedo ayudarte a crear:\n- 🖼️ **Imágenes** con Gemini Image\n- 🎥 Videos (próximamente)\n- 🎙️ Audios (próximamente)\n- 📝 Guiones (próximamente)\n\n¿Qué te gustaría crear hoy?',
-                    tool_results: []
-                }];
-                
-                sessionStorage.setItem(storageKey, 'true');
-                this.scrollToBottom();
-            }
-            
             // Detectar si hay un mensaje en la URL (viene del dashboard)
             const urlParams = new URLSearchParams(window.location.search);
             const messageFromUrl = urlParams.get('message');
@@ -322,20 +305,24 @@ function chatApp() {
                     throw new Error(data.error);
                 }
                 
-                // Agregar respuesta del asistente
-                this.messages.push({
+                // Agregar respuesta del asistente con contenido pre-renderizado
+                const assistantMessage = {
                     id: 'assistant-' + Date.now(),
                     role: 'assistant',
                     content: data.answer,
+                    renderedContent: this.renderMarkdown(data.answer), // Pre-renderizar markdown
                     tool_results: data.tool_results || []
-                });
+                };
+                this.messages.push(assistantMessage);
                 
             } catch (error) {
                 console.error('Error:', error);
+                const errorMessage = `❌ Lo siento, ocurrió un error: ${error.message}`;
                 this.messages.push({
                     id: 'error-' + Date.now(),
                     role: 'assistant',
-                    content: `❌ Lo siento, ocurrió un error: ${error.message}`,
+                    content: errorMessage,
+                    renderedContent: this.renderMarkdown(errorMessage), // Pre-renderizar markdown
                     tool_results: []
                 });
             } finally {
@@ -357,10 +344,24 @@ function chatApp() {
         },
         
         renderMarkdown(text) {
+            if (!text) return '';
+            
+            // Si marked está disponible, usarlo
             if (typeof marked !== 'undefined') {
-                return marked.parse(text);
+                try {
+                    return marked.parse(text);
+                } catch (e) {
+                    console.warn('Error al renderizar markdown:', e);
+                    // Fallback si hay error
+                    return text.replace(/\n/g, '<br>');
+                }
             }
-            return text.replace(/\n/g, '<br>');
+            
+            // Fallback: convertir saltos de línea a <br> y mantener formato básico
+            return text
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Negrita básica
+                .replace(/\*(.*?)\*/g, '<em>$1</em>'); // Cursiva básica
         }
     };
 }
