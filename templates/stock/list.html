@@ -1407,7 +1407,7 @@ function stockSearch() {
         async downloadItem(item) {
             this.downloadLoading = true;
             
-            // 1. Mostrar toast de inicio
+            // Mostrar toast al inicio de la descarga
             window.dispatchEvent(new CustomEvent('show-toast', {
                 detail: {
                     type: 'info',
@@ -1425,11 +1425,6 @@ function stockSearch() {
                 if (!downloadUrl) {
                     throw new Error('No se encontró una URL de descarga válida');
                 }
-
-                // --- ESTRATEGIA DE DESCARGA DIRECTA (BLOB) ---
-                // Fetch del archivo para obtenerlo como blob y forzar la descarga
-                // Nota: Esto puede fallar por CORS si el servidor externo no lo permite.
-                // Si falla, usaremos el proxy de tu backend o el método de link directo como fallback.
                 
                 let blob;
                 try {
@@ -1438,17 +1433,6 @@ function stockSearch() {
                     blob = await response.blob();
                 } catch (corsError) {
                     console.warn('Descarga directa bloqueada por CORS, intentando vía backend proxy...', corsError);
-                    
-                    // Fallback: Usar tu backend para obtener el archivo (si tienes un endpoint proxy de descarga)
-                    // Si no tienes un endpoint específico de "proxy download" que devuelva el archivo raw,
-                    // el comportamiento de guardar en BD (/api/stock/download/) es lo correcto para persistencia,
-                    // pero no descarga al disco local del usuario.
-                    
-                    // Si el objetivo es solo descargar al disco local, y CORS falla, la única opción
-                    // sin proxy es abrir en nueva pestaña (lo cual querías evitar) o usar un proxy.
-                    
-                    // Asumiremos que el fetch falló y lanzamos error para manejarlo abajo o
-                    // intentamos el método de link simple que podría abrir en nueva pestaña.
                     throw corsError;
                 }
 
@@ -1472,8 +1456,7 @@ function stockSearch() {
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(blobUrl);
 
-                // --- OPCIONAL: GUARDAR EN TU DB (HISTORIAL) ---
-                // Si quieres seguir guardando la referencia en tu BD como hacía el código original:
+                // GUARDAR EN LA DB
                 const csrfToken = this.getCSRFToken();
                 if (csrfToken) {
                     // Llamada silenciosa al backend para registrar la descarga
@@ -1490,7 +1473,7 @@ function stockSearch() {
                     }).catch(err => console.error('Error registrando descarga en BD:', err));
                 }
 
-                // 2. Mostrar toast de éxito
+                // Mostrar toast de éxito
                 window.dispatchEvent(new CustomEvent('show-toast', {
                     detail: {
                         type: 'success',
@@ -1504,7 +1487,6 @@ function stockSearch() {
                 console.error('Error en descarga:', e);
                 
                 // Intentar método fallback (abrir link) si el método blob falló
-                // Esto es mejor que nada si CORS bloquea el fetch
                 const fallbackUrl = item.download_url || item.url;
                 if (fallbackUrl) {
                     const link = document.createElement('a');
