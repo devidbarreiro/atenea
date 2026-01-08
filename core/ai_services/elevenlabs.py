@@ -59,45 +59,46 @@ class ElevenLabsClient:
             logger.error(f"Error making request to ElevenLabs: {e}")
             raise
     
-    def list_voices(self, page_size: int = 30) -> List[Dict]:
+    def list_voices(self) -> List[Dict]:
         """
-        Lista todas las voces disponibles
-        
-        Args:
-            page_size: Número de voces por página (max 100)
-            
-        Returns:
-            Lista de diccionarios con información de las voces
+        Lista TODAS las voces disponibles de una sola vez (Endpoint V1).
+        Esto permite alimentar el modal con el catálogo completo para filtrar en el frontend.
         """
         try:
-            logger.info("Listando voces de ElevenLabs")
-            response = self.make_request(
-                'GET', 
-                f'/v2/voices?page_size={page_size}'
-            )
+            logger.info("Listando catálogo completo de voces ElevenLabs (API V1)...")
             
+            # Usamos /v1/voices porque devuelve la lista completa sin forzar paginación estricta
+            response = self.make_request('GET', '/v1/voices')
+            
+            # La respuesta suele venir en la clave 'voices'
             voices = response.get('voices', [])
-            logger.info(f"Se encontraron {len(voices)} voces")
+            logger.info(f"Se encontraron {len(voices)} voces en total.")
             
-            # Simplificar la respuesta para facilitar el uso
             simplified_voices = []
             for voice in voices:
+                # Extraemos etiquetas para facilitar el filtrado en el frontend
+                labels = voice.get('labels', {})
+                
+                # Normalizamos un poco los datos antes de enviarlos
                 simplified_voices.append({
                     'voice_id': voice.get('voice_id'),
                     'name': voice.get('name'),
-                    'category': voice.get('category'),
+                    'category': voice.get('category'), # 'premade', 'cloned', 'generated'
+                    'labels': labels,                  # Aquí suelen venir 'gender', 'accent', etc.
                     'description': voice.get('description', ''),
                     'preview_url': voice.get('preview_url'),
-                    'labels': voice.get('labels', {}),
                     'settings': voice.get('settings', {}),
+                    
+                    # Extraemos género explícitamente si existe para facilitar al JS
+                    'gender': labels.get('gender', 'unknown'),
                 })
             
             return simplified_voices
             
         except Exception as e:
-            logger.error(f"Error al listar voces: {e}")
+            logger.error(f"Error al listar voces de ElevenLabs: {e}")
             raise
-    
+
     def get_voice(self, voice_id: str) -> Dict:
         """
         Obtiene información de una voz específica

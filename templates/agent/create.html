@@ -228,6 +228,8 @@
                             </button>
                         </div>
                     </div>
+
+                    {% include 'includes/voice_selector_modal.html' %}
                     
                     <p class="text-xs text-gray-500">Puedes cambiar la voz por escena en el paso 2</p>
                 </div>
@@ -725,21 +727,13 @@ let voicesCache = null;
 
 async function openVoiceModalManual() {
     // Usar función genérica del modal de voces
-    openVoiceModal({
-        modalId: 'voice-modal-manual',
-        filterPrefix: 'manual',
-        apiUrl: '{% url "core:api_list_elevenlabs_voices" %}',
-        onSelect: function(voiceId, voiceName, voiceCategory) {
-            // Actualizar campos hidden
-            document.getElementById('default_voice_id_manual').value = voiceId;
-            document.getElementById('default_voice_name_manual').value = voiceName;
-            
-            // Actualizar UI
-            document.getElementById('selected-voice-name-manual').textContent = voiceName;
-            document.getElementById('selected-voice-category-manual').textContent = voiceCategory;
-            
-            console.log('Voz seleccionada:', voiceName, voiceId);
-        }
+    openVoiceSelector(function(voiceId, voiceName, voiceCategory) {
+        // Lógica específica del agente
+        document.getElementById('default_voice_id_manual').value = voiceId;
+        document.getElementById('default_voice_name_manual').value = voiceName;
+        
+        document.getElementById('selected-voice-name-manual').textContent = voiceName;
+        document.getElementById('selected-voice-category-manual').textContent = voiceCategory;
     });
 }
 

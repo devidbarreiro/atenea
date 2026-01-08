@@ -1,4 +1,68 @@
 {% load static %}
+{% include 'includes/voice_selector_modal.html' %}
+
+<script>
+    // 1. FUNCIÓN PUENTE GLOBAL
+    // Se llama desde el onclick del botón inyectado por Python
+    window.openVoiceSelectorFromSidebar = function(provider = 'elevenlabs') {
+        if (typeof window.openVoiceSelector === 'function') {
+            window.openVoiceSelector(function(voiceId, voiceName, voiceCategory) {
+                // Actualizar UI Visualmente
+                updateVoiceUI(voiceId, voiceName, voiceCategory);
+
+                // Actualizar Estado de Alpine (para persistencia)
+                const sidebar = document.querySelector('[x-data^="creationSidebar"]');
+                if (sidebar && sidebar.__x) {
+                    sidebar.__x.$data.selectedVoice = {
+                        id: voiceId,
+                        name: voiceName,
+                        category: voiceCategory
+                    };
+                }
+            }, provider); // Pasamos el provider (heygen o elevenlabs)
+        } else {
+            console.error("El modal de voces no está cargado.");
+            alert("Error: No se pudo cargar el selector de voces.");
+        }
+    };
+
+    // 2. FUNCIÓN AUXILIAR PARA ACTUALIZAR DOM
+    function updateVoiceUI(id, name, category) {
+        const nameEl = document.getElementById('dynamic-voice-name');
+        const catEl = document.getElementById('dynamic-voice-cat');
+        const infoEl = document.getElementById('dynamic-voice-info');
+        const placeEl = document.getElementById('dynamic-voice-placeholder');
+        const inputEl = document.getElementById('dynamic-voice-input');
+        const inputNameEl = document.getElementById('dynamic-voice-name-input');
+
+        if (nameEl && catEl && infoEl && placeEl) {
+            nameEl.textContent = name;
+            catEl.textContent = category || 'ElevenLabs';
+            infoEl.classList.remove('hidden');
+            placeEl.classList.add('hidden');
+        }
+        if (inputEl) inputEl.value = id;
+        if (inputNameEl) inputNameEl.value = name;
+    }
+
+    // 3. EVENTO DE CARGA HTMX (CRÍTICO)
+    // Se ejecuta cuando HTMX inyecta el nuevo HTML del formulario.
+    // Restaura el estado visual si Alpine ya tenía una voz guardada.
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Verificar si se actualizó el contenedor de campos dinámicos
+        // (Asegúrate de que el ID coincida con el target de tu hx-get, usualmente #dynamic-fields-container o similar)
+        if (evt.target.id === 'dynamic-fields-container' || evt.target.closest('#dynamic-fields-container')) {
+            
+            // Buscar datos en Alpine
+            const sidebar = document.querySelector('[x-data^="creationSidebar"]');
+            if (sidebar && sidebar.__x && sidebar.__x.$data.selectedVoice) {
+                const v = sidebar.__x.$data.selectedVoice;
+                // Restaurar vista
+                updateVoiceUI(v.id, v.name, v.category);
+            }
+        }
+    });
+</script>
 
 <!-- Definir el componente Alpine de forma global -->
 <script>
@@ -22,6 +86,13 @@ document.addEventListener('alpine:init', () => {
         templateLoading: false,
         templateTab: 'public',
         templateSearch: '',
+
+        // Voice selector state
+        voiceModalOpen: false,
+        voiceList: [],
+        voiceLoading: false,
+        voiceSearch: '',
+        selectedVoice: null,
         
         init() {
             // Cargar prompt desde caché al inicializar
@@ -161,6 +232,38 @@ document.addEventListener('alpine:init', () => {
                 localStorage.setItem(`template_cache_${cacheKey}`, JSON.stringify(data));
             } catch (e) {
                 console.warn('Error caching templates:', e);
+            }
+        },
+
+        async loadVoices() {
+            this.voiceLoading = true;
+            try {
+                const response = await fetch('/api/voices/');
+                const data = await response.json();
+                this.voiceList = data.voices || [];
+            } catch (error) {
+                console.error('Error cargando voces:', error);
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        message: 'No se pudieron cargar las voces',
+                        type: 'error'
+                    }
+                }));
+                this.voiceList = [];
+            } finally {
+                this.voiceLoading = false;
+            }
+        },
+
+        selectVoice(voice) {
+            this.selectedVoice = voice;
+            this.voiceModalOpen = false;
+        },
+
+        openVoiceModal() {
+            this.voiceModalOpen = true;
+            if (this.voiceList.length === 0) {
+                this.loadVoices();
             }
         },
         
@@ -692,7 +795,7 @@ document.addEventListener('alpine:init', () => {
             } finally {
                 this.submitting = false;
             }
-        }
+        },
     }));
 });
 </script>
@@ -724,6 +827,10 @@ document.addEventListener('alpine:init', () => {
     
     <!-- Contenido del Sidebar -->
     <div class="p-6 space-y-5">
+
+        <input type="hidden" name="voice_id" id="dynamic-voice-input">
+
+        <input type="hidden" name="voice_name" id="dynamic-voice-name-input">
         
         <!-- Sección PROMPT TEMPLATE (solo para video e image, excluyendo heygen y manim) -->
         <div x-show="(activeTab === 'video' || activeTab === 'image') && (!selectedModel || (selectedModel && !selectedModel.includes('heygen') && selectedModel !== 'manim-quote'))">
@@ -1083,3 +1190,14 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
 </div>
+
+<script>
+    (function() {
+        // Al cargar este fragmento, movemos el modal al final del body
+        // para asegurar que 'fixed' funcione respecto a la ventana completa.
+        const modal = document.getElementById('elevenlabs-voice-modal');
+        if (modal && document.body) {
+            document.body.appendChild(modal);
+        }
+    })();
+</script>
