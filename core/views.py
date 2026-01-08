@@ -33,7 +33,7 @@ def get_remove_image_background_task():
     from core.tasks import remove_image_background_task
     return remove_image_background_task
 
-from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate
+from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate, ProjectMember
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 from .services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
@@ -480,72 +480,61 @@ class DashboardView(ServiceMixin, ListView):
         # Obtener query de búsqueda
         search_query = self.request.GET.get('q', '').strip()
         context['search_query'] = search_query
+
+        # 1. OBTENER FILTRO DE LA URL (Nuevo)
+        filter_type = self.request.GET.get('filter', 'personal') # Default: personal
+        context['current_filter'] = filter_type
         
-        # Obtener proyectos del usuario para filtrar estadísticas
-        user_projects = ProjectService.get_user_projects(self.request.user)
-        user_project_ids = user_projects.values_list('id', flat=True)
+        user = self.request.user
         
-        # Agregar estadísticas filtradas por items del usuario (con y sin proyecto)
-        from django.db.models import Q
+        # 2. DEFINIR LÓGICA DE FILTRADO (Nuevo)
+        if filter_type == 'shared':
+            # COMPARTIDO: Items en proyectos donde soy miembro pero NO dueño
+            shared_project_ids = ProjectMember.objects.filter(user=user).values_list('project_id', flat=True)
+            # Filtro: Está en un proyecto compartido Y el dueño del proyecto no soy yo
+            base_filter = Q(project_id__in=shared_project_ids) & ~Q(project__owner=user)
+        else:
+            # PERSONAL: Items creados por mí (estén en proyecto o no)
+            base_filter = Q(created_by=user)
+
+        # 3. ESTADÍSTICAS
+        all_user_projects = ProjectService.get_user_projects(user)
+        all_project_ids = all_user_projects.values_list('id', flat=True)
+        stats_filter = Q(project_id__in=all_project_ids) | Q(project__isnull=True, created_by=user)
+
         context.update({
-            'total_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'total_images': Image.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'total_scripts': Script.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'completed_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='completed'
-            ).count(),
-            'processing_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='processing'
-            ).count(),
-            'completed_scripts': Script.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='completed'
-            ).count(),
+            'total_videos': Video.objects.filter(stats_filter).count(),
+            'total_images': Image.objects.filter(stats_filter).count(),
+            'total_scripts': Script.objects.filter(stats_filter).count(),
+            'completed_videos': Video.objects.filter(stats_filter, status='completed').count(),
+            'processing_videos': Video.objects.filter(stats_filter, status='processing').count(),
+            'completed_scripts': Script.objects.filter(stats_filter, status='completed').count(),
         })
         
-        # Construir filtro base para items del usuario
-        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-        
-        # Si hay búsqueda, agregar filtro de texto
+        # 4. APLICAR FILTRO A LA LISTA DE ITEMS (Modificado)
+        # Si hay búsqueda, agregar filtro de texto al filtro base (personal/shared)
         if search_query:
-            # Videos: buscar en título y script
             video_search = Q(title__icontains=search_query) | Q(script__icontains=search_query)
             video_filter = base_filter & video_search
             
-            # Imágenes: buscar en título y prompt
             image_search = Q(title__icontains=search_query) | Q(prompt__icontains=search_query)
             image_filter = base_filter & image_search
             
-            # Audios: buscar en título y texto
             audio_search = Q(title__icontains=search_query) | Q(text__icontains=search_query)
             audio_filter = base_filter & audio_search
-            
-            # Música: buscar en nombre y prompt
-            music_search = Q(name__icontains=search_query) | Q(prompt__icontains=search_query)
-            music_filter = base_filter & music_search
-            
-            # Scripts: buscar en título y contenido del script
+
             script_search = Q(title__icontains=search_query) | Q(original_script__icontains=search_query)
             script_filter = base_filter & script_search
         else:
+            # Sin búsqueda, usamos directamente el filtro Personal/Shared
             video_filter = base_filter
             image_filter = base_filter
             audio_filter = base_filter
-            music_filter = base_filter
             script_filter = base_filter
-        
-        # Obtener todos los items recientes mezclados (videos, imágenes, audios, música, scripts)
+
         recent_items = []
         
-        # Videos
+        # --- VIDEOS ---
         videos = Video.objects.filter(video_filter).select_related('project').order_by('-created_at')
         video_service = self.get_video_service()
         for video in videos:
@@ -569,7 +558,7 @@ class DashboardView(ServiceMixin, ListView):
                     pass
             recent_items.append(item_data)
         
-        # Imágenes
+        # --- IMÁGENES ---
         images = Image.objects.filter(image_filter).select_related('project').order_by('-created_at')
         image_service = self.get_image_service()
         for image in images:
@@ -592,8 +581,8 @@ class DashboardView(ServiceMixin, ListView):
                 except Exception:
                     pass
             recent_items.append(item_data)
-        
-        # Audios
+
+        # --- AUDIOS ---
         audios = Audio.objects.filter(audio_filter).select_related('project').order_by('-created_at')
         audio_service = self.get_audio_service()
         for audio in audios:
@@ -616,8 +605,8 @@ class DashboardView(ServiceMixin, ListView):
                 except Exception:
                     pass
             recent_items.append(item_data)
-        
-        # Scripts
+
+        # --- SCRIPTS ---
         scripts = Script.objects.filter(script_filter).select_related('project').order_by('-created_at')
         for script in scripts:
             item_data = {
@@ -638,7 +627,7 @@ class DashboardView(ServiceMixin, ListView):
         recent_items.sort(key=lambda x: x['created_at'], reverse=True)
         
         # Paginación
-        paginator = Paginator(recent_items, 20)  # 20 items por página
+        paginator = Paginator(recent_items, 20)
         page_number = self.request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
         
@@ -646,7 +635,6 @@ class DashboardView(ServiceMixin, ListView):
         context['page_obj'] = page_obj
         
         return context
-
 
 # ====================
 # PROJECT VIEWS
