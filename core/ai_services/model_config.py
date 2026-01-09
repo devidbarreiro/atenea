@@ -860,6 +860,15 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/google.png',
     },
+    # ==================== MIXED (AGENTE DE VIDEO) ====================
+    'mixed': {
+        'name': 'Composición Multi-Modelo',
+        'service': 'agent',
+        'type': 'video',
+        'description': 'Video combinado usando múltiples modelos de IA',
+        'logo': '/static/img/logos/atenea.png',
+        'supports': {}
+    },
 }
 
 
