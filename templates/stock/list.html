@@ -1491,7 +1491,6 @@ function stockSearch() {
                 if (fallbackUrl) {
                     const link = document.createElement('a');
                     link.href = fallbackUrl;
-                    link.target = '_blank';
                     link.download = item.title || 'download';
                     document.body.appendChild(link);
                     link.click();
