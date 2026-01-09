@@ -6160,7 +6160,7 @@ class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
                 elif service == 'sora':
                     final_video_type = 'sora'
                 elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
-                    final_video_type = 'heygen_avatar_v2' # O el tipo genérico que uses para HeyGen
+                    final_video_type = 'heygen_avatar_v2'
                 else:
                     final_video_type = 'general'
             else:
@@ -6604,7 +6604,7 @@ class AgentFinalStandaloneView(BreadcrumbMixin, ServiceMixin, View):
                 elif service == 'sora':
                     final_video_type = 'sora'
                 elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
-                    final_video_type = 'heygen_avatar_v2' # O el tipo genérico que uses para HeyGen
+                    final_video_type = 'heygen_avatar_v2'
                 else:
                     final_video_type = 'general'
             else:
