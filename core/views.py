@@ -586,18 +586,6 @@ class DashboardView(ServiceMixin, ListView):
         audios = Audio.objects.filter(audio_filter).select_related('project').order_by('-created_at')
         audio_service = self.get_audio_service()
         for audio in audios:
-            # Generar gradiente determinista basado en UUID
-            import hashlib
-            colors = [
-                ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
-                ('#84fab0', '#8fd3f4'), ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'),
-                ('#f093fb', '#f5576c'), ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'),
-                ('#fa709a', '#fee140'), ('#a8edea', '#fed6e3'), ('#d299c2', '#fef9d7'),
-            ]
-            hash_val = int(hashlib.md5(str(audio.uuid).encode()).hexdigest(), 16)
-            c1, c2 = colors[hash_val % len(colors)]
-            bg_gradient = f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
-
             item_data = {
                 'type': 'audio',
                 'object': audio,
@@ -607,7 +595,7 @@ class DashboardView(ServiceMixin, ListView):
                 'status': audio.status,
                 'project': audio.project,
                 'signed_url': None,
-                'audio_background': bg_gradient,
+                'audio_background': audio.background_gradient,
                 'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
@@ -893,18 +881,6 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
         audio_service = self.get_audio_service()
         audios_items = []
         for audio in audios:
-            # Generar gradiente determinista basado en UUID
-            import hashlib
-            colors = [
-                ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
-                ('#84fab0', '#8fd3f4'), ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'),
-                ('#f093fb', '#f5576c'), ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'),
-                ('#fa709a', '#fee140'), ('#a8edea', '#fed6e3'), ('#d299c2', '#fef9d7'),
-            ]
-            hash_val = int(hashlib.md5(str(audio.uuid).encode()).hexdigest(), 16)
-            c1, c2 = colors[hash_val % len(colors)]
-            bg_gradient = f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
-
             item_data = {
                 'type': 'audio',
                 'id': str(audio.uuid),
@@ -913,7 +889,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': audio.created_at,
                 'project': audio.project,
                 'signed_url': None,
-                'audio_background': bg_gradient,
+                'audio_background': audio.background_gradient,
                 'detail_url': reverse('core:project_audio_detail', args=[self.object.uuid, audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
@@ -1123,6 +1099,7 @@ class LibraryView(ServiceMixin, ListView):
                 'signed_url': signed_url,
                 'detail_url': detail_url,
                 'delete_url': delete_url,
+                'audio_background': item.background_gradient if item_wrapper.type == 'audio' else None,
             })
         
         context['items_with_urls'] = items_with_urls
@@ -2789,21 +2766,6 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     else:
                         detail_url = reverse('core:audio_detail', args=[audio.uuid])
                     
-                    # Generar gradiente determinista basado en UUID
-                    import hashlib
-                    colors = [
-                        ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
-                        ('#fdcbf1', '#e6dee9'), ('#a1c4fd', '#c2e9fb'), ('#d4fc79', '#96e6a1'),
-                        ('#84fab0', '#8fd3f4'), ('#cfd9df', '#e2ebf0'), ('#a6c0fe', '#f68084'),
-                        ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'), ('#f093fb', '#f5576c'),
-                        ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'), ('#fa709a', '#fee140'),
-                        ('#8EC5FC', '#E0C3FC'), ('#85FFBD', '#FFFB7D'), ('#FFFB7D', '#85FFBD'),
-                        ('#FBAB7E', '#F7CE68'), ('#F7CE68', '#FBAB7E')
-                    ]
-                    hash_val = int(hashlib.md5(str(audio.uuid).encode()).hexdigest(), 16)
-                    c1, c2 = colors[hash_val % len(colors)]
-                    bg_gradient = f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
-
                     item_data = {
                         'id': str(audio.uuid),
                         'type': 'audio',
@@ -2818,7 +2780,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
                         'model': model_info,  # Información del modelo (nombre, logo, servicio)
                         'audio_type': audio.type,  # 'tts' o 'music'
-                        'audio_background': bg_gradient, # Nuevo campo para miniatura dinámica
+                        'audio_background': audio.background_gradient, # Nuevo campo para miniatura dinámica
                     }
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and audio.status == 'completed' and audio.gcs_path:
@@ -3194,21 +3156,6 @@ class ItemDetailAPIView(ServiceMixin, View):
                     prev_url = reverse('core:audio_detail', args=[prev_item.uuid]) if prev_item else None
                     next_url = reverse('core:audio_detail', args=[next_item.uuid]) if next_item else None
                 
-                # Generar gradiente determinista basado en UUID
-                import hashlib
-                colors = [
-                    ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
-                    ('#fdcbf1', '#e6dee9'), ('#a1c4fd', '#c2e9fb'), ('#d4fc79', '#96e6a1'),
-                    ('#84fab0', '#8fd3f4'), ('#cfd9df', '#e2ebf0'), ('#a6c0fe', '#f68084'),
-                    ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'), ('#f093fb', '#f5576c'),
-                    ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'), ('#fa709a', '#fee140'),
-                    ('#8EC5FC', '#E0C3FC'), ('#85FFBD', '#FFFB7D'), ('#FFFB7D', '#85FFBD'),
-                    ('#FBAB7E', '#F7CE68'), ('#F7CE68', '#FBAB7E')
-                ]
-                hash_val = int(hashlib.md5(str(audio.uuid).encode()).hexdigest(), 16)
-                c1, c2 = colors[hash_val % len(colors)]
-                bg_gradient = f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
-
                 return JsonResponse({
                     'item': {
                         'id': str(audio.uuid),
@@ -3236,7 +3183,7 @@ class ItemDetailAPIView(ServiceMixin, View):
                         'voice_name': audio.voice_name,
                         'duration': audio.duration,
                         'audio_type': audio.type,  # 'tts' o 'music'
-                        'audio_background': bg_gradient, # Nuevo campo para miniatura dinámica
+                        'audio_background': audio.background_gradient, # Nuevo campo para miniatura dinámica
                     },
                     'navigation': {
                         'prev': {
