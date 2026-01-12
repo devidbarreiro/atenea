@@ -78,7 +78,7 @@
                 </div>
 
                 <!-- Video Preview -->
-                <div class="w-64 h-40 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 relative">
+                <div id="preview-container-{{ scene.id }}" class="w-64 h-40 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 relative">
                     {% if scene.final_video_status == 'completed' and scene_data.final_video_url %}
                         <!-- Video final combinado (video + audio ElevenLabs) -->
                         <video src="{{ scene_data.final_video_url }}" 
@@ -865,29 +865,65 @@ function continueToFinal() {
 }
 
 function updateSceneUI() {
-    // Actualizar el estado visual de cada escena sin recargar
     for (const sceneId of sceneIds) {
         const sceneData = sceneStatuses[sceneId];
+        
+        // Solo actualizamos si tenemos datos nuevos
         if (sceneData) {
-            const sceneElement = document.querySelector(`[data-scene-id="${sceneId}"]`);
-            if (sceneElement) {
-                const statusElement = sceneElement.querySelector('[data-status]');
-                const videoElement = sceneElement.querySelector('video');
-                
-                // Actualizar estado
-                if (statusElement) {
-                    statusElement.textContent = sceneData.videoStatus;
-                    statusElement.className = getStatusClass(sceneData.videoStatus);
-                }
-                
-                // Actualizar video si está disponible
-                if (videoElement && sceneData.videoUrl) {
-                    videoElement.src = sceneData.videoUrl;
-                    videoElement.style.display = 'block';
+            const sceneElement = document.getElementById(`scene-${sceneId}`);
+            if (!sceneElement) continue;
+
+            // 1. Actualizar Badge de Estado (buscamos por la estructura de clases)
+            // Buscamos el span dentro del contenedor de badges
+            const statusBadge = sceneElement.querySelector('.flex.flex-col.items-end span:first-child');
+            if (statusBadge) {
+                statusBadge.textContent = getStatusText(sceneData.videoStatus);
+                statusBadge.className = getStatusClass(sceneData.videoStatus);
+            }
+
+            // 2. Actualizar el Contenedor de Video (AQUÍ ESTÁ LA CLAVE)
+            const previewContainer = document.getElementById(`preview-container-${sceneId}`);
+            
+            if (previewContainer) {
+                // Si ya está completado y tenemos URL, inyectamos el HTML del video
+                if (sceneData.videoStatus === 'completed' && sceneData.videoUrl) {
+                    // Solo actualizamos si el contenedor no tiene ya un video, para no reiniciar la reproducción
+                    if (!previewContainer.querySelector('video')) {
+                        console.log(`Pintando video para escena ${sceneId}`);
+                        previewContainer.innerHTML = `
+                            <video src="${sceneData.videoUrl}" controls class="w-full h-full object-cover"></video>
+                            <div class="absolute top-2 left-2 px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded shadow">
+                                📹 SIN AUDIO TTS
+                            </div>
+                        `;
+                        
+                        // Si era la última que faltaba, habilitar el botón de continuar
+                        checkContinueButton(); 
+                    }
+                } 
+                // Si sigue procesando, nos aseguramos que se vea el spinner
+                else if (sceneData.videoStatus === 'processing') {
+                    // Solo si no tiene ya el spinner
+                    if (!previewContainer.querySelector('.animate-spin')) {
+                         previewContainer.innerHTML = `
+                            <div class="w-full h-full flex flex-col items-center justify-center text-white">
+                                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-3"></div>
+                                <p class="text-sm">Generando...</p>
+                            </div>
+                        `;
+                    }
                 }
             }
         }
     }
+}
+
+// Helper para el texto del estado
+function getStatusText(status) {
+    if (status === 'completed') return 'Completado';
+    if (status === 'processing') return 'Procesando';
+    if (status === 'error') return 'Error';
+    return 'Pendiente';
 }
 
 function getStatusClass(status) {
