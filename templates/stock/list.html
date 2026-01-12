@@ -1406,50 +1406,116 @@ function stockSearch() {
 
         async downloadItem(item) {
             this.downloadLoading = true;
-            try {
-                // Obtener CSRF token de forma segura
-                const csrfToken = this.getCSRFToken();
-                if (!csrfToken) {
-                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
-                    return;
+            
+            // Mostrar toast al inicio de la descarga
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: {
+                    type: 'info',
+                    title: 'Descargando...',
+                    message: 'Tu descarga comenzará en breve',
+                    auto_close: 3
                 }
-                
-                // Descargar y guardar en BD usando la API
-                const response = await fetch('/api/stock/download/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({
-                        item: item,
-                        content_type: this.contentType
-                    })
-                });
+            }));
 
-                const data = await response.json();
+            try {
+                // Obtener la URL de descarga directa
+                // Priorizamos download_url, luego preview, luego url
+                const downloadUrl = item.download_url || item.preview || item.url;
                 
-                if (data.success) {
-                    // También descargar el archivo directamente usando download_url si está disponible
-                    const downloadUrl = item.download_url || item.url;
-                    if (downloadUrl) {
-                        const link = document.createElement('a');
-                        link.href = downloadUrl;
-                        link.download = item.title || 'stock-item';
-                        link.target = '_blank';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }
-                    
-                    alert(data.message || 'Item descargado y guardado correctamente');
-                } else {
-                    console.error('Error en descarga:', data);
-                    alert('Error: ' + (data.error || 'Error al descargar'));
+                if (!downloadUrl) {
+                    throw new Error('No se encontró una URL de descarga válida');
                 }
+                
+                let blob;
+                try {
+                    const response = await fetch(downloadUrl);
+                    if (!response.ok) throw new Error('Error de red al descargar');
+                    blob = await response.blob();
+                } catch (corsError) {
+                    console.warn('Descarga directa bloqueada por CORS, intentando vía backend proxy...', corsError);
+                    throw corsError;
+                }
+
+                // Crear URL temporal para el blob
+                const blobUrl = window.URL.createObjectURL(blob);
+                
+                // Crear link invisible
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                
+                // Determinar nombre de archivo
+                const extension = blob.type.split('/')[1] || 'jpg';
+                const filename = (item.title || 'stock-download').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.' + extension;
+                link.download = filename;
+                
+                // Trigger descarga
+                document.body.appendChild(link);
+                link.click();
+                
+                // Limpieza
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(blobUrl);
+
+                // GUARDAR EN LA DB
+                const csrfToken = this.getCSRFToken();
+                if (csrfToken) {
+                    // Llamada silenciosa al backend para registrar la descarga
+                    fetch('/api/stock/download/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({
+                            item: item,
+                            content_type: this.contentType
+                        })
+                    }).catch(err => console.error('Error registrando descarga en BD:', err));
+                }
+
+                // Mostrar toast de éxito
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        type: 'success',
+                        title: 'Descarga completada',
+                        message: 'El archivo se ha guardado en tu dispositivo',
+                        auto_close: 5
+                    }
+                }));
+
             } catch (e) {
-                alert('Error al descargar: ' + e.message);
-                console.error('Error descargando:', e);
+                console.error('Error en descarga:', e);
+                
+                // Intentar método fallback (abrir link) si el método blob falló
+                const fallbackUrl = item.download_url || item.url;
+                if (fallbackUrl) {
+                    const link = document.createElement('a');
+                    link.href = fallbackUrl;
+                    link.target = '_blank';
+                    link.download = item.title || 'download';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'warning',
+                            title: 'Descarga iniciada',
+                            message: 'La descarga se abrió en una nueva pestaña debido a restricciones de seguridad.',
+                            auto_close: 5
+                        }
+                    }));
+                } else {
+                    // Error total
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Error de descarga',
+                            message: 'No se pudo descargar el archivo: ' + e.message,
+                            auto_close: 5
+                        }
+                    }));
+                }
             } finally {
                 this.downloadLoading = false;
             }
