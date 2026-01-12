@@ -467,7 +467,7 @@ class DashboardView(ServiceMixin, ListView):
     model = Project
     template_name = 'dashboard/index.html'
     context_object_name = 'projects'
-    paginate_by = 20
+
     
     def get_queryset(self):
         """Obtener proyectos optimizado"""
