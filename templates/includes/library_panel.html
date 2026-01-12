@@ -448,11 +448,13 @@ document.addEventListener('alpine:init', () => {
                         // Si cambiaron los IDs, reemplazar los primeros items
                         this.items = [...filteredItems, ...this.items.slice(this.pageSize)];
                     } else {
-                        // Si no cambiaron IDs, solo actualizar URLs
+                        // Si no cambiaron IDs, actualizar URLs (incluso si ya existen, para refrescar expiradas)
                         const urlMap = new Map(filteredItems.map(i => [i.id, i.signed_url]));
                         this.items = this.items.map(item => {
-                            if (!item.signed_url && urlMap.has(item.id)) {
-                                return { ...item, signed_url: urlMap.get(item.id) };
+                            const newUrl = urlMap.get(item.id);
+                            if (newUrl) {
+                                // Actualizar URL si existe en la respuesta (refrescar expiradas)
+                                return { ...item, signed_url: newUrl };
                             }
                             return item;
                         });
@@ -922,12 +924,12 @@ document.addEventListener('alpine:init', () => {
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
             <!-- Header con selector de vista -->
-            <div class="px-6 py-4 flex items-center justify-end bg-white flex-shrink-0">
+            <div class="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex items-center justify-end bg-white flex-shrink-0">
                 {% include 'includes/view_mode_selector.html' %}
             </div>
             
             <!-- Contenido -->
-            <div class="flex-1 overflow-y-auto p-6 relative"> 
+            <div class="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 relative"> 
                 <!-- Loading -->
                 <div x-show="loading" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
@@ -936,7 +938,7 @@ document.addEventListener('alpine:init', () => {
                 
                 <!-- Grid -->
                 <div x-show="!loading && items.length > 0 && viewMode === 'grid'" 
-                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
+                     class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
                                 menuOpen: false, 
@@ -1162,7 +1164,7 @@ document.addEventListener('alpine:init', () => {
                                     }
                                 }
                             }"
-                            class="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all cursor-pointer"
+                            class="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all cursor-pointer"
                             :class="{
                                 'ring-2 ring-blue-500 border-blue-500': isSelected(),
                                 'hover:border-gray-300': !isSelected()
@@ -1170,7 +1172,7 @@ document.addEventListener('alpine:init', () => {
                             @click="handleMainClick(item)">
                             
                             <!-- Thumbnail pequeño -->
-                            <div class="w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                            <div class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
                                 <template x-if="item.type === 'video' && item.signed_url">
                                     <video :src="item.signed_url" class="w-full h-full object-cover" preload="metadata"></video>
                                 </template>
@@ -1222,19 +1224,19 @@ document.addEventListener('alpine:init', () => {
                             
                             <!-- Información -->
                             <div class="flex-1 min-w-0">
-                                <h3 class="font-semibold text-gray-900 mb-1 truncate" x-text="item.title"></h3>
-                                <div class="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                                <h3 class="font-semibold text-sm sm:text-base text-gray-900 mb-1 truncate" x-text="item.title"></h3>
+                                <div class="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2 flex-wrap">
                                     <span x-text="item.type === 'video' ? '🎬 Video' : item.type === 'image' ? '🖼️ Imagen' : '🔊 Audio'"></span>
-                                    <span>•</span>
-                                    <span x-text="new Date(item.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })"></span>
+                                    <span class="hidden sm:inline">•</span>
+                                    <span class="text-xs sm:text-sm" x-text="new Date(item.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })"></span>
                                     <template x-if="item.project">
-                                        <span>
+                                        <span class="hidden sm:inline-flex items-center gap-1">
                                             <span>•</span>
                                             <span x-text="item.project.name"></span>
                                         </span>
                                     </template>
                                 </div>
-                                <p class="text-sm text-gray-600 line-clamp-2" 
+                                <p class="text-xs sm:text-sm text-gray-600 line-clamp-2 hidden sm:block" 
                                    x-text="item.type === 'video' ? (item.script || 'Sin descripción') : item.type === 'image' ? (item.prompt || 'Sin descripción') : (item.prompt || 'Sin descripción')">
                                 </p>
                             </div>
@@ -1327,13 +1329,13 @@ document.addEventListener('alpine:init', () => {
     
     <!-- ========== VISTA: DETALLE DEL ITEM ========== -->
     <template x-if="selectedItem && !loadingDetail">
-        <div class="h-full flex">
+        <div class="h-full flex flex-col lg:flex-row">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative overflow-hidden">
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-3 sm:p-4 lg:p-8 relative overflow-hidden min-h-[40vh] lg:min-h-0">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
-                        class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute top-2 left-2 sm:top-3 sm:left-3 lg:top-4 lg:left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
@@ -1341,16 +1343,16 @@ document.addEventListener('alpine:init', () => {
                 <!-- Navegación -->
                 <button x-show="navigation && navigation.prev"
                         @click="navigateTo('prev')"
-                        class="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute left-2 sm:left-3 lg:left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
                 
                 <button x-show="navigation && navigation.next"
                         @click="navigateTo('next')"
-                        class="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute right-2 sm:right-3 lg:right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                     </svg>
                 </button>
@@ -1364,7 +1366,7 @@ document.addEventListener('alpine:init', () => {
                 <!-- Image -->
                 <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
                     <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
-                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
+                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-3 sm:p-4 lg:p-8"
                          x-data="imageZoom" 
                          x-key="selectedItem.id"> 
 
@@ -1400,21 +1402,21 @@ document.addEventListener('alpine:init', () => {
             </div>
             
             <!-- Panel Derecho: Info -->
-            <div class="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
+            <div class="w-full lg:w-72 bg-white border-t lg:border-l border-gray-200 flex flex-col h-full overflow-hidden">
                 <!-- Header -->
-                <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                    <span class="text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
+                <div class="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <span class="text-xs sm:text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
                     <div class="flex items-center gap-1">
                          <a x-bind:href="'/api/items/' + selectedItem.type + '/' + selectedItem.id + '/download/'" 
-                            class="p-2 hover:bg-gray-100 rounded-lg" 
+                            class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" 
                             title="Descargar"
                             x-show="selectedItem.signed_url">
-                             <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                              </svg>
                          </a>
-                        <button @click="closeDetail()" class="p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button @click="closeDetail()" class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
@@ -1422,7 +1424,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Content -->
-                <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-5">
                     <!-- PROMPT TEMPLATE (sin título, solo preview) -->
                     <div x-show="selectedItem.prompt_template">
                         <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">

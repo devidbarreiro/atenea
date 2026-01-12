@@ -3,12 +3,12 @@
 {% block title %}Dashboard - Atenea{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 py-8">
+<div class="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
     <!-- Barra de búsqueda superior -->
-<div class="mb-8">
+<div class="mb-6 sm:mb-8">
         <div class="relative max-w-2xl mx-auto">
-            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                <svg class="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
             </svg>
         </div>
@@ -16,18 +16,18 @@
                    id="dashboard-search-input"
                    value="{{ search_query }}"
                    placeholder="Busca contenido o empieza a crear" 
-                   class="w-full pl-12 pr-12 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                   class="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-3 sm:py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base sm:text-lg"
                    @keydown.enter="handleSearchInput($event)">
-            <div class="absolute inset-y-0 right-0 pr-4 flex items-center">
+            <div class="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center gap-1">
                 {% if search_query %}
-                <a href="{% url 'core:dashboard' %}" class="p-2 text-gray-400 hover:text-gray-600" title="Limpiar búsqueda">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <a href="{% url 'core:dashboard' %}" class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Limpiar búsqueda">
+                    <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                 </a>
                 {% endif %}
-                <button type="button" @click="handleSearchInput($event)" class="p-2 text-gray-400 hover:text-gray-600" title="Buscar o ir al chat">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button type="button" @click="handleSearchInput($event)" class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Buscar o ir al chat">
+                    <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
                 </button>
@@ -74,14 +74,15 @@
     </div>
     
     <!-- Sección: ¿Qué te gustaría crear hoy? -->
-    <div class="mb-12" x-data="{ toolsModalOpen: false }">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-bold text-gray-900">¿Qué te gustaría crear hoy?</h2>
-            <button type="button" @click="toolsModalOpen = true" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="mb-8 sm:mb-12" x-data="{ toolsModalOpen: false }">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
+            <h2 class="text-xl sm:text-2xl font-bold text-gray-900">¿Qué te gustaría crear hoy?</h2>
+            <button type="button" @click="toolsModalOpen = true" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2 text-sm sm:text-base">
+                <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
                 </svg>
-                Todas las herramientas
+                <span class="hidden sm:inline">Todas las herramientas</span>
+                <span class="sm:hidden">Herramientas</span>
             </button>
         </div>
         
@@ -90,13 +91,13 @@
              x-cloak
              @click.away="toolsModalOpen = false"
              @keydown.escape.window="toolsModalOpen = false"
-             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+             class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black bg-opacity-50"
              style="display: none;">
-            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
                  @click.stop>
                 <!-- Header del Modal -->
-                <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-                    <h2 class="text-2xl font-bold text-gray-900">Todas las herramientas</h2>
+                <div class="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between z-10">
+                    <h2 class="text-lg sm:text-2xl font-bold text-gray-900">Todas las herramientas</h2>
                     <button type="button" @click="toolsModalOpen = false" 
                             class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +107,7 @@
                 </div>
                 
                 <!-- Contenido del Modal -->
-                <div class="p-6 space-y-8">
+                <div class="p-4 sm:p-6 space-y-6 sm:space-y-8">
                     <!-- Categoría: IMAGEN -->
                     <div>
                         <div class="flex items-center gap-3 mb-4">
@@ -256,67 +257,67 @@
         </div>
     </div>
         
-        <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+        <div class="flex gap-3 sm:gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-3 sm:mx-0 px-3 sm:px-0">
             <!-- Buscar contenido -->
-            <a href="{% url 'core:library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
-                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                         </svg>
                     </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
-                    <p class="text-sm text-gray-600">Explora tu biblioteca</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Explora tu biblioteca</p>
     </div>
             </a>
             
             <!-- Generar imágenes -->
-            <a href="{% url 'core:image_library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:image_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
-                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
             </svg>
         </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
-                    <p class="text-sm text-gray-600">Crea imágenes con IA</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Crea imágenes con IA</p>
     </div>
             </a>
             
             <!-- Generar vídeos -->
-            <a href="{% url 'core:video_library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-red-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:video_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-red-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
-                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                         </svg>
         </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
-                    <p class="text-sm text-gray-600">Crea vídeos con IA</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Crea vídeos con IA</p>
     </div>
             </a>
 
             <!-- Generar audio -->
-            <a href="{% url 'core:audio_library' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:audio_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
-                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
                         </svg>
         </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar audio</h3>
-                    <p class="text-sm text-gray-600">Crea voces con IA</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar audio</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Crea voces con IA</p>
     </div>
             </a>
             
             <!-- Generar música -->
-            <div class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 opacity-75 cursor-not-allowed flex flex-col justify-between relative">
+            <div class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 opacity-75 cursor-not-allowed flex flex-col justify-between relative">
                 <div>
-                    <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4">
-                        <span class="text-2xl">🎵</span>
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <span class="text-xl sm:text-2xl">🎵</span>
             </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Generar música</h3>
-                    <p class="text-sm text-gray-600">Crea música con IA</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar música</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Crea música con IA</p>
                 </div>
                 <div class="absolute top-2 right-2">
                     <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded">Próximamente</span>
@@ -324,25 +325,25 @@
     </div>
 
             <!-- Crear proyecto -->
-            <a href="{% url 'core:project_create' %}" class="flex-shrink-0 w-64 h-40 bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <a href="{% url 'core:project_create' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-indigo-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
                 <div>
-                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                         </svg>
             </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Nuevo proyecto</h3>
-                    <p class="text-sm text-gray-600">Organiza tu trabajo</p>
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Nuevo proyecto</h3>
+                    <p class="text-xs sm:text-sm text-gray-600">Organiza tu trabajo</p>
             </div>
         </a>
         </div>
     </div>
     
     <!-- Sección: Creaciones recientes -->
-    <div class="mb-12">
-        <div class="flex justify-between items-center mb-6">
-            <div class="flex items-center gap-4">
-                <h2 class="text-2xl font-bold text-gray-900">
+    <div class="mb-8 sm:mb-12">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                <h2 class="text-xl sm:text-2xl font-bold text-gray-900">
                     {% if search_query %}
                         Resultados de búsqueda{% if page_obj.paginator.count %} ({{ page_obj.paginator.count }}){% endif %}
                     {% else %}
@@ -352,14 +353,14 @@
                 {% if not search_query %}
                 <select 
                     onchange="applyDashboardFilter(this)"
-                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-400 transition-colors">
+                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-400 transition-colors w-full sm:w-auto">
                     <option value="personal" {% if current_filter == 'personal' %}selected{% endif %}>Personal</option>
                     <option value="shared" {% if current_filter == 'shared' %}selected{% endif %}>Compartido</option>
                 </select>
                 {% endif %}
             </div>
             {% if not search_query %}
-            <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-900 font-medium">
+            <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-900 font-medium text-sm sm:text-base">
                 Ver todas →
         </a>
             {% endif %}
@@ -374,38 +375,54 @@
 
         <!-- Paginación -->
         {% if page_obj.has_other_pages %}
-        <div class="mt-8 flex justify-center">
-            <nav class="flex items-center gap-2">
+        <div class="mt-6 sm:mt-8 flex justify-center">
+            <nav class="flex flex-wrap items-center justify-center gap-2">
                 {% if page_obj.has_previous %}
                     <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page=1" 
-                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        « Primera
+                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <span class="hidden sm:inline">« Primera</span>
+                        <span class="sm:hidden">«</span>
                     </a>
                     <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.previous_page_number }}" 
-                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        ‹ Anterior
+                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <span class="hidden sm:inline">‹ Anterior</span>
+                        <span class="sm:hidden">‹</span>
                     </a>
                 {% else %}
-                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">« Primera</span>
-                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">‹ Anterior</span>
+                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
+                        <span class="hidden sm:inline">« Primera</span>
+                        <span class="sm:hidden">«</span>
+                    </span>
+                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
+                        <span class="hidden sm:inline">‹ Anterior</span>
+                        <span class="sm:hidden">‹</span>
+                    </span>
                 {% endif %}
                 
-                <span class="px-4 py-2 text-sm font-medium text-gray-700">
+                <span class="px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
                     Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
                 </span>
                 
                 {% if page_obj.has_next %}
                     <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.next_page_number }}" 
-                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Siguiente ›
+                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <span class="hidden sm:inline">Siguiente ›</span>
+                        <span class="sm:hidden">›</span>
                     </a>
                     <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.paginator.num_pages }}" 
-                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Última »
+                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        <span class="hidden sm:inline">Última »</span>
+                        <span class="sm:hidden">»</span>
                     </a>
                 {% else %}
-                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">Siguiente ›</span>
-                    <span class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed">Última »</span>
+                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
+                        <span class="hidden sm:inline">Siguiente ›</span>
+                        <span class="sm:hidden">›</span>
+                    </span>
+                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
+                        <span class="hidden sm:inline">Última »</span>
+                        <span class="sm:hidden">»</span>
+                    </span>
                 {% endif %}
             </nav>
             </div>
