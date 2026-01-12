@@ -753,9 +753,37 @@ def get_model_specific_fields(model_id, service):
                         <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
                             VOZ <span class="text-red-500">*</span>
                         </label>
-                        <select name="voice_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-                            {voice_options}
-                        </select>
+                        
+                        <input type="hidden" 
+                            name="voice_id" 
+                            id="dynamic-voice-input"
+                            required>
+
+                        <button type="button" 
+                                onclick="window.openVoiceSelectorFromSidebar('heygen')"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-left flex items-center gap-3 hover:border-gray-400 transition-colors group">
+                            
+                            <div class="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0 text-purple-600 group-hover:bg-purple-100 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                                </svg>
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <div id="dynamic-voice-info" class="hidden">
+                                    <div id="dynamic-voice-name" class="font-bold text-gray-900 text-sm truncate"></div>
+                                    <div id="dynamic-voice-cat" class="text-xs text-gray-500 truncate"></div>
+                                </div>
+                                
+                                <div id="dynamic-voice-placeholder" class="text-sm text-gray-500">
+                                    Seleccionar voz de HeyGen...
+                                </div>
+                            </div>
+
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
                     </div>
                 '''
             })
@@ -1040,103 +1068,54 @@ def get_model_specific_fields(model_id, service):
     
     # ElevenLabs TTS (para audios)
     elif model_id == 'elevenlabs' or model_id == 'elevenlabs-tts':
-        try:
-            api_key = getattr(settings, 'ELEVENLABS_API_KEY', None)
-            if not api_key:
-                raise ValueError('ELEVENLABS_API_KEY no está configurada en settings')
-            client = ElevenLabsClient(api_key=api_key)
-            voices = client.list_voices()
-            
-            logger.info(f"ElevenLabs: Cargadas {len(voices)} voces")
-            
-            data['voices'] = voices
-            
-            # Generar HTML para voice select
-            voice_options = '<option value="">Selecciona una voz</option>'
-            for voice in voices:
-                voice_id = voice.get('voice_id') or voice.get('id')
-                voice_name = voice.get('name', voice_id)
-                voice_category = voice.get('category', '')
-                labels = voice.get('labels', {})
-                accent = labels.get('accent', '')
-                gender = labels.get('gender', '')
-                
-                label = f"{voice_name}"
-                details = []
-                if accent:
-                    details.append(accent)
-                if gender:
-                    details.append(gender)
-                if voice_category:
-                    details.append(voice_category)
-                if details:
-                    label += f" ({', '.join(details)})"
+        
+        fields.append({
+            'name': 'voice_id',
+            'label': 'Voz',
+            'required': True,
+            'html': f'''
+                <div class="mb-4">
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
+                        VOZ <span class="text-red-500">*</span>
+                    </label>
                     
-                voice_options += f'<option value="{voice_id}">{label}</option>'
-            
-            fields.append({
-                'name': 'voice_id',
-                'label': 'Voz',
-                'required': True,
-                'html': f'''
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
-                            VOZ <span class="text-red-500">*</span>
-                        </label>
-                        <select name="voice_id" required class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-                            {voice_options}
-                        </select>
-                        <p class="mt-1 text-xs text-gray-500">Selecciona la voz para el audio</p>
-                    </div>
-                '''
-            })
-        except Exception as e:
-            logger.error(f"Error cargando voces de ElevenLabs: {e}", exc_info=True)
-            # Mostrar advertencia y permitir entrada manual
-            error_msg = str(e)
-            if 'API_KEY' in error_msg:
-                error_msg = 'API Key no configurada'
-            elif 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
-                error_msg = 'Error de conexión con ElevenLabs API'
-            else:
-                error_msg = 'No se pudieron cargar las voces automáticamente'
-            
-            fields.append({
-                'name': 'elevenlabs_warning',
-                'label': 'Advertencia',
-                'required': False,
-                'html': f'''
-                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p class="text-sm text-yellow-800 font-semibold mb-2">
-                            ⚠️ {error_msg}
-                        </p>
-                        <p class="text-xs text-yellow-700 mb-3">
-                            Se usará la voz por defecto o puedes ingresar un ID de voz manualmente:
-                        </p>
-                    </div>
-                '''
-            })
-            
-            fields.append({
-                'name': 'voice_id',
-                'label': 'Voice ID',
-                'required': False,
-                'html': f'''
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">
-                            VOZ ID <span class="text-yellow-600">(opcional)</span>
-                        </label>
-                        <input type="text" 
-                               name="voice_id" 
-                               placeholder="Ej: 21m00Tcm4TlvDq8ikWAM" 
-                               class="w-full px-3 py-2.5 text-sm border border-yellow-300 rounded-lg bg-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all">
-                        <p class="mt-1 text-xs text-gray-500">Ingresa el ID de la voz si lo conoces, o deja vacío para usar la voz por defecto</p>
-                    </div>
-                '''
-            })
+                    <input type="hidden" 
+                           name="voice_id" 
+                           id="dynamic-voice-input"
+                           required>
+
+                    <button type="button" 
+                            onclick="window.openVoiceSelectorFromSidebar('elevenlabs')"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-left flex items-center gap-3 hover:border-gray-400 transition-colors group">
+                        
+                        <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0 text-green-600 group-hover:bg-green-100 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                            </svg>
+                        </div>
+
+                        <div class="flex-1 min-w-0">
+                            <div id="dynamic-voice-info" class="hidden">
+                                <div id="dynamic-voice-name" class="font-bold text-gray-900 text-sm truncate"></div>
+                                <div id="dynamic-voice-cat" class="text-xs text-gray-500 truncate"></div>
+                            </div>
+                            
+                            <div id="dynamic-voice-placeholder" class="text-sm text-gray-500">
+                                Seleccionar una voz...
+                            </div>
+                        </div>
+
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    
+                    <p class="mt-1 text-xs text-gray-500">Haz clic para abrir el catálogo de voces</p>
+                </div>
+            '''
+        })
     
     return {
         'fields': fields,
         'data': data
     }
-

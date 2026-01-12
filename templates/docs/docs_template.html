@@ -627,17 +627,16 @@ async function loadSidebar() {
 
     // Búsqueda mejorada
     const searchInput = document.getElementById('sidebar-search');
-    searchInput.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      document.querySelectorAll('#sidebar-list li').forEach(li => {
-        const link = li.querySelector('.sidebar-link');
-        const folder = li.querySelector('.sidebar-folder');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const allItems = document.querySelectorAll('#sidebar-list li');
         
-        if (link) {
-          const text = link.textContent.toLowerCase();
-          if (text.includes(query)) {
+        if (!query) {
+          // Si no hay query, mostrar todos los items
+          allItems.forEach(li => {
             li.style.display = '';
-            // Mostrar padres
+            // Mostrar todos los padres también
             let parent = li.parentElement;
             while (parent && parent !== sidebarList) {
               if (parent.tagName === 'UL') {
@@ -645,24 +644,55 @@ async function loadSidebar() {
               }
               parent = parent.parentElement;
             }
-          } else {
-            li.style.display = 'none';
-          }
-        } else if (folder) {
-          // Verificar si algún hijo coincide
-          const hasMatch = Array.from(li.querySelectorAll('.sidebar-link')).some(
-            link => link.textContent.toLowerCase().includes(query)
-          );
-          if (hasMatch || folder.textContent.toLowerCase().includes(query)) {
-            li.style.display = '';
-          } else if (query) {
-            li.style.display = 'none';
-          } else {
-            li.style.display = '';
-          }
+          });
+          return;
         }
+        
+        allItems.forEach(li => {
+          const link = li.querySelector('.sidebar-link');
+          const folder = li.querySelector('.sidebar-folder');
+          
+          if (link) {
+            const text = link.textContent.toLowerCase();
+            if (text.includes(query)) {
+              li.style.display = '';
+              // Mostrar padres
+              let parent = li.parentElement;
+              while (parent && parent !== sidebarList) {
+                if (parent.tagName === 'UL') {
+                  parent.style.display = '';
+                }
+                parent = parent.parentElement;
+              }
+            } else {
+              li.style.display = 'none';
+            }
+          } else if (folder) {
+            // Verificar si algún hijo coincide
+            const childLinks = Array.from(li.querySelectorAll('.sidebar-link'));
+            const hasMatch = childLinks.some(
+              link => link.textContent.toLowerCase().includes(query)
+            );
+            const folderMatches = folder.textContent.toLowerCase().includes(query);
+            
+            if (hasMatch || folderMatches) {
+              li.style.display = '';
+              // Mostrar todos los hijos que coinciden
+              childLinks.forEach(childLink => {
+                const childLi = childLink.closest('li');
+                if (childLi && childLink.textContent.toLowerCase().includes(query)) {
+                  childLi.style.display = '';
+                }
+              });
+            } else if (query) {
+              li.style.display = 'none';
+            } else {
+              li.style.display = '';
+            }
+          }
+        });
       });
-    });
+    }
 
     // Cargar doc de la URL actual si existe
     let pathFromUrl = window.location.pathname.replace(/^\/docs\/?/, '').replace(/\.md$/, '').replace(/\/$/, '');
@@ -905,7 +935,58 @@ async function loadDoc(servicePath) {
       pre.appendChild(button);
     });
 
-    // Delegar click de enlaces internos
+    // Procesar enlaces internos de documentación (convertir enlaces markdown a enlaces funcionales)
+    contentDiv.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href');
+      
+      // Si es un enlace interno de documentación (empieza con /docs/ o es relativo a docs/)
+      if (href.startsWith('/docs/')) {
+        e.preventDefault();
+        const docPath = href.replace('/docs/', '').replace(/\.md$/, '').replace(/\/$/, '');
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const sidebarLink = document.querySelector(`a[data-route="${docPath}"]`);
+          if (sidebarLink) {
+            setActiveLink(sidebarLink);
+          }
+          history.pushState({ path: docPath }, '', `/docs/${docPath}`);
+          loadDoc(docPath);
+        });
+        // Cambiar href para que sea clickeable
+        a.href = '#';
+        a.style.cursor = 'pointer';
+      }
+      // Si es un enlace relativo que apunta a otro documento markdown
+      else if (href.includes('.md') && !href.startsWith('http') && !href.startsWith('#')) {
+        // Convertir rutas relativas a rutas absolutas
+        // Ejemplo: "public/app/GUIA_USUARIO.md" -> "app/GUIA_USUARIO"
+        let docPath = href.replace(/\.md$/, '').replace(/\/$/, '');
+        // Si empieza con "public/", quitarlo
+        if (docPath.startsWith('public/')) {
+          docPath = docPath.replace('public/', '');
+        }
+        // Si empieza con "private/", ignorarlo (documentación privada)
+        if (docPath.startsWith('private/')) {
+          a.style.opacity = '0.5';
+          a.title = 'Documentación privada (solo disponible en el repositorio)';
+          return;
+        }
+        
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const sidebarLink = document.querySelector(`a[data-route="${docPath}"]`);
+          if (sidebarLink) {
+            setActiveLink(sidebarLink);
+          }
+          history.pushState({ path: docPath }, '', `/docs/${docPath}`);
+          loadDoc(docPath);
+        });
+        a.href = '#';
+        a.style.cursor = 'pointer';
+      }
+    });
+
+    // Delegar click de enlaces internos con data-route
     contentDiv.querySelectorAll('a[data-route]').forEach(a => {
       a.addEventListener('click', e => {
         e.preventDefault();

@@ -34,6 +34,26 @@
             </div>
         </div>
         <script>
+            function applyDashboardFilter(selectElement) {
+                // Usamos 'window.URL' explícitamente para evitar conflictos con variables locales llamadas 'URL'
+                try {
+                    const currentUrl = new window.URL(window.location.href);
+                    
+                    // Establecer el filtro seleccionado
+                    currentUrl.searchParams.set('filter', selectElement.value);
+                    
+                    // Resetear la paginación a 1 para evitar errores (estar en pag 10 y filtrar a una lista de 2 items)
+                    currentUrl.searchParams.set('page', '1');
+                    
+                    // Redirigir
+                    window.location.href = currentUrl.toString();
+                } catch (e) {
+                    // Fallback muy seguro por si el navegador es extremadamente antiguo o window.URL también falla
+                    console.warn('Fallback filter redirection');
+                    window.location.search = '?filter=' + selectElement.value + '&page=1';
+                }
+            }
+            
             function handleSearchInput(event) {
                 const input = document.getElementById('dashboard-search-input');
                 const value = input.value.trim();
@@ -330,9 +350,11 @@
                     {% endif %}
                 </h2>
                 {% if not search_query %}
-                <select class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option>Personal</option>
-                    <option>Compartido</option>
+                <select 
+                    onchange="applyDashboardFilter(this)"
+                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-400 transition-colors">
+                    <option value="personal" {% if current_filter == 'personal' %}selected{% endif %}>Personal</option>
+                    <option value="shared" {% if current_filter == 'shared' %}selected{% endif %}>Compartido</option>
                 </select>
                 {% endif %}
             </div>

@@ -1,0 +1,540 @@
+<div id="elevenlabs-voice-modal" class="fixed inset-0 z-[9999] hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="modal-backdrop"></div>
+
+    <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            
+            <div class="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-6xl opacity-0 scale-95 flex flex-col h-[85vh]" id="modal-panel">
+                
+                <div class="border-b border-gray-100 bg-white px-6 py-4 flex items-center justify-between shrink-0 z-20">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-gray-900 rounded-lg text-white shadow-md">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900" id="modal-title">Biblioteca de Voces</h3>
+                            <div class="flex items-center gap-3 text-xs font-medium text-gray-500">
+                                <span id="el-voices-count" class="bg-gray-100 px-2 py-0.5 rounded-full">Cargando...</span>
+                                <button onclick="reloadVoices()" class="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 transition-colors">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    Sincronizar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeVoiceModal()" class="rounded-full p-2 hover:bg-gray-100 transition-colors focus:outline-none">
+                        <svg class="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div class="flex flex-1 overflow-hidden">
+                    
+                    <div class="w-72 bg-gray-50 border-r border-gray-200 p-5 overflow-y-auto hidden md:block shrink-0 custom-scrollbar">
+                        <div class="space-y-8 pb-4">
+                            
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Buscar por Nombre</label>
+                                <div class="relative group">
+                                    <input type="text" id="el-voice-search" placeholder="Ej: Adam, Rachel..." 
+                                           class="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-all shadow-sm"
+                                           oninput="renderVoices()">
+                                    <svg class="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Ordenar por</label>
+                                <select id="el-voice-sort" onchange="renderVoices()" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-gray-900 cursor-pointer">
+                                    <option value="name_asc">Nombre (A-Z)</option>
+                                    <option value="name_desc">Nombre (Z-A)</option>
+                                    <option value="cat_asc">Categoría (Origen)</option>
+                                </select>
+                            </div>
+
+                            <hr class="border-gray-200">
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Origen</label>
+                                <div class="flex flex-col gap-2">
+                                    <button onclick="updateFilters('category', 'all')" class="filter-chip active w-full text-left" data-group="category" data-val="all">Todas</button>
+                                    <button onclick="updateFilters('category', 'cloned')" class="filter-chip w-full text-left flex justify-between items-center" data-group="category" data-val="cloned">
+                                        Clonadas
+                                        <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                                    </button>
+                                    <button onclick="updateFilters('category', 'premade')" class="filter-chip w-full text-left flex justify-between items-center" data-group="category" data-val="premade">
+                                        Librería Oficial
+                                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Género</label>
+                                <div class="flex gap-2">
+                                    <button onclick="updateFilters('gender', 'all')" class="filter-chip active flex-1 text-center justify-center" data-group="gender" data-val="all">Todos</button>
+                                    <button onclick="updateFilters('gender', 'male')" class="filter-chip flex-1 text-center justify-center" data-group="gender" data-val="male">Hombre</button>
+                                    <button onclick="updateFilters('gender', 'female')" class="filter-chip flex-1 text-center justify-center" data-group="gender" data-val="female">Mujer</button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Acento</label>
+                                <div id="filter-accent-container" class="flex flex-wrap gap-1.5"></div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Caso de Uso</label>
+                                <div id="filter-usecase-container" class="flex flex-wrap gap-1.5"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 bg-gray-100 p-6 overflow-y-auto custom-scrollbar" id="main-scroll-area">
+                        <div class="md:hidden mb-4 sticky top-0 z-10">
+                            <input type="text" placeholder="Buscar nombre..." class="w-full p-3 rounded-lg border border-gray-300 shadow-md" oninput="document.getElementById('el-voice-search').value = this.value; renderVoices()">
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10" id="el-voices-grid">
+                            <div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-500">
+                                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-3"></div>
+                                <p>Cargando voces...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Estilos Chips */
+    .filter-chip {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        color: #4b5563;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+    }
+    .filter-chip:hover { border-color: #9ca3af; background-color: #f9fafb; }
+    
+    /* Estado ACTIVO visual */
+    .filter-chip.active { 
+        background-color: #111827 !important; /* Gray-900 */
+        color: white !important; 
+        border-color: #111827 !important; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+    }
+    
+    /* Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+
+    /* Etiquetas de la tarjeta */
+    .voice-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        white-space: nowrap;
+    }
+
+    /* Animación Audio */
+    .playing-animation span { display: block; width: 3px; background-color: white; border-radius: 2px; animation: audio-wave 1s infinite ease-in-out; }
+    .playing-animation span:nth-child(1) { animation-delay: 0.0s; height: 40%; }
+    .playing-animation span:nth-child(2) { animation-delay: 0.1s; height: 100%; }
+    .playing-animation span:nth-child(3) { animation-delay: 0.2s; height: 60%; }
+    @keyframes audio-wave { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1); } }
+</style>
+
+<script>
+    // --- ESTADO GLOBAL ---
+    window.elevenLabsState = {
+        allVoices: [],
+        filters: { gender: 'all', category: 'all', accent: 'all', use_case: 'all', search: '' },
+        currentProvider: 'elevenlabs',
+        currentAudio: null,
+        currentPlayingId: null,
+        onSelectCallback: null,
+        loaded: false
+    };
+
+    // --- 1. ABRIR MODAL ---
+    window.openVoiceSelector = function(callback, provider = 'elevenlabs') {
+        document.body.style.overflow = 'hidden'; // Bloquear scroll fondo
+        window.elevenLabsState.onSelectCallback = callback;
+        
+        // Título dinámico
+        const titleEl = document.getElementById('modal-title');
+        if (titleEl) {
+            titleEl.textContent = provider === 'heygen' ? 'Biblioteca HeyGen' : 'Biblioteca ElevenLabs';
+        }
+
+        // Reset si cambiamos proveedor
+        if (window.elevenLabsState.currentProvider !== provider) {
+            window.elevenLabsState.currentProvider = provider;
+            window.elevenLabsState.loaded = false;
+            window.elevenLabsState.allVoices = [];
+        }
+
+        const modal = document.getElementById('elevenlabs-voice-modal');
+        const backdrop = document.getElementById('modal-backdrop');
+        const panel = document.getElementById('modal-panel');
+        
+        modal.classList.remove('hidden');
+        // Pequeño delay para la animación CSS
+        setTimeout(() => { 
+            backdrop.classList.remove('opacity-0'); 
+            panel.classList.remove('opacity-0', 'scale-95'); 
+        }, 10);
+        
+        if (!window.elevenLabsState.loaded) {
+            fetchVoices(provider);
+        } else {
+            renderVoices();
+        }
+    };
+
+    // --- 2. CERRAR MODAL ---
+    window.closeVoiceModal = function() {
+        document.body.style.overflow = ''; // Desbloquear scroll
+        
+        const modal = document.getElementById('elevenlabs-voice-modal');
+        const backdrop = document.getElementById('modal-backdrop');
+        const panel = document.getElementById('modal-panel');
+        
+        stopCurrentAudio(); // Parar audio si suena
+
+        backdrop.classList.add('opacity-0');
+        panel.classList.add('opacity-0', 'scale-95');
+        
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200);
+    };
+
+    // --- ACCIÓN DE RECARGA ---
+    window.reloadVoices = function() {
+        const provider = window.elevenLabsState.currentProvider;
+        const cacheKey = provider === 'heygen' ? 'heygen_voices_cache' : 'elevenlabs_voices_cache';
+        
+        // 1. Borrar caché del navegador
+        sessionStorage.removeItem(cacheKey);
+        window.elevenLabsState.loaded = false;
+        
+        // 2. Llamar al fetch indicando que es una recarga forzada
+        fetchVoices(provider, true); 
+    };
+
+    // --- FETCH CON CACHE BUSTING ---
+    async function fetchVoices(provider, forceRefresh = false) {
+        const grid = document.getElementById('el-voices-grid');
+        grid.innerHTML = '<div class="col-span-full flex flex-col items-center justify-center py-32"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900 mb-4"></div><p class="text-gray-500 font-medium">Contactando con la API...</p></div>';
+
+        try {
+            // URL Base
+            let baseUrl = provider === 'heygen' ? '{% url "core:api_list_voices" %}' : '{% url "core:api_list_elevenlabs_voices" %}'; 
+            let cacheKey = provider === 'heygen' ? 'heygen_voices_cache' : 'elevenlabs_voices_cache';
+
+            // Si no forzamos recarga, miramos la caché del navegador primero
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) { 
+                    try {
+                        processAndRender(JSON.parse(cached)); 
+                        return;
+                    } catch(e) {
+                        console.warn("Caché corrupta");
+                    }
+                }
+            }
+
+            // AÑADIR PARÁMETRO PARA SALTAR CACHÉ DEL BACKEND
+            // Agregamos ?force_refresh=true o &force_refresh=true según corresponda
+            const separator = baseUrl.includes('?') ? '&' : '?';
+            const apiUrl = forceRefresh ? `${baseUrl}${separator}force_refresh=true&t=${new Date().getTime()}` : baseUrl;
+
+            console.log("Fetching:", apiUrl); // Para depurar
+
+            const response = await fetch(apiUrl);
+            if (!response.ok) throw new Error(`Error API: ${response.status}`);
+            
+            const data = await response.json();
+            
+            // ... (Resto del código de normalización igual que antes) ...
+            let rawList = data.voices || data;
+            if (data.data && Array.isArray(data.data)) rawList = data.data;
+
+            const processed = rawList.map((v, index) => {
+                // ... (Tu código de normalización anterior) ...
+                // COPIA AQUÍ EL BLOQUE DE MAPEO 'processed' DE LA RESPUESTA ANTERIOR
+                // Para no hacer el código gigante otra vez, usa el mismo mapeo seguro.
+                const labels = v.labels || {};
+                const safeId = String(v.voice_id || v.id || v.external_id || `temp_id_${index}`);
+                
+                let category = 'premade';
+                if (v.category) category = v.category;
+                else if (labels.type) category = labels.type;
+                else if (v.is_cloned) category = 'cloned';
+
+                let preview = v.preview_url || v.preview_audio || v.sample_url;
+                if (!preview || preview === 'None') preview = null;
+
+                return {
+                    id: safeId, 
+                    name: v.name || v.voice_name || `Voz ${index + 1}`,
+                    category: category.toLowerCase(),
+                    gender: (v.gender || labels.gender || 'unknown').toLowerCase(),
+                    preview_url: preview,
+                    accent: labels.accent || 'General',
+                    use_case: labels.use_case || labels.description || 'General',
+                    description: v.description || labels.description || ''
+                };
+            });
+
+            sessionStorage.setItem(cacheKey, JSON.stringify(processed));
+            processAndRender(processed);
+
+        } catch (error) {
+            console.error(error);
+            grid.innerHTML = `<div class="col-span-full text-center p-10 text-red-600">
+                <p class="font-bold">Error de conexión</p>
+                <p class="text-sm mb-4">${error.message}</p>
+                <button onclick="reloadVoices()" class="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50">Intentar de nuevo</button>
+            </div>`;
+        }
+    }
+
+    function processAndRender(data) {
+        window.elevenLabsState.allVoices = data;
+        window.elevenLabsState.loaded = true;
+        populateDynamicFilters(data);
+        renderVoices();
+    }
+
+    // --- 4. FILTROS DINÁMICOS ---
+    function populateDynamicFilters(voices) {
+        const accents = new Set();
+        const useCases = new Set();
+        
+        voices.forEach(v => {
+            if(v.accent && v.accent !== 'General') accents.add(v.accent);
+            if(v.use_case && v.use_case !== 'General') useCases.add(v.use_case);
+        });
+
+        const createButton = (text, group, val) => 
+            `<button onclick="updateFilters('${group}', '${val}')" class="filter-chip w-auto justify-center text-center whitespace-nowrap" data-group="${group}" data-val="${val}">${text}</button>`;
+
+        // Acentos
+        const accentContainer = document.getElementById('filter-accent-container');
+        if(accentContainer) {
+            let html = createButton('Todos', 'accent', 'all');
+            Array.from(accents).sort().forEach(acc => html += createButton(acc, 'accent', acc));
+            accentContainer.innerHTML = html;
+            const allBtn = accentContainer.querySelector('[data-val="all"]');
+            if(allBtn) allBtn.classList.add('active');
+        }
+
+        // Casos de Uso
+        const useCaseContainer = document.getElementById('filter-usecase-container');
+        if(useCaseContainer) {
+            let html = createButton('Todos', 'use_case', 'all');
+            Array.from(useCases).sort().forEach(uc => html += createButton(uc, 'use_case', uc));
+            useCaseContainer.innerHTML = html;
+            const allBtn = useCaseContainer.querySelector('[data-val="all"]');
+            if(allBtn) allBtn.classList.add('active');
+        }
+    }
+
+    // --- 5. RENDERIZADO VISUAL ---
+    window.renderVoices = function() {
+        const state = window.elevenLabsState;
+        const grid = document.getElementById('el-voices-grid');
+        const countLabel = document.getElementById('el-voices-count');
+        
+        const searchVal = document.getElementById('el-voice-search').value.toLowerCase();
+        const sortVal = document.getElementById('el-voice-sort').value;
+        const f = state.filters;
+
+        // FILTRADO
+        let filtered = state.allVoices.filter(v => {
+            const matchSearch = !searchVal || v.name.toLowerCase().includes(searchVal);
+            const matchGender = f.gender === 'all' || v.gender === f.gender;
+            const matchAccent = f.accent === 'all' || v.accent === f.accent;
+            const matchUseCase = f.use_case === 'all' || v.use_case === f.use_case;
+            
+            let matchCat = true;
+            if (f.category !== 'all') {
+                if (f.category === 'cloned') matchCat = v.category.includes('clon') || v.category.includes('gener');
+                if (f.category === 'premade') matchCat = !v.category.includes('clon') && !v.category.includes('gener');
+            }
+            return matchSearch && matchGender && matchCat && matchAccent && matchUseCase;
+        });
+
+        // ORDENACIÓN
+        filtered.sort((a, b) => {
+            if (sortVal === 'name_asc') return a.name.localeCompare(b.name);
+            if (sortVal === 'name_desc') return b.name.localeCompare(a.name);
+            if (sortVal === 'cat_asc') return a.category.localeCompare(b.category);
+            return 0;
+        });
+
+        if (countLabel) countLabel.textContent = `${filtered.length} voces`;
+
+        if (filtered.length === 0) {
+            grid.innerHTML = '<div class="col-span-full text-center py-20 text-gray-400">No se encontraron voces.</div>';
+            return;
+        }
+
+        // GENERACIÓN HTML
+        const html = filtered.map(voice => {
+            const isMale = voice.gender === 'male';
+            const genderEmoji = isMale ? '👨' : '👩';
+            const genderText = isMale ? 'Hombre' : 'Mujer';
+            const genderBg = isMale ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-pink-50 text-pink-600 border-pink-100';
+
+            const isCloned = voice.category.includes('clon') || voice.category.includes('gener');
+            const originText = isCloned ? 'Clonada' : 'Oficial';
+            const originClass = isCloned 
+                ? 'bg-purple-50 text-purple-700 border-purple-100' 
+                : 'bg-gray-50 text-gray-600 border-gray-200';
+
+            const isPlaying = state.currentPlayingId === voice.id;
+            
+            // Icono Play
+            const playIcon = isPlaying 
+                ? `<div class="playing-animation flex items-center justify-center gap-[2px] h-3 w-3"><span></span><span></span><span></span></div>`
+                : `<svg class="w-3 h-3 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+            
+            const playClass = isPlaying ? 'bg-gray-900 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:border-gray-300 hover:shadow-sm';
+            
+            const hasAudio = voice.preview_url && voice.preview_url !== 'None';
+            // IMPORTANTE: Pasamos el ID como string explícito para evitar SyntaxError
+            const playAction = hasAudio 
+                ? `onclick="event.stopPropagation(); window.toggleAudio('${voice.id}')"`
+                : `disabled style="opacity: 0.4; cursor: not-allowed;" title="Audio no disponible"`;
+
+            const selectAction = `onclick="window.selectVoiceById('${voice.id}')"`;
+
+            return `
+            <div class="group bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-400 hover:shadow-lg transition-all duration-200 flex flex-col h-full cursor-default">
+                
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-12 h-12 rounded-full ${genderBg} flex items-center justify-center text-xl shrink-0 border">
+                        ${genderEmoji}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h4 class="font-bold text-gray-900 text-base truncate" title="${voice.name}">${voice.name}</h4>
+                        <div class="flex gap-1.5 mt-1">
+                            <span class="voice-tag ${originClass} border">${originText}</span>
+                            <span class="voice-tag ${genderBg} border">${genderText}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <span class="voice-tag bg-gray-50 text-gray-600 border border-gray-200">${voice.accent}</span>
+                    <span class="voice-tag bg-gray-50 text-gray-600 border border-gray-200 truncate max-w-full" title="${voice.use_case}">${voice.use_case}</span>
+                </div>
+
+                <div class="flex-1 mb-4">
+                    <p class="text-xs text-gray-500 leading-relaxed line-clamp-3" title="${voice.description}">
+                        ${voice.description || 'Sin descripción disponible.'}
+                    </p>
+                </div>
+
+                <div class="mt-auto flex items-center gap-3 pt-3 border-t border-gray-50">
+                    <button ${playAction} class="w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${playClass}">
+                        ${playIcon}
+                    </button>
+                    
+                    <button ${selectAction} class="flex-1 py-2.5 px-4 bg-gray-100 hover:bg-gray-900 hover:text-white text-gray-800 text-sm font-bold rounded-lg transition-colors text-center border border-transparent shadow-sm">
+                        Seleccionar
+                    </button>
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        grid.innerHTML = html;
+    };
+
+    // --- 6. ACCIONES (POR ID) ---
+    // Buscar el objeto en memoria en lugar de pasarlo por HTML evita errores de sintaxis
+    window.selectVoiceById = function(voiceId) {
+        const voice = window.elevenLabsState.allVoices.find(v => v.id === String(voiceId));
+        if (voice && window.elevenLabsState.onSelectCallback) {
+            window.elevenLabsState.onSelectCallback(voice.id, voice.name, voice.category);
+            closeVoiceModal();
+        } else {
+            console.error("Error: Voz no encontrada en memoria", voiceId);
+        }
+    };
+
+    window.toggleAudio = function(voiceId) {
+        const state = window.elevenLabsState;
+        
+        // Buscar por ID
+        const voice = state.allVoices.find(v => v.id === String(voiceId));
+        
+        if (!voice || !voice.preview_url) {
+            console.warn("No se encontró URL de audio para:", voiceId);
+            return;
+        }
+
+        // Si es el mismo, pausar
+        if (state.currentPlayingId === String(voiceId)) {
+            stopCurrentAudio();
+            return;
+        }
+
+        stopCurrentAudio();
+
+        const audio = new Audio(voice.preview_url);
+        
+        // Manejo de error 403 (URL Expirada)
+        audio.onerror = () => {
+            console.error("Error cargando audio:", voice.preview_url);
+            alert("El audio de esta voz ha caducado o no es accesible. Pulsa 'Sincronizar' para renovar las URLs.");
+            stopCurrentAudio();
+        };
+
+        audio.onended = () => stopCurrentAudio();
+        audio.play().catch(e => console.error("Error play:", e));
+        
+        state.currentAudio = audio;
+        state.currentPlayingId = String(voiceId);
+        renderVoices();
+    };
+
+    window.stopCurrentAudio = function() {
+        const state = window.elevenLabsState;
+        if (state.currentAudio) {
+            state.currentAudio.pause();
+            state.currentAudio = null;
+        }
+        state.currentPlayingId = null;
+        renderVoices();
+    };
+
+    window.updateFilters = function(key, val) {
+        window.elevenLabsState.filters[key] = val;
+        // Actualizar estado visual de botones
+        document.querySelectorAll(`.filter-chip[data-group="${key}"]`).forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.val === val);
+        });
+        renderVoices();
+    };
+</script>

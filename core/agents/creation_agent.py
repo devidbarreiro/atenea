@@ -108,7 +108,17 @@ INSTRUCCIONES:
 - Para videos con HeyGen, primero usa list_avatars_tool y list_voices_tool si no se proporcionan
 - Si falta información, pregunta al usuario antes de crear
 - Sé conciso pero amigable en tus respuestas
-- Cuando listes avatares/voces, presenta la información de forma clara y útil""".format(user_id=self.user_id)
+- Cuando listes avatares/voces, presenta la información de forma clara y útil
+
+IMPORTANTE - REGLAS CRÍTICAS:
+- SOLO ejecuta tools para crear el contenido que el usuario está pidiendo EN ESTE MENSAJE ACTUAL
+- NO ejecutes tools para crear contenido mencionado en mensajes anteriores del historial
+- El historial es solo para contexto conversacional, NO para recrear contenido anterior
+- Si el usuario dice "crea X" y luego "crea Y", solo crea Y (no vuelvas a crear X)
+- Cuando crees contenido, menciona SOLO lo que acabas de crear ahora, nunca menciones contenido anterior
+- NO generes enlaces con el título (ej: NO uses "[Imagen: Un gato](url)")
+- El sistema mostrará automáticamente un enlace "Ver imagen →" o "Ver video →" usando la URL correcta
+- Solo menciona el título como texto normal, sin crear enlaces markdown""".format(user_id=self.user_id)
         
         # Crear prompt template
         self.prompt = ChatPromptTemplate.from_messages([
@@ -168,6 +178,15 @@ INSTRUCCIONES:
             
             if tool_calls:
                 # El LLM quiere usar tools
+                logger.info(f"LLM quiere usar {len(tool_calls)} tool(s): {[tc.get('name') if isinstance(tc, dict) else getattr(tc, 'name', None) for tc in tool_calls]}")
+                
+                # Agregar el mensaje del asistente con tool_calls SOLO UNA VEZ
+                messages.append(response)
+                
+                # Ejecutar todas las tools y recopilar resultados
+                tool_messages = []
+                executed_tool_ids = set()  # Para evitar ejecuciones duplicadas
+                executed_prompts = set()  # Para evitar crear el mismo contenido múltiples veces
                 for tool_call in tool_calls:
                     # tool_call puede ser dict o objeto
                     if isinstance(tool_call, dict):
@@ -199,36 +218,79 @@ INSTRUCCIONES:
                             break
                     
                     if tool_func:
+                        # Obtener tool_call_id del tool_call para evitar duplicados
+                        tool_call_id = None
+                        if isinstance(tool_call, dict):
+                            tool_call_id = tool_call.get('id') or tool_call.get('tool_call_id')
+                        else:
+                            tool_call_id = getattr(tool_call, 'id', None)
+                        
+                        # Evitar ejecutar la misma tool múltiples veces
+                        if tool_call_id and tool_call_id in executed_tool_ids:
+                            logger.warning(f"Tool {tool_name} con ID {tool_call_id} ya fue ejecutada, saltando duplicado")
+                            continue
+                        
+                        # Para create_image_tool, evitar crear el mismo prompt múltiples veces
+                        if tool_name == 'create_image_tool' and 'prompt' in tool_args:
+                            prompt_key = tool_args.get('prompt', '').strip().lower()[:100]  # Primeros 100 chars normalizados
+                            if prompt_key in executed_prompts:
+                                logger.warning(f"Prompt '{prompt_key[:50]}...' ya fue ejecutado en esta interacción, saltando duplicado")
+                                continue
+                            executed_prompts.add(prompt_key)
+                        
                         try:
+                            logger.info(f"Ejecutando tool: {tool_name} con args: {tool_args}")
                             tool_result = tool_func.invoke(tool_args)
                             tool_results.append((tool_name, tool_result))
+                            logger.info(f"Tool {tool_name} ejecutada exitosamente. Resultado: {tool_result.get('status') if isinstance(tool_result, dict) else 'OK'}")
                             
-                            # Obtener tool_call_id del tool_call
-                            tool_call_id = None
-                            if isinstance(tool_call, dict):
-                                tool_call_id = tool_call.get('id') or tool_call.get('tool_call_id')
-                            else:
-                                tool_call_id = getattr(tool_call, 'id', None)
-                            
-                            # Agregar resultado al historial usando ToolMessage (requerido por OpenAI)
-                            messages.append(response)  # Mensaje del asistente con tool_calls
+                            # Marcar como ejecutada
+                            if tool_call_id:
+                                executed_tool_ids.add(tool_call_id)
                             
                             # Crear ToolMessage con el resultado
                             tool_result_str = json.dumps(tool_result) if isinstance(tool_result, dict) else str(tool_result)
                             tool_message = ToolMessage(
                                 content=tool_result_str,
-                                tool_call_id=tool_call_id or f"call_{tool_name}"
+                                tool_call_id=tool_call_id or f"call_{tool_name}_{len(tool_messages)}"
                             )
-                            messages.append(tool_message)
-                            
-                            # Invocar nuevamente para obtener respuesta final
-                            final_response = self.llm_with_tools.invoke(messages)
-                            answer = final_response.content if hasattr(final_response, 'content') else str(final_response)
+                            tool_messages.append(tool_message)
                         except Exception as e:
                             logger.error(f"Error ejecutando tool {tool_name}: {e}", exc_info=True)
-                            answer = f"Error al ejecutar {tool_name}: {str(e)}"
+                            # Agregar mensaje de error como ToolMessage
+                            error_message = ToolMessage(
+                                content=json.dumps({'error': f'Error al ejecutar {tool_name}: {str(e)}'}),
+                                tool_call_id=getattr(tool_call, 'id', None) if not isinstance(tool_call, dict) else tool_call.get('id', f"call_{tool_name}")
+                            )
+                            tool_messages.append(error_message)
                     else:
-                        answer = f"No se encontró la herramienta: {tool_name}"
+                        logger.warning(f"No se encontró la herramienta: {tool_name}")
+                
+                # Agregar todos los ToolMessages al historial
+                messages.extend(tool_messages)
+                
+                # Invocar LLM UNA SOLA VEZ con todos los resultados de las tools
+                final_response = self.llm_with_tools.invoke(messages)
+                
+                # Verificar si el LLM quiere usar más tools después de recibir los resultados
+                # Si es así, solo usar la respuesta de texto, no ejecutar más tools
+                final_tool_calls = None
+                if hasattr(final_response, 'tool_calls'):
+                    final_tool_calls = final_response.tool_calls
+                elif hasattr(final_response, 'additional_kwargs'):
+                    final_tool_calls = final_response.additional_kwargs.get('tool_calls', [])
+                
+                if final_tool_calls:
+                    # El LLM quiere usar más tools, pero ya ejecutamos las que pidió
+                    # Solo usar su respuesta de texto si la tiene
+                    logger.warning(f"LLM intentó usar más tools después de recibir resultados. Ignorando tool_calls adicionales.")
+                    if hasattr(final_response, 'content') and final_response.content:
+                        answer = final_response.content
+                    else:
+                        # Si no hay contenido, generar respuesta basada en los tool_results
+                        answer = "He completado tu solicitud."
+                else:
+                    answer = final_response.content if hasattr(final_response, 'content') else str(final_response)
             else:
                 # Respuesta directa sin tools
                 answer = response.content if hasattr(response, 'content') else str(response)

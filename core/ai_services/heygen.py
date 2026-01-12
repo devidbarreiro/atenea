@@ -61,13 +61,62 @@ class HeyGenClient(BaseAIClient):
             raise
     
     def list_voices(self) -> List[Dict]:
-        """Lista todas las voces disponibles"""
+        """
+        Lista todas las voces disponibles y NORMALIZA la estructura
+        para que coincida con el formato visual del modal (estilo ElevenLabs).
+        """
         try:
+            # Petición a la API real
             response = self.make_request('GET', '/v2/voices')
-            return response.get('data', {}).get('voices', [])
+            raw_voices = response.get('data', {}).get('voices', [])
+            
+            normalized_voices = []
+            
+            for v in raw_voices:
+                # 1. Extraer y limpiar datos básicos
+                voice_id = v.get('id')
+                name = v.get('name')
+                preview_url = v.get('preview_audio') # HeyGen usa este nombre
+                
+                # 2. Normalizar Género (Male/Female)
+                gender = v.get('gender', 'unknown').lower()
+                
+                # 3. Mapear Idioma -> Acento 
+                # (HeyGen no da acentos, así que usamos el idioma como etiqueta visual)
+                language = v.get('language', 'General')
+                
+                # 4. Definir Categoría (Clonada vs Premade)
+                is_cloned = v.get('is_cloned', False)
+                category = 'cloned' if is_cloned else 'premade'
+
+                # 5. CONSTRUIR LABELS (IMPORTANTE)
+                # Aquí creamos artificialmente el objeto 'labels' que tu Frontend espera
+                # para poder filtrar por acento y uso.
+                labels = {
+                    'gender': gender,
+                    'accent': language,        # Usamos el idioma como 'Acento'
+                    'use_case': 'Video Avatar', # Valor por defecto para que el filtro no salga vacío
+                    'description': f"Voz {gender} para videos en {language}."
+                }
+
+                # 6. Crear objeto final estandarizado
+                normalized_voices.append({
+                    'voice_id': voice_id,
+                    'name': name,
+                    'category': category,
+                    'preview_url': preview_url,
+                    'labels': labels,         # El JS leerá labels.accent y labels.use_case
+                    'gender': gender,
+                    'settings': {}
+                })
+            
+            logger.info(f"HeyGen: Se normalizaron {len(normalized_voices)} voces.")
+            return normalized_voices
+
         except Exception as e:
-            logger.error(f"Error al obtener voces: {str(e)}")
-            raise
+            logger.error(f"Error al obtener voces de HeyGen: {str(e)}")
+            # Devolvemos lista vacía para no romper la app si falla la API
+            return []
     
     def list_assets(self, file_type: str = None, limit: int = 100) -> List[Dict]:
         """
