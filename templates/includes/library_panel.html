@@ -448,11 +448,13 @@ document.addEventListener('alpine:init', () => {
                         // Si cambiaron los IDs, reemplazar los primeros items
                         this.items = [...filteredItems, ...this.items.slice(this.pageSize)];
                     } else {
-                        // Si no cambiaron IDs, solo actualizar URLs
+                        // Si no cambiaron IDs, actualizar URLs (incluso si ya existen, para refrescar expiradas)
                         const urlMap = new Map(filteredItems.map(i => [i.id, i.signed_url]));
                         this.items = this.items.map(item => {
-                            if (!item.signed_url && urlMap.has(item.id)) {
-                                return { ...item, signed_url: urlMap.get(item.id) };
+                            const newUrl = urlMap.get(item.id);
+                            if (newUrl) {
+                                // Actualizar URL si existe en la respuesta (refrescar expiradas)
+                                return { ...item, signed_url: newUrl };
                             }
                             return item;
                         });

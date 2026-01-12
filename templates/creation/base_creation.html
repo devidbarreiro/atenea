@@ -14,18 +14,23 @@
      x-init="
         sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
         sidebarWidth = sidebarCollapsed ? 64 : 256;
+        // Detectar móvil correctamente
+        function checkMobile() {
+            const wasMobile = isMobile;
+            isMobile = window.innerWidth < 1024;
+            // Si cambiamos de móvil a desktop, asegurar sidebar visible
+            if (wasMobile && !isMobile) {
+                creationSidebarOpen = false;
+            }
+        }
+        checkMobile();
         window.addEventListener('sidebar-toggled', (e) => { 
             sidebarCollapsed = e.detail.collapsed;
             sidebarWidth = sidebarCollapsed ? 64 : 256;
         });
-        window.addEventListener('resize', () => {
-            isMobile = window.innerWidth < 1024;
-            if (!isMobile) {
-                creationSidebarOpen = false;
-            }
-        });
+        window.addEventListener('resize', checkMobile);
      "
-     class="h-screen w-screen overflow-hidden flex">
+     class="h-screen w-screen overflow-hidden">
     
     <!-- Overlay para móvil cuando sidebar está abierto -->
     <div x-show="isMobile && creationSidebarOpen"
@@ -47,8 +52,10 @@
                window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });
            "
            :class="isMobile ? (creationSidebarOpen ? 'translate-x-0' : '-translate-x-full') : ''"
-           class="fixed lg:relative top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-40 lg:z-30 flex flex-col transition-all duration-300"
-           :style="isMobile ? '' : 'left: ' + sidebarWidth + 'px'">
+           class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-40 lg:z-30 flex flex-col transition-all duration-300"
+           :style="isMobile ? (creationSidebarOpen ? 'left: ' + sidebarWidth + 'px' : 'left: -320px') : 'left: ' + sidebarWidth + 'px'"
+           x-show="!isMobile || creationSidebarOpen"
+           x-cloak>
         
         <!-- Header móvil con botón cerrar -->
         <div x-show="isMobile" class="lg:hidden px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white flex-shrink-0">
@@ -101,13 +108,13 @@
     </aside>
     
     <!-- Panel Principal: Breadcrumbs + Biblioteca + Detalle -->
-    <main class="flex-1 h-screen overflow-hidden bg-white flex flex-col transition-all duration-300"
+    <main class="h-screen overflow-hidden bg-white flex flex-col transition-all duration-300"
           x-data="{ notificationSidebarOpen: false }"
           x-init="
               window.addEventListener('open-notifications-modal', () => { notificationSidebarOpen = true; });
               window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });
           "
-          :style="isMobile ? 'margin-left: 0' : 'margin-left: ' + (sidebarWidth + creationSidebarWidth) + 'px'">
+          :style="isMobile ? 'margin-left: 0; width: 100%;' : 'margin-left: ' + (sidebarWidth + creationSidebarWidth) + 'px; width: calc(100% - ' + (sidebarWidth + creationSidebarWidth) + 'px);'">
         
         <!-- Header móvil con botón para abrir sidebar -->
         <div x-show="isMobile" class="lg:hidden px-3 sm:px-4 py-2 sm:py-3 border-b border-gray-200 flex items-center justify-between bg-white flex-shrink-0">
@@ -117,13 +124,26 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
             </button>
-            <h1 class="text-lg font-semibold text-gray-900 flex-1 text-center">
+            <h1 class="text-base sm:text-lg font-semibold text-gray-900 flex-1 text-center">
                 {% if active_tab == 'video' %}Videos
                 {% elif active_tab == 'image' %}Imágenes
                 {% elif active_tab == 'audio' %}Audios
                 {% else %}Biblioteca{% endif %}
             </h1>
             <div class="w-9"></div> <!-- Spacer para centrar título -->
+        </div>
+        
+        <!-- Botón flotante para crear en móvil (solo cuando sidebar está cerrado) -->
+        <div x-show="isMobile && !creationSidebarOpen" 
+             x-cloak
+             class="lg:hidden fixed bottom-6 right-6 z-30"
+             style="display: none;">
+            <button @click="creationSidebarOpen = true"
+                    class="bg-black text-white rounded-full p-4 shadow-lg hover:bg-gray-800 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+            </button>
         </div>
         
         <!-- Breadcrumbs -->
