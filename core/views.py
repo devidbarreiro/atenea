@@ -6130,12 +6130,35 @@ class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
             
             # Calcular duración total
             total_duration = sum(scene.duration_sec for scene in scenes)
+
+            # Detectar qué servicios se usaron en las escenas
+            unique_services = set(scene.ai_service for scene in scenes)
+
+            # Determinar el tipo de video final dinámicamente
+            if len(unique_services) > 1:
+                # Si hay más de un servicio distinto (ej: Veo + Sora), es mixto
+                final_video_type = 'mixed'
+            elif len(unique_services) == 1:
+                # Si todas las escenas usan el mismo servicio, intentamos heredar el tipo
+                service = list(unique_services)[0]
+                
+                # Mapeo de ai_service (Scene) a type (Video)
+                if service == 'gemini_veo':
+                    final_video_type = 'gemini_veo'
+                elif service == 'sora':
+                    final_video_type = 'sora'
+                elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
+                    final_video_type = 'heygen_avatar_v2'
+                else:
+                    final_video_type = 'general'
+            else:
+                final_video_type = 'general'
             
             # Crear objeto Video final
             video = Video.objects.create(
                 project=project,
                 title=video_title,
-                type='gemini_veo',  # Tipo genérico, podría ser mixto
+                type=final_video_type,  # Tipo genérico, podría ser mixto
                 status='completed',
                 script=f"Video generado por agente con {scenes.count()} escenas",
                 config={
@@ -6550,13 +6573,37 @@ class AgentFinalStandaloneView(BreadcrumbMixin, ServiceMixin, View):
             
             # Calcular duración total
             total_duration = sum(scene.duration_sec for scene in scenes)
+
+            
+            # Detectar qué servicios se usaron en las escenas
+            unique_services = set(scene.ai_service for scene in scenes)
+
+            # Determinar el tipo de video final dinámicamente
+            if len(unique_services) > 1:
+                # Si hay más de un servicio distinto (ej: Veo + Sora), es mixto
+                final_video_type = 'mixed'
+            elif len(unique_services) == 1:
+                # Si todas las escenas usan el mismo servicio, intentamos heredar el tipo
+                service = list(unique_services)[0]
+                
+                # Mapeo de ai_service (Scene) a type (Video)
+                if service == 'gemini_veo':
+                    final_video_type = 'gemini_veo'
+                elif service == 'sora':
+                    final_video_type = 'sora'
+                elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
+                    final_video_type = 'heygen_avatar_v2'
+                else:
+                    final_video_type = 'general'
+            else:
+                final_video_type = 'general'
             
             # Crear objeto Video final sin proyecto
             video = Video.objects.create(
                 project=None,  # Sin proyecto
                 created_by=request.user,
                 title=video_title,
-                type='gemini_veo',
+                type=final_video_type,
                 status='completed',
                 script=f"Video generado por agente con {scenes.count()} escenas",
                 config={
