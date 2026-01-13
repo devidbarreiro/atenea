@@ -981,16 +981,16 @@ def process_script_task(self, script_id):
     except Exception as exc:
         logger.error(f"Error procesando guión {script_id}: {exc}", exc_info=True)
         
-        # Marcar guión como error si existe
+        # Reintentar si no se ha alcanzado el máximo
+        if self.request.retries < self.max_retries:
+            logger.info(f"Reintentando procesamiento de guión en 60 segundos (intento {self.request.retries + 1}/{self.max_retries})")
+            raise self.retry(exc=exc, countdown=60)
+        
+        # Marcar guión como error solo cuando se hayan agotado todos los reintentos
         try:
             script = Script.objects.get(id=script_id)
             script.mark_as_error(str(exc))
         except Script.DoesNotExist:
             pass
-        
-        # Reintentar si no se ha alcanzado el máximo
-        if self.request.retries < self.max_retries:
-            logger.info(f"Reintentando procesamiento de guión en 60 segundos (intento {self.request.retries + 1}/{self.max_retries})")
-            raise self.retry(exc=exc, countdown=60)
         
         return {'success': False, 'error': str(exc)}

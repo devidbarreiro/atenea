@@ -5667,6 +5667,7 @@ class ScriptCreatePartialView(ServiceMixin, FormView):
                     return redirect('core:script_detail', script_id=script.pk)
                 except Exception as e:
                     logger.error(f"Error al procesar guión con LangChain: {e}")
+                    script.mark_as_error(str(e))
                     messages.error(request, f'Error al procesar guión: {str(e)}')
                     return redirect('core:script_detail', script_id=script.pk)
             else:
