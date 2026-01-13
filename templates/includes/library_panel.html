@@ -1050,8 +1050,9 @@ document.addEventListener('alpine:init', () => {
                                 
                                 <!-- Audio -->
                                 <div x-show="item.type === 'audio'" 
-                                     class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100">
-                                    <svg class="w-16 h-16 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
+                                     class="w-full h-full flex items-center justify-center"
+                                     :style="{ background: item.audio_background || 'linear-gradient(135deg, #f3e7e9 0%, #e3eeff 100%)' }">
+                                    <svg class="w-16 h-16 text-black" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                                     </svg>
                                 </div>
@@ -1180,8 +1181,9 @@ document.addEventListener('alpine:init', () => {
                                     <img :src="item.signed_url" :alt="item.title" class="w-full h-full object-cover">
                                 </template>
                                 <template x-if="item.type === 'audio'">
-                                    <div class="w-full h-full flex items-center justify-center bg-gray-50">
-                                        <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                    <div class="w-full h-full flex items-center justify-center"
+                                         :style="{ background: item.audio_background || '#f9fafb' }">
+                                        <svg class="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                                         </svg>
                                     </div>
@@ -1380,15 +1382,15 @@ document.addEventListener('alpine:init', () => {
                                  alt="Visualización detallada">
                         </div>
                     </div>
-                </div>
-                
-                <!-- Audio -->
-                <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">
-                    <div class="bg-white rounded-lg p-8 shadow-lg text-center">
-                        <svg class="w-24 h-24 mx-auto text-purple-500 mb-6" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                        </svg>
-                        <audio x-show="selectedItem.signed_url" :src="selectedItem.signed_url" controls class="w-full"></audio>
+                    <!-- Audio -->
+                    <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md mx-auto relative z-10">
+                        <div class="bg-white rounded-lg p-8 shadow-lg text-center"
+                             :style="{ background: selectedItem.audio_background ? selectedItem.audio_background : '#ffffff' }">
+                            <svg class="w-24 h-24 mx-auto text-black mb-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                            </svg>
+                            <audio x-show="selectedItem.signed_url" :src="selectedItem.signed_url" controls class="w-full"></audio>
+                        </div>
                     </div>
                 </div>
                 

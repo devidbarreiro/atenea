@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Optional, Dict
 import logging
 import uuid
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -603,6 +604,21 @@ class Audio(models.Model):
         null=True,
         help_text='Nombre de la voz (para mostrar en UI)'
     )
+    
+    @property
+    def background_gradient(self):
+        """Genera un gradiente determinista basado en el UUID"""
+        colors = [
+            ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
+            ('#84fab0', '#8fd3f4'), ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'),
+            ('#f093fb', '#f5576c'), ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'),
+            ('#fa709a', '#fee140'), ('#a8edea', '#fed6e3'), ('#d299c2', '#fef9d7'),
+        ]
+        # Usar el UUID para generar un índice determinista
+        hash_val = int(hashlib.md5(str(self.uuid).encode()).hexdigest(), 16)
+        c1, c2 = colors[hash_val % len(colors)]
+        return f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
+    
     model_id = models.CharField(
         max_length=100,
         default='eleven_turbo_v2_5',
