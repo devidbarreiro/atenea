@@ -57,13 +57,101 @@ document.addEventListener('alpine:init', () => {
         
         // Modal de mover
         moveModal: { open: false, item: null },
+        
+        // Modal de editar imagen
+        editModal: { open: false, item: null, loading: false },
+        
+        // Modal de crear video desde imagen
+        createVideoModal: { open: false, item: null, loading: false },
+        videoModels: [], // Se cargará dinámicamente
+        selectedVideoModel: null,
+        selectedModelCapabilities: null,
+        videoDuration: 8,
+        videoAspectRatio: '16:9',
+        
+        // Modal de escalar imagen
+        upscaleModal: { open: false, item: null, loading: false },
+        upscaleFactor: 'x4',
+        outputMimeType: 'image/png',
+        
+        async openCreateVideoModal(item) {
+            this.createVideoModal = { open: true, item: item, loading: false };
+            this.selectedVideoModel = null;
+            this.selectedModelCapabilities = null;
+            this.videoDuration = 8;
+            this.videoAspectRatio = '16:9';
+            // Cargar modelos cuando se abre el modal
+            try {
+                const response = await fetch('/api/video-models/?image_to_video=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.videoModels = data.models || [];
+                    // Seleccionar primer modelo por defecto si hay modelos
+                    if (this.videoModels.length > 0) {
+                        this.selectVideoModel(this.videoModels[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('Error cargando modelos:', error);
+                this.videoModels = [];
+            }
+        },
+        
+        async selectVideoModel(modelId) {
+            this.selectedVideoModel = modelId;
+            // Cargar capacidades del modelo
+            try {
+                const response = await fetch(`/api/models/${modelId}/capabilities/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.selectedModelCapabilities = data.capabilities?.supports || {};
+                    
+                    // Establecer valores por defecto según el modelo
+                    const supports = this.selectedModelCapabilities;
+                    
+                    // Duración por defecto
+                    if (supports.duration) {
+                        if (supports.duration.fixed) {
+                            this.videoDuration = supports.duration.fixed;
+                        } else if (supports.duration.options && supports.duration.options.length > 0) {
+                            this.videoDuration = supports.duration.options[0];
+                        } else if (supports.duration.min) {
+                            this.videoDuration = supports.duration.min;
+                        }
+                    }
+                    
+                    // Aspect ratio por defecto
+                    if (supports.aspect_ratio && supports.aspect_ratio.length > 0) {
+                        this.videoAspectRatio = supports.aspect_ratio[0];
+                    }
+                }
+            } catch (error) {
+                console.error('Error cargando capacidades del modelo:', error);
+                this.selectedModelCapabilities = null;
+            }
+        },
+        
         projects: [{% for p in projects %}{ id: {{ p.id }}, uuid: '{{ p.uuid }}', name: '{{ p.name|escapejs }}' }{% if not forloop.last %}, {% endif %}{% endfor %}],
         
         // === ESTADO DE SELECCIÓN MASIVA ===
         isBulkActionMode: false,
-        selectedItems: [], 
+        selectedItems: [],
+        
+        // === MODO DE VISTA ===
+        viewMode: localStorage.getItem('viewMode') || 'grid', 
 
         init() {
+            // Leer viewMode del localStorage
+            this.viewMode = localStorage.getItem('viewMode') || 'grid';
+            
+            // Guardar cambios de viewMode en localStorage
+            this.$watch('viewMode', value => localStorage.setItem('viewMode', value));
+            
+            // Escuchar eventos de cambio de vista
+            window.addEventListener('view-mode-changed', (e) => {
+                this.viewMode = e.detail.mode;
+            });
+            
             // Si ya tenemos datos del caché, solo actualizar en segundo plano
             if (this.items.length > 0) {
                 this._refreshItemsInBackground();
@@ -360,11 +448,13 @@ document.addEventListener('alpine:init', () => {
                         // Si cambiaron los IDs, reemplazar los primeros items
                         this.items = [...filteredItems, ...this.items.slice(this.pageSize)];
                     } else {
-                        // Si no cambiaron IDs, solo actualizar URLs
+                        // Si no cambiaron IDs, actualizar URLs (incluso si ya existen, para refrescar expiradas)
                         const urlMap = new Map(filteredItems.map(i => [i.id, i.signed_url]));
                         this.items = this.items.map(item => {
-                            if (!item.signed_url && urlMap.has(item.id)) {
-                                return { ...item, signed_url: urlMap.get(item.id) };
+                            const newUrl = urlMap.get(item.id);
+                            if (newUrl) {
+                                // Actualizar URL si existe en la respuesta (refrescar expiradas)
+                                return { ...item, signed_url: newUrl };
                             }
                             return item;
                         });
@@ -704,10 +794,12 @@ document.addEventListener('alpine:init', () => {
         
         downloadItem(item, e) {
             e.stopPropagation();
-            if (item.signed_url) {
+            if (item.signed_url && item.type && item.id) {
+                // Usar el endpoint de descarga que fuerza la descarga
+                const downloadUrl = '/api/items/' + item.type + '/' + item.id + '/download/';
                 const a = document.createElement('a');
-                a.href = item.signed_url;
-                a.download = item.title || 'download';
+                a.href = downloadUrl;
+                a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -831,8 +923,13 @@ document.addEventListener('alpine:init', () => {
     <!-- ========== VISTA: GRID DE ITEMS ========== -->
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
+            <!-- Header con selector de vista -->
+            <div class="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex items-center justify-end bg-white flex-shrink-0">
+                {% include 'includes/view_mode_selector.html' %}
+            </div>
+            
             <!-- Contenido -->
-            <div class="flex-1 overflow-y-auto p-6 relative"> 
+            <div class="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 relative"> 
                 <!-- Loading -->
                 <div x-show="loading" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
@@ -840,8 +937,8 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Grid -->
-                <div x-show="!loading && items.length > 0" 
-                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
+                <div x-show="!loading && items.length > 0 && viewMode === 'grid'" 
+                     class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
                                 menuOpen: false, 
@@ -1026,6 +1123,167 @@ document.addEventListener('alpine:init', () => {
                     </template>
                 </div>
                 
+                <!-- Vista de Lista -->
+                <div x-show="!loading && items.length > 0 && viewMode === 'list'" 
+                     class="space-y-2 pb-20">
+                    <template x-for="item in items" :key="item.id">
+                        <div x-data="{ 
+                                menuOpen: false, 
+                                pollingInterval: null,
+                                init() {
+                                    if (item.type === 'video' && item.status === 'processing') {
+                                        this.startPolling(item.id);
+                                    }
+                                },
+                                isSelected() {
+                                    return selectedItems.includes(item.id);
+                                },
+                                startPolling(videoId) {
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                    }
+                                    this.pollingInterval = setInterval(async () => {
+                                        try {
+                                            const response = await fetch(`/videos/${videoId}/status-partial/?template=badge`);
+                                            const html = await response.text();
+                                            if (html.includes('completed') || html.includes('error')) {
+                                                clearInterval(this.pollingInterval);
+                                                window.dispatchEvent(new CustomEvent('video-status-changed', {
+                                                    detail: { videoId, status: html.includes('completed') ? 'completed' : 'error' }
+                                                }));
+                                            }
+                                        } catch (error) {
+                                            console.error('Error polling video status:', error);
+                                        }
+                                    }, 5000);
+                                },
+                                destroy() {
+                                    if (this.pollingInterval) {
+                                        clearInterval(this.pollingInterval);
+                                        this.pollingInterval = null;
+                                    }
+                                }
+                            }"
+                            class="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all cursor-pointer"
+                            :class="{
+                                'ring-2 ring-blue-500 border-blue-500': isSelected(),
+                                'hover:border-gray-300': !isSelected()
+                            }"
+                            @click="handleMainClick(item)">
+                            
+                            <!-- Thumbnail pequeño -->
+                            <div class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                                <template x-if="item.type === 'video' && item.signed_url">
+                                    <video :src="item.signed_url" class="w-full h-full object-cover" preload="metadata"></video>
+                                </template>
+                                <template x-if="item.type === 'image' && item.signed_url">
+                                    <img :src="item.signed_url" :alt="item.title" class="w-full h-full object-cover">
+                                </template>
+                                <template x-if="item.type === 'audio'">
+                                    <div class="w-full h-full flex items-center justify-center bg-gray-50">
+                                        <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                        </svg>
+                                    </div>
+                                </template>
+                                <template x-if="!item.signed_url">
+                                    <div class="w-full h-full flex items-center justify-center">
+                                        <svg class="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </div>
+                                </template>
+                                
+                                <!-- Badge de estado -->
+                                <div class="absolute top-1 left-1">
+                                    <span class="px-1.5 py-0.5 text-xs font-medium rounded"
+                                          :class="{
+                                              'bg-green-100 text-green-700': item.status === 'completed',
+                                              'bg-yellow-100 text-yellow-700': item.status === 'processing',
+                                              'bg-red-100 text-red-700': item.status === 'error',
+                                              'bg-gray-100 text-gray-700': item.status === 'pending'
+                                          }"
+                                          x-text="item.status === 'completed' ? 'Completado' : item.status === 'processing' ? 'Procesando' : item.status === 'error' ? 'Error' : 'Pendiente'">
+                                    </span>
+                                </div>
+                                
+                                <!-- Checkbox de selección -->
+                                <div class="absolute top-1 right-1">
+                                    <button @click.stop="toggleSelection(item.id)"
+                                            class="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors shadow-sm"
+                                            :class="{
+                                                'bg-blue-500 border-blue-500': isSelected(),
+                                                'bg-white border-gray-300 hover:border-blue-400': !isSelected()
+                                            }">
+                                        <svg x-show="isSelected()" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Información -->
+                            <div class="flex-1 min-w-0">
+                                <h3 class="font-semibold text-sm sm:text-base text-gray-900 mb-1 truncate" x-text="item.title"></h3>
+                                <div class="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2 flex-wrap">
+                                    <span x-text="item.type === 'video' ? '🎬 Video' : item.type === 'image' ? '🖼️ Imagen' : '🔊 Audio'"></span>
+                                    <span class="hidden sm:inline">•</span>
+                                    <span class="text-xs sm:text-sm" x-text="new Date(item.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })"></span>
+                                    <template x-if="item.project">
+                                        <span class="hidden sm:inline-flex items-center gap-1">
+                                            <span>•</span>
+                                            <span x-text="item.project.name"></span>
+                                        </span>
+                                    </template>
+                                </div>
+                                <p class="text-xs sm:text-sm text-gray-600 line-clamp-2 hidden sm:block" 
+                                   x-text="item.type === 'video' ? (item.script || 'Sin descripción') : item.type === 'image' ? (item.prompt || 'Sin descripción') : (item.prompt || 'Sin descripción')">
+                                </p>
+                            </div>
+                            
+                            <!-- Acciones -->
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <div class="relative" x-data="{ menuOpen: false }">
+                                    <button @click.stop="menuOpen = !menuOpen" 
+                                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                                        </svg>
+                                    </button>
+                                    
+                                    <div x-show="menuOpen" 
+                                         @click.away="menuOpen = false" 
+                                         x-cloak
+                                         class="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+                                        <button @click="downloadItem(item, $event); menuOpen = false" 
+                                                x-show="item.signed_url"
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Descargar
+                                        </button>
+                                        <button @click="openMoveModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                            </svg>
+                                            Mover
+                                        </button>
+                                        <button @click="openDeleteModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
                 <!-- Botón Cargar Más -->
                 <div x-show="!loading && items.length > 0 && hasMore" class="mt-6 mb-4 text-center">
                     <button @click="loadMoreItems()"
@@ -1071,13 +1329,13 @@ document.addEventListener('alpine:init', () => {
     
     <!-- ========== VISTA: DETALLE DEL ITEM ========== -->
     <template x-if="selectedItem && !loadingDetail">
-        <div class="h-full flex">
+        <div class="h-full flex flex-col lg:flex-row">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative overflow-hidden">
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-3 sm:p-4 lg:p-8 relative overflow-hidden min-h-[40vh] lg:min-h-0">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
-                        class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute top-2 left-2 sm:top-3 sm:left-3 lg:top-4 lg:left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
@@ -1085,16 +1343,16 @@ document.addEventListener('alpine:init', () => {
                 <!-- Navegación -->
                 <button x-show="navigation && navigation.prev"
                         @click="navigateTo('prev')"
-                        class="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute left-2 sm:left-3 lg:left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
                 
                 <button x-show="navigation && navigation.next"
                         @click="navigateTo('next')"
-                        class="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute right-2 sm:right-3 lg:right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                     </svg>
                 </button>
@@ -1108,7 +1366,7 @@ document.addEventListener('alpine:init', () => {
                 <!-- Image -->
                 <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
                     <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
-                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
+                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-3 sm:p-4 lg:p-8"
                          x-data="imageZoom" 
                          x-key="selectedItem.id"> 
 
@@ -1135,8 +1393,8 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Placeholder -->
-                <div x-show="!selectedItem.signed_url" class="text-center text-gray-400">
-                    <svg class="w-24 h-24 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div x-show="!selectedItem.signed_url" class="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-400">
+                    <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                     </svg>
                     <p class="text-lg" x-text="selectedItem.status === 'processing' ? 'Procesando...' : 'Vista previa no disponible'"></p>
@@ -1144,18 +1402,21 @@ document.addEventListener('alpine:init', () => {
             </div>
             
             <!-- Panel Derecho: Info -->
-            <div class="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
+            <div class="w-full lg:w-72 bg-white border-t lg:border-l border-gray-200 flex flex-col h-full overflow-hidden">
                 <!-- Header -->
-                <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                    <span class="text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
+                <div class="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <span class="text-xs sm:text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
                     <div class="flex items-center gap-1">
-                        <a :href="selectedItem.signed_url" download class="p-2 hover:bg-gray-100 rounded-lg" title="Descargar">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
-                        </a>
-                        <button @click="closeDetail()" class="p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <a x-bind:href="'/api/items/' + selectedItem.type + '/' + selectedItem.id + '/download/'" 
+                            class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" 
+                            title="Descargar"
+                            x-show="selectedItem.signed_url">
+                             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                             </svg>
+                         </a>
+                        <button @click="closeDetail()" class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
@@ -1163,7 +1424,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Content -->
-                <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-5">
                     <!-- PROMPT TEMPLATE (sin título, solo preview) -->
                     <div x-show="selectedItem.prompt_template">
                         <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -1307,36 +1568,55 @@ document.addEventListener('alpine:init', () => {
                                 Recrear
                             </button>
                         </form>
-                        <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                            </svg>
-                            Escalar
+                        <!-- Escalar imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="upscaleModal = { open: true, item: selectedItem, loading: false }; upscaleFactor = 'x4'; outputMimeType = 'image/png'"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                                </svg>
+                                Escalar
+                            </div>
                         </button>
-                        <button x-show="selectedItem.type === 'image'" class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                            </svg>
-                            Crear video
+                        <!-- Crear video desde imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="openCreateVideoModal(selectedItem)"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Crear video
+                            </div>
                         </button>
-                        <button class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left text-sm text-gray-700">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
-                            </svg>
-                            Variaciones
+                        {# TODO: Implementar funcionalidad de variaciones (para videos e imágenes) #}
+                        <!-- Variaciones (deshabilitado) -->
+                        <div class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-400 opacity-50 cursor-not-allowed">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                                </svg>
+                                Variaciones
+                            </div>
+                            <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                        </div>
+                        <!-- Editar imagen -->
+                        <button x-show="selectedItem.type === 'image' && selectedItem.status === 'completed'" 
+                                @click="editModal = { open: true, item: selectedItem, loading: false }"
+                                class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                                Editar
+                            </div>
                         </button>
                     </div>
                 </div>
                 
                 <div class="p-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
                     <span class="text-xs text-gray-500" x-text="selectedItem.width && selectedItem.height ? selectedItem.width + 'x' + selectedItem.height + ' px' : ''"></span>
-                    <button x-show="selectedItem.type === 'image'" 
-                            class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                        </svg>
-                        Editar
-                    </button>
                 </div>
             </div>
         </div>
@@ -1453,4 +1733,573 @@ document.addEventListener('alpine:init', () => {
             </div>
         </div>
     </div>
+    
+    <!-- ========== MODAL DE EDITAR IMAGEN ========== -->
+    <div x-show="editModal.open && editModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="editModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-2xl transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Editar Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="editModal.item ? ('Editando: ' + (editModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="editModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="editImageForm" method="post" x-bind:action="editModal.item ? ('/images/' + editModal.item.id + '/edit/') : ''" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Campos ocultos con valores por defecto -->
+                        <input type="hidden" name="title" x-bind:value="editModal.item ? (editModal.item.title + ' (editada)') : ''">
+                        <input type="hidden" name="aspect_ratio" x-bind:value="editModal.item ? (editModal.item.aspect_ratio || '1:1') : '1:1'">
+                        <input type="hidden" name="format" value="png">
+                        <input type="hidden" name="background" value="opaque">
+                        
+                        <!-- Vista previa de imagen original -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="editModal.item && editModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="editModal.item ? editModal.item.signed_url : ''" 
+                                     x-bind:alt="editModal.item ? editModal.item.title : ''"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-64 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Modelo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Modelo <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="model_id" 
+                                required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="gpt-image-1.5" selected>GPT Image 1.5 - Modelo más avanzado, 4x más rápido</option>
+                                <option value="gpt-image-1">GPT Image 1 - Modelo estándar de alta calidad</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Prompt -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Instrucciones de Edición <span class="text-red-500">*</span>
+                            </label>
+                            <textarea 
+                                name="prompt" 
+                                rows="4" 
+                                required 
+                                placeholder="Describe las modificaciones que deseas hacer a la imagen..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                            ></textarea>
+                            <p class="text-xs text-gray-500 mt-1">Sé específico sobre qué quieres cambiar, agregar o modificar.</p>
+                        </div>
+                        
+                        <!-- Calidad y Fidelidad (en fila) -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Calidad</label>
+                                <select 
+                                    name="quality" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                >
+                                    <option value="low">Low - Más rápido</option>
+                                    <option value="medium" selected>Medium - Balance</option>
+                                    <option value="high">High - Máxima calidad</option>
+                                    <option value="auto">Auto</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Fidelidad</label>
+                                <select 
+                                    name="input_fidelity" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                >
+                                    <option value="low" selected>Low - Más creativo</option>
+                                    <option value="high">High - Más fiel</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Referencias - Diseño mejorado como dynamic form -->
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold text-gray-700 uppercase mb-3">REFERENCIAS (Opcional)</label>
+                            <div class="grid grid-cols-2 gap-2" id="edit-reference-images-container">
+                                <!-- Máscara para Inpainting -->
+                                <label class="relative group cursor-pointer" for="mask-input">
+                                    <input 
+                                        type="file" 
+                                        id="mask-input"
+                                        name="mask" 
+                                        accept="image/png,image/jpeg"
+                                        class="hidden" 
+                                        onchange="updateImagePreview(this, 'mask-preview')"
+                                    >
+                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                                        <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                                            <div class="absolute top-2 left-2">
+                                                <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <path d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.648 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"/>
+                                                </svg>
+                                            </div>
+                                            <span class="text-xs font-medium text-gray-900 mt-auto">Máscara</span>
+                                            <img id="mask-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded" alt="Preview">
+                                        </div>
+                                    </div>
+                                </label>
+                                
+                                <!-- Imágenes de Referencia -->
+                                <label class="relative group cursor-pointer" for="reference-images-input">
+                                    <input 
+                                        type="file" 
+                                        id="reference-images-input"
+                                        name="reference_images" 
+                                        accept="image/*"
+                                        multiple
+                                        class="hidden" 
+                                        onchange="updateMultipleImagePreviews(this, 'reference-preview-container')"
+                                    >
+                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-gray-400 transition-colors group-hover:bg-gray-50 h-24 flex items-center justify-center">
+                                        <div class="flex flex-col items-center justify-center text-center relative w-full h-full">
+                                            <div class="absolute top-2 left-2">
+                                                <svg class="w-5 h-5 text-gray-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <path d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25h2.25A2.25 2.25 0 0121 10.5v8.25a2.25 2.25 0 01-2.25 2.25H16.5m-9-8.25h8.25m0 0V12m0-3.75v3.75m0 0v3.75m0-3.75h8.25"/>
+                                                </svg>
+                                            </div>
+                                            <span class="text-xs font-medium text-gray-900 mt-auto">Referencias</span>
+                                            <div id="reference-preview-container" class="hidden absolute inset-0 w-full h-full rounded overflow-hidden"></div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                <strong>Máscara:</strong> PNG con canal alpha para inpainting. <strong>Referencias:</strong> Múltiples imágenes para composición.
+                            </p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="editModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="editModal.loading = true; document.getElementById('editImageForm').submit();"
+                            x-bind:disabled="editModal.loading"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!editModal.loading">Generar Edición</span>
+                        <span x-show="editModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Generando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== MODAL DE CREAR VIDEO DESDE IMAGEN ========== -->
+    <div x-show="createVideoModal.open && createVideoModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="createVideoModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Crear Video desde Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="createVideoModal.item ? ('Desde: ' + (createVideoModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="createVideoModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="createVideoForm" method="post" x-bind:action="createVideoModal.item ? ('/images/' + createVideoModal.item.id + '/create-video/') : ''" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Vista previa de imagen -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="createVideoModal.item && createVideoModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen de Entrada</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="createVideoModal.item ? createVideoModal.item.signed_url : ''" 
+                                     x-bind:alt="createVideoModal.item ? createVideoModal.item.title : ''"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Modelo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Modelo <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="model_id" 
+                                required
+                                x-model="selectedVideoModel"
+                                @change="selectVideoModel($event.target.value)"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                x-show="videoModels.length > 0"
+                            >
+                                <template x-for="model in videoModels" :key="model.id">
+                                    <option :value="model.id" x-text="model.name + (model.description ? ' - ' + model.description : '')"></option>
+                                </template>
+                            </select>
+                            <div x-show="videoModels.length === 0" class="text-sm text-gray-500 italic">
+                                Cargando modelos...
+                            </div>
+                        </div>
+                        
+                        <!-- Duración y Aspect Ratio (en fila) -->
+                        <div class="grid grid-cols-2 gap-4 mb-4" x-show="selectedModelCapabilities">
+                            <!-- Duración -->
+                            <div x-show="selectedModelCapabilities && selectedModelCapabilities.duration">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Duración
+                                </label>
+                                <!-- Duración fija -->
+                                <div x-show="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.fixed" 
+                                     class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
+                                    <span x-text="selectedModelCapabilities && selectedModelCapabilities.duration ? (selectedModelCapabilities.duration.fixed + 's (fija)') : ''"></span>
+                                    <input type="hidden" name="duration" :value="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.fixed ? selectedModelCapabilities.duration.fixed : ''">
+                                </div>
+                                <!-- Duración con opciones -->
+                                <select 
+                                    name="duration" 
+                                    x-model="videoDuration"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && selectedModelCapabilities.duration.options && selectedModelCapabilities.duration.options.length > 0"
+                                >
+                                    <template x-for="opt in (selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.options ? selectedModelCapabilities.duration.options : [])" :key="opt">
+                                        <option :value="opt" x-text="opt + 's'"></option>
+                                    </template>
+                                </select>
+                                <!-- Duración con min/max (input numérico) -->
+                                <input 
+                                    type="number" 
+                                    name="duration" 
+                                    x-model="videoDuration"
+                                    :min="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.min ? selectedModelCapabilities.duration.min : 4"
+                                    :max="selectedModelCapabilities && selectedModelCapabilities.duration && selectedModelCapabilities.duration.max ? selectedModelCapabilities.duration.max : 12"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.duration && !selectedModelCapabilities.duration.fixed && (!selectedModelCapabilities.duration.options || selectedModelCapabilities.duration.options.length === 0) && selectedModelCapabilities.duration.min"
+                                >
+                            </div>
+                            
+                            <!-- Aspect Ratio -->
+                            <div x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 0">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Aspect Ratio
+                                    <span class="text-xs text-gray-500 font-normal" x-show="selectedVideoModel && selectedVideoModel.includes('sora')">
+                                        (la imagen se redimensionará automáticamente)
+                                    </span>
+                                </label>
+                                <select 
+                                    name="aspect_ratio" 
+                                    x-model="videoAspectRatio"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length > 1"
+                                >
+                                    <template x-for="ar in (selectedModelCapabilities && selectedModelCapabilities.aspect_ratio ? selectedModelCapabilities.aspect_ratio : [])" :key="ar">
+                                        <option :value="ar" x-text="ar + (ar === '1:1' ? ' (Cuadrado)' : ar === '16:9' ? ' (Horizontal)' : ar === '9:16' ? ' (Vertical)' : '')"></option>
+                                    </template>
+                                </select>
+                                <div x-show="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio.length === 1" 
+                                     class="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-600">
+                                    <span x-text="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio[0] ? (selectedModelCapabilities.aspect_ratio[0] + ' (único disponible)') : ''"></span>
+                                    <input type="hidden" name="aspect_ratio" :value="selectedModelCapabilities && selectedModelCapabilities.aspect_ratio && selectedModelCapabilities.aspect_ratio[0] ? selectedModelCapabilities.aspect_ratio[0] : ''">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Prompt -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Descripción del Video <span class="text-red-500">*</span>
+                            </label>
+                            <textarea 
+                                name="prompt" 
+                                rows="4" 
+                                required 
+                                placeholder="Describe cómo quieres que se anime la imagen..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+                            ></textarea>
+                            <p class="text-xs text-gray-500 mt-1">Describe el movimiento, animación o acción que quieres que ocurra en el video.</p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="createVideoModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="createVideoModal.loading = true; document.getElementById('createVideoForm').submit();"
+                            x-bind:disabled="createVideoModal.loading || videoModels.length === 0"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!createVideoModal.loading">Crear Video</span>
+                        <span x-show="createVideoModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Creando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== MODAL DE ESCALAR IMAGEN ========== -->
+    <div x-show="upscaleModal.open && upscaleModal.item" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" 
+             @click="upscaleModal = { open: false, item: null, loading: false }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+                 @click.stop>
+                
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                    <div class="flex items-start gap-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-lg font-semibold text-gray-900">Escalar Imagen</h3>
+                            <p class="mt-1 text-sm text-gray-500" x-text="upscaleModal.item ? ('Escalar: ' + (upscaleModal.item.title || 'Sin título')) : ''"></p>
+                        </div>
+                        <button @click="upscaleModal = { open: false, item: null, loading: false }"
+                                class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido del formulario (scrollable) -->
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <form id="upscaleImageForm" method="post" x-bind:action="upscaleModal.item ? ('/images/' + upscaleModal.item.id + '/upscale/') : ''" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Vista previa de imagen -->
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg" x-show="upscaleModal.item && upscaleModal.item.signed_url">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Imagen Original</label>
+                            <div class="relative w-full max-w-md mx-auto">
+                                <img x-bind:src="upscaleModal.item ? upscaleModal.item.signed_url : ''" 
+                                     x-bind:alt="upscaleModal.item ? upscaleModal.item.title : ''"
+                                     class="w-full h-auto rounded-lg shadow-md max-h-48 object-contain">
+                            </div>
+                        </div>
+                        
+                        <!-- Factor de escalado -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Factor de Escalado <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                name="upscale_factor" 
+                                required
+                                x-model="upscaleFactor"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="x2">x2 (2x más grande)</option>
+                                <option value="x3">x3 (3x más grande)</option>
+                                <option value="x4" selected>x4 (4x más grande) - Recomendado</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Mayor factor = mejor calidad pero más tiempo de procesamiento.</p>
+                        </div>
+                        
+                        <!-- Formato de salida -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Formato de Salida
+                            </label>
+                            <select 
+                                name="output_mime_type" 
+                                x-model="outputMimeType"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                                <option value="image/png">PNG (sin pérdida, recomendado)</option>
+                                <option value="image/jpeg">JPEG (con pérdida, más pequeño)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                </svg>
+                                <div class="text-sm text-blue-800">
+                                    <p class="font-medium mb-1">Nota importante:</p>
+                                    <p>La imagen escalada se guardará como una nueva imagen en tu biblioteca. El proceso puede tardar varios minutos dependiendo del tamaño y factor de escalado.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Footer con botones -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end flex-shrink-0">
+                    <button type="button"
+                            @click="upscaleModal = { open: false, item: null, loading: false }"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            @click="upscaleModal.loading = true; document.getElementById('upscaleImageForm').submit();"
+                            x-bind:disabled="upscaleModal.loading"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span x-show="!upscaleModal.loading">Escalar Imagen</span>
+                        <span x-show="upscaleModal.loading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Escalando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+// Funciones para preview de imágenes en el modal de edición
+function updateImagePreview(input, previewId) {
+    const preview = document.getElementById(previewId);
+    const label = input.closest('label');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+            // Ocultar el icono y el texto cuando hay preview
+            const icon = label.querySelector('.absolute.top-2');
+            const text = label.querySelector('span.text-xs');
+            if (icon) icon.style.display = 'none';
+            if (text) text.style.display = 'none';
+        };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        // Si se elimina la imagen, restaurar preview
+        preview.classList.add('hidden');
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = '';
+        if (text) text.style.display = '';
+    }
+}
+
+function updateMultipleImagePreviews(input, containerId) {
+    const container = document.getElementById(containerId);
+    const label = input.closest('label');
+    if (input.files && input.files.length > 0) {
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+        
+        // Mostrar hasta 4 imágenes en grid
+        const maxPreviews = Math.min(input.files.length, 4);
+        for (let i = 0; i < maxPreviews; i++) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'w-full h-full object-cover';
+                img.style.width = `${100 / maxPreviews}%`;
+                img.style.display = 'inline-block';
+                container.appendChild(img);
+            };
+            reader.readAsDataURL(input.files[i]);
+        }
+        
+        // Si hay más de 4 imágenes, mostrar indicador
+        if (input.files.length > 4) {
+            const indicator = document.createElement('div');
+            indicator.className = 'absolute bottom-0 right-0 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-tl';
+            indicator.textContent = `+${input.files.length - 4}`;
+            container.appendChild(indicator);
+        }
+        
+        // Ocultar icono y texto
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = 'none';
+        if (text) text.style.display = 'none';
+    } else {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        const icon = label.querySelector('.absolute.top-2');
+        const text = label.querySelector('span.text-xs');
+        if (icon) icon.style.display = '';
+        if (text) text.style.display = '';
+    }
+}
+</script>

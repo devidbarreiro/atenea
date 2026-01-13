@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invitación a proyecto</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 40px 0;">
+        <tr>
+            <td align="center">
+                <!-- Contenedor principal -->
+                <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    
+                    <!-- Header con gradiente -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1f2937 0%, #374151 100%); padding: 40px 30px; text-align: center;">
+                            <!-- Emoji de paleta -->
+                            <div style="font-size: 64px; line-height: 1; margin-bottom: 16px;">🎨</div>
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Atenea</h1>
+                            <p style="color: #d1d5db; margin: 8px 0 0 0; font-size: 14px;">Plataforma de Creación con IA</p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Contenido -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <!-- Ícono de invitación -->
+                            <div style="text-align: center; margin-bottom: 24px;">
+                                <div style="display: inline-block; width: 80px; height: 80px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 50%; line-height: 80px; font-size: 40px;">
+                                    🎉
+                                </div>
+                            </div>
+                            
+                            <h2 style="color: #111827; margin: 0 0 16px 0; font-size: 24px; font-weight: 600; text-align: center;">¡Has sido invitado!</h2>
+                            
+                            <p style="color: #6b7280; line-height: 1.6; margin: 0 0 24px 0; font-size: 16px; text-align: center;">
+                                <strong style="color: #374151;">{{ invited_by.username }}</strong> te ha invitado a colaborar en el proyecto
+                            </p>
+                            
+                            <!-- Tarjeta del proyecto -->
+                            <div style="background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); border-radius: 12px; padding: 24px; margin-bottom: 24px; border-left: 4px solid #3b82f6;">
+                                <h3 style="color: #111827; margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">{{ project.name }}</h3>
+                                <p style="color: #6b7280; margin: 0 0 12px 0; font-size: 14px;">Rol asignado:</p>
+                                <span style="display: inline-block; background: #3b82f6; color: #ffffff; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;">{{ role_display }}</span>
+                            </div>
+                            
+                            <p style="color: #6b7280; line-height: 1.6; margin: 0 0 24px 0; font-size: 15px;">
+                                Podrás acceder a todos los recursos del proyecto, colaborar con el equipo y crear contenido increíble juntos.
+                            </p>
+                            
+                            <!-- Botón CTA -->
+                            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 8px 0;">
+                                        <a href="{{ accept_url }}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 10px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+                                            Aceptar Invitación
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Info de expiración -->
+                            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: center;">
+                                <p style="color: #9ca3af; font-size: 13px; margin: 0;">
+                                    ⏰ Esta invitación expira el <strong style="color: #6b7280;">{{ invitation.expires_at|date:"d/m/Y H:i" }}</strong>
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin: 0 0 12px 0;">
+                                Si no esperabas esta invitación, puedes ignorar este correo de forma segura.
+                            </p>
+                            <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin: 0;">
+                                © 2025 Atenea. Todos los derechos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

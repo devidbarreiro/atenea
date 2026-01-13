@@ -273,13 +273,13 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'type': 'video',
         'supports': {
             'text_to_video': True,
-            'image_to_video': False,
+            'image_to_video': True,
             'duration': {'min': 4, 'max': 12, 'options': [4, 8, 12]},
             'aspect_ratio': ['16:9', '9:16', '1:1'],
             'resolution': ['720p', '1080p'],  # Basado en sizes: 1280x720, 720x1280, 1024x1024
             'audio': False,
             'references': {
-                'start_image': False,
+                'start_image': True,  # Soporta image-to-video
                 'end_image': False,
                 'style_image': False,
                 'asset_image': False,
@@ -297,13 +297,13 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         'type': 'video',
         'supports': {
             'text_to_video': True,
-            'image_to_video': False,
+            'image_to_video': True,
             'duration': {'min': 4, 'max': 12, 'options': [4, 8, 12]},
             'aspect_ratio': ['16:9', '9:16', '1:1'],
             'resolution': ['720p', '1080p'],
             'audio': False,
             'references': {
-                'start_image': False,
+                'start_image': True,  # Soporta image-to-video
                 'end_image': False,
                 'style_image': False,
                 'asset_image': False,
@@ -786,6 +786,47 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
         },
         'logo': '/static/img/logos/seedream.png',
     },
+    
+    # ==================== OPENAI GPT IMAGE ====================
+    'gpt-image-1': {
+        'service': 'openai_image',
+        'name': 'GPT Image 1',
+        'description': 'Generación de imágenes de alta calidad con OpenAI',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_image': True,  # Soportado vía Edits endpoint
+            'multi_image': True,  # Soportado vía Edits endpoint con múltiples imágenes
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '16:9', '9:16'],
+            'quality': ['low', 'medium', 'high', 'auto'],
+            'format': ['png', 'jpeg', 'webp'],
+            'background': ['transparent', 'opaque'],
+            'input_fidelity': ['low', 'high'],
+        },
+        'logo': '/static/img/logos/openai.svg',
+    },
+    'gpt-image-1.5': {
+        'service': 'openai_image',
+        'name': 'GPT Image 1.5',
+        'description': 'Modelo más avanzado, 4x más rápido que GPT Image 1',
+        'type': 'image',
+        'supports': {
+            'text_to_image': True,
+            'image_to_image': True,  # Soportado vía Edits endpoint
+            'multi_image': True,  # Soportado vía Edits endpoint con múltiples imágenes
+            'image_to_video': False,
+            'text_to_video': False,
+            'aspect_ratio': ['1:1', '16:9', '9:16'],
+            'quality': ['low', 'medium', 'high', 'auto'],
+            'format': ['png', 'jpeg', 'webp'],
+            'background': ['transparent', 'opaque'],
+            'input_fidelity': ['low', 'high'],
+        },
+        'logo': '/static/img/logos/openai.svg',
+    },
+    
     # ==================== ELEVENLABS ====================
     'elevenlabs': {
         'service': 'elevenlabs',
@@ -798,6 +839,35 @@ MODEL_CAPABILITIES: Dict[str, Dict] = {
             'voice_settings': True,
         },
         'logo': '/static/img/logos/elevenlabs.png',
+    },
+    
+    # ==================== GOOGLE LYRIA ====================
+    'lyria-002': {
+        'service': 'google_lyria',
+        'name': 'Lyria 2',
+        'description': 'Generación de música instrumental de alta calidad',
+        'type': 'audio',
+        'supports': {
+            'text_to_music': True,
+            'prompt': True,
+            'negative_prompt': True,
+            'seed': True,
+            'sample_count': True,
+            'duration': {'fixed': 30},  # Siempre 30 segundos
+            'format': 'wav',
+            'sample_rate': 48000,
+            'instrumental_only': True,
+        },
+        'logo': '/static/img/logos/google.png',
+    },
+    # ==================== MIXED (AGENTE DE VIDEO) ====================
+    'mixed': {
+        'name': 'Composición Multi-Modelo',
+        'service': 'agent',
+        'type': 'video',
+        'description': 'Video combinado usando múltiples modelos de IA',
+        'logo': '/static/img/logos/atenea.png',
+        'supports': {}
     },
 }
 
@@ -850,7 +920,7 @@ def get_supported_fields(model_id: str) -> List[str]:
     fields = []
     
     # Campos básicos
-    if supports.get('text_to_video') or supports.get('text_to_image') or supports.get('text_to_speech'):
+    if supports.get('text_to_video') or supports.get('text_to_image') or supports.get('text_to_speech') or supports.get('text_to_music'):
         fields.append('prompt')
     
     if supports.get('image_to_video') or supports.get('references', {}).get('start_image'):
@@ -883,6 +953,10 @@ def get_supported_fields(model_id: str) -> List[str]:
     
     if supports.get('seed'):
         fields.append('seed')
+    
+    # Campos específicos de música
+    if supports.get('sample_count'):
+        fields.append('sample_count')
     
     # Campos específicos
     if supports.get('avatar_id'):
@@ -1028,12 +1102,21 @@ def get_model_info_for_item(item_type: str, model_key: str = None) -> Dict:
         }
     
     elif item_type == 'audio':
-        # Audios usan ElevenLabs
+        # Si model_key está en MODEL_CAPABILITIES, usarlo directamente
+        if model_key and model_key in MODEL_CAPABILITIES:
+            model = MODEL_CAPABILITIES[model_key]
+            return {
+                'name': model.get('name', 'Modelo desconocido'),
+                'logo': model.get('logo', '/static/img/logos/default.png'),
+                'service': model.get('service', 'unknown'),
+                'model_id': model_key
+            }
+        # Fallback: Audios por defecto usan ElevenLabs
         return {
             'name': 'ElevenLabs TTS',
             'logo': '/static/img/logos/elevenlabs.png',
             'service': 'elevenlabs',
-            'model_id': 'elevenlabs-tts'
+            'model_id': 'elevenlabs'
         }
     
     return default_info

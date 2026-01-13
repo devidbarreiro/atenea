@@ -18,7 +18,9 @@ from django.contrib.auth.models import User
 from .ai_services.heygen import HeyGenClient
 from .ai_services.gemini_veo import GeminiVeoClient
 from .ai_services.gemini_image import GeminiImageClient
+from .ai_services.gemini_imagen_upscale import GeminiImagenUpscaleClient
 from .ai_services.seedream import SeaDreamImageClient
+from .ai_services.openai_image import OpenAIImageClient
 from .ai_services.sora import SoraClient
 from .storage.gcs import gcs_storage
 from core.utils.prompt_templates import apply_prompt_template
@@ -1067,7 +1069,15 @@ class VideoService:
         # Obtener configuración
         model = video.config.get('sora_model', 'sora-2')
         duration = int(video.config.get('duration', 8))  # Asegurar que es int
-        size = video.config.get('size', '1280x720')
+        aspect_ratio = video.config.get('aspect_ratio', '16:9')
+        
+        # Mapear aspect ratio a tamaño de Sora
+        size_map = {
+            '16:9': '1280x720',
+            '9:16': '720x1280',
+            '1:1': '1024x1024',
+        }
+        size = size_map.get(aspect_ratio, '1280x720')
         use_input_reference = video.config.get('use_input_reference', False)
         
         # Log de configuración antes de generar
@@ -1271,6 +1281,7 @@ class VideoService:
         container_color = video.config.get('container_color')  # Color del contenedor
         text_color = video.config.get('text_color')  # Color del texto
         font_family = video.config.get('font_family')  # Tipo de fuente
+        display_time = video.config.get('display_time')  # Tiempo de visualización en pantalla
         
         # Generar video localmente
         # Usar video.id como unique_id para evitar colisiones entre renders simultáneos
@@ -1282,6 +1293,7 @@ class VideoService:
             container_color=container_color,
             text_color=text_color,
             font_family=font_family,
+            display_time=display_time,
             unique_id=str(video.id)  # ID único por video para evitar colisiones
         )
         
@@ -2039,6 +2051,7 @@ class ImageService:
         self.gemini_client = None
         self.higgsfield_client = None
         self.seedream_client = None
+        self.openai_image_client = None
     
     # ----------------
     # CLIENT GETTERS
@@ -2089,6 +2102,23 @@ class ImageService:
         
         if model_name is None or model_to_use == "seedream-default-model":
             self.seedream_client = client
+        
+        return client
+    
+    def _get_openai_image_client(self, model_name: Optional[str] = None) -> OpenAIImageClient:
+        """Inicialización perezosa del cliente OpenAI Image."""
+        model_to_use = model_name or "gpt-image-1.5"
+        
+        if self.openai_image_client and self.openai_image_client.model == model_to_use:
+            return self.openai_image_client
+        
+        if not settings.OPENAI_API_KEY:
+            raise ValidationException('OPENAI_API_KEY no está configurada')
+        
+        client = OpenAIImageClient(api_key=settings.OPENAI_API_KEY, model_name=model_to_use)
+        
+        if model_name is None or model_to_use == "gpt-image-1.5":
+            self.openai_image_client = client
         
         return client
     
@@ -2203,6 +2233,14 @@ class ImageService:
             # Calcular costo según el servicio
             if service == 'higgsfield':
                 estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            elif service == 'openai_image':
+                image_type = image.type
+                quality = image.config.get('quality', 'medium')
+                estimated_cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
             else:
                 estimated_cost = CreditService.estimate_image_cost()
             
@@ -2236,6 +2274,10 @@ class ImageService:
             elif service == 'seedream':
                 # Delegamos a la función específica de SeaDream
                 result = self._generate_seedream_image(image, model_id, aspect_ratio, final_prompt)
+            
+            elif service == 'openai_image':
+                # Delegamos a la función específica de OpenAI Image
+                result = self._generate_openai_image(image, model_id, aspect_ratio, final_prompt)
             
             else:
                 # Por defecto, usar Gemini
@@ -2293,7 +2335,18 @@ class ImageService:
             capabilities = get_model_capabilities(model_id) if model_id else None
             service = capabilities.get('service') if capabilities else None
             
-            estimated_cost = CreditService.estimate_image_cost(model_id=model_id) if service == 'higgsfield' else CreditService.estimate_image_cost()
+            if service == 'higgsfield':
+                estimated_cost = CreditService.estimate_image_cost(model_id=model_id)
+            elif service == 'openai_image':
+                image_type = image.type
+                quality = image.config.get('quality', 'medium')
+                estimated_cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
+            else:
+                estimated_cost = CreditService.estimate_image_cost()
             
             # Solo verificar créditos si el costo es > 0 (algunos modelos son gratis)
             if estimated_cost > 0:
@@ -2418,6 +2471,75 @@ class ImageService:
             logger.error(f"[Seedream] Error al generar imagen: {e}")
             raise ImageGenerationException(f"Error de la API de SeaDream: {str(e)}")
 
+    def _generate_openai_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
+        """Genera imagen usando el cliente OpenAI Image."""
+        client = self._get_openai_image_client(model_name=model_id)
+        
+        # Obtener parámetros opcionales del config
+        quality = image.config.get('quality')
+        format_type = image.config.get('format')
+        background = image.config.get('background')
+        input_fidelity = image.config.get('input_fidelity')
+        
+        try:
+            if image.type == 'text_to_image':
+                return client.generate_image_from_text(
+                    prompt=final_prompt,
+                    aspect_ratio=aspect_ratio,
+                    quality=quality,
+                    format=format_type,
+                    background=background,
+                )
+            
+            elif image.type == 'image_to_image':
+                input_gcs_path = image.config.get('input_image_gcs_path')
+                if not input_gcs_path:
+                    raise ValidationException('Imagen de entrada es requerida para image-to-image.')
+                
+                # Descargar imagen desde GCS a bytes
+                input_image_data = self._download_image_from_gcs(input_gcs_path)
+                
+                # Obtener máscara si existe
+                mask_gcs_path = image.config.get('mask_gcs_path')
+                mask_data = None
+                if mask_gcs_path:
+                    mask_data = self._download_image_from_gcs(mask_gcs_path)
+                
+                return client.generate_image_from_image(
+                    prompt=final_prompt,
+                    input_image_data=input_image_data,
+                    aspect_ratio=aspect_ratio,
+                    mask_data=mask_data,
+                    quality=quality,
+                    format=format_type,
+                    input_fidelity=input_fidelity,
+                )
+            
+            elif image.type == 'multi_image':
+                input_images_config = image.config.get('input_images', [])
+                if not input_images_config:
+                    raise ValidationException('Imágenes de entrada son requeridas para multi-image.')
+                
+                # Descargar imágenes desde GCS a lista de bytes
+                input_images_data = [
+                    self._download_image_from_gcs(img_config['gcs_path'])
+                    for img_config in input_images_config
+                ]
+                
+                return client.generate_image_from_multiple_images(
+                    prompt=final_prompt,
+                    input_images_data=input_images_data,
+                    aspect_ratio=aspect_ratio,
+                    quality=quality,
+                    format=format_type,
+                    input_fidelity=input_fidelity,
+                )
+            
+            raise ValidationException(f'Tipo de imagen {image.type} no soportado por OpenAI GPT Image.')
+            
+        except Exception as e:
+            logger.error(f"[OpenAI Image] Error al generar imagen: {e}")
+            raise ImageGenerationException(f"Error de la API de OpenAI Image: {str(e)}")
 
     def _generate_higgsfield_image(self, image: Image, model_id: str, aspect_ratio: str, final_prompt: str) -> dict:
         """
@@ -2606,6 +2728,141 @@ class ImageService:
                 logger.error(f"Error al generar URLs firmadas para imágenes de entrada: {e}")
         
         return result
+    
+    # ----------------
+    # UPSCALE IMAGE
+    # ----------------
+    
+    def upscale_image(
+        self,
+        image: Image,
+        upscale_factor: str = "x4",
+        output_mime_type: str = "image/png"
+    ) -> str:
+        """
+        Escala una imagen usando Vertex AI Imagen Upscale
+        
+        Args:
+            image: Imagen a escalar (debe tener gcs_path)
+            upscale_factor: Factor de escalado ("x2", "x3", "x4")
+            output_mime_type: Tipo MIME de salida ("image/png", "image/jpeg")
+        
+        Returns:
+            GCS path de la imagen escalada
+        
+        Raises:
+            ValidationException: Si la imagen no tiene gcs_path
+            ImageGenerationException: Si falla el upscale
+        """
+        if not image.gcs_path:
+            raise ValidationException('La imagen no tiene archivo disponible para escalar')
+        
+        if upscale_factor not in ["x2", "x3", "x4"]:
+            raise ValidationException(f"upscale_factor debe ser 'x2', 'x3' o 'x4', recibido: {upscale_factor}")
+        
+        try:
+            from .ai_services.gemini_imagen_upscale import GeminiImagenUpscaleClient
+            
+            # Inicializar cliente
+            client = GeminiImagenUpscaleClient()
+            
+            # Preparar directorio de salida
+            project_id = image.project.id if image.project else 'none'
+            output_directory = f"gs://{settings.GCS_BUCKET_NAME}/projects/{project_id}/images/{image.uuid}/upscaled/"
+            
+            logger.info(f"Escalando imagen: {image.gcs_path}")
+            logger.info(f"Factor: {upscale_factor}, Output directory: {output_directory}")
+            
+            # Llamar al cliente de upscale
+            result = client.upscale_image(
+                input_gcs_uri=image.gcs_path,
+                output_gcs_directory=output_directory,
+                upscale_factor=upscale_factor,
+                output_mime_type=output_mime_type
+            )
+            
+            output_gcs_uri = result.get('output_gcs_uri')
+            if not output_gcs_uri:
+                raise ImageGenerationException("No se recibió URI de salida del upscale")
+            
+            logger.info(f"✅ Upscale completado: {output_gcs_uri}")
+            return output_gcs_uri
+            
+        except Exception as e:
+            logger.error(f"Error al escalar imagen: {e}", exc_info=True)
+            raise ImageGenerationException(f"Error al escalar imagen: {str(e)}")
+    
+    def upscale_image_async(
+        self,
+        original_image: Image,
+        upscale_factor: str = "x4",
+        output_mime_type: str = "image/png"
+    ) -> 'GenerationTask':
+        """
+        Encola el upscale de una imagen usando el sistema de colas
+        
+        Args:
+            original_image: Imagen original a escalar
+            upscale_factor: Factor de escalado ("x2", "x3", "x4")
+            output_mime_type: Tipo MIME de salida ("image/png", "image/jpeg")
+        
+        Returns:
+            GenerationTask creada
+        """
+        from core.services.queue import QueueService
+        
+        # Validar que la imagen tenga archivo
+        if not original_image.gcs_path:
+            raise ValidationException('La imagen no tiene archivo disponible para escalar')
+        
+        if upscale_factor not in ["x2", "x3", "x4"]:
+            raise ValidationException(f"upscale_factor debe ser 'x2', 'x3' o 'x4', recibido: {upscale_factor}")
+        
+        # Validar output_mime_type
+        valid_mime_types = ['image/png', 'image/jpeg']
+        if output_mime_type not in valid_mime_types:
+            raise ValidationException(f"output_mime_type debe ser uno de {valid_mime_types}, recibido: {output_mime_type}")
+        
+        # Crear nueva imagen para el resultado del upscale
+        from datetime import datetime
+        upscaled_image = Image.objects.create(
+            project=original_image.project,
+            title=f"{original_image.title} (Escalada {upscale_factor})",
+            type='text_to_image',  # Tipo base
+            prompt=original_image.prompt or f"Escalada {upscale_factor} de {original_image.title}",
+            config={
+                'upscaled_from': str(original_image.uuid),
+                'upscale_factor': upscale_factor,
+                'original_title': original_image.title,
+                'original_gcs_path': original_image.gcs_path,
+                'output_mime_type': output_mime_type,
+            },
+            created_by=original_image.created_by,
+            status='pending',  # Se procesará de forma asíncrona
+            aspect_ratio=original_image.aspect_ratio,  # Mantener el mismo aspect ratio
+        )
+        
+        # Preparar metadata para la tarea
+        task_metadata = {
+            'original_image_uuid': str(original_image.uuid),
+            'upscaled_image_uuid': str(upscaled_image.uuid),
+            'upscale_factor': upscale_factor,
+            'output_mime_type': output_mime_type,
+            'title': upscaled_image.title,
+            'item_id': upscaled_image.id,
+            'item_uuid': str(upscaled_image.uuid),
+        }
+        
+        # Encolar tarea
+        task = QueueService.enqueue_generation(
+            item=upscaled_image,
+            user=original_image.created_by,
+            task_type='image_upscale',
+            metadata=task_metadata
+        )
+        
+        logger.info(f"Upscale de imagen {original_image.uuid} encolado. Nueva imagen: {upscaled_image.uuid}. Task UUID: {task.uuid}")
+        return task
 
 
 # ====================
@@ -2628,6 +2885,20 @@ class AudioService:
         return ElevenLabsClient(api_key=api_key)
     
     @staticmethod
+    def _get_lyria_client(model_name: str = "lyria-002"):
+        """Obtiene cliente de Google Lyria"""
+        from .ai_services import GoogleLyriaClient
+        from django.conf import settings
+        
+        location = getattr(settings, 'GCP_LOCATION', 'us-central1')
+        project_id = getattr(settings, 'GCS_PROJECT_ID', None)
+        
+        if not project_id:
+            raise ServiceException('GCS_PROJECT_ID no configurada')
+        
+        return GoogleLyriaClient(project_id=project_id, location=location, model_name=model_name)
+    
+    @staticmethod
     def _get_default_voice_settings():
         """Obtiene configuración de voz por defecto desde settings"""
         from django.conf import settings
@@ -2644,7 +2915,7 @@ class AudioService:
     def create_audio(title: str, text: str, voice_id: str, created_by, voice_name: str = None, 
                      voice_settings: Dict = None, project = None):
         """
-        Crea un nuevo audio (sin generarlo aún)
+        Crea un nuevo audio TTS (sin generarlo aún)
         
         Args:
             title: Título del audio
@@ -2677,10 +2948,79 @@ class AudioService:
             language_code=config('ELEVENLABS_DEFAULT_LANGUAGE', default='es'),
             voice_settings=voice_settings,
             status='pending',
+            type='tts',
             created_by=created_by
         )
         
-        logger.info(f"Audio creado: {audio.id} - {audio.title}")
+        logger.info(f"Audio TTS creado: {audio.id} - {audio.title}")
+        return audio
+    
+    @staticmethod
+    def create_music_audio(
+        title: str,
+        prompt: str,
+        created_by,
+        model_id: str = 'lyria-002',
+        negative_prompt: str = None,
+        seed: int = None,
+        sample_count: int = None,
+        project = None,
+        metadata: Dict = None
+    ):
+        """
+        Crea un nuevo audio de música (sin generarlo aún)
+        
+        Args:
+            title: Título del audio
+            prompt: Descripción de texto en inglés (en-us) del audio a generar
+            created_by: Usuario que crea el audio
+            model_id: ID del modelo de Lyria (default: 'lyria-002')
+            negative_prompt: Descripción de lo que se debe excluir (opcional)
+            seed: Semilla para generación determinista (opcional)
+            sample_count: Número de muestras a generar (opcional, no compatible con seed)
+            project: Proyecto al que pertenece (opcional)
+            metadata: Metadata adicional (opcional)
+            
+        Returns:
+            Objeto Audio creado con type='music'
+        """
+        from .models import Audio
+        
+        # Validar parámetros mutuamente excluyentes
+        if seed is not None and sample_count is not None:
+            raise ValidationException("No se puede usar 'seed' y 'sample_count' al mismo tiempo")
+        
+        # Preparar song_metadata
+        song_metadata = {
+            'negative_prompt': negative_prompt,
+            'seed': seed,
+            'sample_count': sample_count,
+        }
+        
+        # Preparar metadata general
+        audio_metadata = metadata or {}
+        audio_metadata.update({
+            'negative_prompt': negative_prompt,
+            'seed': seed,
+            'sample_count': sample_count,
+        })
+        
+        # Crear audio de música
+        audio = Audio.objects.create(
+            project=project,
+            title=title,
+            prompt=prompt,
+            type='music',
+            model_id=model_id,
+            song_metadata=song_metadata,
+            metadata=audio_metadata,
+            status='pending',
+            created_by=created_by
+        )
+        
+        logger.info(f"Audio música creado: {audio.id} - {audio.title}")
+        logger.info(f"  Modelo: {model_id}, Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+        
         return audio
     
     @staticmethod
@@ -2707,23 +3047,32 @@ class AudioService:
         if audio.status in ['processing', 'completed']:
             raise ValidationException(f'El audio ya está en estado: {audio.get_status_display()}')
         
-        # Verificar tipo de audio
+        # Verificar tipo de audio y model_id para determinar el servicio
         audio_type = getattr(audio, 'type', 'tts') or 'tts'
+        model_id = getattr(audio, 'model_id', None) or ''
         
-        if audio_type == 'music':
-            # La generación de música requiere implementación separada
-            raise ValidationException('La generación de música aún no está implementada en este flujo')
-        
-        # Para TTS, validar campos requeridos
-        if not audio.text:
-            raise ValidationException('El texto es requerido para audio TTS')
-        if not audio.voice_id:
-            raise ValidationException('La voz es requerida para audio TTS')
+        # Determinar si es Lyria basándose en type O model_id
+        is_lyria = (
+            audio_type == 'music' or 
+            model_id.startswith('lyria-') or 
+            model_id in ['lyria-002']
+        )
         
         # Marcar como procesando
         audio.mark_as_processing()
         
         try:
+            if is_lyria:
+                # Generación de música con Google Lyria
+                logger.info(f"Detectado servicio Lyria (type={audio_type}, model_id={model_id})")
+                return AudioService._generate_lyria_music(audio)
+            
+            # Para TTS, validar campos requeridos
+            if not audio.text:
+                raise ValidationException('El texto es requerido para audio TTS')
+            if not audio.voice_id:
+                raise ValidationException('La voz es requerida para audio TTS')
+            
             client = AudioService._get_elevenlabs_client()
             
             # Obtener configuración de voz
@@ -2829,6 +3178,153 @@ class AudioService:
             raise ServiceException(f"Error al generar audio: {str(e)}")
     
     @staticmethod
+    def _generate_lyria_music(audio):
+        """
+        Genera música usando Google Lyria
+        
+        Args:
+            audio: Objeto Audio con type='music'
+            
+        Returns:
+            GCS path del audio generado
+        """
+        from .storage.gcs import gcs_storage
+        import tempfile
+        import os
+        
+        # Validar campos requeridos para música
+        if not audio.prompt:
+            raise ValidationException('El prompt es requerido para generar música')
+        
+        # Obtener modelo desde config o usar default
+        # Si model_id no está configurado o no es de Lyria, usar default
+        model_id = audio.model_id or 'lyria-002'
+        
+        # Asegurar que el model_id es de Lyria
+        if not model_id.startswith('lyria-') and model_id not in ['lyria-002']:
+            logger.warning(f"Model ID '{model_id}' no es de Lyria, usando 'lyria-002' por defecto")
+            model_id = 'lyria-002'
+        
+        try:
+            client = AudioService._get_lyria_client(model_name=model_id)
+            
+            logger.info(f"Generando música con Lyria para: {audio.title}")
+            logger.info(f"  Modelo: {model_id}")
+            prompt_preview = audio.prompt[:100] if audio.prompt else ''
+            logger.info(f"  Prompt: {prompt_preview}{'...' if len(audio.prompt or '') > 100 else ''}")
+            
+            # Obtener parámetros desde config o metadata
+            config = audio.metadata or {}
+            negative_prompt = audio.metadata.get('negative_prompt') if audio.metadata else None
+            seed = audio.metadata.get('seed') if audio.metadata else None
+            sample_count = audio.metadata.get('sample_count') if audio.metadata else None
+            
+            # También verificar en song_metadata si existe
+            if audio.song_metadata:
+                negative_prompt = negative_prompt or audio.song_metadata.get('negative_prompt')
+                seed = seed if seed is not None else audio.song_metadata.get('seed')
+                sample_count = sample_count if sample_count is not None else audio.song_metadata.get('sample_count')
+            
+            # Generar música
+            result = client.generate_music(
+                prompt=audio.prompt,
+                negative_prompt=negative_prompt,
+                seed=seed,
+                sample_count=sample_count,
+            )
+            
+            # Obtener el primer audio sample (o el seleccionado si hay múltiples)
+            audio_samples = result.get('audio_samples', [])
+            if not audio_samples:
+                raise ServiceException('No se generaron muestras de audio')
+            
+            # Usar el primer sample por defecto
+            selected_sample = audio_samples[0]
+            audio_data = selected_sample['audio_data']
+            mime_type = selected_sample['mime_type']
+            
+            # Determinar extensión del archivo
+            file_extension = 'wav'  # Lyria siempre devuelve WAV
+            content_type = mime_type or 'audio/wav'
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_file:
+                tmp_file.write(audio_data)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Subir a GCS
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                safe_title = audio.title.replace(' ', '_').replace('/', '_')
+                if audio.project:
+                    gcs_path = f"projects/{audio.project.id}/audios/{audio.uuid}/{timestamp}_{safe_title}.{file_extension}"
+                else:
+                    gcs_path = f"audios/{audio.uuid}/{timestamp}_{safe_title}.{file_extension}"
+                
+                with open(tmp_path, 'rb') as f:
+                    gcs_full_path = gcs_storage.upload_from_bytes(
+                        file_content=f.read(),
+                        destination_path=gcs_path,
+                        content_type=content_type
+                    )
+                
+                # Obtener duración del audio usando ffprobe
+                duration = AudioService._get_audio_duration(tmp_path)
+                file_size = os.path.getsize(tmp_path)
+                
+                # Preparar metadata completa
+                metadata = {
+                    'model_id': model_id,
+                    'model_display_name': result.get('model_display_name', 'Lyria 2'),
+                    'duration_seconds': result.get('duration_seconds', 30),
+                    'sample_rate': result.get('sample_rate', 48000),
+                    'format': result.get('format', 'wav'),
+                    'file_size': file_size,
+                    'sample_count': len(audio_samples),
+                    'selected_sample_index': selected_sample.get('index', 0),
+                    'negative_prompt': negative_prompt,
+                    'seed': seed,
+                    'sample_count_requested': sample_count,
+                }
+                
+                # Guardar song_metadata si no existe
+                if not audio.song_metadata:
+                    audio.song_metadata = {
+                        'negative_prompt': negative_prompt,
+                        'seed': seed,
+                        'sample_count': sample_count,
+                    }
+                
+                # Marcar como completado
+                audio.mark_as_completed(
+                    gcs_path=gcs_full_path,
+                    duration=duration,
+                    metadata=metadata,
+                    alignment=None  # La música no tiene alignment como TTS
+                )
+                
+                audio.file_size = file_size
+                audio.format = file_extension
+                audio.sample_rate = result.get('sample_rate', 48000)
+                audio.duration_ms = int(duration * 1000) if duration else None
+                audio.save(update_fields=['file_size', 'format', 'sample_rate', 'duration_ms', 'song_metadata'])
+                
+                logger.info(f"✓ Música generada: {gcs_full_path}")
+                logger.info(f"  Duración: {duration}s, Tamaño: {file_size} bytes, Formato: {file_extension}")
+                
+                return gcs_full_path
+                
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            logger.error(f"Error al generar música: {e}")
+            audio.mark_as_error(str(e))
+            raise ServiceException(f"Error al generar música: {str(e)}")
+    
+    @staticmethod
     def generate_audio_async(audio, metadata: Dict = None, with_timestamps: bool = False) -> 'GenerationTask':
         """
         Encola la generación de un audio usando el sistema de colas
@@ -2870,8 +3366,27 @@ class AudioService:
                 'model_id': audio.model_id,
             })
         elif audio_type == 'music':
+            # Obtener parámetros desde metadata o song_metadata
+            negative_prompt = None
+            seed = None
+            sample_count = None
+            
+            if audio.metadata:
+                negative_prompt = audio.metadata.get('negative_prompt')
+                seed = audio.metadata.get('seed')
+                sample_count = audio.metadata.get('sample_count')
+            
+            if audio.song_metadata:
+                negative_prompt = negative_prompt or audio.song_metadata.get('negative_prompt')
+                seed = seed if seed is not None else audio.song_metadata.get('seed')
+                sample_count = sample_count if sample_count is not None else audio.song_metadata.get('sample_count')
+            
             task_metadata.update({
                 'prompt': audio.prompt,
+                'model_id': audio.model_id or 'lyria-002',
+                'negative_prompt': negative_prompt,
+                'seed': seed,
+                'sample_count': sample_count,
                 'duration_ms': audio.duration_ms,
             })
         

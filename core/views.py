@@ -19,6 +19,7 @@ from django.contrib.auth.decorators import permission_required, login_required
 from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db import models
+from datetime import datetime
 from django.db.models import Max, Q, Sum, Count
 from django.contrib.auth import authenticate, login, logout
 import os
@@ -32,7 +33,7 @@ def get_remove_image_background_task():
     from core.tasks import remove_image_background_task
     return remove_image_background_task
 
-from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate
+from .models import Project, Video, Image, Audio, Script, Scene, UserCredits, CreditTransaction, ServiceUsage, Notification, GenerationTask, PromptTemplate, ProjectMember
 from .forms import VideoBaseForm, HeyGenAvatarV2Form, HeyGenAvatarIVForm, GeminiVeoVideoForm, SoraVideoForm, GeminiImageForm, AudioForm, ScriptForm
 from .services import ProjectService, VideoService, ImageService, AudioService, APIService, SceneService, VideoCompositionService, ValidationException, ServiceException, ImageGenerationException, InvitationService
 from .services.credits import CreditService, InsufficientCreditsException, RateLimitExceededException
@@ -182,7 +183,7 @@ def send_invitation_email(request, invitation):
         invitation: ProjectInvitation a enviar
     """
     from .models import ProjectInvitation
-    from django.core.mail import send_mail
+    from django.core.mail import EmailMultiAlternatives
     
     try:
         # Construir URL de aceptación
@@ -199,19 +200,21 @@ def send_invitation_email(request, invitation):
             'role_display': invitation.get_role_display(),
         }
         
-        # Renderizar mensaje
+        # Renderizar mensajes (texto plano y HTML)
         subject = f'Invitación para unirte al proyecto "{invitation.project.name}"'
-        message = render_to_string('projects/invitation_email.txt', context)
+        text_content = render_to_string('projects/invitation_email.txt', context)
+        html_content = render_to_string('projects/invitation_email.html', context)
         
-        # Enviar email
+        # Enviar email con HTML
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-        send_mail(
+        email = EmailMultiAlternatives(
             subject,
-            message,
+            text_content,
             from_email,
-            [invitation.email],
-            fail_silently=False
+            [invitation.email]
         )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
         
         logger.info(f"Email de invitación enviado a {invitation.email} para proyecto {invitation.project.id}")
         
@@ -464,7 +467,7 @@ class DashboardView(ServiceMixin, ListView):
     model = Project
     template_name = 'dashboard/index.html'
     context_object_name = 'projects'
-    paginate_by = 20
+
     
     def get_queryset(self):
         """Obtener proyectos optimizado"""
@@ -477,72 +480,61 @@ class DashboardView(ServiceMixin, ListView):
         # Obtener query de búsqueda
         search_query = self.request.GET.get('q', '').strip()
         context['search_query'] = search_query
+
+        # 1. OBTENER FILTRO DE LA URL (Nuevo)
+        filter_type = self.request.GET.get('filter', 'personal') # Default: personal
+        context['current_filter'] = filter_type
         
-        # Obtener proyectos del usuario para filtrar estadísticas
-        user_projects = ProjectService.get_user_projects(self.request.user)
-        user_project_ids = user_projects.values_list('id', flat=True)
+        user = self.request.user
         
-        # Agregar estadísticas filtradas por items del usuario (con y sin proyecto)
-        from django.db.models import Q
+        # 2. DEFINIR LÓGICA DE FILTRADO (Nuevo)
+        if filter_type == 'shared':
+            # COMPARTIDO: Items en proyectos donde soy miembro pero NO dueño
+            shared_project_ids = ProjectMember.objects.filter(user=user).values_list('project_id', flat=True)
+            # Filtro: Está en un proyecto compartido Y el dueño del proyecto no soy yo
+            base_filter = Q(project_id__in=shared_project_ids) & ~Q(project__owner=user)
+        else:
+            # PERSONAL: Items creados por mí (estén en proyecto o no)
+            base_filter = Q(created_by=user)
+
+        # 3. ESTADÍSTICAS
+        all_user_projects = ProjectService.get_user_projects(user)
+        all_project_ids = all_user_projects.values_list('id', flat=True)
+        stats_filter = Q(project_id__in=all_project_ids) | Q(project__isnull=True, created_by=user)
+
         context.update({
-            'total_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'total_images': Image.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'total_scripts': Script.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-            ).count(),
-            'completed_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='completed'
-            ).count(),
-            'processing_videos': Video.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='processing'
-            ).count(),
-            'completed_scripts': Script.objects.filter(
-                Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user),
-                status='completed'
-            ).count(),
+            'total_videos': Video.objects.filter(stats_filter).count(),
+            'total_images': Image.objects.filter(stats_filter).count(),
+            'total_scripts': Script.objects.filter(stats_filter).count(),
+            'completed_videos': Video.objects.filter(stats_filter, status='completed').count(),
+            'processing_videos': Video.objects.filter(stats_filter, status='processing').count(),
+            'completed_scripts': Script.objects.filter(stats_filter, status='completed').count(),
         })
         
-        # Construir filtro base para items del usuario
-        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=self.request.user)
-        
-        # Si hay búsqueda, agregar filtro de texto
+        # 4. APLICAR FILTRO A LA LISTA DE ITEMS (Modificado)
+        # Si hay búsqueda, agregar filtro de texto al filtro base (personal/shared)
         if search_query:
-            # Videos: buscar en título y script
             video_search = Q(title__icontains=search_query) | Q(script__icontains=search_query)
             video_filter = base_filter & video_search
             
-            # Imágenes: buscar en título y prompt
             image_search = Q(title__icontains=search_query) | Q(prompt__icontains=search_query)
             image_filter = base_filter & image_search
             
-            # Audios: buscar en título y texto
             audio_search = Q(title__icontains=search_query) | Q(text__icontains=search_query)
             audio_filter = base_filter & audio_search
-            
-            # Música: buscar en nombre y prompt
-            music_search = Q(name__icontains=search_query) | Q(prompt__icontains=search_query)
-            music_filter = base_filter & music_search
-            
-            # Scripts: buscar en título y contenido del script
+
             script_search = Q(title__icontains=search_query) | Q(original_script__icontains=search_query)
             script_filter = base_filter & script_search
         else:
+            # Sin búsqueda, usamos directamente el filtro Personal/Shared
             video_filter = base_filter
             image_filter = base_filter
             audio_filter = base_filter
-            music_filter = base_filter
             script_filter = base_filter
-        
-        # Obtener todos los items recientes mezclados (videos, imágenes, audios, música, scripts)
+
         recent_items = []
         
-        # Videos
+        # --- VIDEOS ---
         videos = Video.objects.filter(video_filter).select_related('project').order_by('-created_at')
         video_service = self.get_video_service()
         for video in videos:
@@ -566,7 +558,7 @@ class DashboardView(ServiceMixin, ListView):
                     pass
             recent_items.append(item_data)
         
-        # Imágenes
+        # --- IMÁGENES ---
         images = Image.objects.filter(image_filter).select_related('project').order_by('-created_at')
         image_service = self.get_image_service()
         for image in images:
@@ -589,8 +581,8 @@ class DashboardView(ServiceMixin, ListView):
                 except Exception:
                     pass
             recent_items.append(item_data)
-        
-        # Audios
+
+        # --- AUDIOS ---
         audios = Audio.objects.filter(audio_filter).select_related('project').order_by('-created_at')
         audio_service = self.get_audio_service()
         for audio in audios:
@@ -613,8 +605,8 @@ class DashboardView(ServiceMixin, ListView):
                 except Exception:
                     pass
             recent_items.append(item_data)
-        
-        # Scripts
+
+        # --- SCRIPTS ---
         scripts = Script.objects.filter(script_filter).select_related('project').order_by('-created_at')
         for script in scripts:
             item_data = {
@@ -635,7 +627,7 @@ class DashboardView(ServiceMixin, ListView):
         recent_items.sort(key=lambda x: x['created_at'], reverse=True)
         
         # Paginación
-        paginator = Paginator(recent_items, 20)  # 20 items por página
+        paginator = Paginator(recent_items, 20)
         page_number = self.request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
         
@@ -643,7 +635,6 @@ class DashboardView(ServiceMixin, ListView):
         context['page_obj'] = page_obj
         
         return context
-
 
 # ====================
 # PROJECT VIEWS
@@ -849,7 +840,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': video.created_at,
                 'project': video.project,
                 'signed_url': None,
-                'detail_url': reverse('core:video_detail', args=[video.uuid]),
+                'detail_url': reverse('core:project_video_detail', args=[self.object.uuid, video.uuid]),
                 'delete_url': reverse('core:video_delete', args=[video.uuid]),
             }
             if video.status == 'completed' and video.gcs_path:
@@ -873,7 +864,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': image.created_at,
                 'project': image.project,
                 'signed_url': None,
-                'detail_url': reverse('core:image_detail', args=[image.uuid]),
+                'detail_url': reverse('core:project_image_detail', args=[self.object.uuid, image.uuid]),
                 'delete_url': reverse('core:image_delete', args=[image.uuid]),
             }
             if image.status == 'completed' and image.gcs_path:
@@ -897,7 +888,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': audio.created_at,
                 'project': audio.project,
                 'signed_url': None,
-                'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
+                'detail_url': reverse('core:project_audio_detail', args=[self.object.uuid, audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
             if audio.status == 'completed' and audio.gcs_path:
@@ -1812,6 +1803,14 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 # Si no se puede parsear, dejar que la animación calcule automáticamente
                 pass
         
+        # Tiempo de visualización opcional (segundos que permanece en pantalla)
+        display_time = request.POST.get('display_time')
+        if display_time:
+            try:
+                config['display_time'] = float(display_time)
+            except (ValueError, TypeError):
+                pass
+        
         return config
 
 
@@ -2286,6 +2285,69 @@ class ModelCapabilitiesAPIView(View):
             }, status=500)
 
 
+class VideoModelsAPIView(View):
+    """API endpoint para obtener modelos de video que soporten image-to-video"""
+    
+    def get(self, request):
+        """
+        Retorna modelos de video que soporten image-to-video
+        
+        Query params:
+            image_to_video: Si es 'true', solo retorna modelos que soporten image-to-video
+        """
+        from .ai_services.model_config import get_models_by_type
+        
+        try:
+            image_to_video_only = request.GET.get('image_to_video', 'false').lower() == 'true'
+            
+            # Obtener todos los modelos de video (retorna lista de diccionarios)
+            video_models = get_models_by_type('video')
+            
+            # Filtrar por image_to_video si se solicita
+            if image_to_video_only:
+                filtered_models = []
+                excluded_services = ['heygen']  # Excluir servicios que requieren flujo especial
+                
+                for model_info in video_models:
+                    model_id = model_info.get('id', '')
+                    service = model_info.get('service', '')
+                    supports = model_info.get('supports', {})
+                    
+                    # Excluir modelos HeyGen (requieren avatar, no imagen genérica)
+                    if service in excluded_services or 'heygen' in model_id.lower():
+                        continue
+                    
+                    # Solo incluir modelos que realmente soporten image-to-video genérico
+                    if supports.get('image_to_video') or supports.get('references', {}).get('start_image'):
+                        filtered_models.append(model_info)
+                
+                video_models = filtered_models
+            
+            # Formatear respuesta (ya viene con 'id' incluido desde get_models_by_type)
+            models_list = []
+            for model_info in video_models:
+                models_list.append({
+                    'id': model_info.get('id', ''),
+                    'name': model_info.get('name', model_info.get('id', '')),
+                    'description': model_info.get('description', ''),
+                    'service': model_info.get('service', ''),
+                    'logo': model_info.get('logo', ''),
+                    'supports': model_info.get('supports', {}),
+                })
+            
+            return JsonResponse({
+                'models': models_list,
+                'count': len(models_list)
+            })
+        except Exception as e:
+            logger.error(f"Error al obtener modelos de video: {e}", exc_info=True)
+            return JsonResponse({
+                'error': 'Error al cargar modelos de video',
+                'error_detail': str(e),
+                'models': []
+            }, status=500)
+
+
 class EstimateCostAPIView(LoginRequiredMixin, View):
     """API endpoint para calcular costo estimado de generación"""
     
@@ -2342,7 +2404,14 @@ class EstimateCostAPIView(LoginRequiredMixin, View):
                 )
                     
             elif item_type == 'image':
-                cost = CreditService.estimate_image_cost()
+                model_id = data.get('model_id')
+                image_type = data.get('image_type', 'text_to_image')
+                quality = data.get('config', {}).get('quality', 'medium')
+                cost = CreditService.estimate_image_cost(
+                    model_id=model_id,
+                    image_type=image_type,
+                    quality=quality
+                )
                 
             elif item_type == 'audio':
                 cost = CreditService.estimate_audio_cost(text)
@@ -2498,6 +2567,15 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             if default_template:
                 default_template_id = str(default_template.uuid)
         
+        # Obtener resoluciones disponibles para modelos de imagen
+        image_resolutions = {}
+        if capabilities.get('type') == 'image':
+            from core.ai_services.gemini_image import GeminiImageClient
+            if model_id in GeminiImageClient.MODEL_CONFIGS:
+                model_config = GeminiImageClient.MODEL_CONFIGS[model_id]
+                if 'resolutions' in model_config:
+                    image_resolutions = model_config['resolutions']
+        
         # Renderizar template con los campos
         context = {
             'model_id': model_id,
@@ -2510,11 +2588,17 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             'has_references': has_references,
             'recommended_service': recommended_service_for_template,  # Para el selector de templates
             'default_template_id': default_template_id,  # Template "General" por defecto
+            'image_resolutions': image_resolutions,  # Resoluciones disponibles para modelos de imagen
         }
         
         logger.debug(f"DynamicFormFieldsView: Contexto para {model_id}: supports.references = {supports.get('references')}")
         
-        return render(request, 'videos/_dynamic_fields.html', context)
+        # Renderizar template según el tipo
+        item_type = capabilities.get('type', 'video')
+        if item_type == 'image':
+            return render(request, 'images/_dynamic_fields.html', context)
+        else:
+            return render(request, 'videos/_dynamic_fields.html', context)
 
 
 class LibraryItemsAPIView(ServiceMixin, View):
@@ -2537,7 +2621,9 @@ class LibraryItemsAPIView(ServiceMixin, View):
         from django.db.models import Q
         
         item_type = request.GET.get('type', 'video')
+        # Aceptar tanto project_id como project_uuid para compatibilidad
         project_id = request.GET.get('project_id')
+        project_uuid = request.GET.get('project_uuid')
         user = request.user
         
         # Incluir URLs (para carga rápida, puede ser false)
@@ -2561,8 +2647,17 @@ class LibraryItemsAPIView(ServiceMixin, View):
         # Construir filtro base
         base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
         
-        # Si hay project_id específico, filtrar por ese proyecto
-        if project_id:
+        # Si hay project_uuid o project_id específico, filtrar por ese proyecto
+        project = None
+        if project_uuid:
+            try:
+                project = get_object_or_404(Project, uuid=project_uuid)
+                if not ProjectService.user_has_access(project, user):
+                    return JsonResponse({'error': 'No tienes acceso a este proyecto'}, status=403)
+                base_filter = Q(project_id=project.id)
+            except (ValueError, Project.DoesNotExist):
+                return JsonResponse({'error': 'Proyecto no encontrado'}, status=404)
+        elif project_id:
             try:
                 project_id_int = int(project_id)
                 if project_id_int in user_project_ids:
@@ -2586,6 +2681,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 videos = queryset[offset:offset + limit]
                 video_service = self.get_video_service()
                 for video in videos:
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_video_detail', args=[project.uuid, video.uuid])
+                    else:
+                        detail_url = reverse('core:video_detail', args=[video.uuid])
+                    
                     item_data = {
                         'id': str(video.uuid),
                         'type': 'video',
@@ -2598,7 +2699,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'script': video.script[:100] if video.script else '',
                         'signed_url': None,
                         'has_media': video.status == 'completed' and bool(video.gcs_path),
-                        'detail_url': reverse('core:video_detail', args=[video.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:video_delete', args=[video.uuid]),
                     }
                     # Solo generar signed URLs si se pide explícitamente
@@ -2616,6 +2717,12 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 images = queryset[offset:offset + limit]
                 image_service = self.get_image_service()
                 for image in images:
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_image_detail', args=[project.uuid, image.uuid])
+                    else:
+                        detail_url = reverse('core:image_detail', args=[image.uuid])
+                    
                     item_data = {
                         'id': str(image.uuid),
                         'type': 'image',
@@ -2628,7 +2735,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'prompt': image.prompt[:100] if image.prompt else '',
                         'signed_url': None,
                         'has_media': image.status == 'completed' and bool(image.gcs_path),
-                        'detail_url': reverse('core:image_detail', args=[image.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:image_delete', args=[image.uuid]),
                     }
                     # Solo generar signed URLs si se pide explícitamente
@@ -2646,6 +2753,16 @@ class LibraryItemsAPIView(ServiceMixin, View):
                 audios = queryset[offset:offset + limit]
                 audio_service = self.get_audio_service()
                 for audio in audios:
+                    # Obtener info del modelo usando el model_id del audio
+                    model_id = audio.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+                    model_info = get_model_info_for_item('audio', model_key=model_id)
+                    
+                    # Usar URL del proyecto si hay proyecto específico, sino URL genérica
+                    if project:
+                        detail_url = reverse('core:project_audio_detail', args=[project.uuid, audio.uuid])
+                    else:
+                        detail_url = reverse('core:audio_detail', args=[audio.uuid])
+                    
                     item_data = {
                         'id': str(audio.uuid),
                         'type': 'audio',
@@ -2656,8 +2773,10 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'project': audio.project.name if audio.project else None,
                         'signed_url': None,
                         'has_media': audio.status == 'completed' and bool(audio.gcs_path),
-                        'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
+                        'detail_url': detail_url,
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
+                        'model': model_info,  # Información del modelo (nombre, logo, servicio)
+                        'audio_type': audio.type,  # 'tts' o 'music'
                     }
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and audio.status == 'completed' and audio.gcs_path:
@@ -3019,8 +3138,9 @@ class ItemDetailAPIView(ServiceMixin, View):
                     created_at__gt=audio.created_at
                 ).order_by('created_at').first()
                 
-                # Obtener info del modelo
-                model_info = get_model_info_for_item('audio')
+                # Obtener info del modelo usando el model_id del audio
+                model_id = audio.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+                model_info = get_model_info_for_item('audio', model_key=model_id)
                 
                 # URL de detalle con contexto de proyecto si aplica
                 if nav_project_uuid:
@@ -3047,7 +3167,7 @@ class ItemDetailAPIView(ServiceMixin, View):
                             'name': audio.project.name if audio.project else None,
                         },
                         'text': audio.text,
-                        'prompt': audio.text,  # Para consistencia con otros tipos
+                        'prompt': audio.prompt if audio.type == 'music' else audio.text,  # Para música usar prompt, para TTS usar text
                         'error_message': audio.error_message,
                         'signed_url': audio_data.get('signed_url'),
                         'detail_url': detail_url,
@@ -3273,6 +3393,12 @@ class CreateItemAPIView(ServiceMixin, View):
             # Obtener avatar_id y voice_id (requeridos)
             config['avatar_id'] = settings.get('avatar_id') if 'avatar_id' in settings else data.get('avatar_id')
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
+            
+            # Validar campos requeridos ANTES de crear el video
+            if not config.get('avatar_id'):
+                raise ValidationException('El campo Avatar es requerido para HeyGen Avatar V2. Por favor selecciona un avatar.')
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar V2. Por favor selecciona una voz.')
             # Convertir has_background a boolean correctamente
             has_bg_setting = settings.get('has_background', False)
             has_bg_data = data.get('has_background', False)
@@ -3305,6 +3431,10 @@ class CreateItemAPIView(ServiceMixin, View):
             config['voice_id'] = settings.get('voice_id') if 'voice_id' in settings else data.get('voice_id')
             config['video_orientation'] = settings.get('video_orientation') if 'video_orientation' in settings else data.get('video_orientation', 'portrait')
             config['fit'] = settings.get('fit') if 'fit' in settings else data.get('fit', 'cover')
+            
+            # Validar voice_id requerido ANTES de crear el video
+            if not config.get('voice_id'):
+                raise ValidationException('El campo Voz es requerido para HeyGen Avatar IV. Por favor selecciona una voz.')
             
             # Manejar imagen de avatar: puede venir como start_image (formulario dinámico) o avatar_image_id (select)
             # start_image se procesará más abajo en el código, aquí solo manejamos avatar_image_id
@@ -3408,6 +3538,20 @@ class CreateItemAPIView(ServiceMixin, View):
             gcs_path = gcs_storage.upload_django_file(end_file, gcs_destination)
             config['end_image'] = gcs_path
             logger.info(f"✅ Imagen final subida: {gcs_path}")
+        
+        # Validación adicional para HeyGen Avatar IV: requiere imagen de avatar
+        if video_type == 'heygen_avatar_iv':
+            has_avatar_image = (
+                config.get('start_image') or 
+                config.get('gcs_avatar_path') or 
+                config.get('existing_image_id')
+            )
+            if not has_avatar_image:
+                raise ValidationException(
+                    'HeyGen Avatar IV requiere una imagen de avatar. '
+                    'Por favor sube una imagen usando el campo "Start Image" en Referencias, '
+                    'o selecciona una imagen existente.'
+                )
         
         # Crear video
         video = video_service.create_video(
@@ -3540,24 +3684,71 @@ class CreateItemAPIView(ServiceMixin, View):
         return JsonResponse(response_data)
     
     def _create_audio(self, request, data, project, settings):
-        """Crear audio"""
+        """Crear audio (TTS o Música)"""
         from decouple import config as get_config
         
         title = data.get('title')
-        text = data.get('text') or data.get('prompt', '')
-        # voice_id puede venir de settings, data, o usar el default
-        voice_id = settings.get('voice_id') or settings.get('voice') or data.get('voice_id') or get_config('ELEVENLABS_DEFAULT_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+        audio_type = data.get('type', 'tts') or 'tts'  # 'tts' o 'music'
+        model_id = data.get('model_id', '')
         
         audio_service = self.get_audio_service()
         
-        # Crear audio con los parámetros correctos
-        audio = audio_service.create_audio(
-            title=title,
-            text=text,
-            voice_id=voice_id,
-            created_by=request.user,
-            project=project
+        # Determinar si es música basándose en type o model_id
+        is_music = (
+            audio_type == 'music' or 
+            model_id.startswith('lyria-') or 
+            model_id in ['lyria-002']
         )
+        
+        if is_music:
+            # Crear audio de música con Lyria
+            prompt = data.get('prompt') or data.get('text', '')
+            if not prompt:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'El prompt es requerido para generar música'
+                }, status=400)
+            
+            negative_prompt = data.get('negative_prompt')
+            seed = data.get('seed')
+            sample_count = data.get('sample_count')
+            
+            # Convertir seed y sample_count a int si vienen como string
+            if seed is not None:
+                try:
+                    seed = int(seed) if not isinstance(seed, int) else seed
+                except (ValueError, TypeError):
+                    seed = None
+            
+            if sample_count is not None:
+                try:
+                    sample_count = int(sample_count) if not isinstance(sample_count, int) else sample_count
+                except (ValueError, TypeError):
+                    sample_count = None
+            
+            audio = audio_service.create_music_audio(
+                title=title,
+                prompt=prompt,
+                created_by=request.user,
+                model_id=model_id or 'lyria-002',
+                negative_prompt=negative_prompt,
+                seed=seed,
+                sample_count=sample_count,
+                project=project
+            )
+        else:
+            # Crear audio TTS con ElevenLabs
+            text = data.get('text') or data.get('prompt', '')
+            # voice_id puede venir de settings, data, o usar el default
+            voice_id = settings.get('voice_id') or settings.get('voice') or data.get('voice_id') or get_config('ELEVENLABS_DEFAULT_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+            
+            audio = audio_service.create_audio(
+                title=title,
+                text=text,
+                voice_id=voice_id,
+                created_by=request.user,
+                project=project
+            )
         
         # Encolar generación automáticamente
         try:
@@ -3565,10 +3756,11 @@ class CreateItemAPIView(ServiceMixin, View):
             generate_status = 'started'
             audio.refresh_from_db()
             # Mostrar toast de que se encoló la tarea
+            audio_preview = audio.text[:50] if audio.text else (audio.prompt[:50] if audio.prompt else audio.title)
             toast_message = {
                 'type': 'info',
                 'title': 'Audio encolado',
-                'message': f'El audio "{audio.text[:50]}..." está en cola y comenzará a generarse pronto',
+                'message': f'El audio "{audio_preview}..." está en cola y comenzará a generarse pronto',
                 'auto_close': 5
             }
         except Exception as e:
@@ -4177,6 +4369,507 @@ class ImageRecreateView(ServiceMixin, View):
             return redirect('core:image_detail', image_uuid=original_image.uuid)
 
 
+class ImageEditView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para editar una imagen existente con nuevo prompt"""
+    
+    def get(self, request, image_uuid):
+        """Muestra formulario para editar imagen"""
+        from django.shortcuts import render
+        from core.ai_services.model_config import get_models_by_type
+        
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        # Obtener modelos de imagen disponibles (solo OpenAI Image para edición)
+        image_models = [
+            model for model in get_models_by_type('image')
+            if model.get('service') == 'openai_image'
+        ]
+        
+        # Obtener URL firmada de la imagen original
+        from core.storage.gcs import gcs_storage
+        original_image_url = None
+        if original_image.gcs_path:
+            try:
+                original_image_url = gcs_storage.get_signed_url(original_image.gcs_path, expiration=3600)
+            except Exception as e:
+                logger.warning(f"No se pudo obtener URL firmada: {e}")
+        
+        project = original_image.project
+        context = {
+            'original_image': original_image,
+            'original_image_url': original_image_url,
+            'image_models': image_models,
+            'project': project,
+        }
+        
+        # Agregar contexto del proyecto si existe
+        if project:
+            context['user_role'] = project.get_user_role(request.user)
+            context['project_owner'] = project.owner
+            context['project_members'] = project.members.select_related('user').all()
+        
+        return render(request, 'images/edit.html', context)
+    
+    def post(self, request, image_uuid):
+        """Procesa la edición de imagen"""
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        image_service = self.get_image_service()
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        try:
+            # Obtener datos del formulario
+            # Valores por defecto automáticos:
+            title = request.POST.get('title', f'{original_image.title} (editada)')
+            prompt = request.POST.get('prompt', '')
+            model_id = request.POST.get('model_id', 'gpt-image-1.5')
+            aspect_ratio = request.POST.get('aspect_ratio', original_image.aspect_ratio or '1:1')
+            quality = request.POST.get('quality', 'medium')
+            format_type = request.POST.get('format', 'png')  # Siempre PNG por defecto
+            background = request.POST.get('background', 'opaque')  # Siempre opaque por defecto
+            input_fidelity = request.POST.get('input_fidelity', 'low')
+            
+            if not prompt:
+                messages.error(request, 'El prompt es requerido')
+                return redirect('core:image_edit', image_uuid=image_uuid)
+            
+            # Determinar tipo de edición según archivos subidos
+            mask_file = request.FILES.get('mask')
+            reference_images = request.FILES.getlist('reference_images')
+            
+            # Siempre usar image_to_image o multi_image (siempre hay imagen original)
+            if reference_images and len(reference_images) > 0:
+                # Multi-image: imagen original + imágenes de referencia adicionales
+                image_type = 'multi_image'
+            else:
+                # Image-to-image: imagen original + máscara opcional
+                image_type = 'image_to_image'
+            
+            # Construir configuración
+            config = {
+                'model_id': model_id,
+                'aspect_ratio': aspect_ratio,
+                'quality': quality,
+                'format': format_type,
+                'background': background,
+                'input_fidelity': input_fidelity,
+            }
+            
+            # Si es image_to_image o multi_image, necesitamos la imagen original
+            if image_type in ['image_to_image', 'multi_image']:
+                # Usar la imagen original como primera imagen de entrada
+                if original_image.gcs_path:
+                    config['input_image_gcs_path'] = original_image.gcs_path
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_edit', image_uuid=image_uuid)
+            
+            # Si hay máscara, subirla
+            if mask_file:
+                mask_result = image_service.upload_input_image(mask_file, original_image.project)
+                config['mask_gcs_path'] = mask_result['gcs_path']
+            
+            # Si hay imágenes de referencia, subirlas
+            if reference_images and len(reference_images) > 0:
+                reference_results = image_service.upload_multiple_input_images(
+                    reference_images, 
+                    original_image.project
+                )
+                # La primera imagen es la original, luego las referencias
+                input_images = [{'gcs_path': config['input_image_gcs_path']}]
+                input_images.extend(reference_results)
+                config['input_images'] = input_images
+            
+            # Crear nueva imagen
+            new_image = image_service.create_image(
+                title=title,
+                image_type=image_type,
+                prompt=prompt,
+                config=config,
+                created_by=request.user,
+                project=original_image.project
+            )
+            
+            # Generar la imagen automáticamente
+            task = image_service.generate_image_async(new_image)
+            
+            messages.success(
+                request,
+                f'Imagen "{title}" creada y encolada para generación.'
+            )
+            
+            # Redirigir a la nueva imagen
+            if new_image.project:
+                return redirect('core:project_image_detail', project_uuid=new_image.project.uuid, image_uuid=new_image.uuid)
+            else:
+                return redirect('core:image_detail', image_uuid=new_image.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:image_edit', image_uuid=image_uuid)
+        except Exception as e:
+            logger.error(f'Error al editar imagen: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:image_edit', image_uuid=image_uuid)
+
+
+class ImageToVideoView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para crear un video desde una imagen existente"""
+    
+    def post(self, request, image_uuid):
+        """Crea un video desde una imagen"""
+        from django.contrib import messages
+        from core.ai_services.model_config import get_model_capabilities, get_video_type_from_model_id
+        
+        original_image = get_object_or_404(Image, uuid=image_uuid)
+        video_service = self.get_video_service()
+        
+        # Verificar permisos
+        if original_image.project:
+            if not ProjectService.user_has_access(original_image.project, request.user):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        else:
+            if not original_image.created_by or original_image.created_by != request.user:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('No tienes acceso a esta imagen')
+        
+        try:
+            # Obtener datos del formulario
+            prompt = request.POST.get('prompt', '')
+            model_id = request.POST.get('model_id', 'veo-3.1-generate-preview')
+            duration = request.POST.get('duration')
+            aspect_ratio = request.POST.get('aspect_ratio')
+            
+            if not prompt:
+                messages.error(request, 'El prompt es requerido')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Validar que el modelo soporte image-to-video
+            capabilities = get_model_capabilities(model_id)
+            if not capabilities:
+                messages.error(request, f'Modelo {model_id} no encontrado')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            supports = capabilities.get('supports', {})
+            if not supports.get('image_to_video') and not supports.get('references', {}).get('start_image'):
+                messages.error(request, f'El modelo {model_id} no soporta image-to-video')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Obtener tipo de video desde model_id
+            video_type = get_video_type_from_model_id(model_id)
+            if not video_type:
+                messages.error(request, f'No se pudo determinar el tipo de video para el modelo {model_id}')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Determinar aspect ratio final
+            final_aspect_ratio = aspect_ratio or original_image.aspect_ratio or '16:9'
+            
+            # Construir configuración del video
+            config = {
+                'model_id': model_id,
+                'aspect_ratio': final_aspect_ratio,
+            }
+            
+            # Duración del formulario o por defecto según el modelo
+            if duration:
+                try:
+                    config['duration'] = int(duration)
+                except (ValueError, TypeError):
+                    # Si no se puede convertir, usar valor por defecto del modelo
+                    duration_config = supports.get('duration', {})
+                    if duration_config.get('fixed'):
+                        config['duration'] = duration_config['fixed']
+                    elif duration_config.get('options'):
+                        config['duration'] = duration_config['options'][0]
+                    elif duration_config.get('min'):
+                        config['duration'] = duration_config['min']
+                    else:
+                        config['duration'] = 8
+            else:
+                # Usar valor por defecto del modelo (fallback si no viene del formulario)
+                duration_config = supports.get('duration', {})
+                if duration_config.get('fixed'):
+                    config['duration'] = duration_config['fixed']
+                elif duration_config.get('options'):
+                    config['duration'] = duration_config['options'][0]
+                elif duration_config.get('min'):
+                    config['duration'] = duration_config['min']
+                else:
+                    config['duration'] = 8
+            
+            # Configurar imagen de entrada según el tipo de video
+            if video_type == 'gemini_veo':
+                # Veo usa input_image_gcs_uri
+                if original_image.gcs_path:
+                    config['input_image_gcs_uri'] = original_image.gcs_path
+                    config['input_image_mime_type'] = 'image/png'  # Por defecto PNG
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            elif video_type == 'sora':
+                # Sora usa input_reference_gcs_path
+                # Redimensionar y subir la imagen a GCS ANTES de crear el video
+                if original_image.gcs_path:
+                    from core.storage.gcs import gcs_storage
+                    from PIL import Image as PILImage
+                    from io import BytesIO
+                    try:
+                        # Mapear aspect ratio a tamaño de Sora
+                        size_map = {
+                            '16:9': (1280, 720),
+                            '9:16': (720, 1280),
+                            '1:1': (1024, 1024),
+                        }
+                        target_size = size_map.get(final_aspect_ratio, (1280, 720))
+                        
+                        # Descargar imagen desde GCS
+                        blob_name = original_image.gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                        blob = gcs_storage.bucket.blob(blob_name)
+                        image_data = blob.download_as_bytes()
+                        
+                        # Redimensionar imagen al tamaño requerido por Sora
+                        pil_image = PILImage.open(BytesIO(image_data))
+                        original_size = pil_image.size
+                        
+                        # Redimensionar manteniendo aspect ratio y luego recortar/rellenar si es necesario
+                        pil_image = pil_image.resize(target_size, PILImage.Resampling.LANCZOS)
+                        
+                        # Convertir a RGB si es necesario (Sora requiere RGB)
+                        if pil_image.mode in ('RGBA', 'LA', 'P'):
+                            rgb_image = PILImage.new('RGB', pil_image.size, (255, 255, 255))
+                            if pil_image.mode == 'P':
+                                pil_image = pil_image.convert('RGBA')
+                            rgb_image.paste(pil_image, mask=pil_image.split()[-1] if pil_image.mode == 'RGBA' else None)
+                            pil_image = rgb_image
+                        elif pil_image.mode != 'RGB':
+                            pil_image = pil_image.convert('RGB')
+                        
+                        # Guardar imagen redimensionada en bytes
+                        output = BytesIO()
+                        pil_image.save(output, format='PNG', quality=95)
+                        resized_image_data = output.getvalue()
+                        
+                        logger.info(f"Imagen redimensionada de {original_size} a {target_size} para Sora")
+                        
+                        # Subir a GCS como input_reference ANTES de crear el video
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        gcs_destination = f"projects/{original_image.project.id if original_image.project else 'none'}/videos/temp_input_reference_{timestamp}.png"
+                        gcs_path = gcs_storage.upload_from_bytes(
+                            file_content=resized_image_data,
+                            destination_path=gcs_destination,
+                            content_type='image/png'
+                        )
+                        
+                        # Guardar path en config (no los bytes)
+                        config['input_reference_gcs_path'] = gcs_path
+                        config['input_reference_mime_type'] = 'image/png'
+                        config['use_input_reference'] = True
+                    except Exception as e:
+                        logger.error(f"Error procesando imagen para Sora: {e}", exc_info=True)
+                        messages.error(request, 'Error al procesar la imagen para Sora')
+                        return redirect('core:image_detail', image_uuid=image_uuid)
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            else:
+                # Otros servicios (Higgsfield, Kling, etc.)
+                if original_image.gcs_path:
+                    # Obtener URL firmada para otros servicios
+                    from core.storage.gcs import gcs_storage
+                    try:
+                        image_url = gcs_storage.get_signed_url(original_image.gcs_path, expiration=3600)
+                        config['image_url'] = image_url
+                    except Exception as e:
+                        logger.error(f"Error obteniendo URL firmada: {e}")
+                        messages.error(request, 'Error al obtener URL de la imagen')
+                        return redirect('core:image_detail', image_uuid=image_uuid)
+                else:
+                    messages.error(request, 'La imagen original no tiene archivo disponible')
+                    return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Duración por defecto según el modelo
+            duration_config = supports.get('duration', {})
+            if duration_config:
+                if duration_config.get('fixed'):
+                    config['duration'] = duration_config['fixed']
+                elif duration_config.get('options'):
+                    config['duration'] = duration_config['options'][0]
+                elif duration_config.get('min'):
+                    config['duration'] = duration_config['min']
+                else:
+                    config['duration'] = 8
+            else:
+                config['duration'] = 8
+            
+            # Crear video
+            video_title = f"Video desde {original_image.title}"
+            new_video = video_service.create_video(
+                created_by=request.user,
+                project=original_image.project,
+                title=video_title,
+                video_type=video_type,
+                script=prompt,
+                config=config
+            )
+            
+            # Para Sora, mover el archivo temporal a la ubicación final del video
+            if video_type == 'sora' and config.get('input_reference_gcs_path'):
+                from core.storage.gcs import gcs_storage
+                try:
+                    # Mover de temp a la ubicación final del video
+                    old_path = config['input_reference_gcs_path']
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    new_gcs_destination = f"projects/{new_video.project.id if new_video.project else 'none'}/videos/{new_video.id}/input_reference_{timestamp}.png"
+                    
+                    # Copiar el archivo a la nueva ubicación
+                    old_blob_name = old_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                    new_blob_name = new_gcs_destination.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+                    
+                    old_blob = gcs_storage.bucket.blob(old_blob_name)
+                    new_blob = gcs_storage.bucket.blob(new_blob_name)
+                    new_blob.upload_from_string(old_blob.download_as_bytes(), content_type='image/png')
+                    
+                    # Actualizar config con la nueva ruta
+                    new_gcs_path = f"gs://{settings.GCS_BUCKET_NAME}/{new_gcs_destination}"
+                    config['input_reference_gcs_path'] = new_gcs_path
+                    new_video.config = config
+                    new_video.save(update_fields=['config'])
+                    
+                    # Eliminar archivo temporal
+                    try:
+                        old_blob.delete()
+                    except Exception:
+                        pass  # Ignorar si no se puede eliminar
+                except Exception as e:
+                    logger.error(f"Error moviendo input_reference para Sora: {e}")
+                    # Continuar de todas formas, el path temporal también funciona
+            
+            # Generar el video automáticamente
+            task = video_service.generate_video_async(new_video)
+            
+            messages.success(
+                request,
+                f'Video "{video_title}" creado y encolado para generación.'
+            )
+            
+            # Redirigir al nuevo video
+            if new_video.project:
+                return redirect('core:project_video_detail', project_uuid=new_video.project.uuid, video_uuid=new_video.uuid)
+            else:
+                return redirect('core:video_detail', video_uuid=new_video.uuid)
+                
+        except InsufficientCreditsException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except RateLimitExceededException as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except (ValidationException, ServiceException) as e:
+            messages.error(request, str(e))
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        except Exception as e:
+            logger.error(f'Error al crear video desde imagen: {e}', exc_info=True)
+            messages.error(request, f'Error inesperado: {str(e)}')
+            return redirect('core:image_detail', image_uuid=image_uuid)
+
+
+class ImageUpscaleView(LoginRequiredMixin, ServiceMixin, View):
+    """View para escalar imágenes usando Vertex AI Imagen Upscale"""
+    
+    def post(self, request, image_uuid):
+        """
+        Escala una imagen usando Vertex AI Imagen Upscale
+        
+        Args:
+            image_uuid: UUID de la imagen a escalar
+        """
+        from core.models import Image
+        from core.services import ImageService
+        from django.contrib import messages
+        
+        try:
+            # Obtener imagen
+            original_image = Image.objects.get(uuid=image_uuid)
+            
+            # Verificar permisos
+            if original_image.project:
+                if not ProjectService.user_has_access(original_image.project, request.user):
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('No tienes acceso a esta imagen')
+            else:
+                if not original_image.created_by or original_image.created_by != request.user:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('No tienes acceso a esta imagen')
+            
+            # Verificar que la imagen tenga archivo
+            if not original_image.gcs_path:
+                messages.error(request, 'La imagen no tiene archivo disponible para escalar')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Obtener parámetros del formulario
+            upscale_factor = request.POST.get('upscale_factor', 'x4')
+            output_mime_type = request.POST.get('output_mime_type', 'image/png')
+            
+            # Validar upscale_factor
+            if upscale_factor not in ['x2', 'x3', 'x4']:
+                messages.error(request, 'Factor de escalado inválido. Debe ser x2, x3 o x4')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Validar output_mime_type
+            valid_mime_types = ['image/png', 'image/jpeg']
+            if output_mime_type not in valid_mime_types:
+                messages.error(request, f'Formato de salida inválido. Debe ser uno de: {", ".join(valid_mime_types)}')
+                return redirect('core:image_detail', image_uuid=image_uuid)
+            
+            # Encolar upscale de forma asíncrona
+            image_service = ImageService()
+            task = image_service.upscale_image_async(
+                original_image=original_image,
+                upscale_factor=upscale_factor,
+                output_mime_type=output_mime_type
+            )
+            
+            messages.success(
+                request,
+                f'Upscale de imagen encolado ({upscale_factor}). La nueva imagen se generará en breve y aparecerá en tu biblioteca.'
+            )
+            
+            return redirect('core:image_detail', image_uuid=image_uuid)
+        
+        except Image.DoesNotExist:
+            messages.error(request, 'Imagen no encontrada')
+            return redirect('core:image_list')
+        except Exception as e:
+            logger.error(f"Error al escalar imagen: {e}", exc_info=True)
+            messages.error(request, f'Error al escalar imagen: {str(e)}')
+            return redirect('core:image_detail', image_uuid=image_uuid)
+
+
 class ImageRemoveBackgroundView(LoginRequiredMixin, ServiceMixin, View):
     """Vista para encolar una tarea de remoción de fondo usando rembg + BiRefNet"""
     
@@ -4352,6 +5045,11 @@ class AudioDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Detai
         context['active_tab'] = 'audio'
         context['initial_item_type'] = 'audio'
         context['initial_item_id'] = str(self.object.uuid)
+        
+        # Obtener información del modelo usado
+        model_id = self.object.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
+        model_info = get_model_info_for_item('audio', model_key=model_id)
+        context['model_info'] = model_info
         if project:
             context['project'] = project
             context['user_role'] = project.get_user_role(self.request.user)
@@ -5432,12 +6130,35 @@ class AgentFinalView(BreadcrumbMixin, ServiceMixin, View):
             
             # Calcular duración total
             total_duration = sum(scene.duration_sec for scene in scenes)
+
+            # Detectar qué servicios se usaron en las escenas
+            unique_services = set(scene.ai_service for scene in scenes)
+
+            # Determinar el tipo de video final dinámicamente
+            if len(unique_services) > 1:
+                # Si hay más de un servicio distinto (ej: Veo + Sora), es mixto
+                final_video_type = 'mixed'
+            elif len(unique_services) == 1:
+                # Si todas las escenas usan el mismo servicio, intentamos heredar el tipo
+                service = list(unique_services)[0]
+                
+                # Mapeo de ai_service (Scene) a type (Video)
+                if service == 'gemini_veo':
+                    final_video_type = 'gemini_veo'
+                elif service == 'sora':
+                    final_video_type = 'sora'
+                elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
+                    final_video_type = 'heygen_avatar_v2'
+                else:
+                    final_video_type = 'general'
+            else:
+                final_video_type = 'general'
             
             # Crear objeto Video final
             video = Video.objects.create(
                 project=project,
                 title=video_title,
-                type='gemini_veo',  # Tipo genérico, podría ser mixto
+                type=final_video_type,  # Tipo genérico, podría ser mixto
                 status='completed',
                 script=f"Video generado por agente con {scenes.count()} escenas",
                 config={
@@ -5852,13 +6573,37 @@ class AgentFinalStandaloneView(BreadcrumbMixin, ServiceMixin, View):
             
             # Calcular duración total
             total_duration = sum(scene.duration_sec for scene in scenes)
+
+            
+            # Detectar qué servicios se usaron en las escenas
+            unique_services = set(scene.ai_service for scene in scenes)
+
+            # Determinar el tipo de video final dinámicamente
+            if len(unique_services) > 1:
+                # Si hay más de un servicio distinto (ej: Veo + Sora), es mixto
+                final_video_type = 'mixed'
+            elif len(unique_services) == 1:
+                # Si todas las escenas usan el mismo servicio, intentamos heredar el tipo
+                service = list(unique_services)[0]
+                
+                # Mapeo de ai_service (Scene) a type (Video)
+                if service == 'gemini_veo':
+                    final_video_type = 'gemini_veo'
+                elif service == 'sora':
+                    final_video_type = 'sora'
+                elif service in ['heygen_v2', 'heygen_avatar_iv', 'heygen']:
+                    final_video_type = 'heygen_avatar_v2'
+                else:
+                    final_video_type = 'general'
+            else:
+                final_video_type = 'general'
             
             # Crear objeto Video final sin proyecto
             video = Video.objects.create(
                 project=None,  # Sin proyecto
                 created_by=request.user,
                 title=video_title,
-                type='gemini_veo',
+                type=final_video_type,
                 status='completed',
                 script=f"Video generado por agente con {scenes.count()} escenas",
                 config={
@@ -6399,22 +7144,14 @@ class SceneUploadCustomImageView(View):
             
             image_file = request.FILES['image_file']
             
-            # Validar tipo de archivo
+            # Validaciones de tipo y tamaño...
             allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
             file_ext = os.path.splitext(image_file.name)[1].lower()
             if file_ext not in allowed_extensions:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': f'Formato no soportado. Use: {", ".join(allowed_extensions)}'
-                }, status=400)
+                return JsonResponse({'status': 'error', 'message': 'Formato no soportado'}, status=400)
             
-            # Validar tamaño (max 10MB)
-            max_size = 10 * 1024 * 1024  # 10MB
-            if image_file.size > max_size:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'La imagen es demasiado grande. Tamaño máximo: 10MB'
-                }, status=400)
+            if image_file.size > 10 * 1024 * 1024:
+                return JsonResponse({'status': 'error', 'message': 'Imagen demasiado grande'}, status=400)
             
             # Subir a GCS
             from .storage.gcs import gcs_storage
@@ -6422,16 +7159,28 @@ class SceneUploadCustomImageView(View):
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             safe_filename = os.path.basename(image_file.name)
-            gcs_destination = f"projects/{scene.project.id}/scenes/{scene.id}/custom_preview_{timestamp}_{safe_filename}"
+            
+            # Manejo de Standalone vs Proyecto
+            project_id_str = scene.project.id if scene.project else 'standalone'
+            gcs_destination = f"projects/{project_id_str}/scenes/{scene.id}/custom_preview_{timestamp}_{safe_filename}"
             
             logger.info(f"Subiendo imagen personalizada a GCS: {safe_filename}")
             gcs_path = gcs_storage.upload_django_file(image_file, gcs_destination)
             
-            # Establecer como preview de la escena
-            scene.preview_image_path = gcs_path
-            scene.save()
+            # --- CORRECCIÓN AQUÍ ---
+            # 1. Guardar la ruta en el campo correcto (asegúrate que tu modelo usa preview_image_gcs_path)
+            scene.preview_image_gcs_path = gcs_path
             
-            logger.info(f"✓ Imagen personalizada subida para escena {scene.id}: {gcs_path}")
+            # 2. IMPORTANTE: Marcar el estado como completado para que el HTML lo muestre
+            scene.preview_image_status = 'completed'
+            
+            # 3. Opcional: Marcar la fuente para mostrar el badge "Subida"
+            scene.image_source = 'user_upload'
+            
+            scene.save()
+            # -----------------------
+            
+            logger.info(f"✓ Imagen personalizada subida y activada para escena {scene.id}")
             
             return JsonResponse({
                 'status': 'success',
@@ -6445,7 +7194,6 @@ class SceneUploadCustomImageView(View):
                 'status': 'error',
                 'message': f'Error: {str(e)}'
             }, status=500)
-
 
 class SceneUpdateConfigView(View):
     """Actualizar configuración de una escena"""
@@ -7059,8 +7807,9 @@ class FreepikSetSceneImageView(View):
             
             try:
                 # Subir a GCS
-                gcs_path = f"projects/{scene.project.id}/scenes/{scene.id}/preview_freepik.jpg"
-                
+                project_id_str = scene.project.id if scene.project else 'standalone'
+                gcs_path = f"projects/{project_id_str}/scenes/{scene.id}/preview_freepik.jpg"   
+                             
                 with open(tmp_path, 'rb') as image_file:
                     gcs_full_path = gcs_storage.upload_from_bytes(
                         file_content=image_file.read(),
@@ -7602,12 +8351,21 @@ class UserMenuView(View):
 
                 # Send activation email
                 try:
+                    from django.core.mail import EmailMultiAlternatives
                     context = {'user': user, 'activation_url': activation_url}
                     subject = 'Activa tu cuenta en Atenea'
-                    message = render_to_string('users/activation_email.txt', context)
+                    text_content = render_to_string('users/activation_email.txt', context)
+                    html_content = render_to_string('users/activation_email.html', context)
                     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-                    from django.core.mail import send_mail
-                    send_mail(subject, message, from_email, [user.email], fail_silently=False)
+                    
+                    email = EmailMultiAlternatives(
+                        subject,
+                        text_content,
+                        from_email,
+                        [user.email]
+                    )
+                    email.attach_alternative(html_content, "text/html")
+                    email.send(fail_silently=False)
                 except Exception as e:
                     logger.error(f"Error enviando email de activación a {user.email}: {e}")
 
@@ -8883,6 +9641,142 @@ class StockVideoProxyView(LoginRequiredMixin, View):
             return HttpResponse('Error interno', status=500)
 
 
+class ItemDownloadView(LoginRequiredMixin, ServiceMixin, View):
+    """View para descargar archivos de items (video, image, audio) forzando descarga"""
+    
+    def get(self, request, item_type, item_id):
+        """
+        Descarga un archivo desde GCS forzando la descarga (no abrir en navegador)
+        
+        Args:
+            item_type: 'video', 'image', 'audio'
+            item_id: UUID del item
+        """
+        from django.http import HttpResponse, Http404
+        from django.db.models import Q
+        import uuid as uuid_module
+        
+        # Validar y convertir item_id a UUID
+        try:
+            item_uuid = uuid_module.UUID(item_id)
+        except (ValueError, TypeError):
+            raise Http404('ID de item inválido')
+        
+        user = request.user
+        user_projects = ProjectService.get_user_projects(user)
+        user_project_ids = [p.id for p in user_projects]
+        
+        # Obtener el item según el tipo
+        if item_type == 'video':
+            from core.models import Video
+            item = get_object_or_404(Video, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a este video')
+                
+        elif item_type == 'image':
+            from core.models import Image
+            item = get_object_or_404(Image, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a esta imagen')
+                
+        elif item_type == 'audio':
+            from core.models import Audio
+            item = get_object_or_404(Audio, uuid=item_uuid)
+            gcs_path = item.gcs_path
+            
+            # Verificar acceso
+            has_project_access = item.project_id in user_project_ids if item.project_id else False
+            has_direct_access = item.project is None and item.created_by_id and item.created_by_id == user.id
+            if not (has_project_access or has_direct_access):
+                raise Http404('No tienes acceso a este audio')
+        else:
+            raise Http404('Tipo de item inválido')
+        
+        # Verificar que el item tenga archivo
+        if not gcs_path:
+            raise Http404('El item no tiene archivo disponible')
+        
+        # Verificar que el archivo esté completado
+        if item.status != 'completed':
+            raise Http404('El archivo aún no está disponible para descarga')
+        
+        try:
+            # Descargar archivo desde GCS
+            from core.storage.gcs import gcs_storage
+            
+            blob_name = gcs_path.replace(f"gs://{settings.GCS_BUCKET_NAME}/", "")
+            blob = gcs_storage.bucket.blob(blob_name)
+            
+            if not blob.exists():
+                raise Http404('El archivo no existe en GCS')
+            
+            # Descargar contenido
+            file_content = blob.download_as_bytes()
+            
+            # Obtener content type del blob
+            content_type = blob.content_type or 'application/octet-stream'
+            
+            # Determinar extensión y nombre de archivo
+            import os
+            filename = item.title or 'download'
+            # Limpiar nombre de archivo
+            safe_filename = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_filename = safe_filename.replace(' ', '_')[:50]  # Limitar longitud
+            
+            # Determinar extensión según content type o tipo de item
+            extension_map = {
+                'image/png': '.png',
+                'image/jpeg': '.jpg',
+                'image/jpg': '.jpg',
+                'image/webp': '.webp',
+                'image/gif': '.gif',
+                'video/mp4': '.mp4',
+                'video/webm': '.webm',
+                'video/quicktime': '.mov',
+                'audio/mpeg': '.mp3',
+                'audio/wav': '.wav',
+                'audio/ogg': '.ogg',
+                'audio/mp4': '.m4a',
+            }
+            
+            extension = extension_map.get(content_type, '')
+            if not extension:
+                # Fallback según tipo de item
+                if item_type == 'image':
+                    extension = '.png'
+                elif item_type == 'video':
+                    extension = '.mp4'
+                elif item_type == 'audio':
+                    extension = '.mp3'
+            
+            # Asegurar que el nombre tenga extensión
+            if not safe_filename.endswith(extension):
+                safe_filename += extension
+            
+            # Crear respuesta con headers de descarga
+            response = HttpResponse(file_content, content_type=content_type)
+            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+            response['Content-Length'] = len(file_content)
+            
+            logger.info(f"Descarga de {item_type} {item_uuid}: {safe_filename} ({len(file_content)} bytes)")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error al descargar {item_type} {item_uuid}: {e}", exc_info=True)
+            raise Http404('Error al descargar el archivo')
+
+
 class StockDownloadView(LoginRequiredMixin, View):
     """Vista para descargar contenido stock y guardarlo en BD"""
     
@@ -9758,3 +10652,150 @@ class PromptTemplateFavoriteAPIView(LoginRequiredMixin, View):
                 'error': 'Error al marcar favorito',
                 'error_detail': str(e)
             }, status=500)
+
+
+class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
+    """Vista para subir archivos desde el dispositivo a la biblioteca"""
+
+    def get(self, request):
+        """Muestra el formulario de subida"""
+        return render(request, 'library/upload.html')
+
+    def post(self, request):
+        """Procesa la subida del archivo"""
+        from core.storage.gcs import gcs_storage
+        from django.utils.crypto import get_random_string
+        import mimetypes
+
+        try:
+            # Obtener el archivo del request
+            uploaded_file = request.FILES.get('file')
+            if not uploaded_file:
+                messages.error(request, 'No se seleccionó ningún archivo')
+                return redirect('core:library')
+
+            # Validar tamaño del archivo (máximo 500MB)
+            max_size = 500 * 1024 * 1024  # 500MB
+            if uploaded_file.size > max_size:
+                messages.error(request, f'El archivo es demasiado grande. Máximo permitido: 500MB. Archivo actual: {uploaded_file.size / (1024*1024):.1f}MB')
+                return redirect('core:library')
+
+            # Validar nombre de archivo (seguridad básica)
+            if not uploaded_file.name or len(uploaded_file.name) > 255:
+                messages.error(request, 'Nombre de archivo inválido')
+                return redirect('core:library')
+
+            # Determinar el tipo de archivo basado en content_type
+            content_type = uploaded_file.content_type.lower() if uploaded_file.content_type else ''
+            
+            # Mapeo explícito de tipos MIME permitidos para seguridad
+            ALLOWED_VIDEO_TYPES = {
+                'video/mp4': 'mp4',
+                'video/webm': 'webm',
+                'video/quicktime': 'mov',
+                'video/x-msvideo': 'avi',
+                'video/x-matroska': 'mkv',
+            }
+            
+            ALLOWED_IMAGE_TYPES = {
+                'image/jpeg': 'jpg',
+                'image/png': 'png',
+                'image/gif': 'gif',
+                'image/webp': 'webp',
+            }
+            
+            ALLOWED_AUDIO_TYPES = {
+                'audio/mpeg': 'mp3',
+                'audio/wav': 'wav',
+                'audio/ogg': 'ogg',
+                'audio/mp4': 'm4a',
+                'audio/x-m4a': 'm4a',
+            }
+            
+            file_type = None
+            model_class = None
+            file_extension = None
+
+            # Validar contra listas blancas explícitas
+            if content_type in ALLOWED_VIDEO_TYPES:
+                file_type = 'video'
+                model_class = Video
+                file_extension = ALLOWED_VIDEO_TYPES[content_type]
+            elif content_type in ALLOWED_IMAGE_TYPES:
+                file_type = 'image'
+                model_class = Image
+                file_extension = ALLOWED_IMAGE_TYPES[content_type]
+            elif content_type in ALLOWED_AUDIO_TYPES:
+                file_type = 'audio'
+                model_class = Audio
+                file_extension = ALLOWED_AUDIO_TYPES[content_type]
+
+            if not file_type:
+                messages.error(request, f'Tipo de archivo no soportado: {content_type}. Solo se permiten videos (MP4, WebM, MOV, AVI), imágenes (JPG, PNG, GIF, WebP) y audios (MP3, WAV, OGG, M4A).')
+                return redirect('core:library')
+
+            # Generar nombre único para el archivo
+            random_suffix = get_random_string(8)
+            filename = f"{file_type}s/{request.user.id}/{timezone.now().strftime('%Y%m%d_%H%M%S')}_{random_suffix}.{file_extension}"
+            
+            # Subir a GCS con manejo de errores específico
+            try:
+                gcs_path = gcs_storage.upload_django_file(uploaded_file, filename)
+                logger.info(f"Archivo subido a GCS: {gcs_path} por usuario {request.user.id}")
+            except Exception as gcs_error:
+                logger.error(f"Error al subir a GCS: {gcs_error}", exc_info=True)
+                messages.error(request, 'Error al subir el archivo al almacenamiento. Por favor, intenta de nuevo.')
+                return redirect('core:library')
+
+            # Crear el registro en la base de datos
+            item_data = {
+                'created_by': request.user,
+                'title': uploaded_file.name[:255],  # Truncar a longitud máxima
+                'status': 'completed',
+                'gcs_path': gcs_path,
+                'completed_at': timezone.now(),
+            }
+
+            # Campos específicos por tipo con validación
+            if file_type == 'video':
+                item_data.update({
+                    'type': 'uploaded_video',
+                    'script': '',  # Campo requerido, vacío para uploads
+                    'duration': None,
+                    'config': {},  # Asegurar que config existe
+                })
+            elif file_type == 'image':
+                item_data.update({
+                    'type': 'uploaded_image',
+                    'prompt': '',  # Campo requerido, vacío para uploads
+                    'width': None,
+                    'height': None,
+                    'config': {},
+                })
+            elif file_type == 'audio':
+                item_data.update({
+                    'type': 'uploaded_audio',
+                    'duration': None,
+                })
+
+            # Crear el objeto con manejo de errores
+            try:
+                item = model_class.objects.create(**item_data)
+                logger.info(f"{file_type.title()} creado: ID={item.id}, usuario={request.user.id}")
+                messages.success(request, f'{file_type.title()} "{uploaded_file.name}" subido correctamente a tu biblioteca.')
+                return redirect('core:library')
+            except Exception as db_error:
+                logger.error(f"Error al crear registro en BD: {db_error}", exc_info=True)
+                # Intentar eliminar archivo de GCS si falla la creación en BD
+                try:
+                    gcs_storage.delete_file(gcs_path)
+                    logger.info(f"Archivo eliminado de GCS tras error en BD: {gcs_path}")
+                except:
+                    pass
+                messages.error(request, 'Error al guardar el archivo en la base de datos.')
+                return redirect('core:library')
+
+        except Exception as e:
+            logger.error(f"Error inesperado al subir archivo: {e}", exc_info=True)
+            messages.error(request, 'Error inesperado al subir el archivo. Por favor, contacta al soporte.')
+            return redirect('core:library')

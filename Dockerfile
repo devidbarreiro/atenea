@@ -41,6 +41,9 @@ COPY . .
 RUN mkdir -p logs static media temp_uploads && \
     chmod -R 755 logs static media temp_uploads
 
+# Dar permisos de ejecución a los scripts
+RUN chmod +x scripts/*.sh start.sh 2>/dev/null || true
+
 # Crear usuario no-root
 RUN useradd -m -u 1000 django && \
     chown -R django:django /app

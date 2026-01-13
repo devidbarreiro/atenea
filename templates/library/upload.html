@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+
+{% block title %}Subir Archivo - Atenea{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-8">
+    <div class="flex items-center gap-4 mb-4">
+        <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-800">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+        </a>
+        <h1 class="text-4xl font-bold">Subir Archivo</h1>
+    </div>
+    <p class="text-gray-600">Sube videos, imágenes o audios desde tu dispositivo a tu biblioteca</p>
+</div>
+
+<!-- Formulario de subida -->
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Selector de archivo -->
+            <div>
+                <label for="file" class="block text-sm font-medium text-gray-700 mb-2">
+                    Seleccionar Archivo
+                </label>
+                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
+                    <div class="space-y-1 text-center">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                        <div class="flex text-sm text-gray-600">
+                            <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-black hover:text-gray-800 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-black">
+                                <span>Subir un archivo</span>
+                                <input id="file" name="file" type="file" accept="video/*,image/*,audio/*" class="sr-only" required>
+                            </label>
+                            <p class="pl-1">o arrastra y suelta</p>
+                        </div>
+                        <p class="text-xs text-gray-500">
+                            Videos, imágenes, audios hasta 500MB
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Mostrar archivo seleccionado -->
+                <div id="file-info" class="mt-4 hidden">
+                    <div class="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                        <div class="flex items-center space-x-3">
+                            <div id="file-icon" class="text-2xl">
+                                📄
+                            </div>
+                            <div>
+                                <p id="file-name" class="text-sm font-medium text-gray-900"></p>
+                                <p id="file-size" class="text-xs text-gray-500"></p>
+                            </div>
+                        </div>
+                        <button type="button" id="remove-file" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="flex gap-4 pt-4">
+                <button type="submit" class="flex-1 bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" id="submit-btn" disabled>
+                    Subir Archivo
+                </button>
+                <a href="{% url 'core:library' %}" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Función para formatear tamaño de archivo
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Función para obtener icono según tipo de archivo
+function getFileIcon(contentType) {
+    if (contentType.startsWith('video/')) return '🎥';
+    if (contentType.startsWith('image/')) return '🖼️';
+    if (contentType.startsWith('audio/')) return '🔊';
+    return '📄';
+}
+
+// Manejar selección de archivo
+document.getElementById('file').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+    const fileIcon = document.getElementById('file-icon');
+    const submitBtn = document.getElementById('submit-btn');
+
+    if (file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileIcon.textContent = getFileIcon(file.type);
+        fileInfo.classList.remove('hidden');
+        submitBtn.disabled = false;
+    } else {
+        fileInfo.classList.add('hidden');
+        submitBtn.disabled = true;
+    }
+});
+
+// Manejar eliminación de archivo
+document.getElementById('remove-file').addEventListener('click', function() {
+    document.getElementById('file').value = '';
+    document.getElementById('file-info').classList.add('hidden');
+    document.getElementById('submit-btn').disabled = true;
+});
+
+// Drag and drop
+const dropZone = document.querySelector('.border-dashed');
+const fileInput = document.getElementById('file');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, highlight, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, unhighlight, false);
+});
+
+function highlight(e) {
+    dropZone.classList.add('border-black', 'bg-gray-50');
+}
+
+function unhighlight(e) {
+    dropZone.classList.remove('border-black', 'bg-gray-50');
+}
+
+dropZone.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+
+    if (files.length > 0) {
+        fileInput.files = files;
+        fileInput.dispatchEvent(new Event('change'));
+    }
+}
+</script>
+{% endblock %}

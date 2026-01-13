@@ -200,6 +200,7 @@ class ManimClient:
         container_color: Optional[str] = None,
         text_color: Optional[str] = None,
         font_family: Optional[str] = None,
+        display_time: Optional[float] = None,
         unique_id: Optional[str] = None
     ) -> Dict[str, str]:
         """
@@ -213,6 +214,7 @@ class ManimClient:
             container_color: Color del contenedor en formato hex (ej: #0066CC)
             text_color: Color del texto en formato hex (ej: #FFFFFF)
             font_family: Tipo de fuente (normal/bold/italic/bold_italic)
+            display_time: Tiempo de visualización en pantalla (segundos)
         
         Returns:
             Dict con 'video_path'
@@ -265,6 +267,7 @@ class ManimClient:
             'text': quote,
             'author': author if author and author.strip() else None,
             'duration': duration,
+            'display_time': display_time,
             'container_color': container_color or '#0066CC',
             'text_color': text_color or '#FFFFFF',
             'font_family': font_family or 'normal',

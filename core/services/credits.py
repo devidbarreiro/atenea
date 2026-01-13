@@ -49,6 +49,18 @@ class CreditService:
         'gemini_image': {
             'image': 2,  # por imagen
         },
+        # OpenAI GPT Image (precios según documentación oficial)
+        # Input text: $5/M tokens, Input image: $10/M tokens, Output: $40/M tokens
+        # Tokens output según calidad: Low (272-408), Medium (1056-1584), High (4160-6240)
+        'openai_image': {
+            'text_to_image': 5,      # ~1056 tokens output (Medium) = $0.042 → ~5 créditos
+            'image_to_image': 6,     # ~1056 tokens output + input image tokens = $0.05 → ~6 créditos
+            'multi_image': 8,        # ~1056 tokens output + múltiples input tokens = $0.06-0.08 → ~8 créditos
+            # Precios por calidad (para cálculo más preciso si se necesita)
+            'low': 3,                # ~272 tokens output = $0.011 → ~3 créditos
+            'medium': 5,             # ~1056 tokens output = $0.042 → ~5 créditos
+            'high': 20,              # ~4160 tokens output = $0.166 → ~20 créditos
+        },
         'elevenlabs': {
             'per_character': Decimal('0.017'),  # por carácter
         },
@@ -357,6 +369,39 @@ class CreditService:
     @staticmethod
     def calculate_image_cost(image):
         """Calcula costo de una imagen"""
+        # Obtener model_id del config
+        model_id = image.config.get('model_id') if image.config else None
+        
+        # Si es OpenAI Image, calcular según tipo y calidad
+        if model_id in ['gpt-image-1', 'gpt-image-1.5']:
+            image_type = image.type  # 'text_to_image', 'image_to_image', 'multi_image'
+            quality = image.config.get('quality', 'medium') if image.config else 'medium'
+            
+            # Mapear calidad a precio base
+            quality_map = {
+                'low': 'low',
+                'medium': 'medium',
+                'high': 'high',
+                'auto': 'medium',  # Auto usa medium por defecto
+            }
+            quality_key = quality_map.get(quality.lower(), 'medium')
+            base_cost = CreditService.PRICING['openai_image'].get(quality_key, 5)
+            
+            # Ajustar según tipo de imagen
+            if image_type == 'text_to_image':
+                # Text-to-image usa el precio base según calidad
+                return Decimal(str(base_cost))
+            elif image_type == 'image_to_image':
+                # Image-to-image: precio base + 1 crédito extra por input image
+                return Decimal(str(base_cost + 1))
+            elif image_type == 'multi_image':
+                # Multi-image: precio base + 2 créditos extra por múltiples inputs
+                return Decimal(str(base_cost + 2))
+            else:
+                # Fallback: usar text_to_image
+                return Decimal(str(base_cost))
+        
+        # Por defecto, usar Gemini Image
         return Decimal(str(CreditService.PRICING['gemini_image']['image']))
     
     @staticmethod
@@ -497,12 +542,20 @@ class CreditService:
         metadata = {
             'image_type': image.type,
             'aspect_ratio': image.aspect_ratio,
+            'model_id': image.config.get('model_id') if image.config else None,
         }
+        
+        # Determinar nombre del servicio según model_id
+        model_id = image.config.get('model_id') if image.config else None
+        if model_id in ['gpt-image-1', 'gpt-image-1.5']:
+            service_name = 'openai_image'
+        else:
+            service_name = 'gemini_image'
         
         CreditService.deduct_credits(
             user=user,
             amount=cost,
-            service_name='gemini_image',
+            service_name=service_name,
             operation_type='image_generation',
             resource=image,
             metadata=metadata
@@ -742,10 +795,32 @@ class CreditService:
         return Decimal('0')
     
     @staticmethod
-    def estimate_image_cost(model_id=None):
+    def estimate_image_cost(model_id=None, image_type='text_to_image', quality='medium', config=None):
         """Estima costo de una imagen según el modelo"""
         if model_id:
-            # Mapear model_id a clave de pricing
+            # OpenAI GPT Image
+            if model_id in ['gpt-image-1', 'gpt-image-1.5']:
+                # Mapear calidad
+                quality_map = {
+                    'low': 'low',
+                    'medium': 'medium',
+                    'high': 'high',
+                    'auto': 'medium',
+                }
+                quality_key = quality_map.get(quality.lower() if quality else 'medium', 'medium')
+                base_cost = CreditService.PRICING['openai_image'].get(quality_key, 5)
+                
+                # Ajustar según tipo
+                if image_type == 'text_to_image':
+                    return Decimal(str(base_cost))
+                elif image_type == 'image_to_image':
+                    return Decimal(str(base_cost + 1))
+                elif image_type == 'multi_image':
+                    return Decimal(str(base_cost + 2))
+                else:
+                    return Decimal(str(base_cost))
+            
+            # Mapear model_id a clave de pricing (otros servicios)
             model_pricing_map = {
                 'higgsfield-ai/soul/standard': 'higgsfield_soul_standard',
                 'reve/text-to-image': 'reve_text_to_image',

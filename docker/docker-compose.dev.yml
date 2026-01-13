@@ -32,7 +32,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: daphne -b 0.0.0.0 -p 8000 atenea.asgi:application
+    # Ejecutar migraciones automáticamente antes de iniciar Daphne
+    command: bash scripts/start-daphne.sh daphne -b 0.0.0.0 -p 8000 atenea.asgi:application
     volumes:
       - .:/app
       - dev_static_volume:/app/staticfiles

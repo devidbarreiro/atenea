@@ -87,13 +87,36 @@ docker compose build --no-cache
 docker compose up -d
 
 echo "⏳ Esperando a que los servicios estén listos..."
-sleep 10
+# Esperar a que la base de datos esté lista
+echo "⏳ Esperando a que la base de datos esté lista..."
+timeout=60
+elapsed=0
+while [ $elapsed -lt $timeout ]; do
+    if docker compose exec -T db pg_isready -U atenea > /dev/null 2>&1; then
+        echo "✅ Base de datos lista"
+        break
+    fi
+    echo "⏳ Esperando base de datos... ($elapsed/$timeout segundos)"
+    sleep 2
+    elapsed=$((elapsed + 2))
+done
+
+if [ $elapsed -ge $timeout ]; then
+    echo "❌ Error: La base de datos no está lista después de $timeout segundos"
+    exit 1
+fi
 
 echo "🔄 Ejecutando migraciones"
-docker compose run --rm migrate || echo "⚠️  Advertencia: Error en migraciones"
+if ! docker compose --profile tools run --rm migrate; then
+    echo "❌ Error: Falló la ejecución de migraciones"
+    exit 1
+fi
 
 echo "📦 Recolectando archivos estáticos"
-docker compose run --rm collectstatic || echo "⚠️  Advertencia: Error en collectstatic"
+if ! docker compose --profile tools run --rm collectstatic; then
+    echo "❌ Error: Falló la recolección de archivos estáticos"
+    exit 1
+fi
 cd ..
 
 echo "✅ Despliegue completado!"
