@@ -1,4 +1,68 @@
 {% load static %}
+{% include 'includes/voice_selector_modal.html' %}
+
+<script>
+    // 1. FUNCIÓN PUENTE GLOBAL
+    // Se llama desde el onclick del botón inyectado por Python
+    window.openVoiceSelectorFromSidebar = function(provider = 'elevenlabs') {
+        if (typeof window.openVoiceSelector === 'function') {
+            window.openVoiceSelector(function(voiceId, voiceName, voiceCategory) {
+                // Actualizar UI Visualmente
+                updateVoiceUI(voiceId, voiceName, voiceCategory);
+
+                // Actualizar Estado de Alpine (para persistencia)
+                const sidebar = document.querySelector('[x-data^="creationSidebar"]');
+                if (sidebar && sidebar.__x) {
+                    sidebar.__x.$data.selectedVoice = {
+                        id: voiceId,
+                        name: voiceName,
+                        category: voiceCategory
+                    };
+                }
+            }, provider); // Pasamos el provider (heygen o elevenlabs)
+        } else {
+            console.error("El modal de voces no está cargado.");
+            alert("Error: No se pudo cargar el selector de voces.");
+        }
+    };
+
+    // 2. FUNCIÓN AUXILIAR PARA ACTUALIZAR DOM
+    function updateVoiceUI(id, name, category) {
+        const nameEl = document.getElementById('dynamic-voice-name');
+        const catEl = document.getElementById('dynamic-voice-cat');
+        const infoEl = document.getElementById('dynamic-voice-info');
+        const placeEl = document.getElementById('dynamic-voice-placeholder');
+        const inputEl = document.getElementById('dynamic-voice-input');
+        const inputNameEl = document.getElementById('dynamic-voice-name-input');
+
+        if (nameEl && catEl && infoEl && placeEl) {
+            nameEl.textContent = name;
+            catEl.textContent = category || 'ElevenLabs';
+            infoEl.classList.remove('hidden');
+            placeEl.classList.add('hidden');
+        }
+        if (inputEl) inputEl.value = id;
+        if (inputNameEl) inputNameEl.value = name;
+    }
+
+    // 3. EVENTO DE CARGA HTMX (CRÍTICO)
+    // Se ejecuta cuando HTMX inyecta el nuevo HTML del formulario.
+    // Restaura el estado visual si Alpine ya tenía una voz guardada.
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Verificar si se actualizó el contenedor de campos dinámicos
+        // (Asegúrate de que el ID coincida con el target de tu hx-get, usualmente #dynamic-fields-container o similar)
+        if (evt.target.id === 'dynamic-fields-container' || evt.target.closest('#dynamic-fields-container')) {
+            
+            // Buscar datos en Alpine
+            const sidebar = document.querySelector('[x-data^="creationSidebar"]');
+            if (sidebar && sidebar.__x && sidebar.__x.$data.selectedVoice) {
+                const v = sidebar.__x.$data.selectedVoice;
+                // Restaurar vista
+                updateVoiceUI(v.id, v.name, v.category);
+            }
+        }
+    });
+</script>
 
 <!-- Definir el componente Alpine de forma global -->
 <script>
@@ -22,6 +86,13 @@ document.addEventListener('alpine:init', () => {
         templateLoading: false,
         templateTab: 'public',
         templateSearch: '',
+
+        // Voice selector state
+        voiceModalOpen: false,
+        voiceList: [],
+        voiceLoading: false,
+        voiceSearch: '',
+        selectedVoice: null,
         
         init() {
             // Cargar prompt desde caché al inicializar
@@ -161,6 +232,38 @@ document.addEventListener('alpine:init', () => {
                 localStorage.setItem(`template_cache_${cacheKey}`, JSON.stringify(data));
             } catch (e) {
                 console.warn('Error caching templates:', e);
+            }
+        },
+
+        async loadVoices() {
+            this.voiceLoading = true;
+            try {
+                const response = await fetch('/api/voices/');
+                const data = await response.json();
+                this.voiceList = data.voices || [];
+            } catch (error) {
+                console.error('Error cargando voces:', error);
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        message: 'No se pudieron cargar las voces',
+                        type: 'error'
+                    }
+                }));
+                this.voiceList = [];
+            } finally {
+                this.voiceLoading = false;
+            }
+        },
+
+        selectVoice(voice) {
+            this.selectedVoice = voice;
+            this.voiceModalOpen = false;
+        },
+
+        openVoiceModal() {
+            this.voiceModalOpen = true;
+            if (this.voiceList.length === 0) {
+                this.loadVoices();
             }
         },
         
@@ -692,7 +795,7 @@ document.addEventListener('alpine:init', () => {
             } finally {
                 this.submitting = false;
             }
-        }
+        },
     }));
 });
 </script>
@@ -700,22 +803,22 @@ document.addEventListener('alpine:init', () => {
 <div x-data="creationSidebar()">
     
     <!-- Tabs: Image / Video / Audio -->
-    <div class="border-b border-gray-200 bg-white sticky top-0 z-10 pt-2 pb-3 px-3">
+    <div class="border-b border-gray-200 bg-white sticky top-0 z-10 pt-2 pb-2 sm:pb-3 px-2 sm:px-3">
         <div class="flex items-center justify-center">
-            <div class="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+            <div class="inline-flex rounded-lg border border-gray-200 p-0.5 sm:p-1 bg-gray-50 w-full sm:w-auto">
                 <button @click="switchTab('image')"
                         :class="activeTab === 'image' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
-                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                        class="flex-1 sm:flex-none px-3 sm:px-5 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all">
                     Image
                 </button>
                 <button @click="switchTab('video')"
                         :class="activeTab === 'video' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
-                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                        class="flex-1 sm:flex-none px-3 sm:px-5 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all">
                     Video
                 </button>
                 <button @click="switchTab('audio')"
                         :class="activeTab === 'audio' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
-                        class="px-5 py-1.5 text-sm font-medium rounded-md transition-all">
+                        class="flex-1 sm:flex-none px-3 sm:px-5 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all">
                     Audio
                 </button>
             </div>
@@ -723,11 +826,15 @@ document.addEventListener('alpine:init', () => {
     </div>
     
     <!-- Contenido del Sidebar -->
-    <div class="p-6 space-y-5">
+    <div class="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5">
+
+        <input type="hidden" name="voice_id" id="dynamic-voice-input">
+
+        <input type="hidden" name="voice_name" id="dynamic-voice-name-input">
         
         <!-- Sección PROMPT TEMPLATE (solo para video e image, excluyendo heygen y manim) -->
         <div x-show="(activeTab === 'video' || activeTab === 'image') && (!selectedModel || (selectedModel && !selectedModel.includes('heygen') && selectedModel !== 'manim-quote'))">
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">PROMPT TEMPLATE</label>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">PROMPT TEMPLATE</label>
             
             <!-- Botón selector -->
             <button type="button"
@@ -799,20 +906,20 @@ document.addEventListener('alpine:init', () => {
         
         <!-- Sección MODEL -->
         <div>
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">MODEL</label>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">MODEL</label>
             
             <!-- Dropdown personalizado -->
             <div x-data="{ dropdownOpen: false, searchQuery: '' }" class="relative">
                 <!-- Botón de selección -->
                 <button type="button"
                         @click="dropdownOpen = !dropdownOpen"
-                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm text-left flex items-center gap-2 hover:bg-gray-50 transition-colors">
+                        class="w-full px-2.5 sm:px-3 py-2 sm:py-2.5 border border-gray-300 rounded-lg bg-white text-xs sm:text-sm text-left flex items-center gap-1.5 sm:gap-2 hover:bg-gray-50 transition-colors">
                     <img x-show="selectedModel && allModels[selectedModel] && allModels[selectedModel].logo" 
                          :src="selectedModel && allModels[selectedModel] ? allModels[selectedModel].logo : ''" 
                          :alt="selectedModel && allModels[selectedModel] ? allModels[selectedModel].service : ''"
-                         class="w-5 h-5 rounded flex-shrink-0 object-contain"
+                         class="w-4 h-4 sm:w-5 sm:h-5 rounded flex-shrink-0 object-contain"
                          onerror="this.style.display='none'">
-                    <div x-show="selectedModel && allModels[selectedModel] && !allModels[selectedModel].logo" class="w-5 h-5 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+                    <div x-show="selectedModel && allModels[selectedModel] && !allModels[selectedModel].logo" class="w-4 h-4 sm:w-5 sm:h-5 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
                         <span class="text-xs font-semibold text-gray-500" x-text="selectedModel && allModels[selectedModel] ? (allModels[selectedModel].service || allModels[selectedModel].name).charAt(0).toUpperCase() : ''"></span>
                     </div>
                     <span class="truncate flex-1">
@@ -892,12 +999,12 @@ document.addEventListener('alpine:init', () => {
         
         <!-- Sección PROMPT -->
         <div>
-            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2.5">PROMPT</label>
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">PROMPT</label>
             <div class="relative">
                 <textarea x-model="prompt"
                           :placeholder="'Describe tu ' + activeTab + '...'"
-                          class="w-full px-3 py-2.5 pr-10 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black resize-none transition-all"
-                          rows="6"></textarea>
+                          class="w-full px-3 py-2 sm:py-2.5 pr-8 sm:pr-10 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black resize-none transition-all"
+                          rows="5"></textarea>
                 <!-- Botón copiar dentro del textarea -->
                 <button @click="copyPromptToClipboard($event)"
                         x-show="prompt && prompt.trim()"
@@ -922,18 +1029,18 @@ document.addEventListener('alpine:init', () => {
         
         
         <!-- Botón Generar con Costo Estimado -->
-        <div class="pt-4 border-t border-gray-200">
+        <div class="pt-3 sm:pt-4 border-t border-gray-200">
             <button @click="submitForm()"
                     :disabled="!selectedModel || !prompt || submitting"
                     :class="(!selectedModel || !prompt || submitting) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'"
-                    class="w-full bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                    class="w-full bg-black text-white py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm sm:text-base">
                 <span x-show="!submitting">Generar</span>
                 <span x-show="submitting">Generando...</span>
-                <svg x-show="!submitting" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="!submitting" class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                 </svg>
                 <!-- Costo estimado (se carga dinámicamente vía HTMX) -->
-                <span id="estimated-cost-container" x-show="!submitting" class="text-xs opacity-75">
+                <span id="estimated-cost-container" x-show="!submitting" class="text-xs opacity-75 hidden sm:inline">
                     <!-- Se carga vía HTMX junto con los campos dinámicos -->
                 </span>
             </button>
@@ -1083,3 +1190,14 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
 </div>
+
+<script>
+    (function() {
+        // Al cargar este fragmento, movemos el modal al final del body
+        // para asegurar que 'fixed' funcione respecto a la ventana completa.
+        const modal = document.getElementById('elevenlabs-voice-modal');
+        if (modal && document.body) {
+            document.body.appendChild(modal);
+        }
+    })();
+</script>

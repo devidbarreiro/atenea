@@ -385,10 +385,10 @@ jobs:
         # Establecer nombre de proyecto único para evitar conflictos
         export COMPOSE_PROJECT_NAME="html-${ENV}"
         
-        # Paso 1: Detener y eliminar usando docker compose (MÁS AGRESIVO)
+        # Paso 1: Detener y eliminar usando docker compose
         echo "⏸️  Deteniendo contenedores con docker compose (proyecto: html-${ENV})..."
-        # Usar --volumes para eliminar volúmenes también si es necesario
-        docker compose down --remove-orphans --volumes 2>/dev/null || true
+        # NO usar --volumes para preservar los datos de la base de datos
+        docker compose down --remove-orphans 2>/dev/null || true
         docker compose stop 2>/dev/null || true
         docker compose rm -f 2>/dev/null || true
         
