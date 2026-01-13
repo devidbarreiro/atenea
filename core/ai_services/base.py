@@ -17,7 +17,23 @@ class BaseAIClient(ABC):
         self.api_key = api_key
         self.base_url = base_url
         self.timeout = timeout
+        # Usar adapter con pool de conexiones limitado para evitar "Max clients reached"
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
         self.session = requests.Session()
+        # Configurar adapter con límites de conexión
+        adapter = HTTPAdapter(
+            pool_connections=10,  # Número de pools de conexión
+            pool_maxsize=20,  # Tamaño máximo del pool
+            max_retries=Retry(
+                total=3,
+                backoff_factor=0.3,
+                status_forcelist=[500, 502, 503, 504]
+            )
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
     
     def get_headers(self, method: str = 'GET') -> dict:
         """

@@ -74,6 +74,41 @@ document.addEventListener('alpine:init', () => {
         upscaleFactor: 'x4',
         outputMimeType: 'image/png',
         
+        handleUpscaleSubmit() {
+            if (!this.upscaleModal.item) return;
+            
+            // Validar tamaño de imagen resultante antes de enviar
+            const MAX_RESULT_PIXELS = 17_000_000;
+            const item = this.upscaleModal.item;
+            
+            if (item.width && item.height) {
+                // Calcular factor numérico (x2 = 2, x3 = 3, x4 = 4)
+                const factorNum = parseInt(this.upscaleFactor.replace('x', ''));
+                
+                // Calcular píxeles resultantes: width * height * (factor^2)
+                const resultWidth = item.width * factorNum;
+                const resultHeight = item.height * factorNum;
+                const resultPixels = resultWidth * resultHeight;
+                
+                if (resultPixels > MAX_RESULT_PIXELS) {
+                    // Mostrar toast de error
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Imagen demasiado grande',
+                            message: `La imagen resultante excedería el límite de ${MAX_RESULT_PIXELS.toLocaleString()} píxeles. Imagen original: ${item.width} x ${item.height} píxeles. Con factor ${this.upscaleFactor}, la imagen resultante sería ${resultWidth} x ${resultHeight} (${resultPixels.toLocaleString()} píxeles). Por favor, usa un factor menor o selecciona otra imagen.`,
+                            auto_close: 10
+                        }
+                    }));
+                    return; // No enviar el formulario
+                }
+            }
+            
+            // Si pasa la validación, enviar el formulario
+            this.upscaleModal.loading = true;
+            document.getElementById('upscaleImageForm').submit();
+        },
+        
         async openCreateVideoModal(item) {
             this.createVideoModal = { open: true, item: item, loading: false };
             this.selectedVideoModel = null;
@@ -2215,7 +2250,7 @@ document.addEventListener('alpine:init', () => {
                         Cancelar
                     </button>
                     <button type="button"
-                            @click="upscaleModal.loading = true; document.getElementById('upscaleImageForm').submit();"
+                            @click="handleUpscaleSubmit()"
                             x-bind:disabled="upscaleModal.loading"
                             class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                         <span x-show="!upscaleModal.loading">Escalar Imagen</span>

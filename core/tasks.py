@@ -9,8 +9,9 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 from django.contrib.auth.models import User
-from core.models import GenerationTask, Video, Image, Audio, Scene, Notification
+from core.models import GenerationTask, Video, Image, Audio, Scene, Notification, Script
 from core.services import VideoService, ImageService, AudioService
+from core.services_agent import get_script_service
 
 # rembg imports are done lazily inside the task to avoid CI failures
 # (rembg requires onnxruntime which is heavy and not needed for tests)
@@ -948,5 +949,48 @@ def remove_image_background_task(self, image_uuid, new_image_uuid=None):
         if self.request.retries < self.max_retries:
             logger.info(f"Reintentando remoción de fondo en 60 segundos (intento {self.request.retries + 1}/{self.max_retries})")
             raise self.retry(exc=exc, countdown=60)
+        
+        return {'success': False, 'error': str(exc)}
+
+
+@shared_task(bind=True, max_retries=3)
+def process_script_task(self, script_id):
+    """
+    Tarea para procesar un guión de forma asíncrona
+    
+    Args:
+        script_id: ID del Script a procesar
+    """
+    try:
+        script = Script.objects.get(id=script_id)
+        
+        # Obtener servicio de procesamiento de guiones
+        service = get_script_service()
+        
+        # Procesar guión
+        script = service.process_script(script)
+        
+        logger.info(f"✅ Guión {script_id} procesado exitosamente")
+        return {'success': True, 'script_id': script_id}
+        
+    except Script.DoesNotExist:
+        error_msg = f"Guion {script_id} no encontrado"
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+        
+    except Exception as exc:
+        logger.error(f"Error procesando guión {script_id}: {exc}", exc_info=True)
+        
+        # Reintentar si no se ha alcanzado el máximo
+        if self.request.retries < self.max_retries:
+            logger.info(f"Reintentando procesamiento de guión en 60 segundos (intento {self.request.retries + 1}/{self.max_retries})")
+            raise self.retry(exc=exc, countdown=60)
+        
+        # Marcar guión como error solo cuando se hayan agotado todos los reintentos
+        try:
+            script = Script.objects.get(id=script_id)
+            script.mark_as_error(str(exc))
+        except Script.DoesNotExist:
+            pass
         
         return {'success': False, 'error': str(exc)}

@@ -3268,13 +3268,22 @@ class CreateItemAPIView(ServiceMixin, View):
         project = None
         if project_id:
             try:
-                project = get_object_or_404(Project, pk=project_id)
+                # Intentar primero como UUID, luego como ID numérico
+                import uuid as uuid_module
+                try:
+                    project_uuid = uuid_module.UUID(str(project_id))
+                    project = get_object_or_404(Project, uuid=project_uuid)
+                except (ValueError, TypeError):
+                    # Si no es UUID válido, intentar como ID numérico
+                    project_id_int = int(project_id)
+                    project = get_object_or_404(Project, pk=project_id_int)
+                
                 if not ProjectService.user_has_access(project, request.user):
                     return JsonResponse({
                         'success': False,
                         'error': 'No tienes acceso a este proyecto'
                     }, status=403)
-            except (ValueError, Project.DoesNotExist):
+            except (ValueError, TypeError, Project.DoesNotExist):
                 return JsonResponse({
                     'success': False,
                     'error': 'Proyecto no encontrado'
@@ -5055,6 +5064,17 @@ class AudioDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Detai
         model_id = self.object.model_id or 'elevenlabs'  # Default a elevenlabs si no hay model_id
         model_info = get_model_info_for_item('audio', model_key=model_id)
         context['model_info'] = model_info
+        
+        # Generar signed_url para el audio si está completado
+        if self.object.status == 'completed' and self.object.gcs_path:
+            try:
+                audio_service = self.get_audio_service()
+                audio_data = audio_service.get_audio_with_signed_url(self.object)
+                context['signed_url'] = audio_data.get('signed_url')
+            except Exception as e:
+                logger.error(f"Error al generar signed_url para audio {self.object.uuid}: {e}")
+                context['signed_url'] = None
+        
         if project:
             context['project'] = project
             context['user_role'] = project.get_user_role(self.request.user)
@@ -5572,15 +5592,19 @@ class ScriptCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Form
             # Procesar guión con el servicio configurado (n8n o LangChain)
             service = get_script_service()
             
-            # LangChain procesa síncronamente, n8n es asíncrono
+            # Siempre usar procesamiento asíncrono para evitar timeouts
+            # LangChain puede tardar mucho tiempo, así que mejor procesarlo en background
             if hasattr(service, 'process_script'):
-                # LangChain: procesamiento síncrono
+                # LangChain: usar procesamiento asíncrono para evitar timeouts
                 try:
-                    script = service.process_script(script)
-                    messages.success(request, f'Guión "{title}" procesado exitosamente.')
-                    return redirect('core:script_detail', script_id=script.pk)
+                    # Marcar como procesando y encolar tarea
+                    script.mark_as_processing()
+                    from core.tasks import process_script_task
+                    process_script_task.delay(script.id)
+                    messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
                 except Exception as e:
-                    logger.error(f"Error al procesar guión con LangChain: {e}")
+                    logger.error(f"Error al encolar procesamiento de guión con LangChain: {e}")
+                    script.mark_as_error(str(e))
                     messages.error(request, f'Error al procesar guión: {str(e)}')
                     return redirect('core:script_detail', script_id=script.pk)
             else:
@@ -5590,9 +5614,9 @@ class ScriptCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Form
                     messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
                 except Exception as e:
                     messages.warning(request, f'Guión "{title}" creado pero hubo un problema al enviarlo para procesamiento: {str(e)}')
-                
-                # Redirigir inmediatamente al detalle del guión
-                return redirect('core:script_detail', script_id=script.pk)
+            
+            # Redirigir inmediatamente al detalle del guión
+            return redirect('core:script_detail', script_id=script.pk)
             
         except Exception as e:
             messages.error(request, f'Error inesperado: {str(e)}')
@@ -5639,12 +5663,16 @@ class ScriptCreatePartialView(ServiceMixin, FormView):
             service = get_script_service()
             
             if hasattr(service, 'process_script'):
+                # Usar procesamiento asíncrono para evitar timeouts
                 try:
-                    script = service.process_script(script)
-                    messages.success(request, f'Guión "{title}" procesado exitosamente.')
+                    script.mark_as_processing()
+                    from core.tasks import process_script_task
+                    process_script_task.delay(script.id)
+                    messages.success(request, f'Guión "{title}" creado y enviado para procesamiento.')
                     return redirect('core:script_detail', script_id=script.pk)
                 except Exception as e:
                     logger.error(f"Error al procesar guión con LangChain: {e}")
+                    script.mark_as_error(str(e))
                     messages.error(request, f'Error al procesar guión: {str(e)}')
                     return redirect('core:script_detail', script_id=script.pk)
             else:
@@ -9842,7 +9870,16 @@ class StockDownloadView(LoginRequiredMixin, View):
             project = None
             if project_id:
                 try:
-                    project = Project.objects.get(id=project_id)
+                    # Intentar primero como UUID, luego como ID numérico
+                    import uuid as uuid_module
+                    try:
+                        project_uuid = uuid_module.UUID(str(project_id))
+                        project = Project.objects.get(uuid=project_uuid)
+                    except (ValueError, TypeError):
+                        # Si no es UUID válido, intentar como ID numérico
+                        project_id_int = int(project_id)
+                        project = Project.objects.get(id=project_id_int)
+                    
                     # Verificar acceso usando ProjectService (incluye owner y colaboradores)
                     from core.services import ProjectService
                     if not ProjectService.user_has_access(project, request.user):
@@ -9850,7 +9887,7 @@ class StockDownloadView(LoginRequiredMixin, View):
                             'success': False,
                             'error': 'No tienes acceso a este proyecto'
                         }, status=403)
-                except Project.DoesNotExist:
+                except (ValueError, TypeError, Project.DoesNotExist):
                     return JsonResponse({
                         'success': False,
                         'error': 'Proyecto no encontrado'
