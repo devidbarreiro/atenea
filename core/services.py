@@ -2823,6 +2823,27 @@ class ImageService:
         if output_mime_type not in valid_mime_types:
             raise ValidationException(f"output_mime_type debe ser uno de {valid_mime_types}, recibido: {output_mime_type}")
         
+        # Validar tamaño de imagen resultante antes de crear la imagen
+        # El límite es 17,000,000 píxeles para la imagen resultante
+        MAX_RESULT_PIXELS = 17_000_000
+        
+        if original_image.width and original_image.height:
+            # Calcular factor numérico (x2 = 2, x3 = 3, x4 = 4)
+            factor_num = int(upscale_factor.replace('x', ''))
+            
+            # Calcular píxeles resultantes: width * height * (factor^2)
+            result_width = original_image.width * factor_num
+            result_height = original_image.height * factor_num
+            result_pixels = result_width * result_height
+            
+            if result_pixels > MAX_RESULT_PIXELS:
+                raise ValidationException(
+                    f'La imagen resultante excedería el límite de {MAX_RESULT_PIXELS:,} píxeles. '
+                    f'Imagen original: {original_image.width} x {original_image.height} píxeles. '
+                    f'Con factor {upscale_factor}, la imagen resultante sería {result_width} x {result_height} '
+                    f'({result_pixels:,} píxeles). Por favor, usa un factor menor o selecciona otra imagen.'
+                )
+        
         # Crear nueva imagen para el resultado del upscale
         from datetime import datetime
         upscaled_image = Image.objects.create(
@@ -5595,21 +5616,37 @@ class N8nService:
     
     def send_script_for_processing(self, script):
         """Enviar guión a n8n para procesamiento"""
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        # Preparar datos para enviar (solo guión y duración)
+        data = {
+            'script_id': script.id,
+            'guion': script.original_script,
+            'duracion_minutos': script.desired_duration_min
+        }
+        
+        # Marcar como procesando
+        script.mark_as_processing()
+        
+        # Crear sesión con límites de conexión para evitar "Max clients reached"
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=5,
+            pool_maxsize=10,
+            max_retries=Retry(
+                total=2,
+                backoff_factor=0.5,
+                status_forcelist=[500, 502, 503, 504]
+            )
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        
         try:
-            import requests
-            
-            # Preparar datos para enviar (solo guión y duración)
-            data = {
-                'script_id': script.id,
-                'guion': script.original_script,
-                'duracion_minutos': script.desired_duration_min
-            }
-            
-            # Marcar como procesando
-            script.mark_as_processing()
-            
             # Enviar a n8n
-            response = requests.post(
+            response = session.post(
                 self.webhook_url,
                 json=data,
                 timeout=30
@@ -5635,6 +5672,12 @@ class N8nService:
             script.mark_as_error(f"Error inesperado: {str(e)}")
             logger.error(f"Error inesperado al enviar guión a n8n: {e}")
             return False
+        finally:
+            # Cerrar sesión para liberar conexiones
+            try:
+                session.close()
+            except:
+                pass
     
     def process_webhook_response(self, data):
         """Procesar respuesta del webhook de n8n"""

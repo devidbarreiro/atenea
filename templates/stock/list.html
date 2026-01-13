@@ -1533,7 +1533,14 @@ function stockSearch() {
                 // Obtener CSRF token de forma segura
                 const csrfToken = this.getCSRFToken();
                 if (!csrfToken) {
-                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Error de seguridad',
+                            message: 'No se pudo obtener el token de seguridad. Por favor recarga la página.',
+                            auto_close: 8
+                        }
+                    }));
                     return;
                 }
                 
@@ -1554,13 +1561,37 @@ function stockSearch() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(data.message || 'Item guardado en proyecto correctamente');
+                    // Mostrar toast de éxito en lugar de alert
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'success',
+                            title: 'Item guardado',
+                            message: data.message || 'Item guardado en proyecto correctamente',
+                            auto_close: 5
+                        }
+                    }));
                     this.showProjectModal = false;
                 } else {
-                    alert('Error: ' + (data.error || 'Error al guardar en proyecto'));
+                    // Mostrar toast de error en lugar de alert
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Error',
+                            message: data.error || 'Error al guardar en proyecto',
+                            auto_close: 5
+                        }
+                    }));
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                // Mostrar toast de error en lugar de alert
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        type: 'error',
+                        title: 'Error',
+                        message: e.message || 'Error al mover item a proyecto',
+                        auto_close: 5
+                    }
+                }));
                 console.error('Error moviendo a proyecto:', e);
             } finally {
                 this.downloadLoading = false;
