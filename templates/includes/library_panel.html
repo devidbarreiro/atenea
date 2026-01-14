@@ -1495,12 +1495,17 @@ document.addEventListener('alpine:init', () => {
                             <button 
                                 x-data="{ copied: false }"
                                 @click="
-                                    textToCopy = selectedItem.prompt || selectedItem.script || selectedItem.text;
+                                    const textToCopy = selectedItem.prompt || selectedItem.script || selectedItem.text;
                                     if(textToCopy) {
-                                        navigator.clipboard.writeText(textToCopy).then(() => {
-                                            copied = true;
-                                            setTimeout(() => copied = false, 2000);
-                                        });
+                                        navigator.clipboard.writeText(textToCopy)
+                                            .then(() => {
+                                                copied = true;
+                                                setTimeout(() => copied = false, 2000);
+                                            })
+                                            .catch(err => {
+                                                console.error('Error al copiar:', err);
+                                                alert('No se pudo copiar el texto al portapapeles');
+                                            });
                                     }
                                 "
                                 x-show="selectedItem.prompt || selectedItem.script || selectedItem.text"
