@@ -152,6 +152,17 @@
                         <div class="flex items-center justify-between mb-1">
                             <label class="text-sm font-medium text-gray-700">Guión</label>
                             <button 
+                                onclick="copySceneScript({{ scene.id }})"
+                                class="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mr-auto ml-2"
+                                title="Copiar guión">
+                                <span id="copy-icon-{{ scene.id }}">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </span>
+                                <span id="copy-text-{{ scene.id }}" class="hidden text-green-600 font-medium">¡Copiado!</span>
+                            </button>
+                            <button 
                                 onclick="openInspector({{ scene.id }})" 
                                 class="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
                                 🔧 Inspector
@@ -619,18 +630,36 @@
             </div>
         </div>
         
-        <div class="flex justify-end gap-2 mt-6">
-            <button onclick="closeEditModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
-                Cancelar
-            </button>
-            <button onclick="saveEdit()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                Guardar
-            </button>
         </div>
     </div>
 </div>
 
 <script>
+function copySceneScript(sceneId) {
+    // Obtener el texto del script desde el objeto cacheado scenesData o del DOM
+    const scene = scenesData[sceneId];
+    const textToCopy = scene ? scene.script_text : document.getElementById(`script-preview-${sceneId}`).innerText;
+    
+    if (textToCopy) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            // Mostrar feedback
+            const icon = document.getElementById(`copy-icon-${sceneId}`);
+            const text = document.getElementById(`copy-text-${sceneId}`);
+            
+            icon.classList.add('hidden');
+            text.classList.remove('hidden');
+            
+            setTimeout(() => {
+                icon.classList.remove('hidden');
+                text.classList.add('hidden');
+            }, 2000);
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+            alert('No se pudo copiar el texto');
+        });
+    }
+}
+
 const scriptId = {{ script.id }};
 const sceneIds = [{% for scene_data in scenes_with_urls %}{{ scene_data.scene.id }}{% if not forloop.last %}, {% endif %}{% endfor %}];
 const totalScenes = sceneIds.length;
