@@ -119,15 +119,17 @@
                 </a>
                 
                 <!-- Guiones -->
-                <a href="{% url 'core:project_scripts' project.uuid %}" 
-                   class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                <div class="bg-white rounded-lg border border-gray-200 p-6 opacity-75 cursor-not-allowed">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">📝</span>
+                            <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl grayscale">📝</span>
                             </div>
                             <div>
-                                <h3 class="font-semibold text-gray-900">Guiones</h3>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-semibold text-gray-900">Guiones</h3>
+                                    <span class="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                                </div>
                                 <p class="text-sm text-gray-500">Total: {{ stats.scripts.total }}</p>
                             </div>
                         </div>
@@ -138,7 +140,7 @@
                             <span class="font-medium text-green-600">{{ stats.scripts.completed }}</span>
                         </div>
                     </div>
-                </a>
+                </div>
                 
                 <!-- Video con Agente -->
                 <a href="{% url 'core:project_agent' project.uuid %}" 
