@@ -595,6 +595,7 @@ class DashboardView(ServiceMixin, ListView):
                 'status': audio.status,
                 'project': audio.project,
                 'signed_url': None,
+                'audio_background': audio.background_gradient,
                 'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
@@ -888,6 +889,7 @@ class ProjectDetailView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, Det
                 'created_at': audio.created_at,
                 'project': audio.project,
                 'signed_url': None,
+                'audio_background': audio.background_gradient,
                 'detail_url': reverse('core:project_audio_detail', args=[self.object.uuid, audio.uuid]),
                 'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
             }
@@ -1097,6 +1099,7 @@ class LibraryView(ServiceMixin, ListView):
                 'signed_url': signed_url,
                 'detail_url': detail_url,
                 'delete_url': delete_url,
+                'audio_background': item.background_gradient if item_wrapper.type == 'audio' else None,
             })
         
         context['items_with_urls'] = items_with_urls
@@ -2777,6 +2780,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
                         'model': model_info,  # Información del modelo (nombre, logo, servicio)
                         'audio_type': audio.type,  # 'tts' o 'music'
+                        'audio_background': audio.background_gradient, # Nuevo campo para miniatura dinámica
                     }
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and audio.status == 'completed' and audio.gcs_path:
@@ -3179,6 +3183,7 @@ class ItemDetailAPIView(ServiceMixin, View):
                         'voice_name': audio.voice_name,
                         'duration': audio.duration,
                         'audio_type': audio.type,  # 'tts' o 'music'
+                        'audio_background': audio.background_gradient, # Nuevo campo para miniatura dinámica
                     },
                     'navigation': {
                         'prev': {

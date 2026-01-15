@@ -76,13 +76,15 @@ Ejemplo de uso:
             <a href="{{ item.detail_url }}" class="block w-full h-full">
                 <img src="{{ item.signed_url }}" alt="{{ item.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
             </a>
-        {% elif item.type == 'audio' and item.signed_url %}
+        {% elif item.type == 'audio' %}
             <a href="{{ item.detail_url }}" class="block w-full h-full">
-                <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
-                    <svg class="w-16 h-16 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                <div class="w-full h-full flex flex-col items-center justify-center transition-all duration-300 group-hover:brightness-95"
+                     style="background: {{ item.audio_background|default:'#f3e7e9' }};">
+                     <!-- Fallback gradient included in style if variable missing, though default filter handles empty -->
+                    <svg class="w-16 h-16 text-gray-600 mb-2 transform group-hover:scale-110 transition-transform duration-300 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                     </svg>
-                    <span class="text-xs text-gray-600 font-medium">Audio</span>
+                    <span class="text-xs text-gray-600 font-medium drop-shadow-md">Audio</span>
                 </div>
             </a>
         {% elif item.type == 'music' and item.signed_url %}
