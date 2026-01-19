@@ -8149,7 +8149,7 @@ class UserMenuView(View):
             return "La contraseña debe contener al menos una letra mayúscula."
         if not re.search(r'\d', password):
             return "La contraseña debe contener al menos un número."
-        if not re.search(r'[^A-Za-z0-9]', password):
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
             return "La contraseña debe contener al menos un carácter especial."
         return None
 
@@ -10870,7 +10870,7 @@ class PasswordResetRequestView(View):
                         [email], 
                         html_message=html_message
                     )
-                    logger.info(f"Password reset email sent to {email}")
+                    logger.info("Password reset email sent for user_id=%s", user.pk)
                 except Exception as e:
                     logger.error(f"Error sending password reset email: {e}")
         except User.DoesNotExist:

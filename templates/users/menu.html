@@ -417,7 +417,7 @@
                 this.checks.lower = /[a-z]/.test(this.password);
                 this.checks.upper = /[A-Z]/.test(this.password);
                 this.checks.number = /\d/.test(this.password);
-                this.checks.special = /[^A-Za-z0-9]/.test(this.password);
+                this.checks.special = /[!@#$%^&*(),.?\x22:{}|<>_\-\[\]\\;\/+=]/.test(this.password);
                 this.checks.password = this.password !== '' && this.password === this.passwordConfirm;
             },
             get valid() {
