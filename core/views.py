@@ -9351,8 +9351,8 @@ class StockSearchView(View):
                     per_page=per_page
                 )
             
-            # Guardar en caché
-            if use_cache:
+            # Guardar en caché (siempre, para actualizar datos frescos)
+            if results:
                 try:
                     cache_kwargs = {
                         'query': query,
