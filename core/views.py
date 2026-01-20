@@ -6933,9 +6933,15 @@ class SceneCreateManualView(View):
             max_order = script.db_scenes.aggregate(Max('order'))['order__max'] or -1
             new_order = max_order + 1
             
-            # Calcular scene_id
-            scene_count = script.db_scenes.count()
-            scene_id = f"Escena {scene_count + 1}"
+            # Calcular scene_id único
+            base_count = script.db_scenes.count() + 1
+            scene_id = f"Escena {base_count}"
+            counter = 0
+            
+            # Verificar si existe y buscar el siguiente libre
+            while Scene.objects.filter(script=script, scene_id=scene_id).exists():
+                counter += 1
+                scene_id = f"Escena {base_count + counter}"
             
             # Obtener y convertir ai_service si es necesario
             ai_service = data.get('ai_service', 'gemini_veo')
@@ -10804,3 +10810,39 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
             logger.error(f"Error inesperado al subir archivo: {e}", exc_info=True)
             messages.error(request, 'Error inesperado al subir el archivo. Por favor, contacta al soporte.')
             return redirect('core:library')
+
+class SceneDeleteView(View):
+    """Vista para eliminar una escena"""
+    
+    def post(self, request, scene_id):
+        if not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'No autenticado'}, status=401)
+            
+        try:
+            scene = Scene.objects.get(id=scene_id)
+            
+            # Verificar permisos (propietario del proyecto o miembro)
+            # Asumimos que si tiene acceso al script/proyecto, puede borrar
+            # TODO: Refinar permisos si es necesario
+            if scene.script.created_by != request.user:
+                 # Check project membership if needed, simpler check for now
+                 if not scene.project.has_access(request.user):
+                     return JsonResponse({'status': 'error', 'message': 'No tienes permisos'}, status=403)
+
+            # Eliminar archivos asociados en GCS si es necesario?
+            # Por ahora, confiamos en que Django elimine la entrada de DB
+            # Podríamos disparar una tarea de limpieza de GCS en segundo plano
+            
+            scene.delete()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Escena eliminada correctamente',
+                'scene_id': scene_id
+            })
+            
+        except Scene.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Escena no encontrada'}, status=404)
+        except Exception as e:
+            logger.error(f"Error al eliminar escena {scene_id}: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

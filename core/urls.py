@@ -127,6 +127,7 @@ urlpatterns = [
     path('scenes/<int:scene_id>/combine-audio/', views.SceneCombineAudioView.as_view(), name='scene_combine_audio'),
     path('scenes/<int:scene_id>/regenerate/', views.SceneRegenerateView.as_view(), name='scene_regenerate'),
     path('scenes/<int:scene_id>/versions/', views.SceneVersionsView.as_view(), name='scene_versions'),
+    path('scenes/<int:scene_id>/delete/', views.SceneDeleteView.as_view(), name='scene_delete'),
     
     # Freepik API
     path('api/freepik/search/images/', views.FreepikSearchImagesView.as_view(), name='freepik_search_images'),

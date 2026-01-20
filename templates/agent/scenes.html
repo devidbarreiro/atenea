@@ -167,6 +167,16 @@
                                 class="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
                                 🔧 Inspector
                             </button>
+                            <!-- Moved Delete Button -->
+                            <button 
+                                onclick="deleteScene({{ scene.id }})" 
+                                class="px-2 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1 ml-2"
+                                title="Eliminar escena">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                <span>Eliminar</span>
+                            </button>
                         </div>
                         <p id="script-preview-{{ scene.id }}" class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">{{ scene.script_text|truncatewords:30 }}</p>
                     </div>
@@ -746,6 +756,46 @@ function regenerateScene(sceneId) {
     .catch(error => {
         console.error(`Error en fetch para regenerar escena ${sceneId}:`, error);
         alert('Error al regenerar escena: ' + error.message);
+    });
+}
+
+function deleteScene(sceneId) {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta escena? Esta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    console.log(`Eliminando escena ${sceneId}...`);
+    
+    fetch(`/scenes/${sceneId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log(`✓ Escena ${sceneId} eliminada`);
+            // Eliminar del DOM con animación
+            const element = document.getElementById(`scene-${sceneId}`);
+            if (element) {
+                element.style.transition = 'all 0.5s ease';
+                element.style.opacity = '0';
+                element.style.transform = 'translateX(100px)';
+                setTimeout(() => {
+                    element.remove();
+                    // Recargar si es necesario o actualizar contadores
+                    // location.reload(); 
+                }, 500);
+            }
+        } else {
+            console.error(`Error al eliminar escena ${sceneId}:`, data.message);
+            alert('Error al eliminar escena: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error(`Error en fetch para eliminar escena ${sceneId}:`, error);
+        alert('Error al eliminar escena: ' + error.message);
     });
 }
 
