@@ -9836,21 +9836,30 @@ class StockDownloadView(LoginRequiredMixin, View):
                     'error': 'Item no proporcionado'
                 }, status=400)
             
-            # Obtener la URL directa del archivo (priorizar download_url sobre url)
-            # download_url es la URL directa del archivo, url puede ser la página web
-            # Para Freepik: 'url' es HTML, 'preview' es la URL directa
-            download_url = item.get('download_url') or item.get('preview') or item.get('original_url')
+            # Estrategia de extracción de URL mejorada
+            # 1. Preferir 'download_url' explícita
+            download_url = item.get('download_url')
             
-            # Si download_url es una página HTML (especialmente Freepik), usar preview
-            if download_url and isinstance(download_url, str) and download_url.endswith(('.htm', '.html')):
-                logger.warning(f"StockDownloadView: download_url es HTML, usando preview en su lugar")
-                download_url = item.get('preview') or item.get('thumbnail')
+            # 2. Si no, usar 'preview' (común en imágenes/videos de stock para visualización)
+            if not download_url:
+                download_url = item.get('preview')
             
-            # Fallback: intentar 'url' solo si no es HTML
+            # 3. Si no, usar 'original_url'
+            if not download_url:
+                download_url = item.get('original_url')
+
+            # 4. Si no, intentar 'url' si parece un archivo válido
             if not download_url:
                 url_candidate = item.get('url')
-                if url_candidate and isinstance(url_candidate, str) and not url_candidate.endswith(('.htm', '.html')):
-                    download_url = url_candidate
+                if url_candidate and isinstance(url_candidate, str):
+                    # Relajar chequeo: aceptar si tiene extensión de archivo conocida o si no termina en html/htm
+                    is_html = url_candidate.endswith(('.htm', '.html')) or '/view/' in url_candidate or '/photo/' in url_candidate or '/video/' in url_candidate
+                    if not is_html:
+                        download_url = url_candidate
+            
+            # 5. Fallback final: thumbnail (mejor algo que nada)
+            if not download_url:
+                download_url = item.get('thumbnail')
             
             logger.info(f"StockDownloadView: download_url={download_url}, item.url={item.get('url')}, item.download_url={item.get('download_url')}, item.preview={item.get('preview')}")
             
@@ -9865,7 +9874,15 @@ class StockDownloadView(LoginRequiredMixin, View):
             project = None
             if project_id:
                 try:
-                    project = Project.objects.get(id=project_id)
+                    # Intentar buscar por UUID primero (formato 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
+                    try:
+                        project = Project.objects.get(uuid=project_id)
+                    except (Project.DoesNotExist, ValueError, TypeError):
+                        # Fallback a ID numérico si no es UUID válido o no se encuentra
+                        if isinstance(project_id, int) or (isinstance(project_id, str) and project_id.isdigit()):
+                            project = Project.objects.get(id=project_id)
+                        else:
+                            raise Project.DoesNotExist
                     # Verificar acceso usando ProjectService (incluye owner y colaboradores)
                     from core.services import ProjectService
                     if not ProjectService.user_has_access(project, request.user):
