@@ -859,13 +859,8 @@ function stockSearch() {
                 this.selectedSources = [...this.availableSources];
             }
             
-            // Si hay query inicial, buscar
-            if (this.query) {
-                this.search();
-            } else {
-                // Precargar contenido genérico
-                this.loadFeaturedContent();
-            }
+            // Iniciar búsqueda (si no hay query, el backend usará defaults)
+            this.search();
             
             // Configurar navegación de teclado solo si estamos en vista única
             if (this.viewMode === 'single') {
@@ -886,11 +881,7 @@ function stockSearch() {
             // Crear nuevo handler
             this._popstateHandler = () => {
                 this.readUrlParams();
-                if (this.query) {
-                    this.search();
-                } else {
-                    this.loadFeaturedContent();
-                }
+                this.search();
                 // Reconfigurar navegación de teclado si cambió el modo de vista
                 if (this.viewMode === 'single') {
                     this.setupKeyboardNavigation();
@@ -1191,66 +1182,13 @@ function stockSearch() {
             this.query = '';
             this.results = [];
             this.updateUrl({ query: '', page: 1, view: 'grid', index: 0 });
-            this.loadFeaturedContent();
+            this.search();
         },
 
-        async loadFeaturedContent() {
-            // Búsquedas genéricas para mostrar contenido destacado
-            const featuredQueries = {
-                'image': 'nature',
-                'video': 'nature',
-                'audio': 'ambient'
-            };
-            
-            const featuredQuery = featuredQueries[this.contentType] || 'nature';
-            this.loading = true;
-            this.error = null;
-            
-            try {
-                // Buscar directamente sin modificar el input
-                const params = new URLSearchParams({
-                    query: featuredQuery,
-                    type: this.contentType,
-                    page: 1,
-                    per_page: 20
-                });
 
-                if (this.selectedSources.length > 0) {
-                    params.append('sources', this.selectedSources.join(','));
-                }
-
-                const response = await fetch(`/api/stock/search/?${params.toString()}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
-                    this.results = newResults;
-                    this.totalResults = data.data?.total || this.results.length || 0;
-                    // Determinar si hay más resultados disponibles (considerando límite máximo de páginas)
-                    this.hasMore = newResults.length === 20 && this.page < this.maxPage; // perPage por defecto
-                } else {
-                    this.results = [];
-                    this.totalResults = 0;
-                    this.hasMore = false;
-                }
-            } catch (e) {
-                console.error('Error cargando contenido destacado:', e);
-                this.results = [];
-                this.totalResults = 0;
-            } finally {
-                this.loading = false;
-            }
-        },
 
         async search(resetPage = true) {
-            if (!this.query.trim()) {
-                this.results = [];
-                this.totalResults = 0;
-                this.hasMore = false;
-                this.currentIndex = 0;
-                this.updateUrl({ query: '', page: 1 });
-                return;
-            }
+            // Permitimos búsqueda con query vacío (el backend usará defaults)
 
             if (resetPage) {
                 this.page = 1;
@@ -1353,55 +1291,8 @@ function stockSearch() {
                 return;
             }
             
-            // Si no hay query, usar la búsqueda destacada con página incrementada
-            if (!this.query.trim()) {
-                // Cargar más contenido destacado
-                const featuredQueries = {
-                    'image': 'nature',
-                    'video': 'landscape',
-                    'audio': 'ambient'
-                };
-                
-                const featuredQuery = featuredQueries[this.contentType] || 'nature';
-                this.page += 1;
-                this.loadingMore = true;
-                
-                try {
-                    const params = new URLSearchParams({
-                        query: featuredQuery,
-                        type: this.contentType,
-                        page: this.page,
-                        per_page: this.perPage
-                    });
-
-                    if (this.selectedSources.length > 0) {
-                        params.append('sources', this.selectedSources.join(','));
-                    }
-
-                    const response = await fetch(`/api/stock/search/?${params.toString()}`);
-                    const data = await response.json();
-
-                    if (data.success) {
-                        const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
-                        // Agregar resultados a los existentes
-                        this.results = [...this.results, ...newResults];
-                        this.totalResults = data.data?.total || this.results.length || 0;
-                        // Determinar si hay más resultados (considerando límite máximo de páginas)
-                        this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
-                    } else {
-                        this.hasMore = false;
-                    }
-                } catch (e) {
-                    console.error('Error cargando más contenido destacado:', e);
-                    this.hasMore = false;
-                } finally {
-                    this.loadingMore = false;
-                }
-            } else {
-                // Búsqueda normal con query
-                this.page += 1;
-                await this.search(false);
-            }
+            this.page += 1;
+            await this.search(false);
         },
 
         async downloadItem(item) {

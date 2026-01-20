@@ -9216,16 +9216,6 @@ class StockSearchView(View):
         from core.services.stock_service import StockService
         from core.services.stock_cache import StockCache
         
-        query = request.GET.get('query')
-        if not query:
-            return JsonResponse({
-                'success': False,
-                'error': {
-                    'code': 'MISSING_QUERY',
-                    'message': 'El parámetro "query" es requerido'
-                }
-            }, status=400)
-        
         # Validar tipo de contenido
         content_type = request.GET.get('type', 'image').lower()
         if content_type not in ['image', 'video', 'audio']:
@@ -9236,6 +9226,16 @@ class StockSearchView(View):
                     'message': 'El parámetro "type" debe ser "image", "video" o "audio"'
                 }
             }, status=400)
+
+        query = request.GET.get('query', '').strip()
+        if not query:
+            # Si no hay query, usar defaults según el tipo de contenido
+            defaults = {
+                'image': 'nature',
+                'video': 'nature',
+                'audio': 'ambient'
+            }
+            query = defaults.get(content_type, 'nature')
         
         # Parsear fuentes
         sources_str = request.GET.get('sources', '')
