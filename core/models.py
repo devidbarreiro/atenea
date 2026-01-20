@@ -1635,17 +1635,13 @@ class UserCredits(models.Model):
     
     @property
     def credits_remaining(self):
-        """Créditos restantes del mes"""
-        # Si el límite es 0, es ilimitado
-        if self.monthly_limit == 0:
-            return Decimal('999999999')  # Valor muy alto para representar ilimitado
         return max(Decimal('0'), self.monthly_limit - self.current_month_usage)
     
     @property
     def usage_percentage(self):
         """Porcentaje de uso mensual"""
         if self.monthly_limit == 0:
-            return 0
+            return 100 if self.current_month_usage > 0 else 0
         return min(100, (self.current_month_usage / self.monthly_limit) * 100)
 
 

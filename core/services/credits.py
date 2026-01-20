@@ -191,10 +191,6 @@ class CreditService:
         credits = CreditService.get_or_create_user_credits(user)
         amount_decimal = Decimal(str(amount))
         
-        # Si el límite es 0, no hay límite (ilimitado)
-        if credits.monthly_limit == 0:
-            return
-        
         if credits.current_month_usage + amount_decimal > credits.monthly_limit:
             raise RateLimitExceededException(
                 f"Límite mensual excedido. Usado: {credits.current_month_usage}/{credits.monthly_limit} créditos. "
