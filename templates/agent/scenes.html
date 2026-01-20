@@ -150,18 +150,19 @@
                     <!-- Script Text -->
                     <div class="mb-3">
                         <div class="flex items-center justify-between mb-1">
-                            <label class="text-sm font-medium text-gray-700">Guión</label>
-                            <button 
-                                onclick="copySceneScript({{ scene.id }})"
-                                class="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mr-auto ml-2"
-                                title="Copiar guión">
-                                <span id="copy-icon-{{ scene.id }}">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                                    </svg>
-                                </span>
-                                <span id="copy-text-{{ scene.id }}" class="hidden text-green-600 font-medium">¡Copiado!</span>
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm font-medium text-gray-700">Guión</label>
+                                <button onclick="copySceneScript(event, this, {{ scene.id }})" 
+                                    aria-label="Copiar guión"
+                                    class="flex items-center gap-1 px-1 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors text-xs font-medium border border-blue-100"
+                                    title="Copiar guión">
+                                    <span id="copy-icon-{{ scene.id }}">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </span>
+                                </button>
+                            </div>
                             <button 
                                 onclick="openInspector({{ scene.id }})" 
                                 class="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
@@ -322,7 +323,16 @@
             <div>
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm font-medium text-gray-700">🎙️ Guión/Narración (para Audio)</label>
-                    <span id="inspector-script-char-count" class="text-xs text-gray-500">0 / 5000</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="copyInspectorField(event, this, 'inspector-script-text')" 
+                                aria-label="Copiar guión/narración"
+                                class="flex items-center gap-1 px-1 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors text-xs font-medium border border-blue-100">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                        <span id="inspector-script-char-count" class="text-xs text-gray-500 font-mono bg-gray-50 px-0.5 py-0.5 rounded border border-gray-100">0 / 5000</span>
+                    </div>
                 </div>
                 <textarea 
                     id="inspector-script-text"
@@ -337,9 +347,18 @@
             
             <!-- Visual Prompt Editor (para video) -->
             <div>
-                <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center justify-between mb-1">
                     <label class="text-sm font-medium text-gray-700">🎬 Prompt Visual (para Video)</label>
-                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 caracteres</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="copyInspectorField(event, this, 'inspector-visual-prompt')" 
+                                aria-label="Copiar prompt visual"   
+                                class="flex items-center gap-1 px-1 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors text-xs font-medium border border-blue-100">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                        <span id="inspector-visual-char-count" class="text-xs text-gray-500 font-mono bg-gray-50 px-0.5 py-0.5 rounded border border-gray-100">0 caracteres</span>
+                    </div>
                 </div>
                 <textarea 
                     id="inspector-visual-prompt"
@@ -635,29 +654,63 @@
 </div>
 
 <script>
-function copySceneScript(sceneId) {
+function copySceneScript(event, button, sceneId) {
+    // Si no recibimos el botón directamente (retrocompatibilidad), intentamos encontrarlo
+    const btn = button || (event && event.target.closest('button'));
+    
     // Obtener el texto del script desde el objeto cacheado scenesData o del DOM
     const scene = scenesData[sceneId];
     const textToCopy = scene ? scene.script_text : document.getElementById(`script-preview-${sceneId}`).innerText;
     
     if (textToCopy) {
         navigator.clipboard.writeText(textToCopy).then(() => {
-            // Mostrar feedback
-            const icon = document.getElementById(`copy-icon-${sceneId}`);
-            const text = document.getElementById(`copy-text-${sceneId}`);
+            const svg = btn.querySelector('svg');
+            const path = svg.querySelector('path');
+            const originalPath = path.getAttribute('d');
             
-            icon.classList.add('hidden');
-            text.classList.remove('hidden');
+            // Cambiar a tick
+            path.setAttribute('d', 'M5 13l4 4L19 7');
+            btn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-100');
+            btn.classList.add('bg-green-50', 'text-green-600', 'border-green-100');
             
             setTimeout(() => {
-                icon.classList.remove('hidden');
-                text.classList.add('hidden');
+                // Restaurar icono original
+                path.setAttribute('d', originalPath);
+                btn.classList.remove('bg-green-50', 'text-green-600', 'border-green-100');
+                btn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-100');
             }, 2000);
         }).catch(err => {
             console.error('Error al copiar:', err);
-            alert('No se pudo copiar el texto');
         });
     }
+}
+
+function copyInspectorField(event, button, elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    
+    const textToCopy = el.value;
+    if (!textToCopy) return;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        const svg = button.querySelector('svg');
+        const path = svg.querySelector('path');
+        const originalPath = path.getAttribute('d');
+        
+        // Cambiar a tick
+        path.setAttribute('d', 'M5 13l4 4L19 7');
+        button.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-100');
+        button.classList.add('bg-green-50', 'text-green-600', 'border-green-100');
+        
+        setTimeout(() => {
+            // Restaurar icono original
+            path.setAttribute('d', originalPath);
+            button.classList.remove('bg-green-50', 'text-green-600', 'border-green-100');
+            button.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-100');
+        }, 2000);
+    }).catch(err => {
+        console.error('Error al copiar:', err);
+    });
 }
 
 const scriptId = {{ script.id }};
