@@ -686,32 +686,39 @@
         </template>
     </div>
 
-    <!-- Estado vacío -->
-    <div x-show="!loading && (!results || results.length === 0) && query" 
-         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">🔍</div>
-                <h1 class="text-3xl font-bold text-gray-800">No se encontraron resultados</h1>
-                <p class="py-6 text-gray-600">
-                    Intenta con otros términos de búsqueda o ajusta los filtros
-                </p>
-            </div>
+    <!-- Estado vacío unificado -->
+    <div x-show="!loading && (!results || results.length === 0)" 
+         class="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform scale-95"
+         x-transition:enter-end="opacity-100 transform scale-100">
+        
+        <div class="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+            <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
         </div>
-    </div>
-
-    <!-- Estado inicial - solo se muestra si no hay resultados y no hay query -->
-    <div x-show="!loading && !query && (!results || results.length === 0)" 
-         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">📚</div>
-                <h1 class="text-3xl font-bold text-gray-800">Cargando contenido destacado...</h1>
-                <p class="py-6 text-gray-600">
-                    Mostrando contenido popular mientras buscas
-                </p>
-            </div>
-        </div>
+        
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">No encontramos lo que buscas</h2>
+        <p class="text-gray-500 max-w-md mx-auto mb-8">
+            No hay resultados para los filtros seleccionados. Intenta usar términos más generales o eliminar algunos filtros.
+        </p>
+        
+        <button 
+            @click="
+                query = ''; 
+                selectedSources = [...availableSources]; 
+                licenseFilter = 'all'; 
+                orientation = '';
+                audioType = 'all';
+                search();
+            "
+            class="px-6 py-2.5 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-all transform hover:scale-105 shadow-md flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Limpiar filtros y buscar
+        </button>
     </div>
 
     <!-- Modal para mover a proyecto -->
