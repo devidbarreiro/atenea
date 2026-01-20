@@ -210,6 +210,10 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# Tiempo de expiración de tokens (en segundos)
+# Configurado a 15 minutos (15 * 60)
+PASSWORD_RESET_TIMEOUT = 900
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 

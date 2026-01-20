@@ -28,6 +28,9 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
+from django.core.mail import send_mail
+from django.utils.html import strip_tags
+
 # Lazy import to avoid CI failures (rembg requires onnxruntime)
 def get_remove_image_background_task():
     from core.tasks import remove_image_background_task
@@ -8152,7 +8155,7 @@ class UserMenuView(View):
             return "La contraseña debe contener al menos una letra mayúscula."
         if not re.search(r'\d', password):
             return "La contraseña debe contener al menos un número."
-        if not re.search(r'[^A-Za-z0-9]', password):
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\\;/+=]', password):
             return "La contraseña debe contener al menos un carácter especial."
         return None
 
@@ -8399,52 +8402,76 @@ class UserMenuView(View):
         return redirect('core:user_menu')
 
 
-def activate_account(request, uidb64, token):
-    """Activate account view: user follows email link, sets password, and is activated."""
-    try:
-        uid = force_str(urlsafe_base64_decode(uidb64))
-        user = User.objects.get(pk=uid)
-        # Validar token ANTES de usar el usuario
-        if not default_token_generator.check_token(user, token):
-            user = None #invalidar si token no coincide
-    except Exception:
-        user = None
+class ActivateAccountView(View):
+    """
+    Vista de activación de cuenta: el usuario sigue el enlace del correo,
+    establece su contraseña y se activa la cuenta.
+    Soporta extra_context para ocultar sidebar/header.
+    """
+    template_name = 'users/activate_account.html'
+    invalid_template_name = 'users/activation_invalid.html'
+    extra_context = None
 
-    # If token is invalid or user not found, render an informative page instead of redirecting
-    if user is None:
-        return render(request, 'users/activation_invalid.html', {
-            'user_obj': None,
-            'message': 'El enlace de activación no es válido o ha expirado.'
-        })
+    def get_user(self, uidb64):
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            return User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return None
 
-    # If someone else is currently authenticated on this browser, log them out
-    # so the activation can proceed for the target account. This avoids errors
-    # when trying to activate while another session is active.
+    def get_context_data(self, **kwargs):
+        context = {}
+        if hasattr(self, 'extra_context') and self.extra_context:
+            context.update(self.extra_context)
+        context.update(kwargs)
+        return context
 
-    # verifica si la cuenta esta activa y redirije al login 
-    if user.is_active:
-        messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
-        return redirect('core:login')
 
-    # If someone else is currently authenticated on this browser, log them out
-    if request.user.is_authenticated and request.user.pk != user.pk:
-        # logout the current session and inform the user
-        logout(request)
-        messages.info(request, 'La sesión anterior se ha cerrado para continuar con la activación de la cuenta.')
+
+    def get(self, request, uidb64, token):
+        user = self.get_user(uidb64)
+
+        if user is None or not default_token_generator.check_token(user, token):
+            return render(request, self.invalid_template_name, {
+                'user_obj': None,
+                'message': 'El enlace de activación no es válido o ha expirado.'
+            })
+
+        if user.is_active:
+            messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
+            return redirect('core:login')
+
+        if request.user.is_authenticated and request.user.pk != user.pk:
+            logout(request)
+            messages.info(request, 'La sesión anterior se ha cerrado para continuar con la activación de la cuenta.')
+
+        logger.info(f"Activation GET for uid={uidb64} user_id={getattr(user, 'pk', None)}")
+        form = ActivationSetPasswordForm(user=user)
         
-    # Procesar contraseña y activar (con logging y manejo de errores)
-    if request.method == 'POST':
+        context = self.get_context_data(form=form, user=user)
+        return render(request, self.template_name, context)
+
+    def post(self, request, uidb64, token):
+        user = self.get_user(uidb64)
+
+        if user is None or not default_token_generator.check_token(user, token):
+            return render(request, self.invalid_template_name, {
+                'user_obj': None,
+                'message': 'El enlace de activación no es válido o ha expirado.'
+            })
+
+        if user.is_active:
+            messages.info(request, 'Tu cuenta ya está activa. Puedes iniciar sesión.')
+            return redirect('core:login')
+
         logger.info(f"Activation POST received for uid={uidb64} user_id={getattr(user, 'pk', None)}")
         form = ActivationSetPasswordForm(user=user, data=request.POST)
+
         if form.is_valid():
             try:
-                # Guardar la contraseña (SetPasswordForm.save() llama a user.save())
                 form.save()
-
-                # Marcar activo antes de guardar la contraseña
                 user.is_active = True
                 user.save(update_fields=["is_active"])
-                # Refrescar desde la base de datos para verificar
                 user.refresh_from_db()
 
                 if user.is_active:
@@ -8455,19 +8482,15 @@ def activate_account(request, uidb64, token):
                 return redirect("core:login")
 
             except Exception as e:
-                # Capturar cualquier excepción durante el guardado para depuración
                 logger.exception(f"Exception during account activation for user {getattr(user, 'pk', None)}: {e}")
                 messages.error(request, "Ocurrió un error al activar la cuenta. Por favor intenta de nuevo o contacta con el administrador.")
         else:
-            # Form invalid: log details for debugging
             for field, errors in form.errors.items():
                 messages.error(request, errors)
                 break
-    else:
-        logger.info(f"Activation GET for uid={uidb64} user_id={getattr(user, 'pk', None)}")
-        form = ActivationSetPasswordForm(user=user)
-
-    return render(request, 'users/activate_account.html', {'form': form, 'user': user})
+        
+        context = self.get_context_data(form=form, user=user)
+        return render(request, self.template_name, context)
 
 class AddCreditsView(View):
     def post(self, request):
@@ -10810,6 +10833,61 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
             logger.error(f"Error inesperado al subir archivo: {e}", exc_info=True)
             messages.error(request, 'Error inesperado al subir el archivo. Por favor, contacta al soporte.')
             return redirect('core:library')
+
+
+class PasswordResetRequestView(View):
+    def get(self, request):
+        return render(request, 'login/password_reset_form.html', {'hide_header': True})
+
+    def post(self, request):
+        
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+
+        # Siempre mostrar mensaje de éxito para no enumerar usuarios
+        success_message = 'Si los datos son correctos, recibirás un correo con las instrucciones.'
+        
+        if not username or not email:
+            messages.error(request, 'Por favor completa todos los campos.')
+            return render(request, 'login/password_reset_form.html', {'hide_header': True})
+
+        try:
+            user = User.objects.get(username=username, email=email)
+            if user.is_active:
+                token = default_token_generator.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                
+                try:
+                    reset_url = request.build_absolute_uri(
+                        reverse('core:password_reset_confirm', args=[uid, token])
+                    )
+                    
+                    subject = 'Restablecer contraseña - Atenea'
+                    html_message = render_to_string('login/password_reset_email.html', {
+                        'user': user,
+                        'reset_url': reset_url,
+                    })
+                    plain_message = strip_tags(html_message)
+                    
+                    send_mail(
+                        subject, 
+                        plain_message, 
+                        settings.DEFAULT_FROM_EMAIL, 
+                        [email], 
+                        html_message=html_message
+                    )
+                    logger.info("Password reset email sent for user_id=%s", user.pk)
+                except Exception as e:
+                    logger.error(f"Error sending password reset email: {e}")
+        except User.DoesNotExist:
+            # Simular tiempo de espera para evitar timing attacks
+            import time
+            import random
+            time.sleep(random.uniform(0.1, 0.3))
+            pass
+            
+        messages.success(request, success_message)
+        return render(request, 'login/password_reset_form.html', {'hide_header': True})
 
 class SceneDeleteView(View):
     """Vista para eliminar una escena"""

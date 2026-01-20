@@ -971,3 +971,9 @@ class AudioForm(forms.Form):
         widget=forms.HiddenInput()
     )
 
+
+class PasswordResetRequestForm(forms.Form):
+    """Formulario para solicitar restablecimiento de contraseña"""
+    username = forms.CharField(required=True)
+    email = forms.EmailField(required=True)
+

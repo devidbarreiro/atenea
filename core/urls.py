@@ -1,4 +1,5 @@
-from django.urls import path, re_path
+from django.urls import path, re_path, reverse_lazy
+from django.contrib.auth import views as auth_views
 from . import views
 
 app_name = 'core'
@@ -7,6 +8,14 @@ urlpatterns = [
     # Authentication
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
+    
+    # Password Reset
+    path('password-reset/request/', views.PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('password-reset/confirm/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(
+        template_name='login/password_reset_confirm.html', 
+        success_url=reverse_lazy('core:login'),
+        extra_context={'hide_header': True}
+    ), name='password_reset_confirm'),
 
 
     # Dashboard
@@ -153,7 +162,7 @@ urlpatterns = [
 
     # User Management
     path('users/menu/', views.UserMenuView.as_view(), name='user_menu'),
-    path('users/activate/<uidb64>/<token>/', views.activate_account, name='activate_account'),
+    path('users/activate/<uidb64>/<token>/', views.ActivateAccountView.as_view(extra_context={'hide_header': True}), name='activate_account'),
     path('no-permissions/', views.no_permissions, name='no_permissions'),
     path("credits/add/", views.AddCreditsView.as_view(), name="add_credits"),
     path('user/set-monthly-limit/', views.SetMonthlyLimitView.as_view(), name='set_monthly_limit'),
