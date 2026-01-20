@@ -9986,6 +9986,30 @@ class StockDownloadView(LoginRequiredMixin, View):
                         file_extension = 'ogg'
                         detected_mime = 'audio/ogg'
                 
+                # --- MIME GUARD ---
+                # Verificar que el MIME detectado (si existe) coincida con el tipo esperado
+                expected_type_guard = item.get('content_type') or content_type
+                if detected_mime and expected_type_guard:
+                    allowed_prefixes = []
+                    if expected_type_guard == 'image':
+                        allowed_prefixes = ['image/']
+                    elif expected_type_guard == 'video':
+                        allowed_prefixes = ['video/']
+                    elif expected_type_guard == 'audio':
+                        allowed_prefixes = ['audio/']
+                    
+                    # Si tenemos prefixes definidos, verificamos. Si no (tipo desconocido), permitimos pasar (fallback)
+                    if allowed_prefixes:
+                        is_valid_mime = any(detected_mime.startswith(prefix) for prefix in allowed_prefixes)
+                        if not is_valid_mime:
+                            err_msg = f"MIME guard failed: Expected '{expected_type_guard}' but detected '{detected_mime}'"
+                            logger.error(f"StockDownloadView Error: {err_msg}. Item ID: {item.get('id')}")
+                            return JsonResponse({
+                                'success': False,
+                                'error': f"Tipo de archivo incorrecto. Se esperaba {expected_type_guard} pero se recibió {detected_mime}."
+                            }, status=400)
+                # ------------------
+                
                 # Si no se pudo determinar desde magic bytes ni Content-Type, intentar desde URL
                 if not file_extension:
                     url_path = download_url.split('?')[0]  # Remover query params

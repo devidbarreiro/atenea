@@ -276,14 +276,14 @@ class PexelsClient:
             title = video.get('title') or video.get('alt')
             if not title and video.get('url'):
                  # Extraer del slug: https://www.pexels.com/video/this-is-a-slug-12345/
-                 try:
-                     slug = video.get('url', '').split('/')[-2]
-                     # Remover ID numérico final si existe
-                     if '-' in slug and slug.split('-')[-1].isdigit():
-                         slug = '-'.join(slug.split('-')[:-1])
-                     title = slug.replace('-', ' ').capitalize()
-                 except:
-                     pass
+                try:
+                    slug = video.get('url', '').split('/')[-2]
+                    # Remover ID numérico final si existe
+                    if '-' in slug and slug.split('-')[-1].isdigit():
+                        slug = '-'.join(slug.split('-')[:-1])
+                    title = slug.replace('-', ' ').capitalize()
+                except (IndexError, AttributeError) as e:
+                    logger.debug(f"Could not extract title from URL: {e}")
             
             parsed_item = {
                 'id': str(video.get('id', '')),
