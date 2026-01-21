@@ -9877,12 +9877,12 @@ class StockDownloadView(LoginRequiredMixin, View):
                     # Intentar buscar por UUID primero (formato 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
                     try:
                         project = Project.objects.get(uuid=project_id)
-                    except (Project.DoesNotExist, ValueError, TypeError):
+                    except (Project.DoesNotExist, ValueError, TypeError) as e:
                         # Fallback a ID numérico si no es UUID válido o no se encuentra
                         if isinstance(project_id, int) or (isinstance(project_id, str) and project_id.isdigit()):
                             project = Project.objects.get(id=project_id)
                         else:
-                            raise Project.DoesNotExist
+                            raise Project.DoesNotExist from e
                     # Verificar acceso usando ProjectService (incluye owner y colaboradores)
                     from core.services import ProjectService
                     if not ProjectService.user_has_access(project, request.user):
