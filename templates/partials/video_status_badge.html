@@ -28,6 +28,15 @@
         Error
     </span>
 </div>
+{% elif video.status == 'cancelled' %}
+<div id="video-status-badge-{{ video.id }}">
+    <span class="px-2 py-1 rounded text-xs font-semibold bg-gray-200 text-gray-600 flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Cancelado
+    </span>
+</div>
 {% else %}
 <div id="video-status-badge-{{ video.id }}">
     <span class="px-2 py-1 rounded text-xs font-semibold bg-gray-500 text-white">

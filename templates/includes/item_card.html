@@ -133,6 +133,7 @@ Ejemplo de uso:
                 {% if item.status == 'completed' %}Completado
                 {% elif item.status == 'processing' or item.status == 'generating' %}Procesando
                 {% elif item.status == 'error' %}Error
+                {% elif item.status == 'cancelled' %}Cancelado
                 {% else %}Pendiente
                 {% endif %}
             </span>

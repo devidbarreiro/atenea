@@ -56,7 +56,6 @@
                     hx-confirm="¿Cancelar?"
                     hx-target="#active-queues-content"
                     hx-swap="innerHTML"
-                    hx-get="{% url 'core:active_queues_dropdown' %}"
                     hx-on::after-request="
                         window.dispatchEvent(new CustomEvent('task-status-changed'));
                         window.dispatchEvent(new CustomEvent('queues-updated'));
