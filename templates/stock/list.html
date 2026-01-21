@@ -31,13 +31,7 @@
                         type="submit"
                         :disabled="loading || !query.trim()"
                         class="absolute right-2 top-1/2 transform -translate-y-1/2 px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium">
-                        <span x-show="!loading">Buscar</span>
-                        <span x-show="loading" class="flex items-center gap-2">
-                            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </span>
+                        Buscar
                     </button>
                 </div>
             </form>
@@ -171,7 +165,16 @@
     <!-- Barra de herramientas: Contador y Toggle de vista -->
     <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
         <!-- Contador de resultados (solo cuando hay resultados) -->
-        <div class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0 flex items-center gap-2">
+            <button 
+                @click="search(true, true)"
+                class="p-1 bg-gray-200 text-gray-400 hover:text-black hover:bg-gray-300 rounded-md transition-all"
+                title="Restaurar caché"
+                aria-label="Restaurar caché">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+            </button>
             <p x-show="results && Array.isArray(results) && results.length > 0" class="text-sm text-gray-600">
                 Mostrando <span class="font-semibold text-gray-900" x-text="results.length"></span> de 
                 <span class="font-semibold text-gray-900" x-text="totalResults || results.length"></span> resultados
@@ -569,7 +572,7 @@
                             </div>
                         </template>
                         
-                        <template x-if="contentType === 'audio'">
+                        <template x-if="contentType === 'audio' && results[currentIndex]">
                             <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-8"
                                  x-data="{ playing: false, duration: 0 }"
                                  x-init="
@@ -580,7 +583,7 @@
                                             });
                                         }
                                     });
-                                    duration = results[currentIndex].duration || 0;
+                                    duration = (results[currentIndex] && results[currentIndex].duration) || 0;
                                  ">
                                 <!-- Botón Play/Pause grande -->
                                 <button 
@@ -610,7 +613,7 @@
                                 <!-- Audio oculto -->
                                 <audio 
                                     x-ref="audioPlayerSingle"
-                                    :src="results[currentIndex].preview || results[currentIndex].download_url" 
+                                    :src="(results[currentIndex] || {}).preview || (results[currentIndex] || {}).download_url" 
                                     preload="metadata"
                                     @ended="playing = false"
                                     @pause="playing = false"
@@ -686,32 +689,39 @@
         </template>
     </div>
 
-    <!-- Estado vacío -->
-    <div x-show="!loading && (!results || results.length === 0) && query" 
-         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">🔍</div>
-                <h1 class="text-3xl font-bold text-gray-800">No se encontraron resultados</h1>
-                <p class="py-6 text-gray-600">
-                    Intenta con otros términos de búsqueda o ajusta los filtros
-                </p>
-            </div>
+    <!-- Estado vacío unificado -->
+    <div x-show="!loading && (!results || results.length === 0)" 
+         class="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform scale-95"
+         x-transition:enter-end="opacity-100 transform scale-100">
+        
+        <div class="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+            <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
         </div>
-    </div>
-
-    <!-- Estado inicial - solo se muestra si no hay resultados y no hay query -->
-    <div x-show="!loading && !query && (!results || results.length === 0)" 
-         class="hero min-h-[400px] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <div class="text-6xl mb-4 opacity-30">📚</div>
-                <h1 class="text-3xl font-bold text-gray-800">Cargando contenido destacado...</h1>
-                <p class="py-6 text-gray-600">
-                    Mostrando contenido popular mientras buscas
-                </p>
-            </div>
-        </div>
+        
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">No encontramos lo que buscas</h2>
+        <p class="text-gray-500 max-w-md mx-auto mb-8">
+            No hay resultados para los filtros seleccionados. Intenta usar términos más generales o eliminar algunos filtros.
+        </p>
+        
+        <button 
+            @click="
+                query = ''; 
+                selectedSources = [...availableSources]; 
+                licenseFilter = 'all'; 
+                orientation = '';
+                audioType = 'all';
+                search();
+            "
+            class="px-6 py-2.5 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-all transform hover:scale-105 shadow-md flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Limpiar filtros y buscar
+        </button>
     </div>
 
     <!-- Modal para mover a proyecto -->
@@ -724,9 +734,16 @@
                 <template x-for="(project, index) in projects" :key="`project-${project.uuid}-${index}`">
                     <button 
                         @click="confirmMoveToProject(project.uuid)"
-                        class="w-full text-left px-4 py-2 border rounded hover:bg-gray-50 flex items-center justify-between">
+                        :disabled="movingToProjectId !== null"
+                        class="w-full text-left px-4 py-2 border rounded hover:bg-gray-50 flex items-center justify-between transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <span x-text="project.name"></span>
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div x-show="movingToProjectId === project.uuid">
+                            <svg class="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                        <svg x-show="movingToProjectId !== project.uuid" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
                     </button>
@@ -782,6 +799,7 @@ function stockSearch() {
         selectedItem: null,
         projects: [],
         downloadLoading: false,
+        movingToProjectId: null,
         viewMode: 'grid', // 'grid' o 'single'
         currentIndex: 0,
         _initialized: false,
@@ -859,13 +877,8 @@ function stockSearch() {
                 this.selectedSources = [...this.availableSources];
             }
             
-            // Si hay query inicial, buscar
-            if (this.query) {
-                this.search();
-            } else {
-                // Precargar contenido genérico
-                this.loadFeaturedContent();
-            }
+            // Iniciar búsqueda (si no hay query, el backend usará defaults)
+            this.search();
             
             // Configurar navegación de teclado solo si estamos en vista única
             if (this.viewMode === 'single') {
@@ -886,11 +899,7 @@ function stockSearch() {
             // Crear nuevo handler
             this._popstateHandler = () => {
                 this.readUrlParams();
-                if (this.query) {
-                    this.search();
-                } else {
-                    this.loadFeaturedContent();
-                }
+                this.search();
                 // Reconfigurar navegación de teclado si cambió el modo de vista
                 if (this.viewMode === 'single') {
                     this.setupKeyboardNavigation();
@@ -1191,66 +1200,13 @@ function stockSearch() {
             this.query = '';
             this.results = [];
             this.updateUrl({ query: '', page: 1, view: 'grid', index: 0 });
-            this.loadFeaturedContent();
+            this.search();
         },
 
-        async loadFeaturedContent() {
-            // Búsquedas genéricas para mostrar contenido destacado
-            const featuredQueries = {
-                'image': 'nature',
-                'video': 'nature',
-                'audio': 'ambient'
-            };
-            
-            const featuredQuery = featuredQueries[this.contentType] || 'nature';
-            this.loading = true;
-            this.error = null;
-            
-            try {
-                // Buscar directamente sin modificar el input
-                const params = new URLSearchParams({
-                    query: featuredQuery,
-                    type: this.contentType,
-                    page: 1,
-                    per_page: 20
-                });
 
-                if (this.selectedSources.length > 0) {
-                    params.append('sources', this.selectedSources.join(','));
-                }
 
-                const response = await fetch(`/api/stock/search/?${params.toString()}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
-                    this.results = newResults;
-                    this.totalResults = data.data?.total || this.results.length || 0;
-                    // Determinar si hay más resultados disponibles (considerando límite máximo de páginas)
-                    this.hasMore = newResults.length === 20 && this.page < this.maxPage; // perPage por defecto
-                } else {
-                    this.results = [];
-                    this.totalResults = 0;
-                    this.hasMore = false;
-                }
-            } catch (e) {
-                console.error('Error cargando contenido destacado:', e);
-                this.results = [];
-                this.totalResults = 0;
-            } finally {
-                this.loading = false;
-            }
-        },
-
-        async search(resetPage = true) {
-            if (!this.query.trim()) {
-                this.results = [];
-                this.totalResults = 0;
-                this.hasMore = false;
-                this.currentIndex = 0;
-                this.updateUrl({ query: '', page: 1 });
-                return;
-            }
+        async search(resetPage = true, forceRefresh = false) {
+            // Permitimos búsqueda con query vacío (el backend usará defaults)
 
             if (resetPage) {
                 this.page = 1;
@@ -1275,7 +1231,8 @@ function stockSearch() {
                     query: this.query,
                     type: this.contentType,
                     page: this.page,
-                    per_page: this.perPage
+                    per_page: this.perPage,
+                    use_cache: !forceRefresh
                 });
 
                 if (this.selectedSources.length > 0) {
@@ -1353,55 +1310,8 @@ function stockSearch() {
                 return;
             }
             
-            // Si no hay query, usar la búsqueda destacada con página incrementada
-            if (!this.query.trim()) {
-                // Cargar más contenido destacado
-                const featuredQueries = {
-                    'image': 'nature',
-                    'video': 'landscape',
-                    'audio': 'ambient'
-                };
-                
-                const featuredQuery = featuredQueries[this.contentType] || 'nature';
-                this.page += 1;
-                this.loadingMore = true;
-                
-                try {
-                    const params = new URLSearchParams({
-                        query: featuredQuery,
-                        type: this.contentType,
-                        page: this.page,
-                        per_page: this.perPage
-                    });
-
-                    if (this.selectedSources.length > 0) {
-                        params.append('sources', this.selectedSources.join(','));
-                    }
-
-                    const response = await fetch(`/api/stock/search/?${params.toString()}`);
-                    const data = await response.json();
-
-                    if (data.success) {
-                        const newResults = Array.isArray(data.data?.results) ? data.data.results : [];
-                        // Agregar resultados a los existentes
-                        this.results = [...this.results, ...newResults];
-                        this.totalResults = data.data?.total || this.results.length || 0;
-                        // Determinar si hay más resultados (considerando límite máximo de páginas)
-                        this.hasMore = newResults.length === this.perPage && this.page < this.maxPage;
-                    } else {
-                        this.hasMore = false;
-                    }
-                } catch (e) {
-                    console.error('Error cargando más contenido destacado:', e);
-                    this.hasMore = false;
-                } finally {
-                    this.loadingMore = false;
-                }
-            } else {
-                // Búsqueda normal con query
-                this.page += 1;
-                await this.search(false);
-            }
+            this.page += 1;
+            await this.search(false);
         },
 
         async downloadItem(item) {
@@ -1528,12 +1438,19 @@ function stockSearch() {
         async confirmMoveToProject(projectId) {
             if (!this.selectedItem) return;
 
-            this.downloadLoading = true;
+            this.movingToProjectId = projectId;
+            
             try {
                 // Obtener CSRF token de forma segura
                 const csrfToken = this.getCSRFToken();
                 if (!csrfToken) {
-                    alert('Error: No se pudo obtener el token de seguridad. Por favor recarga la página.');
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Error de seguridad',
+                            message: 'No se pudo obtener el token CSRF. Recarga la página.',
+                        }
+                    }));
                     return;
                 }
                 
@@ -1554,16 +1471,35 @@ function stockSearch() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(data.message || 'Item guardado en proyecto correctamente');
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'success',
+                            title: '¡Guardado!',
+                            message: data.message || 'Item guardado en proyecto correctamente',
+                            auto_close: 3
+                        }
+                    }));
                     this.showProjectModal = false;
                 } else {
-                    alert('Error: ' + (data.error || 'Error al guardar en proyecto'));
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            type: 'error',
+                            title: 'Error',
+                            message: data.error || 'Error al guardar en proyecto',
+                        }
+                    }));
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
                 console.error('Error moviendo a proyecto:', e);
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        type: 'error',
+                        title: 'Error de conexión',
+                        message: e.message || 'Ocurrió un error inesperado',
+                    }
+                }));
             } finally {
-                this.downloadLoading = false;
+                this.movingToProjectId = null;
             }
         }
     }

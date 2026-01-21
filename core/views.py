@@ -9222,16 +9222,6 @@ class StockSearchView(View):
         from core.services.stock_service import StockService
         from core.services.stock_cache import StockCache
         
-        query = request.GET.get('query')
-        if not query:
-            return JsonResponse({
-                'success': False,
-                'error': {
-                    'code': 'MISSING_QUERY',
-                    'message': 'El parámetro "query" es requerido'
-                }
-            }, status=400)
-        
         # Validar tipo de contenido
         content_type = request.GET.get('type', 'image').lower()
         if content_type not in ['image', 'video', 'audio']:
@@ -9242,6 +9232,16 @@ class StockSearchView(View):
                     'message': 'El parámetro "type" debe ser "image", "video" o "audio"'
                 }
             }, status=400)
+
+        query = request.GET.get('query', '').strip()
+        if not query:
+            # Si no hay query, usar defaults según el tipo de contenido
+            defaults = {
+                'image': 'nature',
+                'video': 'nature',
+                'audio': 'ambient'
+            }
+            query = defaults.get(content_type, 'nature')
         
         # Parsear fuentes
         sources_str = request.GET.get('sources', '')
@@ -9357,8 +9357,8 @@ class StockSearchView(View):
                     per_page=per_page
                 )
             
-            # Guardar en caché
-            if use_cache:
+            # Guardar en caché (siempre, para actualizar datos frescos)
+            if results:
                 try:
                     cache_kwargs = {
                         'query': query,
@@ -9842,21 +9842,30 @@ class StockDownloadView(LoginRequiredMixin, View):
                     'error': 'Item no proporcionado'
                 }, status=400)
             
-            # Obtener la URL directa del archivo (priorizar download_url sobre url)
-            # download_url es la URL directa del archivo, url puede ser la página web
-            # Para Freepik: 'url' es HTML, 'preview' es la URL directa
-            download_url = item.get('download_url') or item.get('preview') or item.get('original_url')
+            # Estrategia de extracción de URL mejorada
+            # 1. Preferir 'download_url' explícita
+            download_url = item.get('download_url')
             
-            # Si download_url es una página HTML (especialmente Freepik), usar preview
-            if download_url and isinstance(download_url, str) and download_url.endswith(('.htm', '.html')):
-                logger.warning(f"StockDownloadView: download_url es HTML, usando preview en su lugar")
-                download_url = item.get('preview') or item.get('thumbnail')
+            # 2. Si no, usar 'preview' (común en imágenes/videos de stock para visualización)
+            if not download_url:
+                download_url = item.get('preview')
             
-            # Fallback: intentar 'url' solo si no es HTML
+            # 3. Si no, usar 'original_url'
+            if not download_url:
+                download_url = item.get('original_url')
+
+            # 4. Si no, intentar 'url' si parece un archivo válido
             if not download_url:
                 url_candidate = item.get('url')
-                if url_candidate and isinstance(url_candidate, str) and not url_candidate.endswith(('.htm', '.html')):
-                    download_url = url_candidate
+                if url_candidate and isinstance(url_candidate, str):
+                    # Relajar chequeo: aceptar si tiene extensión de archivo conocida o si no termina en html/htm
+                    is_html = url_candidate.endswith(('.htm', '.html')) or '/view/' in url_candidate or '/photo/' in url_candidate or '/video/' in url_candidate
+                    if not is_html:
+                        download_url = url_candidate
+            
+            # 5. Fallback final: thumbnail (mejor algo que nada)
+            if not download_url:
+                download_url = item.get('thumbnail')
             
             logger.info(f"StockDownloadView: download_url={download_url}, item.url={item.get('url')}, item.download_url={item.get('download_url')}, item.preview={item.get('preview')}")
             
@@ -9871,7 +9880,15 @@ class StockDownloadView(LoginRequiredMixin, View):
             project = None
             if project_id:
                 try:
-                    project = Project.objects.get(id=project_id)
+                    # Intentar buscar por UUID primero (formato 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
+                    try:
+                        project = Project.objects.get(uuid=project_id)
+                    except (Project.DoesNotExist, ValueError, TypeError) as e:
+                        # Fallback a ID numérico si no es UUID válido o no se encuentra
+                        if isinstance(project_id, int) or (isinstance(project_id, str) and project_id.isdigit()):
+                            project = Project.objects.get(id=project_id)
+                        else:
+                            raise Project.DoesNotExist from e
                     # Verificar acceso usando ProjectService (incluye owner y colaboradores)
                     from core.services import ProjectService
                     if not ProjectService.user_has_access(project, request.user):
@@ -9974,6 +9991,30 @@ class StockDownloadView(LoginRequiredMixin, View):
                     elif 'audio/ogg' in http_content_type:
                         file_extension = 'ogg'
                         detected_mime = 'audio/ogg'
+                
+                # --- MIME GUARD ---
+                # Verificar que el MIME detectado (si existe) coincida con el tipo esperado
+                expected_type_guard = item.get('content_type') or content_type
+                if detected_mime and expected_type_guard:
+                    allowed_prefixes = []
+                    if expected_type_guard == 'image':
+                        allowed_prefixes = ['image/']
+                    elif expected_type_guard == 'video':
+                        allowed_prefixes = ['video/']
+                    elif expected_type_guard == 'audio':
+                        allowed_prefixes = ['audio/']
+                    
+                    # Si tenemos prefixes definidos, verificamos. Si no (tipo desconocido), permitimos pasar (fallback)
+                    if allowed_prefixes:
+                        is_valid_mime = any(detected_mime.startswith(prefix) for prefix in allowed_prefixes)
+                        if not is_valid_mime:
+                            err_msg = f"MIME guard failed: Expected '{expected_type_guard}' but detected '{detected_mime}'"
+                            logger.error(f"StockDownloadView Error: {err_msg}. Item ID: {item.get('id')}")
+                            return JsonResponse({
+                                'success': False,
+                                'error': f"Tipo de archivo incorrecto. Se esperaba {expected_type_guard} pero se recibió {detected_mime}."
+                            }, status=400)
+                # ------------------
                 
                 # Si no se pudo determinar desde magic bytes ni Content-Type, intentar desde URL
                 if not file_extension:
