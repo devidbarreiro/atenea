@@ -652,9 +652,14 @@ class DashboardView(ServiceMixin, ListView):
                         audio_data = audio_service.get_audio_with_signed_url(obj)
                         item_data['signed_url'] = audio_data.get('signed_url')
                         
-                except Exception:
-                    # Si falla, simplemente no mostrar preview
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        "No se pudo generar signed_url para %s %s: %s",
+                        item_data['type'],
+                        getattr(obj, 'uuid', getattr(obj, 'id', None)),
+                        e,
+                        exc_info=True
+                    )
         
         context['recent_items'] = page_obj
         context['page_obj'] = page_obj
