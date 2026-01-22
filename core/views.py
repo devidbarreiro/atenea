@@ -28,6 +28,8 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
+from celery import current_app
+
 from django.core.mail import send_mail
 from django.utils.html import strip_tags
 
@@ -10373,13 +10375,60 @@ class CancelTaskView(LoginRequiredMixin, View):
             
             # Cancelar la tarea en Celery si tiene task_id
             if task.task_id:
-                from celery import current_app
-                current_app.control.revoke(task.task_id, terminate=True)
+
+                # Intentar usar SIGKILL primero (más efectivo en Linux/WSL)
+                try:
+                    logger.info(f"Cancelando tarea Celery: {task.task_id} (force kill - SIGKILL)")
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGKILL')
+                except AttributeError:
+                    # Fallback para Windows (no tiene SIGKILL)
+                    logger.info(f"SIGKILL no soportado, usando SIGTERM para tarea: {task.task_id}")
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGTERM')
+                except Exception as e:
+                    logger.error(f"Error al revocar tarea {task.task_id}: {e}")
+                    # Último intento con SIGTERM
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGTERM')
+
+                # Actualizar estado del item asociado a 'cancelled'
+                try:
+                    item = None
+                    if task.task_type == 'video':
+                        item = Video.objects.filter(uuid=task.item_uuid).first()
+                    elif task.task_type == 'image':
+                        item = Image.objects.filter(uuid=task.item_uuid).first()
+                    elif task.task_type == 'audio':
+                        item = Audio.objects.filter(uuid=task.item_uuid).first()
+                    
+                    if item:
+                        # Usar update para ser más eficiente y evitar señales si no es necesario
+                        item_class = item.__class__
+                        item_class.objects.filter(pk=item.pk).update(status='cancelled')
+                        logger.info(f"Item {task.item_uuid} ({task.task_type}) marcado como cancelado")
+                except Exception as e:
+                    logger.error(f"Error al actualizar estado del item: {e}")
+
+            else:
+                logger.warning(f"Tarea {task.uuid} no tiene task_id de Celery para revocar")
             
             # Marcar como cancelada
-            task.mark_as_cancelled(reason='Cancelada por el usuario')
+            task.mark_as_cancelled(reason='Cancelada por el usuario (Force killed)')
             
-            return JsonResponse({'success': True})
+            # Obtener lista actualizada para refrescar el dropdown
+            active_tasks = GenerationTask.objects.filter(
+                user=request.user,
+                status__in=['queued', 'processing']
+            ).order_by('-created_at')[:20]
+            
+            active_count = GenerationTask.objects.filter(
+                user=request.user,
+                status__in=['queued', 'processing']
+            ).count()
+            
+            return render(request, 'partials/active_queues_dropdown.html', {
+                'active_tasks': active_tasks,
+                'active_count': active_count,
+            })
+            
         except GenerationTask.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Tarea no encontrada'}, status=404)
 

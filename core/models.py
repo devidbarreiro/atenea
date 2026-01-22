@@ -40,6 +40,7 @@ VIDEO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 # Tipos de video para el flujo del agente
@@ -74,6 +75,7 @@ IMAGE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 AUDIO_STATUS = [
@@ -81,6 +83,7 @@ AUDIO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCRIPT_STATUS = [
@@ -88,6 +91,7 @@ SCRIPT_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_STATUS = [
@@ -95,6 +99,7 @@ SCENE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_AI_SERVICES = [

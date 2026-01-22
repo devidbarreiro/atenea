@@ -1203,9 +1203,10 @@ document.addEventListener('alpine:init', () => {
                                               'bg-green-100 text-green-700': item.status === 'completed',
                                               'bg-yellow-100 text-yellow-700': item.status === 'processing',
                                               'bg-red-100 text-red-700': item.status === 'error',
+                                              'bg-gray-200 text-gray-600': item.status === 'cancelled',
                                               'bg-gray-100 text-gray-700': item.status === 'pending'
                                           }"
-                                          x-text="item.status === 'completed' ? 'Completado' : item.status === 'processing' ? 'Procesando' : item.status === 'error' ? 'Error' : 'Pendiente'">
+                                          x-text="item.status === 'completed' ? 'Completado' : item.status === 'processing' ? 'Procesando' : item.status === 'error' ? 'Error' : item.status === 'cancelled' ? 'Cancelado' : 'Pendiente'">
                                     </span>
                                 </div>
                                 
@@ -1576,8 +1577,9 @@ document.addEventListener('alpine:init', () => {
                         <span :class="{
                             'bg-yellow-100 text-yellow-800': selectedItem.status === 'processing',
                             'bg-red-100 text-red-800': selectedItem.status === 'error',
+                            'bg-gray-200 text-gray-600': selectedItem.status === 'cancelled',
                             'bg-gray-100 text-gray-800': selectedItem.status === 'pending'
-                        }" class="px-3 py-1 rounded-full text-xs font-medium" x-text="selectedItem.status_display"></span>
+                        }" class="px-3 py-1 rounded-full text-xs font-medium" x-text="selectedItem.status_display || (selectedItem.status === 'cancelled' ? 'Cancelado' : selectedItem.status)"></span>
                         <p x-show="selectedItem.error_message" class="mt-2 text-sm text-red-600" x-text="selectedItem.error_message"></p>
                     </div>
                     
