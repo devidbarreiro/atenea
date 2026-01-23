@@ -1926,6 +1926,36 @@ class VideoDeleteView(BreadcrumbMixin, DeleteView):
         return redirect(success_url)
 
 
+class PublicVideoDetailView(View):
+    """Vista pública para compartir videos"""
+    template_name = 'videos/public_detail.html'
+
+    def get(self, request, video_uuid):
+        # Obtener video sin verificar permisos de usuario (acceso público por UUID)
+        video = get_object_or_404(Video, uuid=video_uuid)
+
+        # Verificar que el video esté completado
+        if video.status != 'completed' or not video.gcs_path:
+            raise Http404("El video no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        video_service = VideoService()
+        try:
+            video_data = video_service.get_video_with_signed_urls(video)
+            signed_url = video_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para video público {video_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'video': video,
+            'signed_url': signed_url,
+            'hide_header': True,  # Para ocultar navegación en layouts que lo soporten
+        }
+
+        return render(request, self.template_name, context)
+
+
 # ====================
 # VIDEO ACTIONS
 # ====================
