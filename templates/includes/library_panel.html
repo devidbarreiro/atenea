@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
             let style = {};
             let classes = [];
             
-            if (item.status === 'processing' || item.status === 'generating') {
+            if (item.status === 'processing' || item.status === 'generating' || item.status === 'pending') {
                 style.backgroundColor = '#fff7ed';
                 style.borderColor = '#fdba74'; // orange-300
                 classes.push('animate-pulse', 'border-2');
@@ -53,7 +53,7 @@ document.addEventListener('alpine:init', () => {
                 style.borderColor = '#93c5fd'; // blue-300
                 classes.push('border-2', 'border-dashed');
             } else {
-                style.background = item.audio_background || 'linear-gradient(135deg, #f3e7e9 0%, #e3eeff 100%)';
+                style.background = item.background_style || item.audio_background || 'linear-gradient(135deg, `#f3e7e9` 0%, `#e3eeff` 100%)';
             }
             return { style, class: classes.join(' ') };
         },
