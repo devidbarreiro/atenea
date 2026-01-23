@@ -30,6 +30,34 @@ document.addEventListener('alpine:init', () => {
         const cachedItems = window._getLibraryCacheSync(activeTab, projectId);
         
         return {
+        // Helper para estilos de audio
+        getAudioBackground(item) {
+            if (!item) return {};
+            let style = {};
+            let classes = [];
+            
+            if (item.status === 'processing' || item.status === 'generating') {
+                style.backgroundColor = '#fff7ed';
+                style.borderColor = '#fdba74'; // orange-300
+                classes.push('animate-pulse', 'border-2');
+            } else if (item.status === 'error') {
+                style.backgroundColor = '#fee2e2';
+                style.borderColor = '#fca5a5'; // red-300
+                classes.push('border-2');
+            } else if (item.status === 'cancelled') {
+                style.backgroundColor = '#f3f4f6';
+                style.borderColor = '#d1d5db'; // gray-300
+                classes.push('border-2', 'border-dashed');
+            } else if (item.status === 'pending') {
+                style.backgroundColor = '#eff6ff'; // blue-50
+                style.borderColor = '#93c5fd'; // blue-300
+                classes.push('border-2', 'border-dashed');
+            } else {
+                style.background = item.audio_background || 'linear-gradient(135deg, #f3e7e9 0%, #e3eeff 100%)';
+            }
+            return { style, class: classes.join(' ') };
+        },
+
         // Estado de la biblioteca - CARGAR DESDE CACHÉ INSTANTÁNEAMENTE
         items: cachedItems || [],
         loading: cachedItems ? false : true, // No loading si hay caché
@@ -1051,17 +1079,37 @@ document.addEventListener('alpine:init', () => {
                                 <!-- Audio -->
                                 <div x-show="item.type === 'audio'" 
                                      class="w-full h-full flex items-center justify-center"
-                                     :style="{ background: item.audio_background || 'linear-gradient(135deg, #f3e7e9 0%, #e3eeff 100%)' }">
-                                    <svg class="w-16 h-16 text-black" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                                    </svg>
+                                     :class="getAudioBackground(item).class"
+                                     :style="getAudioBackground(item).style">
+                                    <!-- Icons based on status -->
+                                    <template x-if="item.status === 'processing' || item.status === 'generating'">
+                                        <svg class="w-12 h-12 text-orange-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'error'">
+                                        <svg class="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'pending'">
+                                        <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="!['processing', 'generating', 'error', 'pending'].includes(item.status)">
+                                        <svg class="w-16 h-16 text-black opacity-75" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                        </svg>
+                                    </template>
                                 </div>
                                 
                                 <!-- Processing -->
-                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
+                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-orange-50 border-2 border-orange-200">
                                     <div class="text-center">
                                         <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
-                                        <p class="text-xs text-gray-500">Procesando...</p>
+                                        <p class="text-xs text-orange-700 font-medium">Procesando...</p>
                                     </div>
                                 </div>
 
@@ -1385,8 +1433,17 @@ document.addEventListener('alpine:init', () => {
                     </div>
                     <!-- Audio -->
                     <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md mx-auto relative z-10">
-                        <div class="bg-white rounded-lg p-8 shadow-lg text-center"
-                             :style="{ background: selectedItem.audio_background ? selectedItem.audio_background : '#ffffff' }">
+                        <div class="bg-white rounded-lg p-8 shadow-lg text-center relative overflow-hidden"
+                             :class="getAudioBackground(selectedItem).class"
+                             :style="getAudioBackground(selectedItem).style">
+                            
+                            <!-- Processing Overlay -->
+                            <div x-show="selectedItem.status === 'processing' || selectedItem.status === 'generating'" 
+                                 class="absolute inset-0 flex flex-col items-center justify-center bg-orange-50/90 z-20">
+                                <span class="inline-block animate-spin text-5xl mb-4">⚙️</span>
+                                <p class="text-orange-800 font-semibold">Procesando...</p>
+                            </div>
+
                             <svg class="w-24 h-24 mx-auto text-black mb-6" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                             </svg>
