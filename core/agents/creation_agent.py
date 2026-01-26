@@ -15,6 +15,7 @@ from core.agents.tools.create_image_tool import create_image_tool
 from core.agents.tools.create_quote_tool import create_quote_tool
 from core.agents.tools.list_avatars_tool import list_avatars_tool
 from core.agents.tools.list_voices_tool import list_voices_tool
+from core.agents.tools.search_library_tool import search_library_tool
 from core.monitoring.langsmith_config import setup_langsmith
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class CreationAgent:
             create_video_tool,
             create_quote_tool,
             list_avatars_tool,
-            list_voices_tool
+            list_voices_tool,
+            search_library_tool
         ]
         
         # Bind tools al LLM
@@ -101,6 +103,12 @@ HERRAMIENTAS DISPONIBLES:
    - Ejemplo: "Dame voces en español"
    - Ejemplo: "Lista voces femeninas"
    - Parámetros: gender ('male', 'female'), language (ej: 'es', 'en'), limit
+
+6. BUSCAR EN BIBLIOTECA: search_library_tool - Busca contenido existente en la biblioteca del usuario
+   - Ejemplo: "Busca videos sobre dinosaurios"
+   - Ejemplo: "Encuentra imágenes que tengan 'playa' en el prompt"
+   - Ejemplo: "Busca audios o guiones sobre 'marketing'"
+   - Parámetros: query (texto a buscar), item_type ('video', 'image', 'audio', 'script', opcional), limit
 
 INSTRUCCIONES:
 - Siempre pasa user_id={user_id} a todas las tools
