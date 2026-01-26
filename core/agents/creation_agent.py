@@ -16,6 +16,7 @@ from core.agents.tools.create_quote_tool import create_quote_tool
 from core.agents.tools.list_avatars_tool import list_avatars_tool
 from core.agents.tools.list_voices_tool import list_voices_tool
 from core.agents.tools.search_library_tool import search_library_tool
+from core.agents.tools.search_stock_tool import search_stock_tool
 from core.monitoring.langsmith_config import setup_langsmith
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,8 @@ class CreationAgent:
             create_quote_tool,
             list_avatars_tool,
             list_voices_tool,
-            search_library_tool
+            search_library_tool,
+            search_stock_tool
         ]
         
         # Bind tools al LLM
@@ -109,6 +111,12 @@ HERRAMIENTAS DISPONIBLES:
    - Ejemplo: "Encuentra imágenes que tengan 'playa' en el prompt"
    - Ejemplo: "Busca audios o guiones sobre 'marketing'"
    - Parámetros: query (texto a buscar), item_type ('video', 'image', 'audio', 'script', opcional), limit
+
+7. BUSCAR CONTENIDO DE STOCK: search_stock_tool - Busca imágenes, videos o audio en bibliotecas de stock (Freepik, Pexels, Pixabay, etc.)
+   - Ejemplo: "Busca imágenes de stock de 'perros jugando'"
+   - Ejemplo: "Encuentra videos de stock de 'paisaje urbano nocturno'"
+   - Ejemplo: "Busca música de stock de 'jazz suave'"
+   - Parámetros: query (texto a buscar), media_type ('image', 'video', 'audio', default: 'image'), limit
 
 INSTRUCCIONES:
 - Siempre pasa user_id={user_id} a todas las tools
