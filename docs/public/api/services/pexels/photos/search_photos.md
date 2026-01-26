@@ -36,7 +36,7 @@ client = PexelsClient(api_key="TU_API_KEY")
 results = client.search_photos(
     "naturaleza",
     orientation=PexelsOrientation.LANDSCAPE,
-    limit=5
+    per_page=5
 )
 ```
 

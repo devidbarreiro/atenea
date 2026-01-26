@@ -19,10 +19,11 @@ Ofrece filtros avanzados de color y orientación.
 | --------- | ---- | ----------- | ------- |
 | query | str | Término de búsqueda | — |
 | orientation | str | Orientación (`landscape`, `portrait`, `squarish`) | — |
-| order_by | str | Orden (`latest`, `relevant`, `popular`) | — |
+| order_by | str | Orden (`latest`, `relevant`, `popular`) | `relevant` |
+| content_filter | str | Content safety filter | `low` |
 | color | str | Filtro de color (ej: `black_and_white`, `red`) | — |
 | page | int | Página de resultados | 1 |
-| per_page | int | Resultados por página | 20 |
+| per_page | int | Resultados por página | 10 |
 
 ---
 

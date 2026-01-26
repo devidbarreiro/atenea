@@ -18,11 +18,11 @@ Permite filtros avanzados estilo Solr.
 | Parámetro | Tipo | Descripción | Default |
 | --------- | ---- | ----------- | ------- |
 | query | str | Término de búsqueda | — |
-| filter_query | str | Filtros avanzados (ej: `duration:[1 TO 10]`) | — |
-| sort | str | Orden (ej: `score`, `duration_desc`) | — |
-| fields | str | Campos a retornar | `id,name,previews...` |
+| filter | str | Filtros avanzados (ej: `duration:[1 TO 10]`) | — |
+| sort | str | Orden (ej: `score`, `duration_desc`) | `score` |
+| fields | str | Campos a retornar | `id,name,tags,username,license` |
 | page | int | Página de resultados | 1 |
-| page_size | int | Resultados por página | 20 |
+| page_size | int | Resultados por página | 15 |
 
 ---
 

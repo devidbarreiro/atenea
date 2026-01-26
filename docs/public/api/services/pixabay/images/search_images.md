@@ -22,7 +22,7 @@ Soporta fotos, ilustraciones y vectores.
 | category | str | Categoría (ej: `nature`, `science`) | — |
 | orientation | str | Orientación (`all`, `horizontal`, `vertical`) | `all` |
 | colors | str | Filtro de color (ej: `grayscale`, `transparent`, `red`) | — |
-| safesearch | bool | Filtro de contenido seguro | `True` |
+| safesearch | bool | Filtro de contenido seguro | `false` |
 | page | int | Página de resultados | 1 |
 | per_page | int | Resultados por página | 20 |
 
