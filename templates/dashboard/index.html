@@ -491,8 +491,21 @@
                 hasMore: false,
                 filter: '{{ current_filter|default:"personal" }}',
                 searchQuery: '{{ search_query|escapejs }}',
+                currentRequestId: 0,
 
                 init() {
+                    // Register popstate listener for back/forward navigation
+                    window.addEventListener('popstate', (event) => {
+                        const url = new URL(window.location);
+                        this.filter = url.searchParams.get('filter') || 'personal';
+                        this.searchQuery = url.searchParams.get('q') || '';
+
+                        // Reset items and page to reload fresh state
+                        this.page = 1;
+                        this.items = [];
+                        this.loadItems();
+                    });
+
                     this.loadItems();
                 },
 
@@ -503,15 +516,17 @@
                         return;
                     }
 
-                    // If called from enter key
-                    if (this.searchQuery) {
-                        // Si es una búsqueda, actualizamos el filtro y recargamos
+                    // If triggered by user action (Enter or Button click) OR if query is non-empty
+                    if (this.searchQuery || event.target) {
                         this.changeFilter();
                     }
-                    if (event.preventDefault) event.preventDefault();
+                    if (event && event.preventDefault) event.preventDefault();
                 },
 
                 async loadItems(append = false) {
+                    // Generate unique request ID
+                    const requestId = ++this.currentRequestId;
+
                     if (append) {
                         this.isLoadingMore = true;
                     } else {
@@ -520,7 +535,10 @@
 
                     try {
                         const limit = 24;
-                        const offset = (this.page - 1) * limit;
+                        // Determine target page: next page if appending, otherwise reset to 1
+                        const targetPage = append ? this.page + 1 : 1;
+                        const offset = (targetPage - 1) * limit;
+
                         let url = `/api/library/items/?type=all&limit=${limit}&offset=${offset}&include_urls=true`;
 
                         if (this.filter) {
@@ -531,6 +549,10 @@
                         }
 
                         const response = await fetch(url);
+
+                        // Check if request is stale
+                        if (requestId !== this.currentRequestId) return;
+
                         const data = await response.json();
 
                         if (data.items) {
@@ -540,17 +562,24 @@
                                 this.items = data.items;
                             }
                             this.hasMore = data.has_more;
+
+                            // Only update page number on successful fetch
+                            this.page = targetPage;
                         }
                     } catch (e) {
-                        console.error('Error loading items:', e);
+                        if (requestId === this.currentRequestId) {
+                            console.error('Error loading items:', e);
+                        }
                     } finally {
-                        this.isLoading = false;
-                        this.isLoadingMore = false;
+                        if (requestId === this.currentRequestId) {
+                            this.isLoading = false;
+                            this.isLoadingMore = false;
+                        }
                     }
                 },
 
                 loadMore() {
-                    this.page++;
+                    // Do not increment optimistic page here; loadItems handles it
                     this.loadItems(true);
                 },
 
