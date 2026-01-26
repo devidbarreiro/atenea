@@ -42,6 +42,19 @@ def search_library_tool(
         if not query:
             return {'status': 'error', 'message': 'query es requerido'}
 
+        if item_type is not None and item_type not in ['video', 'image', 'audio', 'script']:
+            return {'status': 'error', 'message': 'item_type inválido'}
+
+        try:
+            limit = int(limit)
+            if limit <= 0:
+                raise ValueError
+            MAX_LIMIT = 50
+            if limit > MAX_LIMIT:
+                limit = MAX_LIMIT
+        except (ValueError, TypeError):
+             return {'status': 'error', 'message': 'limit debe ser un entero positivo'}
+
         # Validar usuario
         try:
             user = User.objects.get(id=user_id)
@@ -53,21 +66,25 @@ def search_library_tool(
         # Helper para procesar resultados
         def process_item(item, type_name):
             # Determinar campos comunes
-            title = getattr(item, 'title', 'Sin título')
-            uuid_val = str(getattr(item, 'uuid', getattr(item, 'id', '')))
+            title = getattr(item, 'title', 'Sin título') or 'Sin título'
+            uuid_val = str(getattr(item, 'uuid', getattr(item, 'id', '')) or '')
             created_at = item.created_at.isoformat() if hasattr(item, 'created_at') else None
             status = getattr(item, 'status', 'unknown')
 
             # Campos específicos
             content = ""
+            raw_content = None
+            
             if type_name == 'video':
-                content = getattr(item, 'script', '')
+                raw_content = getattr(item, 'script', '')
             elif type_name == 'image':
-                content = getattr(item, 'prompt', '')
+                raw_content = getattr(item, 'prompt', '')
             elif type_name == 'audio':
-                content = getattr(item, 'text', '') or getattr(item, 'prompt', '')
+                raw_content = getattr(item, 'text', '') or getattr(item, 'prompt', '')
             elif type_name == 'script':
-                content = getattr(item, 'original_script', '')
+                raw_content = getattr(item, 'original_script', '')
+            
+            content = str(raw_content) if raw_content is not None else ""
 
             return {
                 'id': uuid_val,
