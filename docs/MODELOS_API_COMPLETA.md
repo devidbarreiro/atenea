@@ -421,7 +421,7 @@ input_reference: <file>  // ⚠️ Imagen debe tener exactamente las mismas dime
 - `kling-v1`: ✅ Text-to-video, ✅ Image-to-video, Resolución: std=720p, pro=720p
 - `kling-v1-5`: ❌ Text-to-video, ✅ Image-to-video, Resolución: std=720p, pro=1080p
 - `kling-v1-6`: ✅ Text-to-video, ✅ Image-to-video, Resolución: std=720p, pro=1080p
-- `kling-v2-1`: ❌ Text-to-video, ✅ Image-to-video, Resolución: std=720p, pro=1080p
+- `kling-v2-1`: ✅ Text-to-video, ✅ Image-to-video, Resolución: std=720p, pro=1080p
 - `kling-v2-5-turbo`: ✅ Text-to-video, ✅ Image-to-video, Resolución: std=1080p, pro=1080p
 
 ---
@@ -672,9 +672,145 @@ input_reference: <file>  // ⚠️ Imagen debe tener exactamente las mismas dime
 
 ---
 
+#### `flux-pro/kontext/max/text-to-image`
+**Endpoint:** `POST https://platform.higgsfield.ai/flux-pro/kontext/max/text-to-image`
+
+**Parámetros:**
+```json
+{
+  "prompt": "string (requerido)",
+  "aspect_ratio": "16:9"|"4:3"|"1:1"|"3:4"|"9:16",
+  "safety_tolerance": 1-6 (opcional),
+  "seed": "string" (opcional)
+}
+```
+
+**Características:**
+- ✅ Text-to-image
+- Modelo Flux Pro Kontext Max
+
+---
+
+### 3. SEADREAM (SeaDream)
+
+#### `seedream-4-5-251128` (SeaDream 4.5)
+**Endpoint:** `POST https://ark.ap-southeast.bytepluses.com/api/v3/images/generations`
+
+**Parámetros:**
+```json
+{
+  "model": "seedream-4-5-251128",
+  "prompt": "string (requerido)",
+  "size": "2048x2048"|"2560x1440"|"1440x2560"|"2304x1728",
+  "response_format": "b64_json",
+  "watermark": false,
+  "aspect_ratio": "1:1"|"16:9"|"9:16"|"4:3" (opcional, client-side param)
+}
+```
+
+**Características:**
+- ✅ Text-to-Image
+- ✅ Multi-Image (Blending)
+- Dimensiones: 2048x2048 (1:1), 2560x1440 (16:9), 1440x2560 (9:16), 2304x1728 (4:3)
+
+#### `seedream-3-0-t2i-250415` (SeaDream 3.0)
+**Endpoint:** `POST https://ark.ap-southeast.bytepluses.com/api/v3/images/generations`
+
+**Parámetros:**
+```json
+{
+  "model": "seedream-3-0-t2i-250415",
+  "prompt": "string (requerido)",
+  "size": "1024x1024"|"1280x720"|"720x1280"|"1152x864",
+  "response_format": "b64_json",
+  "watermark": false
+}
+```
+
+**Características:**
+- ✅ Text-to-Image (Más rápido)
+- Dimensiones: 1024x1024 (1:1), 1280x720 (16:9), 720x1280 (9:16), 1152x864 (4:3)
+
+#### `seededit-3.0-i2i` (Image-to-Image)
+**Endpoint:** `POST https://ark.ap-southeast.bytepluses.com/api/v3/images/generations`
+
+**Parámetros:**
+```json
+{
+  "model": "seededit-3.0-i2i",
+  "prompt": "string (requerido)",
+  "image": ["base64_string"],
+  "size": "string (dimensiones exactas)",
+  "response_format": "b64_json"
+}
+```
+
+**Características:**
+- ✅ Image-to-Image
+
+### 4. GPT IMAGE (OpenAI)
+
+#### `gpt-image-1`
+**Endpoint:** `POST https://api.openai.com/v1/images/generations`
+
+**Parámetros:**
+```json
+{
+  "model": "gpt-image-1",
+  "prompt": "string (requerido)",
+  "n": 1,
+  "size": "1024x1024"|"1536x1024"|"1024x1536",
+  "quality": "standard"|"hd",
+  "response_format": "b64_json",
+  "style": "vivid"|"natural"
+}
+```
+
+**Características:**
+- ✅ Text-to-Image
+- ✅ Image-to-Image (Edit via `/v1/images/edits`)
+- ✅ Multi-Image (Edit via `/v1/images/edits`)
+- Resoluciones: 1024x1024 (1:1), 1536x1024 (16:9), 1024x1536 (9:16)
+
+#### `gpt-image-1.5`
+**Endpoint:** `POST https://api.openai.com/v1/images/generations`
+
+**Parámetros:** Igual que `gpt-image-1`
+
+**Características:**
+- ✅ 4x más rápido que GPT Image 1
+- Igual calidad y resoluciones
+
+---
+
 ## 🎵 MODELOS DE AUDIO
 
-### 1. ELEVENLABS TTS
+### 1. GOOGLE LYRIA (Music)
+
+#### `lyria-002` (Lyria 2)
+**Endpoint:** `POST https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/lyria-002:predict`
+
+**Parámetros:**
+```json
+{
+  "instances": [{
+    "prompt": "string (requerido, en inglés)",
+    "negative_prompt": "string (opcional, en inglés)",
+    "seed": 0-4294967295 (opcional, mutuamente exclusivo con sample_count)
+  }],
+  "parameters": {
+    "sample_count": 1-4 (opcional, mutuamente exclusivo con seed)
+  }
+}
+```
+
+**Características:**
+- ✅ Text-to-Audio (Música Instrumental)
+- Duración fija: 30 segundos
+- Sample Rate: 48kHz
+- Idioma del prompt: Inglés (en-us)
+
+### 2. ELEVENLABS TTS
 
 **Endpoint:** `POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={format}`
 
@@ -735,7 +871,7 @@ input_reference: <file>  // ⚠️ Imagen debe tener exactamente las mismas dime
 | Kling V1 | ✅ | ✅ | ❌ | 720p | ❌ | 5/10s |
 | Kling V1.5 | ❌ | ✅ | ❌ | 720p/1080p | ❌ | 5/10s |
 | Kling V1.6 | ✅ | ✅ | ❌ | 720p/1080p | ❌ | 5/10s |
-| Kling V2.1 | ❌ | ✅ | ❌ | 720p/1080p | ❌ | 5/10s |
+| Kling V2.1 | ✅ | ✅ | ❌ | 720p/1080p | ❌ | 5/10s |
 | Kling V2.5 Turbo | ✅ | ✅ | ❌ | 1080p | ❌ | 5/10s |
 | Kling V2 Master | ✅ | ✅ | ❌ | 720p | ❌ | 5/10s |
 | Higgsfield DoP Standard | ❌ | ✅ | ❌ | 720p | ❌ | 3s |
@@ -750,9 +886,14 @@ input_reference: <file>  // ⚠️ Imagen debe tener exactamente las mismas dime
 | Gemini 2.5 Flash | ✅ | ✅ | ✅ | 10 opciones |
 | Higgsfield Soul | ✅ | ❌ | ❌ | 3 opciones |
 | Reve | ✅ | ❌ | ❌ | 3 opciones |
+| Flux Pro | ✅ | ❌ | ❌ | 5 opciones |
+| SeeDream 4.5 | ✅ | ✅ | ✅ | 4 opciones |
+| SeeDream 3.0 | ✅ | ❌ | ❌ | 4 opciones |
+| GPT Image 1 | ✅ | ✅ | ✅ | 3 opciones |
 
 ### Audio
 | Modelo | Text-to-Speech | Voces | Idiomas | Formatos |
 |--------|----------------|-------|---------|-----------|
 | ElevenLabs | ✅ | Múltiples | Múltiples | 9 formatos |
+| Lyria 2 | ❌ (Music) | N/A | Inglés (Prompt) | WAV 48kHz |
 
