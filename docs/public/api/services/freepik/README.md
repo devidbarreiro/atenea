@@ -44,5 +44,5 @@
 
 ---
 
-**Más información**: [Documentación oficial de Freepik](https://developers.freepik.com/)
+**Más información**: [Documentación oficial de Freepik](https://docs.freepik.com/introduction)
 
