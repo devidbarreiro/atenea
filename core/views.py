@@ -9127,7 +9127,7 @@ class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin,
             
             # Crear nuevo índice
             assistant = DocumentationAssistant(reindex=True)
-            messages.success(request, 'Documentación re-indexada exitosamente desde docs/api')
+            messages.success(request, 'Documentación re-indexada exitosamente desde docs/public/api')
         except Exception as e:
             logger.error(f"Error al re-indexar: {e}", exc_info=True)
             messages.error(request, f'Error al re-indexar: {str(e)}')
