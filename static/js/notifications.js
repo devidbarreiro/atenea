@@ -135,10 +135,9 @@ class NotificationManager {
                 detail: { increment: true }
             }));
             
-            // Refrescar panel si está abierto
-            const panelContent = document.getElementById('notification-panel-content');
-            if (panelContent && typeof htmx !== 'undefined') {
-                htmx.trigger(panelContent, 'refreshNotifications');
+            // Refrescar paneles de notificaciones (tanto en dashboard como en creation)
+            if (typeof htmx !== 'undefined') {
+                document.body.dispatchEvent(new CustomEvent('refreshNotifications'));
             }
             
         } else if (data.type === 'progress_update') {
