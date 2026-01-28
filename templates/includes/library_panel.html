@@ -1378,10 +1378,13 @@ document.addEventListener('alpine:init', () => {
                 </button>
                 
                 <!-- Video -->
-                <video x-show="selectedItem.type === 'video' && selectedItem.signed_url" 
-                       :src="selectedItem.signed_url" 
-                       controls 
-                       class="max-w-full max-h-full rounded-lg shadow-lg"></video>
+                <div x-show="selectedItem.type === 'video' && selectedItem.signed_url" class="w-full h-full flex items-center justify-center">
+                    <video :src="selectedItem.signed_url" 
+                           controls 
+                           class="max-w-full max-h-full rounded-lg shadow-lg mx-auto">
+                        
+                    </video>
+                </div>
                 
                 <!-- Image -->
                 <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
