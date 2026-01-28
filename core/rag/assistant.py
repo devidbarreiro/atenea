@@ -81,7 +81,7 @@ class DocumentationAssistant:
                 self.vector_store_manager.delete_index()
                 logger.info("Índice anterior eliminado, creando nuevo índice...")
             
-            docs_path = getattr(settings, 'RAG_DOCS_PATH', 'docs/api')
+            docs_path = getattr(settings, 'RAG_DOCS_PATH', 'docs/public/api')
             logger.info(f"Cargando documentos desde {docs_path}...")
             loader = DocumentationLoader()
             documents = loader.load_all_documents()

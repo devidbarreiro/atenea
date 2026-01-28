@@ -36,7 +36,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING('⚠ No había índice anterior'))
             
             # Crear nuevo índice
-            self.stdout.write('📚 Cargando documentos desde docs/api...')
+            self.stdout.write('📚 Cargando documentos desde docs/public/api...')
             assistant = DocumentationAssistant(reindex=True)
             
             self.stdout.write(self.style.SUCCESS('✅ Documentación re-indexada exitosamente'))
