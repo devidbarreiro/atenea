@@ -52,6 +52,8 @@ urlpatterns = [
     path('videos/<uuid:video_uuid>/recreate/', views.VideoRecreateView.as_view(), name='video_recreate'),
     path('videos/<uuid:video_uuid>/status/', views.VideoStatusView.as_view(), name='video_status'),
     path('share/video/<uuid:video_uuid>/', views.PublicVideoDetailView.as_view(), name='public_video_detail'),
+    path('share/image/<uuid:image_uuid>/', views.PublicImageDetailView.as_view(), name='public_image_detail'),
+    path('share/audio/<uuid:audio_uuid>/', views.PublicAudioDetailView.as_view(), name='public_audio_detail'),
     
     # Images (nueva vista unificada - creación + biblioteca)
     path('images/', views.ImageLibraryView.as_view(), name='image_library'),

@@ -1,0 +1,91 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ image.title }} - Atenea</title>
+
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="{{ image.title }}">
+    <meta property="og:description" content="{{ image.prompt|default:'Imagen generada por IA'|truncatechars:200 }}">
+    <meta property="og:type" content="image">
+    {% if signed_url %}
+    <meta property="og:image" content="{{ signed_url }}">
+    {% endif %}
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 py-4">
+        <div class="container mx-auto px-4 flex justify-between items-center">
+            <a href="/" class="flex items-center gap-2">
+                <span class="text-xl font-bold text-gray-900">Atenea</span>
+                <span class="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Image</span>
+            </a>
+            {% if user.is_authenticated %}
+            <a href="{% url 'core:dashboard' %}" class="text-sm text-gray-600 hover:text-gray-900">Ir al Dashboard &rarr;</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+
+            <!-- Image Container -->
+            <div class="bg-black rounded-xl overflow-hidden shadow-2xl mb-6">
+                <div class="relative flex items-center justify-center bg-gray-900 min-h-[300px]">
+                    {% if signed_url %}
+                    <img src="{{ signed_url }}"
+                         alt="{{ image.title }}"
+                         class="w-full h-auto max-h-[80vh] object-contain">
+                    {% else %}
+                    <div class="flex flex-col items-center justify-center p-12 text-white">
+                        <p class="text-xl mb-2">Imagen no disponible</p>
+                        <p class="text-sm opacity-70">El enlace ha expirado o la imagen no existe.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Image Info -->
+            <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8">
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">{{ image.title }}</h1>
+
+                <div class="flex flex-wrap gap-4 text-sm text-gray-500 mb-6">
+                    <div class="flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        {{ image.created_at|date:"d M, Y" }}
+                    </div>
+                </div>
+
+                {% if image.prompt %}
+                <div class="prose max-w-none">
+                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">Prompt</h3>
+                    <p class="text-gray-700 whitespace-pre-wrap">{{ image.prompt }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 py-6 mt-8">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm text-gray-500">
+                Creado con <a href="/" class="font-semibold text-blue-600 hover:underline">Atenea AI Platform</a>
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>

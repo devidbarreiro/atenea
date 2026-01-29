@@ -1841,6 +1841,66 @@ class PublicVideoDetailView(View):
         return render(request, self.template_name, context)
 
 
+class PublicImageDetailView(View):
+    """Vista pública para compartir imágenes"""
+    template_name = 'images/public_detail.html'
+
+    def get(self, request, image_uuid):
+        # Obtener imagen sin verificar permisos de usuario (acceso público por UUID)
+        image = get_object_or_404(Image, uuid=image_uuid)
+
+        # Verificar que la imagen esté completada
+        if image.status != 'completed' or not image.gcs_path:
+            raise Http404("La imagen no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        image_service = ImageService()
+        try:
+            image_data = image_service.get_image_with_signed_urls(image)
+            signed_url = image_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para imagen pública {image_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'image': image,
+            'signed_url': signed_url,
+            'hide_header': True,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class PublicAudioDetailView(View):
+    """Vista pública para compartir audios"""
+    template_name = 'audios/public_detail.html'
+
+    def get(self, request, audio_uuid):
+        # Obtener audio sin verificar permisos de usuario (acceso público por UUID)
+        audio = get_object_or_404(Audio, uuid=audio_uuid)
+
+        # Verificar que el audio esté completado
+        if audio.status != 'completed' or not audio.gcs_path:
+            raise Http404("El audio no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        audio_service = AudioService()
+        try:
+            audio_data = audio_service.get_audio_with_signed_url(audio)
+            signed_url = audio_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para audio público {audio_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'audio': audio,
+            'signed_url': signed_url,
+            'hide_header': True,
+        }
+
+        return render(request, self.template_name, context)
+
+
 # ====================
 # VIDEO ACTIONS
 # ====================
@@ -2676,7 +2736,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and image.status == 'completed' and image.gcs_path:
                         try:
-                            image_data = image_service.get_image_with_signed_url(image)
+                            image_data = image_service.get_image_with_signed_urls(image)
                             item_data['signed_url'] = image_data.get('signed_url')
                         except Exception:
                             pass
@@ -2804,7 +2864,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         }
                         if include_urls and item.status == 'completed' and item.gcs_path:
                             try:
-                                image_data = image_service.get_image_with_signed_url(item)
+                                image_data = image_service.get_image_with_signed_urls(item)
                                 item_data['signed_url'] = image_data.get('signed_url')
                             except Exception:
                                 pass
