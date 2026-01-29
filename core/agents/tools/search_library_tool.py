@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any
 from django.contrib.auth.models import User
 from django.db.models import Q
 from core.models import Video, Image, Audio, Script
+from core.storage.gcs import gcs_storage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,13 +87,36 @@ def search_library_tool(
             
             content = str(raw_content) if raw_content is not None else ""
 
+            # Generar URL de preview si tiene gcs_path
+            preview_url = None
+            if hasattr(item, 'gcs_path') and item.gcs_path:
+                try:
+                    preview_url = gcs_storage.get_signed_url(item.gcs_path)
+                except Exception as e:
+                    logger.warning(f"Error generando signed URL para {type_name} {uuid_val}: {e}")
+
+            # Generar URL de detalle
+            detail_url = None
+            if uuid_val:
+                if type_name == 'video':
+                    detail_url = f'/videos/{uuid_val}/'
+                elif type_name == 'image':
+                    detail_url = f'/images/{uuid_val}/'
+                elif type_name == 'audio':
+                    detail_url = f'/audios/{uuid_val}/'
+                elif type_name == 'script':
+                    detail_url = f'/scripts/{uuid_val}/'
+
             return {
                 'id': uuid_val,
                 'type': type_name,
                 'title': title,
                 'content_snippet': content[:100] + '...' if len(content) > 100 else content,
                 'status': status,
-                'created_at': created_at
+                'created_at': created_at,
+                'preview_url': preview_url,
+                'url': preview_url, # Alias para consistencia
+                'detail_url': detail_url
             }
 
         # 1. Buscar VIDEOS
