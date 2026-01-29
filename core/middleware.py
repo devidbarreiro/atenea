@@ -51,6 +51,10 @@ class LoginRequiredMiddleware:
         if request.path.startswith('/password-reset/confirm/'):
             return self.get_response(request)
 
+        # Allow public video sharing
+        if request.path.startswith('/share/video/'):
+            return self.get_response(request)
+
         # Allow exempt urls for everyone (important so logout isn't blocked for no-perm users)
         if request.path in exempt_urls:
             return self.get_response(request)

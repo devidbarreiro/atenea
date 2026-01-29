@@ -28,6 +28,8 @@ from .forms import CustomUserCreationForm, PendingUserCreationForm, ActivationSe
 from django.db import IntegrityError
 import json
 
+from celery import current_app
+
 from django.core.mail import send_mail
 from django.utils.html import strip_tags
 
@@ -515,154 +517,14 @@ class DashboardView(ServiceMixin, ListView):
         })
         
         # 4. APLICAR FILTRO A LA LISTA DE ITEMS (Modificado)
-        # Si hay búsqueda, agregar filtro de texto al filtro base (personal/shared)
-        if search_query:
-            video_search = Q(title__icontains=search_query) | Q(script__icontains=search_query)
-            video_filter = base_filter & video_search
-            
-            image_search = Q(title__icontains=search_query) | Q(prompt__icontains=search_query)
-            image_filter = base_filter & image_search
-            
-            audio_search = Q(title__icontains=search_query) | Q(text__icontains=search_query)
-            audio_filter = base_filter & audio_search
-
-            script_search = Q(title__icontains=search_query) | Q(original_script__icontains=search_query)
-            script_filter = base_filter & script_search
-        else:
-            # Sin búsqueda, usamos directamente el filtro Personal/Shared
-            video_filter = base_filter
-            image_filter = base_filter
-            audio_filter = base_filter
-            script_filter = base_filter
-
-        recent_items = []
+        # La lógica de carga de items se ha movido al frontend (Alpine.js)
+        # para mejorar el tiempo de carga inicial.
+        # Se mantiene la variable 'current_filter' para que el frontend sepa qué cargar.
         
-        # --- VIDEOS ---
-        # Optimizacion: Solo traer campos necesarios para el listado
-        videos = Video.objects.filter(video_filter).select_related('project')\
-            .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'script')\
-            .order_by('-created_at')
-            
-        for video in videos:
-            item_data = {
-                'type': 'video',
-                'object': video,
-                'id': str(video.uuid),
-                'created_at': video.created_at,
-                'title': video.title,
-                'status': video.status,
-                'project': video.project,
-                'signed_url': None,
-                'detail_url': reverse('core:video_detail', args=[video.uuid]),
-                'delete_url': reverse('core:video_delete', args=[video.uuid]),
-            }
-            # NO generar URL firmada todavía
-            recent_items.append(item_data)
-        
-        # --- IMÁGENES ---
-        images = Image.objects.filter(image_filter).select_related('project')\
-            .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'prompt')\
-            .order_by('-created_at')
-            
-        for image in images:
-            item_data = {
-                'type': 'image',
-                'object': image,
-                'id': str(image.uuid),
-                'created_at': image.created_at,
-                'title': image.title,
-                'status': image.status,
-                'project': image.project,
-                'signed_url': None,
-                'detail_url': reverse('core:image_detail', args=[image.uuid]),
-                'delete_url': reverse('core:image_delete', args=[image.uuid]),
-            }
-            recent_items.append(item_data)
+        # Eliminamos la carga síncrona de items para optimizar
+        context['recent_items'] = []
+        context['page_obj'] = None
 
-        # --- AUDIOS ---
-        audios = Audio.objects.filter(audio_filter).select_related('project')\
-            .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'text')\
-            .order_by('-created_at')
-            
-        for audio in audios:
-            item_data = {
-                'type': 'audio',
-                'object': audio,
-                'id': str(audio.uuid),
-                'created_at': audio.created_at,
-                'title': audio.title,
-                'status': audio.status,
-                'project': audio.project,
-                'signed_url': None,
-                'audio_background': audio.background_gradient,
-                'detail_url': reverse('core:audio_detail', args=[audio.uuid]),
-                'delete_url': reverse('core:audio_delete', args=[audio.uuid]),
-            }
-            recent_items.append(item_data)
-
-        # --- SCRIPTS ---
-        scripts = Script.objects.filter(script_filter).select_related('project')\
-            .only('id', 'title', 'created_at', 'status', 'project__name', 'project__uuid')\
-            .order_by('-created_at')
-            
-        for script in scripts:
-            item_data = {
-                'type': 'script',
-                'object': script,
-                'id': script.id,
-                'created_at': script.created_at,
-                'title': script.title,
-                'status': script.status,
-                'project': script.project,
-                'signed_url': None,
-                'detail_url': reverse('core:script_detail', args=[script.id]),
-                'delete_url': reverse('core:script_delete', args=[script.id]),
-            }
-            recent_items.append(item_data)
-        
-        # Ordenar todos los items por fecha de creación (más recientes primero)
-        recent_items.sort(key=lambda x: x['created_at'], reverse=True)
-        
-        # Paginación
-        paginator = Paginator(recent_items, 20)
-        page_number = self.request.GET.get('page', 1)
-        page_obj = paginator.get_page(page_number)
-
-        # === PROCESAR SOLO LOS ITEMS VISIBLES ===
-        # Generar URLs firmadas solo para los 20 items de la página actual
-        video_service = self.get_video_service()
-        image_service = self.get_image_service()
-        audio_service = self.get_audio_service()
-
-        for item_data in page_obj:
-            obj = item_data['object']
-            
-            # Solo si está completado y tiene path en GCS
-            if item_data['status'] == 'completed' and hasattr(obj, 'gcs_path') and obj.gcs_path:
-                try:
-                    if item_data['type'] == 'video':
-                         video_data = video_service.get_video_with_signed_urls(obj)
-                         item_data['signed_url'] = video_data.get('signed_url')
-                    
-                    elif item_data['type'] == 'image':
-                        image_data = image_service.get_image_with_signed_url(obj)
-                        item_data['signed_url'] = image_data.get('signed_url')
-                    
-                    elif item_data['type'] == 'audio':
-                        audio_data = audio_service.get_audio_with_signed_url(obj)
-                        item_data['signed_url'] = audio_data.get('signed_url')
-                        
-                except Exception as e:
-                    logger.warning(
-                        "No se pudo generar signed_url para %s %s: %s",
-                        item_data['type'],
-                        getattr(obj, 'uuid', getattr(obj, 'id', None)),
-                        e,
-                        exc_info=True
-                    )
-        
-        context['recent_items'] = page_obj
-        context['page_obj'] = page_obj
         
         return context
 
@@ -1971,6 +1833,96 @@ class VideoDeleteView(BreadcrumbMixin, DeleteView):
         return redirect(success_url)
 
 
+class PublicVideoDetailView(View):
+    """Vista pública para compartir videos"""
+    template_name = 'videos/public_detail.html'
+
+    def get(self, request, video_uuid):
+        # Obtener video sin verificar permisos de usuario (acceso público por UUID)
+        video = get_object_or_404(Video, uuid=video_uuid)
+
+        # Verificar que el video esté completado
+        if video.status != 'completed' or not video.gcs_path:
+            raise Http404("El video no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        video_service = VideoService()
+        try:
+            video_data = video_service.get_video_with_signed_urls(video)
+            signed_url = video_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para video público {video_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'video': video,
+            'signed_url': signed_url,
+            'hide_header': True,  # Para ocultar navegación en layouts que lo soporten
+        }
+
+        return render(request, self.template_name, context)
+
+
+class PublicImageDetailView(View):
+    """Vista pública para compartir imágenes"""
+    template_name = 'images/public_detail.html'
+
+    def get(self, request, image_uuid):
+        # Obtener imagen sin verificar permisos de usuario (acceso público por UUID)
+        image = get_object_or_404(Image, uuid=image_uuid)
+
+        # Verificar que la imagen esté completada
+        if image.status != 'completed' or not image.gcs_path:
+            raise Http404("La imagen no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        image_service = ImageService()
+        try:
+            image_data = image_service.get_image_with_signed_urls(image)
+            signed_url = image_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para imagen pública {image_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'image': image,
+            'signed_url': signed_url,
+            'hide_header': True,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class PublicAudioDetailView(View):
+    """Vista pública para compartir audios"""
+    template_name = 'audios/public_detail.html'
+
+    def get(self, request, audio_uuid):
+        # Obtener audio sin verificar permisos de usuario (acceso público por UUID)
+        audio = get_object_or_404(Audio, uuid=audio_uuid)
+
+        # Verificar que el audio esté completado
+        if audio.status != 'completed' or not audio.gcs_path:
+            raise Http404("El audio no está disponible o sigue procesando")
+
+        # Generar URL firmada
+        audio_service = AudioService()
+        try:
+            audio_data = audio_service.get_audio_with_signed_url(audio)
+            signed_url = audio_data.get('signed_url')
+        except Exception as e:
+            logger.error(f"Error generando URL firmada para audio público {audio_uuid}: {e}")
+            signed_url = None
+
+        context = {
+            'audio': audio,
+            'signed_url': signed_url,
+            'hide_header': True,
+        }
+
+        return render(request, self.template_name, context)
+
+
 # ====================
 # VIDEO ACTIONS
 # ====================
@@ -2673,7 +2625,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
         """
         from django.db.models import Q
         
-        item_type = request.GET.get('type', 'video')
+        item_type = request.GET.get('type', 'all')
         # Aceptar tanto project_id como project_uuid para compatibilidad
         project_id = request.GET.get('project_id')
         project_uuid = request.GET.get('project_uuid')
@@ -2682,6 +2634,9 @@ class LibraryItemsAPIView(ServiceMixin, View):
         # Incluir URLs (para carga rápida, puede ser false)
         include_urls = request.GET.get('include_urls', 'true').lower() != 'false'
         
+        # Filtro de dashboard (personal/shared)
+        dashboard_filter = request.GET.get('filter')
+
         # Paginación
         try:
             limit = min(int(request.GET.get('limit', self.DEFAULT_LIMIT)), self.MAX_LIMIT)
@@ -2698,9 +2653,18 @@ class LibraryItemsAPIView(ServiceMixin, View):
         user_project_ids = [p.id for p in user_projects]
         
         # Construir filtro base
-        base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
+        if dashboard_filter == 'shared':
+            # Items en proyectos donde soy miembro pero no dueño
+            shared_project_ids = ProjectMember.objects.filter(user=user).values_list('project_id', flat=True)
+            base_filter = Q(project_id__in=shared_project_ids) & ~Q(project__owner=user)
+        elif dashboard_filter == 'personal':
+            # Items creados por mí (en cualquier proyecto o sin proyecto)
+            base_filter = Q(created_by=user)
+        else:
+            # Por defecto: todo lo que tengo acceso
+            base_filter = Q(project_id__in=user_project_ids) | Q(project__isnull=True, created_by=user)
         
-        # Si hay project_uuid o project_id específico, filtrar por ese proyecto
+        # Si hay project_uuid o project_id específico, filtrar por ese proyecto (sobrescribe dashboard_filter)
         project = None
         if project_uuid:
             try:
@@ -2794,7 +2758,7 @@ class LibraryItemsAPIView(ServiceMixin, View):
                     # Solo generar signed URLs si se pide explícitamente
                     if include_urls and image.status == 'completed' and image.gcs_path:
                         try:
-                            image_data = image_service.get_image_with_signed_url(image)
+                            image_data = image_service.get_image_with_signed_urls(image)
                             item_data['signed_url'] = image_data.get('signed_url')
                         except Exception:
                             pass
@@ -2840,6 +2804,141 @@ class LibraryItemsAPIView(ServiceMixin, View):
                         except Exception:
                             pass
                     items_data.append(item_data)
+
+            elif item_type == 'all':
+                # Fetch items from all models
+                # We fetch limit+offset from each to ensure correct global sort
+                fetch_limit = offset + limit
+
+                videos = Video.objects.filter(base_filter).select_related('project').order_by('-created_at')[:fetch_limit]
+                images = Image.objects.filter(base_filter).select_related('project').order_by('-created_at')[:fetch_limit]
+                audios = Audio.objects.filter(base_filter).select_related('project').order_by('-created_at')[:fetch_limit]
+                scripts = Script.objects.filter(base_filter).select_related('project').order_by('-created_at')[:fetch_limit]
+
+                # Calculate total count
+                total_count = (
+                    Video.objects.filter(base_filter).count() +
+                    Image.objects.filter(base_filter).count() +
+                    Audio.objects.filter(base_filter).count() +
+                    Script.objects.filter(base_filter).count()
+                )
+
+                # Combine and sort
+                all_objs = sorted(
+                    list(videos) + list(images) + list(audios) + list(scripts),
+                    key=lambda x: x.created_at,
+                    reverse=True
+                )
+
+                # Slice page
+                page_objs = all_objs[offset:offset + limit]
+
+                # Services
+                video_service = self.get_video_service()
+                image_service = self.get_image_service()
+                audio_service = self.get_audio_service()
+
+                for item in page_objs:
+                    # Determine type and format
+                    if isinstance(item, Video):
+                        detail_url = reverse('core:project_video_detail', args=[item.project.uuid, item.uuid]) if item.project else reverse('core:video_detail', args=[item.uuid])
+
+                        item_data = {
+                            'id': str(item.uuid),
+                            'type': 'video',
+                            'title': item.title,
+                            'status': item.status,
+                            'status_display': item.get_status_display(),
+                            'created_at': item.created_at.isoformat(),
+                            'project': item.project.name if item.project else None,
+                            'video_type': item.get_type_display(),
+                            'script': item.script[:100] if item.script else '',
+                            'signed_url': None,
+                            'has_media': item.status == 'completed' and bool(item.gcs_path),
+                            'detail_url': detail_url,
+                            'delete_url': reverse('core:video_delete', args=[item.uuid]),
+                        }
+                        if include_urls and item.status == 'completed' and item.gcs_path:
+                            try:
+                                video_data = video_service.get_video_with_signed_urls(item)
+                                item_data['signed_url'] = video_data.get('signed_url')
+                            except Exception:
+                                pass
+                        items_data.append(item_data)
+
+                    elif isinstance(item, Image):
+                        detail_url = reverse('core:project_image_detail', args=[item.project.uuid, item.uuid]) if item.project else reverse('core:image_detail', args=[item.uuid])
+
+                        item_data = {
+                            'id': str(item.uuid),
+                            'type': 'image',
+                            'title': item.title,
+                            'status': item.status,
+                            'status_display': item.get_status_display(),
+                            'created_at': item.created_at.isoformat(),
+                            'project': item.project.name if item.project else None,
+                            'image_type': item.get_type_display(),
+                            'prompt': item.prompt[:100] if item.prompt else '',
+                            'signed_url': None,
+                            'has_media': item.status == 'completed' and bool(item.gcs_path),
+                            'detail_url': detail_url,
+                            'delete_url': reverse('core:image_delete', args=[item.uuid]),
+                        }
+                        if include_urls and item.status == 'completed' and item.gcs_path:
+                            try:
+                                image_data = image_service.get_image_with_signed_urls(item)
+                                item_data['signed_url'] = image_data.get('signed_url')
+                            except Exception:
+                                pass
+                        items_data.append(item_data)
+
+                    elif isinstance(item, Audio):
+                        detail_url = reverse('core:project_audio_detail', args=[item.project.uuid, item.uuid]) if item.project else reverse('core:audio_detail', args=[item.uuid])
+                        model_id = item.model_id or 'elevenlabs'
+                        model_info = get_model_info_for_item('audio', model_key=model_id)
+
+                        item_data = {
+                            'id': str(item.uuid),
+                            'type': 'audio',
+                            'title': item.title,
+                            'status': item.status,
+                            'status_display': item.get_status_display(),
+                            'created_at': item.created_at.isoformat(),
+                            'project': item.project.name if item.project else None,
+                            'signed_url': None,
+                            'has_media': item.status == 'completed' and bool(item.gcs_path),
+                            'detail_url': detail_url,
+                            'delete_url': reverse('core:audio_delete', args=[item.uuid]),
+                            'model': model_info,
+                            'audio_type': item.type,
+                            'audio_background': item.background_gradient,
+                        }
+                        if include_urls and item.status == 'completed' and item.gcs_path:
+                            try:
+                                audio_data = audio_service.get_audio_with_signed_url(item)
+                                item_data['signed_url'] = audio_data.get('signed_url')
+                            except Exception:
+                                pass
+                        items_data.append(item_data)
+
+                    elif isinstance(item, Script):
+                        # Script uses numeric ID
+                        detail_url = reverse('core:script_detail', args=[item.id])
+
+                        item_data = {
+                            'id': item.id,
+                            'type': 'script',
+                            'title': item.title,
+                            'status': item.status,
+                            'status_display': item.get_status_display(),
+                            'created_at': item.created_at.isoformat(),
+                            'project': item.project.name if item.project else None,
+                            'signed_url': None,
+                            'detail_url': detail_url,
+                            'delete_url': reverse('core:script_delete', args=[item.id]),
+                        }
+                        items_data.append(item_data)
+
             else:
                 return JsonResponse({'error': 'Tipo no válido'}, status=400)
                 
@@ -9110,7 +9209,7 @@ class DocumentationAssistantReindexView(LoginRequiredMixin, UserPassesTestMixin,
             
             # Crear nuevo índice
             assistant = DocumentationAssistant(reindex=True)
-            messages.success(request, 'Documentación re-indexada exitosamente desde docs/api')
+            messages.success(request, 'Documentación re-indexada exitosamente desde docs/public/api')
         except Exception as e:
             logger.error(f"Error al re-indexar: {e}", exc_info=True)
             messages.error(request, f'Error al re-indexar: {str(e)}')
@@ -10420,13 +10519,60 @@ class CancelTaskView(LoginRequiredMixin, View):
             
             # Cancelar la tarea en Celery si tiene task_id
             if task.task_id:
-                from celery import current_app
-                current_app.control.revoke(task.task_id, terminate=True)
+
+                # Intentar usar SIGKILL primero (más efectivo en Linux/WSL)
+                try:
+                    logger.info(f"Cancelando tarea Celery: {task.task_id} (force kill - SIGKILL)")
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGKILL')
+                except AttributeError:
+                    # Fallback para Windows (no tiene SIGKILL)
+                    logger.info(f"SIGKILL no soportado, usando SIGTERM para tarea: {task.task_id}")
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGTERM')
+                except Exception as e:
+                    logger.error(f"Error al revocar tarea {task.task_id}: {e}")
+                    # Último intento con SIGTERM
+                    current_app.control.revoke(task.task_id, terminate=True, signal='SIGTERM')
+
+                # Actualizar estado del item asociado a 'cancelled'
+                try:
+                    item = None
+                    if task.task_type == 'video':
+                        item = Video.objects.filter(uuid=task.item_uuid).first()
+                    elif task.task_type == 'image':
+                        item = Image.objects.filter(uuid=task.item_uuid).first()
+                    elif task.task_type == 'audio':
+                        item = Audio.objects.filter(uuid=task.item_uuid).first()
+                    
+                    if item:
+                        # Usar update para ser más eficiente y evitar señales si no es necesario
+                        item_class = item.__class__
+                        item_class.objects.filter(pk=item.pk).update(status='cancelled')
+                        logger.info(f"Item {task.item_uuid} ({task.task_type}) marcado como cancelado")
+                except Exception as e:
+                    logger.error(f"Error al actualizar estado del item: {e}")
+
+            else:
+                logger.warning(f"Tarea {task.uuid} no tiene task_id de Celery para revocar")
             
             # Marcar como cancelada
-            task.mark_as_cancelled(reason='Cancelada por el usuario')
+            task.mark_as_cancelled(reason='Cancelada por el usuario (Force killed)')
             
-            return JsonResponse({'success': True})
+            # Obtener lista actualizada para refrescar el dropdown
+            active_tasks = GenerationTask.objects.filter(
+                user=request.user,
+                status__in=['queued', 'processing']
+            ).order_by('-created_at')[:20]
+            
+            active_count = GenerationTask.objects.filter(
+                user=request.user,
+                status__in=['queued', 'processing']
+            ).count()
+            
+            return render(request, 'partials/active_queues_dropdown.html', {
+                'active_tasks': active_tasks,
+                'active_count': active_count,
+            })
+            
         except GenerationTask.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Tarea no encontrada'}, status=404)
 

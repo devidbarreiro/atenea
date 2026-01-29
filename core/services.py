@@ -604,7 +604,7 @@ class VideoService:
         except Exception as e:
             logger.error(f"Error al subir avatar: {e}")
             raise StorageException(f"Error al subir imagen: {str(e)}")
-    
+
     def upload_veo_input_image(
         self,
         image: UploadedFile,
@@ -2863,6 +2863,51 @@ class ImageService:
         
         logger.info(f"Upscale de imagen {original_image.uuid} encolado. Nueva imagen: {upscaled_image.uuid}. Task UUID: {task.uuid}")
         return task
+
+    def get_image_with_signed_urls(self, image: Image) -> Dict:
+        """
+        Obtiene una imagen con todas sus URLs firmadas generadas
+        
+        Args:
+            image: Imagen a procesar
+        
+        Returns:
+            Dict con imagen y URLs firmadas
+        """
+        result = {
+            'image': image,
+            'signed_url': None,
+            'upscaled_url': None,
+            'removed_bg_url': None
+        }
+        metadata = image.metadata or {}
+        
+        # URL firmada de la imagen principal
+        if image.status == 'completed' and image.gcs_path:
+            try:
+                result['signed_url'] = gcs_storage.get_signed_url(image.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada: {e}")
+        
+        # URL de imagen escalada (si existe confirmación en metadata o config)
+        if metadata.get('upscaled_gcs_path'):
+            try:
+                result['upscaled_url'] = gcs_storage.get_signed_url(
+                    metadata['upscaled_gcs_path']
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para imagen escalada: {e}")
+                
+        # URL de imagen sin fondo (si existe confirmación en metadata o config)
+        if metadata.get('removed_bg_gcs_path'):
+            try:
+                result['removed_bg_url'] = gcs_storage.get_signed_url(
+                    metadata['removed_bg_gcs_path']
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para imagen sin fondo: {e}")
+        
+        return result
 
 
 # ====================

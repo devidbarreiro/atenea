@@ -36,6 +36,10 @@ Documentación completa de la API de Atenea.
 | Servicio | Descripción | Documentación |
 |----------|-------------|---------------|
 | **🔴 Freepik** | Búsqueda y descarga de imágenes y videos | [Ver docs](services/freepik/) |
+| **🟢 Pexels** | Fotos y videos de stock gratuitos | [Ver docs](services/pexels/) |
+| **⚫ Unsplash** | Fotos artísticas de alta calidad | [Ver docs](services/unsplash/) |
+| **🟡 Pixabay** | Imágenes, videos y música gratis | [Ver docs](services/pixabay/) |
+| **⚪ Freesound** | Base de datos de sonidos CC | [Ver docs](services/freesound/) |
 
 ## ⚙️ System
 

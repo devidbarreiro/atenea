@@ -40,6 +40,7 @@ VIDEO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 # Tipos de video para el flujo del agente
@@ -74,6 +75,7 @@ IMAGE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 AUDIO_STATUS = [
@@ -81,6 +83,7 @@ AUDIO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCRIPT_STATUS = [
@@ -88,6 +91,7 @@ SCRIPT_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_STATUS = [
@@ -95,6 +99,7 @@ SCENE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_AI_SERVICES = [
@@ -618,6 +623,21 @@ class Audio(models.Model):
         hash_val = int(hashlib.md5(str(self.uuid).encode()).hexdigest(), 16)
         c1, c2 = colors[hash_val % len(colors)]
         return f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
+
+    @property
+    def background_style(self):
+        """Retorna el estilo CSS de fondo según el estado"""
+        if self.status in ['processing', 'generating']:
+            return '#fff7ed' # orange-50
+        elif self.status == 'error':
+            return '#fee2e2' # red-100
+        elif self.status == 'cancelled':
+            return '#f3f4f6' # gray-100
+        elif self.status == 'pending':
+            return '#eff6ff' # blue-50
+        
+        # Completado o default
+        return self.background_gradient
     
     model_id = models.CharField(
         max_length=100,
