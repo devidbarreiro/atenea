@@ -122,8 +122,8 @@
                     {% elif item.type == 'image' and item.signed_url %}
                         <img src="{{ item.signed_url }}" alt="{{ item.title }}" class="w-full h-full object-cover">
                     {% elif item.type == 'audio' %}
-                        <div class="w-full h-full flex items-center justify-center rounded-lg"
-                             style="background: {{ item.audio_background|default:'#f3e7e9' }};">
+                        <div class="w-full h-full flex items-center justify-center rounded-lg {% if item.status == 'processing' or item.status == 'generating' %}animate-pulse{% endif %}"
+                             style="background: {% if item.status == 'completed' %}{{ item.background_style|default:item.audio_background|default:'#f3e7e9' }}{% elif item.status == 'error' %}#fee2e2{% elif item.status == 'cancelled' %}#f3f4f6{% elif item.status == 'pending' %}#eff6ff{% else %}#fff7ed{% endif %};">
                             <svg class="w-10 h-10 text-gray-600 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                             </svg>
@@ -140,12 +140,14 @@
                     <div class="absolute top-1 left-1">
                         <span class="px-1.5 py-0.5 text-xs font-medium rounded
                             {% if item.status == 'completed' %}bg-green-100 text-green-700
-                            {% elif item.status == 'processing' %}bg-yellow-100 text-yellow-700
+                            {% elif item.status == 'processing' or item.status == 'generating' %}bg-yellow-100 text-yellow-700
                             {% elif item.status == 'error' %}bg-red-100 text-red-700
+                            {% elif item.status == 'cancelled' %}bg-gray-200 text-gray-600
                             {% else %}bg-gray-100 text-gray-700{% endif %}">
                             {% if item.status == 'completed' %}Completado
-                            {% elif item.status == 'processing' %}Procesando
+                            {% elif item.status == 'processing' or item.status == 'generating' %}Procesando
                             {% elif item.status == 'error' %}Error
+                            {% elif item.status == 'cancelled' %}Cancelado
                             {% else %}Pendiente{% endif %}
                         </span>
                     </div>

@@ -524,6 +524,7 @@ class DashboardView(ServiceMixin, ListView):
         # Eliminamos la carga síncrona de items para optimizar
         context['recent_items'] = []
         context['page_obj'] = None
+
         
         return context
 
@@ -861,6 +862,15 @@ class ProjectsListView(ServiceMixin, ListView):
         return context
 
 
+class LibraryItem:
+    __slots__ = ('item', 'type', 'created_at', 'title', 'status')
+    def __init__(self, item, item_type):
+        self.item = item
+        self.type = item_type
+        self.created_at = item.created_at
+        self.title = item.title if hasattr(item, 'title') else (getattr(item, 'name', 'Sin título'))
+        self.status = getattr(item, 'status', None)
+
 class LibraryView(ServiceMixin, ListView):
     """Vista de biblioteca que muestra todos los items (videos, imágenes, audios, música, scripts)"""
     template_name = 'library/list.html'
@@ -876,22 +886,39 @@ class LibraryView(ServiceMixin, ListView):
         # Lista para almacenar todos los items con su tipo
         all_items = []
         
+        # Helper para evitar repetición
+        def get_videos():
+            return Video.objects.filter(created_by=user).select_related('project')\
+                .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'script')
+        
+        def get_images():
+            return Image.objects.filter(created_by=user).select_related('project')\
+                .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'prompt')
+                
+        def get_audios():
+            return Audio.objects.filter(created_by=user).select_related('project')\
+                .only('uuid', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'gcs_path', 'text')
+        
+        def get_scripts():
+            return Script.objects.filter(created_by=user).select_related('project')\
+                .only('id', 'title', 'created_at', 'status', 'project__name', 'project__uuid', 'original_script')
+
         # Filtrar por tipo si se especifica
         if item_type == 'video':
-            querysets = [('video', Video.objects.filter(created_by=user))]
+            querysets = [('video', get_videos())]
         elif item_type == 'image':
-            querysets = [('image', Image.objects.filter(created_by=user))]
+            querysets = [('image', get_images())]
         elif item_type == 'audio':
-            querysets = [('audio', Audio.objects.filter(created_by=user))]
+            querysets = [('audio', get_audios())]
         elif item_type == 'script':
-            querysets = [('script', Script.objects.filter(created_by=user))]
+            querysets = [('script', get_scripts())]
         else:
             # Todos los tipos mezclados
             querysets = [
-                ('video', Video.objects.filter(created_by=user)),
-                ('image', Image.objects.filter(created_by=user)),
-                ('audio', Audio.objects.filter(created_by=user)),
-                ('script', Script.objects.filter(created_by=user)),
+                ('video', get_videos()),
+                ('image', get_images()),
+                ('audio', get_audios()),
+                ('script', get_scripts()),
             ]
         
         # Aplicar búsqueda y agregar items a la lista
@@ -907,16 +934,9 @@ class LibraryView(ServiceMixin, ListView):
                     queryset = queryset.filter(Q(title__icontains=search_query) | Q(original_script__icontains=search_query))
             
             # Convertir a lista y agregar tipo
+            # Usar LibraryItem es mucho más rápido que crear tipos dinámicos
             for item in queryset:
-                # Crear un objeto wrapper con el tipo
-                item_wrapper = type('ItemWrapper', (), {
-                    'item': item,
-                    'type': item_type_name,
-                    'created_at': item.created_at,
-                    'title': item.title if hasattr(item, 'title') else (item.name if hasattr(item, 'name') else 'Sin título'),
-                    'status': item.status if hasattr(item, 'status') else None,
-                })()
-                all_items.append(item_wrapper)
+                all_items.append(LibraryItem(item, item_type_name))
         
         # Ordenar por fecha de creación descendente
         all_items.sort(key=lambda x: x.created_at, reverse=True)
@@ -931,6 +951,7 @@ class LibraryView(ServiceMixin, ListView):
         
         # Estadísticas por tipo
         user = self.request.user
+        # Estas consultas son rápidas (COUNT)
         context['stats'] = {
             'total': Video.objects.filter(created_by=user).count() + 
                     Image.objects.filter(created_by=user).count() + 
@@ -974,7 +995,7 @@ class LibraryView(ServiceMixin, ListView):
                 try:
                     signed_url = gcs_storage.get_signed_url(item.gcs_path, expiration=3600)
                 except Exception as e:
-                    logger.error(f"Error al generar URL firmada para {item_wrapper.type} {item.id}: {e}")
+                    logger.error(f"Error al generar URL firmada para {item_wrapper.type} {item.id if hasattr(item, 'id') else 'unknown'}: {e}")
             
             # Para videos, images y audios usar UUID como id; para el resto usar id numérico
             item_id = str(item.uuid) if item_wrapper.type in ('video', 'image', 'audio') else item.id
@@ -982,6 +1003,7 @@ class LibraryView(ServiceMixin, ListView):
             items_with_urls.append({
                 'type': item_wrapper.type,
                 'id': item_id,
+                'object': item, # Agregado para que el template pueda acceder a propiedades (script, prompt)
                 'title': item_wrapper.title,
                 'status': item_wrapper.status,
                 'created_at': item_wrapper.created_at,
