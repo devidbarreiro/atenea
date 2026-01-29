@@ -54,7 +54,7 @@
                 <p class="text-gray-500 mb-8">{{ audio.voice_name|default:"Audio Generado" }}</p>
 
                 {% if signed_url %}
-                <audio controls class="w-full max-w-lg" autoplay>
+                <audio controls class="w-full max-w-lg">
                     <source src="{{ signed_url }}" type="audio/mpeg">
                     Tu navegador no soporta el elemento de audio.
                 </audio>

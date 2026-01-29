@@ -9,7 +9,7 @@
     <!-- Open Graph Tags -->
     <meta property="og:title" content="{{ image.title }}">
     <meta property="og:description" content="{{ image.prompt|default:'Imagen generada por IA'|truncatechars:200 }}">
-    <meta property="og:type" content="image">
+    <meta property="og:type" content="website">
     {% if signed_url %}
     <meta property="og:image" content="{{ signed_url }}">
     {% endif %}
@@ -28,7 +28,7 @@
         <div class="container mx-auto px-4 flex justify-between items-center">
             <a href="/" class="flex items-center gap-2">
                 <span class="text-xl font-bold text-gray-900">Atenea</span>
-                <span class="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Image</span>
+                <span class="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Imagen</span>
             </a>
             {% if user.is_authenticated %}
             <a href="{% url 'core:dashboard' %}" class="text-sm text-gray-600 hover:text-gray-900">Ir al Dashboard &rarr;</a>

@@ -2880,6 +2880,7 @@ class ImageService:
             'upscaled_url': None,
             'removed_bg_url': None
         }
+        metadata = image.metadata or {}
         
         # URL firmada de la imagen principal
         if image.status == 'completed' and image.gcs_path:
@@ -2889,19 +2890,19 @@ class ImageService:
                 logger.error(f"Error al generar URL firmada: {e}")
         
         # URL de imagen escalada (si existe confirmación en metadata o config)
-        if image.metadata.get('upscaled_gcs_path'):
+        if metadata.get('upscaled_gcs_path'):
             try:
                 result['upscaled_url'] = gcs_storage.get_signed_url(
-                    image.metadata['upscaled_gcs_path']
+                    metadata['upscaled_gcs_path']
                 )
             except Exception as e:
                 logger.error(f"Error al generar URL firmada para imagen escalada: {e}")
                 
         # URL de imagen sin fondo (si existe confirmación en metadata o config)
-        if image.metadata.get('removed_bg_gcs_path'):
+        if metadata.get('removed_bg_gcs_path'):
             try:
                 result['removed_bg_url'] = gcs_storage.get_signed_url(
-                    image.metadata['removed_bg_gcs_path']
+                    metadata['removed_bg_gcs_path']
                 )
             except Exception as e:
                 logger.error(f"Error al generar URL firmada para imagen sin fondo: {e}")
