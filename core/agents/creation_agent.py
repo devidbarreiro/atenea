@@ -303,7 +303,31 @@ IMPORTANTE - REGLAS CRÍTICAS:
         except Exception as e:
             logger.error(f"Error en CreationAgent.chat: {e}", exc_info=True)
             return {
-                'answer': f'Lo siento, ocurrió un error: {str(e)}',
+                'answer': self._handle_error(e),
                 'tool_results': []
             }
+
+    def _handle_error(self, error: Exception) -> str:
+        """
+        Procesa errores y devuelve mensajes amigables para el usuario
+        """
+        error_str = str(error)
+        
+        # Error de contexto excedido (OpenAI)
+        if "context_length_exceeded" in error_str:
+            return "⚠️ **Memoria llena**: La conversación es demasiado larga y ha superado el límite de memoria del asistente. Por favor, **inicia un nuevo chat** para continuar."
+            
+        # Error de Rate Limit
+        if "rate_limit_exceeded" in error_str or "429" in error_str:
+             return "⏳ **Demasiadas peticiones**: El sistema está recibiendo muchas solicitudes. Por favor, espera un momento antes de intentar de nuevo."
+             
+        # Error genérico de OpenAI
+        if "openai" in error_str.lower() and "error" in error_str.lower():
+            if "400" in error_str:
+                return "❌ **Error en la solicitud**: Hubo un problema con el mensaje enviado. Intenta reformular tu petición."
+            if "500" in error_str or "503" in error_str:
+                return "🔧 **Error del servicio**: El proveedor de IA está experimentando problemas temporales. Inténtalo de nuevo en unos minutos."
+        
+        # Error por defecto
+        return f"Lo siento, ocurrió un error inesperado. Si persiste, prueba a iniciar un nuevo chat.\n\n*Detalle técnico: {error_str[:100]}...*"
 
