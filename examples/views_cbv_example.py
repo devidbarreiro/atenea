@@ -86,8 +86,7 @@ class ProjectListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         """Filtrar proyectos del usuario"""
-        # TODO: Filtrar por request.user cuando se implemente
-        return Project.objects.all().order_by('-created_at')
+        return Project.objects.filter(owner=self.request.user).order_by('-created_at')
 
 
 class ProjectDetailView(LoginRequiredMixin, BreadcrumbMixin, DetailView):
@@ -153,7 +152,7 @@ class ProjectCreateView(LoginRequiredMixin, SuccessMessageMixin, BreadcrumbMixin
     
     def form_valid(self, form):
         """Asignar usuario propietario"""
-        # TODO: Asignar request.user cuando se implemente
+        form.instance.owner = self.request.user
         return super().form_valid(form)
 
 
