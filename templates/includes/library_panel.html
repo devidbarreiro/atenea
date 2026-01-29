@@ -30,6 +30,34 @@ document.addEventListener('alpine:init', () => {
         const cachedItems = window._getLibraryCacheSync(activeTab, projectId);
         
         return {
+        // Helper para estilos de audio
+        getAudioBackground(item) {
+            if (!item) return {};
+            let style = {};
+            let classes = [];
+            
+            if (item.status === 'processing' || item.status === 'generating' || item.status === 'pending') {
+                style.backgroundColor = '#fff7ed';
+                style.borderColor = '#fdba74'; // orange-300
+                classes.push('animate-pulse', 'border-2');
+            } else if (item.status === 'error') {
+                style.backgroundColor = '#fee2e2';
+                style.borderColor = '#fca5a5'; // red-300
+                classes.push('border-2');
+            } else if (item.status === 'cancelled') {
+                style.backgroundColor = '#f3f4f6';
+                style.borderColor = '#d1d5db'; // gray-300
+                classes.push('border-2', 'border-dashed');
+            } else if (item.status === 'pending') {
+                style.backgroundColor = '#eff6ff'; // blue-50
+                style.borderColor = '#93c5fd'; // blue-300
+                classes.push('border-2', 'border-dashed');
+            } else {
+                style.background = item.background_style || item.audio_background || 'linear-gradient(135deg, `#f3e7e9` 0%, `#e3eeff` 100%)';
+            }
+            return { style, class: classes.join(' ') };
+        },
+
         // Estado de la biblioteca - CARGAR DESDE CACHÉ INSTANTÁNEAMENTE
         items: cachedItems || [],
         loading: cachedItems ? false : true, // No loading si hay caché
@@ -83,7 +111,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         copyShareLink() {
-            const link = window.location.origin + '/share/video/' + this.shareModal.item.id + '/';
+            const link = window.location.origin + '/share/' + this.shareModal.item.type + '/' + this.shareModal.item.id + '/';
             navigator.clipboard.writeText(link).then(() => {
                 window.dispatchEvent(new CustomEvent('show-toast', {
                     detail: { message: 'Enlace copiado al portapapeles', type: 'success' }
@@ -1068,17 +1096,37 @@ document.addEventListener('alpine:init', () => {
                                 <!-- Audio -->
                                 <div x-show="item.type === 'audio'" 
                                      class="w-full h-full flex items-center justify-center"
-                                     :style="{ background: item.audio_background || 'linear-gradient(135deg, #f3e7e9 0%, #e3eeff 100%)' }">
-                                    <svg class="w-16 h-16 text-black" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                                    </svg>
+                                     :class="getAudioBackground(item).class"
+                                     :style="getAudioBackground(item).style">
+                                    <!-- Icons based on status -->
+                                    <template x-if="item.status === 'processing' || item.status === 'generating'">
+                                        <svg class="w-12 h-12 text-orange-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'error'">
+                                        <svg class="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'pending'">
+                                        <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="!['processing', 'generating', 'error', 'pending'].includes(item.status)">
+                                        <svg class="w-16 h-16 text-black opacity-75" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                        </svg>
+                                    </template>
                                 </div>
                                 
                                 <!-- Processing -->
-                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
+                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-orange-50 border-2 border-orange-200">
                                     <div class="text-center">
                                         <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
-                                        <p class="text-xs text-gray-500">Procesando...</p>
+                                        <p class="text-xs text-orange-700 font-medium">Procesando...</p>
                                     </div>
                                 </div>
 
@@ -1244,7 +1292,7 @@ document.addEventListener('alpine:init', () => {
                             
                             <!-- Información -->
                             <div class="flex-1 min-w-0">
-                                <h3 class="font-semibold text-sm sm:text-base text-gray-900 mb-1 truncate" x-text="item.title"></h3>
+                                <h3 class="font-semibold text-sm sm:text-base text-gray-900 mb-1 truncate" x-text="item.title" :title="item.title"></h3>
                                 <div class="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2 flex-wrap">
                                     <span x-text="item.type === 'video' ? '🎬 Video' : item.type === 'image' ? '🖼️ Imagen' : '🔊 Audio'"></span>
                                     <span class="hidden sm:inline">•</span>
@@ -1378,10 +1426,13 @@ document.addEventListener('alpine:init', () => {
                 </button>
                 
                 <!-- Video -->
-                <video x-show="selectedItem.type === 'video' && selectedItem.signed_url" 
-                       :src="selectedItem.signed_url" 
-                       controls 
-                       class="max-w-full max-h-full rounded-lg shadow-lg"></video>
+                <div x-show="selectedItem.type === 'video' && selectedItem.signed_url" class="w-full h-full flex items-center justify-center">
+                    <video :src="selectedItem.signed_url" 
+                           controls 
+                           class="max-w-full max-h-full rounded-lg shadow-lg mx-auto">
+                        
+                    </video>
+                </div>
                 
                 <!-- Image -->
                 <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
@@ -1402,8 +1453,17 @@ document.addEventListener('alpine:init', () => {
                     </div>
                     <!-- Audio -->
                     <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md mx-auto relative z-10">
-                        <div class="bg-white rounded-lg p-8 shadow-lg text-center"
-                             :style="{ background: selectedItem.audio_background ? selectedItem.audio_background : '#ffffff' }">
+                        <div class="bg-white rounded-lg p-8 shadow-lg text-center relative overflow-hidden"
+                             :class="getAudioBackground(selectedItem).class"
+                             :style="getAudioBackground(selectedItem).style">
+                            
+                            <!-- Processing Overlay -->
+                            <div x-show="selectedItem.status === 'processing' || selectedItem.status === 'generating'" 
+                                 class="absolute inset-0 flex flex-col items-center justify-center bg-orange-50/90 z-20">
+                                <span class="inline-block animate-spin text-5xl mb-4">⚙️</span>
+                                <p class="text-orange-800 font-semibold">Procesando...</p>
+                            </div>
+
                             <svg class="w-24 h-24 mx-auto text-black mb-6" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                             </svg>
@@ -1428,7 +1488,7 @@ document.addEventListener('alpine:init', () => {
                     <span class="text-xs sm:text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
                     <div class="flex items-center gap-1">
                         <button @click="openShareModal(selectedItem)"
-                                x-show="selectedItem.type === 'video' && selectedItem.status === 'completed'"
+                                x-show="['video', 'image', 'audio'].includes(selectedItem.type) && selectedItem.status === 'completed'"
                                 class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg"
                                 title="Compartir">
                             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1702,7 +1762,7 @@ document.addEventListener('alpine:init', () => {
 
                 <!-- Header -->
                 <div class="px-6 py-5 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900">Compartir Video</h3>
+                    <h3 class="text-lg font-semibold text-gray-900" x-text="shareModal.item ? 'Compartir ' + (shareModal.item.type === 'video' ? 'Video' : shareModal.item.type === 'image' ? 'Imagen' : 'Audio') : 'Compartir'"></h3>
                     <p class="mt-1 text-sm text-gray-500" x-text="shareModal.item ? shareModal.item.title : ''"></p>
                 </div>
 
@@ -1714,7 +1774,7 @@ document.addEventListener('alpine:init', () => {
                         <div class="flex gap-2">
                             <input type="text"
                                    readonly
-                                   :value="window.location.origin + '/share/video/' + (shareModal.item ? shareModal.item.id : '') + '/'"
+                                   :value="window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/'"
                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600 focus:outline-none">
                             <button @click="copyShareLink()"
                                     class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
@@ -1728,7 +1788,7 @@ document.addEventListener('alpine:init', () => {
                         <label class="block text-sm font-medium text-gray-700 mb-3">Redes Sociales</label>
                         <div class="flex justify-center gap-4">
                             <!-- Twitter/X -->
-                            <a :href="'https://twitter.com/intent/tweet?url=' + encodeURIComponent(window.location.origin + '/share/video/' + (shareModal.item ? shareModal.item.id : '') + '/') + '&text=' + encodeURIComponent(shareModal.item ? shareModal.item.title : '')"
+                            <a :href="'https://twitter.com/intent/tweet?url=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/') + '&text=' + encodeURIComponent(shareModal.item ? shareModal.item.title : '')"
                                target="_blank"
                                class="p-3 bg-gray-100 hover:bg-black hover:text-white rounded-full transition-colors"
                                title="Compartir en X">
@@ -1736,7 +1796,7 @@ document.addEventListener('alpine:init', () => {
                             </a>
 
                             <!-- Facebook -->
-                            <a :href="'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(window.location.origin + '/share/video/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                            <a :href="'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
                                target="_blank"
                                class="p-3 bg-gray-100 hover:bg-blue-600 hover:text-white rounded-full transition-colors"
                                title="Compartir en Facebook">
@@ -1744,7 +1804,7 @@ document.addEventListener('alpine:init', () => {
                             </a>
 
                             <!-- LinkedIn -->
-                            <a :href="'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(window.location.origin + '/share/video/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                            <a :href="'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
                                target="_blank"
                                class="p-3 bg-gray-100 hover:bg-blue-700 hover:text-white rounded-full transition-colors"
                                title="Compartir en LinkedIn">
@@ -1752,7 +1812,7 @@ document.addEventListener('alpine:init', () => {
                             </a>
 
                             <!-- WhatsApp -->
-                            <a :href="'https://api.whatsapp.com/send?text=' + encodeURIComponent((shareModal.item ? shareModal.item.title : '') + ' ' + window.location.origin + '/share/video/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                            <a :href="'https://api.whatsapp.com/send?text=' + encodeURIComponent((shareModal.item ? shareModal.item.title : '') + ' ' + window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
                                target="_blank"
                                class="p-3 bg-gray-100 hover:bg-green-500 hover:text-white rounded-full transition-colors"
                                title="Compartir en WhatsApp">

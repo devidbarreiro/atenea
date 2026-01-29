@@ -3,141 +3,105 @@
 {% block title %}Dashboard - Atenea{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+<div class="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8" x-data="dashboardData()">
     <!-- Barra de búsqueda superior -->
-<div class="mb-6 sm:mb-8">
+    <div class="mb-6 sm:mb-8">
         <div class="relative max-w-2xl mx-auto">
             <div class="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
                 <svg class="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
-        </div>
-            <input type="text" 
-                   id="dashboard-search-input"
-                   value="{{ search_query }}"
-                   placeholder="Busca contenido o empieza a crear" 
-                   class="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-3 sm:py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base sm:text-lg"
-                   @keydown.enter="handleSearchInput($event)">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+            <input type="text" id="dashboard-search-input" x-model="searchQuery"
+                @keydown.enter="handleSearchInput($event)" placeholder="Busca contenido o empieza a crear"
+                class="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-3 sm:py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base sm:text-lg">
             <div class="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center gap-1">
-                {% if search_query %}
-                <a href="{% url 'core:dashboard' %}" class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Limpiar búsqueda">
+                <button x-show="searchQuery" @click="searchQuery=''; handleSearchInput({preventDefault:()=>{}})"
+                    class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Limpiar búsqueda">
                     <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
                     </svg>
-                </a>
-                {% endif %}
-                <button type="button" @click="handleSearchInput($event)" class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Buscar o ir al chat">
+                </button>
+                <button type="button" @click="handleSearchInput($event)"
+                    class="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600" title="Buscar o ir al chat">
                     <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
                 </button>
             </div>
         </div>
-        <script>
-            function applyDashboardFilter(selectElement) {
-                // Usamos 'window.URL' explícitamente para evitar conflictos con variables locales llamadas 'URL'
-                try {
-                    const currentUrl = new window.URL(window.location.href);
-                    
-                    // Establecer el filtro seleccionado
-                    currentUrl.searchParams.set('filter', selectElement.value);
-                    
-                    // Resetear la paginación a 1 para evitar errores (estar en pag 10 y filtrar a una lista de 2 items)
-                    currentUrl.searchParams.set('page', '1');
-                    
-                    // Redirigir
-                    window.location.href = currentUrl.toString();
-                } catch (e) {
-                    // Fallback muy seguro por si el navegador es extremadamente antiguo o window.URL también falla
-                    console.warn('Fallback filter redirection');
-                    window.location.search = '?filter=' + selectElement.value + '&page=1';
-                }
-            }
-            
-            function handleSearchInput(event) {
-                const input = document.getElementById('dashboard-search-input');
-                const value = input.value.trim();
-                
-                if (value) {
-                    // Si hay texto, redirigir al chat con el mensaje
-                    window.location.href = '{% url "core:creation_agent" %}?message=' + encodeURIComponent(value);
-                } else {
-                    // Si está vacío, ir al chat directamente
-                    window.location.href = '{% url "core:creation_agent" %}';
-                }
-                event.preventDefault();
-            }
-            
-            // Hacer la función disponible globalmente para Alpine
-            window.handleSearchInput = handleSearchInput;
-        </script>
     </div>
-    
+
     <!-- Sección: ¿Qué te gustaría crear hoy? -->
     <div class="mb-8 sm:mb-12" x-data="{ toolsModalOpen: false }">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
             <h2 class="text-xl sm:text-2xl font-bold text-gray-900">¿Qué te gustaría crear hoy?</h2>
-            <button type="button" @click="toolsModalOpen = true" class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2 text-sm sm:text-base">
+            <button type="button" @click="toolsModalOpen = true"
+                class="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2 text-sm sm:text-base">
                 <svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z">
+                    </path>
                 </svg>
                 <span class="hidden sm:inline">Todas las herramientas</span>
                 <span class="sm:hidden">Herramientas</span>
             </button>
         </div>
-        
+
         <!-- Modal de Todas las herramientas -->
-        <div x-show="toolsModalOpen" 
-             x-cloak
-             @click.away="toolsModalOpen = false"
-             @keydown.escape.window="toolsModalOpen = false"
-             class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black bg-opacity-50"
-             style="display: none;">
+        <div x-show="toolsModalOpen" x-cloak @click.away="toolsModalOpen = false"
+            @keydown.escape.window="toolsModalOpen = false"
+            class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black bg-opacity-50"
+            style="display: none;">
             <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
-                 @click.stop>
+                @click.stop>
                 <!-- Header del Modal -->
-                <div class="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between z-10">
+                <div
+                    class="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between z-10">
                     <h2 class="text-lg sm:text-2xl font-bold text-gray-900">Todas las herramientas</h2>
-                    <button type="button" @click="toolsModalOpen = false" 
-                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <button type="button" @click="toolsModalOpen = false"
+                        class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-                
+
                 <!-- Contenido del Modal -->
                 <div class="p-4 sm:p-6 space-y-6 sm:space-y-8">
                     <!-- Categoría: IMAGEN -->
                     <div>
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                    </path>
                                 </svg>
                             </div>
                             <h3 class="text-lg font-bold text-gray-900">IMAGEN</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:image_library' %}" 
-                               @click="toolsModalOpen = false"
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                            <a href="{% url 'core:image_library' %}" @click="toolsModalOpen = false"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Generar imágenes</span>
-                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
                                 </svg>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
-                                <span class="text-gray-700">Editar imágenes</span>
-                            </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Mejorar imagen</span>
                             </a>
-                            <a href="{% url 'core:creation_agent' %}" 
-                               @click="toolsModalOpen = false"
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                            <a href="{% url 'core:creation_agent' %}" @click="toolsModalOpen = false"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <div class="flex items-center gap-2">
                                     <span class="text-gray-700 group-hover:text-gray-900">Asistente</span>
                                     <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Nuevo</span>
@@ -145,109 +109,119 @@
                             </a>
                         </div>
                     </div>
-                    
+
                     <!-- Categoría: VÍDEO -->
                     <div>
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
                                 <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                    </path>
                                 </svg>
                             </div>
                             <h3 class="text-lg font-bold text-gray-900">VÍDEO</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:video_library' %}" 
-                               @click="toolsModalOpen = false"
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                            <a href="{% url 'core:video_library' %}" @click="toolsModalOpen = false"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Generar vídeos</span>
-                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
                                 </svg>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Editor de proyectos de vídeo</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Editor de clips</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Sincronización labial</span>
                             </a>
                         </div>
                     </div>
-                    
+
                     <!-- Categoría: AUDIO -->
                     <div>
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z">
+                                    </path>
                                 </svg>
                             </div>
                             <h3 class="text-lg font-bold text-gray-900">AUDIO</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <a href="{% url 'core:audio_library' %}" 
-                               @click="toolsModalOpen = false"
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
+                            <a href="{% url 'core:audio_library' %}" @click="toolsModalOpen = false"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group">
                                 <span class="text-gray-700 group-hover:text-gray-900">Texto a voz</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar efectos de sonido</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar música</span>
                             </a>
                         </div>
                     </div>
-                    
+
                     <!-- Categoría: OTROS -->
                     <div>
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z">
+                                    </path>
                                 </svg>
                             </div>
                             <h3 class="text-lg font-bold text-gray-900">OTROS</h3>
                         </div>
                         <div class="space-y-2 ml-14">
-                            <div class="flex items-center justify-between px-4 py-2 rounded-lg transition-colors group opacity-50 cursor-not-allowed">
+                            <div
+                                class="flex items-center justify-between px-4 py-2 rounded-lg transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar guiones</span>
-                                <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                                <span
+                                    class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
                             </div>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Editor de diseños</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar mockups</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar iconos</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Quitar fondos</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Expandir imágenes</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Generar variaciones</span>
                             </a>
-                            <a href="#" 
-                               class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
+                            <a href="#"
+                                class="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors group opacity-50 cursor-not-allowed">
                                 <span class="text-gray-700">Dibujar y transformar</span>
                             </a>
                         </div>
@@ -256,220 +230,409 @@
             </div>
         </div>
     </div>
-        
-        <div class="flex gap-3 sm:gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-3 sm:mx-0 px-3 sm:px-0">
-            <!-- Buscar contenido -->
-            <a href="{% url 'core:library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Explora tu biblioteca</p>
-    </div>
-            </a>
-            
-            <!-- Generar imágenes -->
-            <a href="{% url 'core:image_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-            </svg>
-        </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Crea imágenes con IA</p>
-    </div>
-            </a>
-            
-            <!-- Generar vídeos -->
-            <a href="{% url 'core:video_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-red-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                        </svg>
-        </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Crea vídeos con IA</p>
-    </div>
-            </a>
 
-            <!-- Generar audio -->
-            <a href="{% url 'core:audio_library' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-green-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                        </svg>
-        </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar audio</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Crea voces con IA</p>
-    </div>
-            </a>
-            
-            <!-- Generar música -->
-            <div class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 opacity-75 cursor-not-allowed flex flex-col justify-between relative">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <span class="text-xl sm:text-2xl">🎵</span>
-            </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar música</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Crea música con IA</p>
+    <div class="flex gap-3 sm:gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-3 sm:mx-0 px-3 sm:px-0">
+        <!-- Buscar contenido -->
+        <a href="{% url 'core:library' %}"
+            class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <div>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
                 </div>
-                <div class="absolute top-2 right-2">
-                    <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded">Próximamente</span>
-                </div>
-    </div>
-
-            <!-- Crear proyecto -->
-            <a href="{% url 'core:project_create' %}" class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-indigo-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                        </svg>
-            </div>
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Nuevo proyecto</h3>
-                    <p class="text-xs sm:text-sm text-gray-600">Organiza tu trabajo</p>
+                <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Buscar contenido</h3>
+                <p class="text-xs sm:text-sm text-gray-600">Explora tu biblioteca</p>
             </div>
         </a>
-        </div>
+
+        <!-- Generar imágenes -->
+        <a href="{% url 'core:image_library' %}"
+            class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <div>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar imágenes</h3>
+                <p class="text-xs sm:text-sm text-gray-600">Crea imágenes con IA</p>
+            </div>
+        </a>
+
+        <!-- Generar vídeos -->
+        <a href="{% url 'core:video_library' %}"
+            class="flex-shrink-0 w-[85vw] sm:w-64 h-36 sm:h-40 bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:border-red-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between">
+            <div>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-600" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-1">Generar vídeos</h3>
+                <p class="text-xs sm:text-sm text-gray-600">Crea vídeos con IA</p>
+            </div>
+        </a>
     </div>
-    
+
     <!-- Sección: Creaciones recientes -->
-    <div class="mb-8 sm:mb-12">
-        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                <h2 class="text-xl sm:text-2xl font-bold text-gray-900">
-                    {% if search_query %}
-                        Resultados de búsqueda{% if page_obj.paginator.count %} ({{ page_obj.paginator.count }}){% endif %}
-                    {% else %}
-                        Creaciones recientes
-                    {% endif %}
-                </h2>
-                {% if not search_query %}
-                <select 
-                    onchange="applyDashboardFilter(this)"
-                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-400 transition-colors w-full sm:w-auto">
-                    <option value="personal" {% if current_filter == 'personal' %}selected{% endif %}>Personal</option>
-                    <option value="shared" {% if current_filter == 'shared' %}selected{% endif %}>Compartido</option>
-                </select>
-                {% endif %}
-            </div>
-            {% if not search_query %}
-            <a href="{% url 'core:library' %}" class="text-gray-600 hover:text-gray-900 font-medium text-sm sm:text-base">
-                Ver todas →
-        </a>
-            {% endif %}
-        </div>
-        
-        {% if recent_items %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {% for item in recent_items %}
-                {% include 'includes/item_card.html' with item=item %}
-        {% endfor %}
-    </div>
-
-        <!-- Paginación -->
-        {% if page_obj.has_other_pages %}
-        <div class="mt-6 sm:mt-8 flex justify-center">
-            <nav class="flex flex-wrap items-center justify-center gap-2">
-                {% if page_obj.has_previous %}
-                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page=1" 
-                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <span class="hidden sm:inline">« Primera</span>
-                        <span class="sm:hidden">«</span>
-                    </a>
-                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.previous_page_number }}" 
-                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <span class="hidden sm:inline">‹ Anterior</span>
-                        <span class="sm:hidden">‹</span>
-                    </a>
-                {% else %}
-                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
-                        <span class="hidden sm:inline">« Primera</span>
-                        <span class="sm:hidden">«</span>
-                    </span>
-                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
-                        <span class="hidden sm:inline">‹ Anterior</span>
-                        <span class="sm:hidden">‹</span>
-                    </span>
-                {% endif %}
-                
-                <span class="px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
-                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                </span>
-                
-                {% if page_obj.has_next %}
-                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.next_page_number }}" 
-                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <span class="hidden sm:inline">Siguiente ›</span>
-                        <span class="sm:hidden">›</span>
-                    </a>
-                    <a href="?{% if search_query %}q={{ search_query }}&{% endif %}page={{ page_obj.paginator.num_pages }}" 
-                       class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <span class="hidden sm:inline">Última »</span>
-                        <span class="sm:hidden">»</span>
-                    </a>
-                {% else %}
-                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
-                        <span class="hidden sm:inline">Siguiente ›</span>
-                        <span class="sm:hidden">›</span>
-                    </span>
-                    <span class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-300 cursor-not-allowed">
-                        <span class="hidden sm:inline">Última »</span>
-                        <span class="sm:hidden">»</span>
-                    </span>
-                {% endif %}
-            </nav>
-            </div>
-        {% endif %}
-        
-        {% else %}
-        <!-- Estado vacío -->
-        <div class="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
-            {% if search_query %}
-                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">No se encontraron resultados</h3>
-                <p class="text-gray-600 mb-6">No hay contenido que coincida con "{{ search_query }}"</p>
-                <a href="{% url 'core:dashboard' %}" class="inline-flex items-center px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors">
-                    Limpiar búsqueda
+        <div class="mb-8 sm:mb-12">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <h2 class="text-xl sm:text-2xl font-bold text-gray-900">
+                        <span x-show="searchQuery">Resultados de búsqueda</span>
+                        <span x-show="!searchQuery">Creaciones recientes</span>
+                        <span x-show="items.length > 0" class="text-gray-500 text-lg"
+                            x-text="'(' + (hasMore ? items.length + '+' : items.length) + ')'"></span>
+                    </h2>
+                    <select x-model="filter" @change="changeFilter()"
+                        class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-400 transition-colors w-full sm:w-auto">
+                        <option value="personal">Personal</option>
+                        <option value="shared">Compartido</option>
+                    </select>
+                </div>
+                <a href="{% url 'core:library' %}"
+                    class="text-gray-600 hover:text-gray-900 font-medium text-sm sm:text-base">
+                    Ver todas →
                 </a>
-            {% else %}
+            </div>
+
+            <!-- Grid de Items -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+
+                <!-- Skeletons (loading state) -->
+                <template x-if="isLoading && items.length === 0">
+                    <template x-for="i in 8">
+                        <div class="bg-white rounded-xl overflow-hidden border border-gray-200 animate-pulse h-[340px]">
+                            <div class="h-48 bg-gray-200 w-full"></div>
+                            <div class="p-4 space-y-3">
+                                <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                                <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+                                <div class="flex justify-between pt-2">
+                                    <div class="h-3 bg-gray-200 rounded w-1/4"></div>
+                                    <div class="h-5 bg-gray-200 rounded w-1/5"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+
+                <!-- Actual Items -->
+                <template x-for="item in items" :key="item.id">
+                    <div class="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 relative"
+                        x-data="{ menuOpen: false }">
+
+                        <div class="relative w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                            <span
+                                class="absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-semibold z-10 bg-gray-800 text-white"
+                                x-text="getTypeLabel(item.type)"></span>
+
+                            <div class="absolute top-2 right-2 z-20">
+                                <button @click.prevent="menuOpen = !menuOpen"
+                                    class="p-1.5 bg-white bg-opacity-90 rounded-md hover:bg-opacity-100 transition-all opacity-0 group-hover:opacity-100"
+                                    :class="{ 'opacity-100': menuOpen }" aria-label="Opciones">
+                                    <svg class="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z">
+                                        </path>
+                                    </svg>
+                                </button>
+
+                                <div x-show="menuOpen" @click.away="menuOpen = false" x-cloak
+                                    class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+
+                                    <button type="button"
+                                        @click="window.location.href = `/items/${item.type}/${item.id}/move/`"
+                                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                        </svg>
+                                        Mover
+                                    </button>
+
+                                    <button type="button"
+                                        @click="window.dispatchEvent(new CustomEvent('open-delete-modal', { detail: { itemId: item.id, itemType: item.type } })); menuOpen = false"
+                                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                            </path>
+                                        </svg>
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <template x-if="item.type == 'video' && item.signed_url">
+                                <a :href="item.detail_url" class="block w-full h-full">
+                                    <video :src="item.signed_url" preload="metadata"
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"></video>
+                                </a>
+                            </template>
+
+                            <template x-if="item.type == 'image' && item.signed_url">
+                                <a :href="item.detail_url" class="block w-full h-full">
+                                    <img :src="item.signed_url" :alt="item.title"
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                                </a>
+                            </template>
+
+                            <template x-if="item.type == 'audio'">
+                                <a :href="item.detail_url" class="block w-full h-full">
+                                    <div class="w-full h-full flex flex-col items-center justify-center transition-all duration-300 group-hover:brightness-95"
+                                        :style="`background: ${item.audio_background || '#f3e7e9'};`">
+                                        <svg class="w-16 h-16 text-gray-600 mb-2 transform group-hover:scale-110 transition-transform duration-300 drop-shadow-md"
+                                            fill="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                                d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z">
+                                            </path>
+                                        </svg>
+                                        <span class="text-xs text-gray-600 font-medium drop-shadow-md">Audio</span>
+                                    </div>
+                                </a>
+                            </template>
+
+                            <template x-if="item.type == 'script' || (!item.signed_url && item.type != 'audio')">
+                                <a :href="item.detail_url" class="block w-full h-full">
+                                    <div class="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                                        <svg class="w-16 h-16 text-gray-400 mb-2" fill="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path
+                                                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3">
+                                            </path>
+                                        </svg>
+                                        <span class="text-xs text-gray-600 font-medium"
+                                            x-text="getTypeLabel(item.type)"></span>
+                                    </div>
+                                </a>
+                            </template>
+                        </div>
+
+                        <div class="p-4">
+                            <div class="flex items-start justify-between mb-2">
+                                <a :href="item.detail_url" class="flex-1 min-w-0">
+                                    <h3 class="font-semibold text-gray-900 mb-1 truncate group-hover:text-blue-600 transition-colors"
+                                        x-text="item.title"></h3>
+                                </a>
+                            </div>
+                            <div class="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                                <span class="flex items-center gap-1"
+                                    x-text="item.project ? item.project : 'Sin proyecto'"></span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="text-xs text-gray-400" x-text="formatDate(item.created_at)"></div>
+                                <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
+                                    x-text="getStatusLabel(item.status)"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Estado vacío -->
+            <div x-show="!isLoading && items.length === 0" x-cloak
+                class="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
                 <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
                 </svg>
                 <h3 class="text-lg font-semibold text-gray-900 mb-2">No se han encontrado creaciones</h3>
                 <p class="text-gray-600 mb-6">Comienza creando tu primer contenido con IA</p>
-                <a href="{% url 'core:image_library' %}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
+                <a href="{% url 'core:image_library' %}"
+                    class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                     Crear
                 </a>
-            {% endif %}
+            </div>
+
+            <!-- Load More -->
+            <div x-show="hasMore" x-cloak class="mt-8 text-center">
+                <button @click="loadMore()" :disabled="isLoadingMore"
+                    class="px-6 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 text-gray-700 font-medium disabled:opacity-50">
+                    <span x-show="!isLoadingMore">Cargar más</span>
+                    <span x-show="isLoadingMore">Cargando...</span>
+                </button>
+            </div>
         </div>
-        {% endif %}
     </div>
-</div>
 
-<style>
-.scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
-}
-</style>
+    <style>
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
 
-<!-- Modales de eliminación -->
-{% for item in recent_items %}
-    {% include 'includes/delete_modal.html' with item_id=item.id item_type=item.type item_title=item.title delete_url=item.delete_url item_type_label=item.type|title %}
-{% endfor %}
-{% endblock %}
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+
+    <script>
+        function dashboardData() {
+            return {
+                items: [],
+                isLoading: true,
+                isLoadingMore: false,
+                page: 1,
+                hasMore: false,
+                filter: '{{ current_filter|default:"personal" }}',
+                searchQuery: '{{ search_query|escapejs }}',
+                currentRequestId: 0,
+
+                init() {
+                    // Register popstate listener for back/forward navigation
+                    window.addEventListener('popstate', (event) => {
+                        const url = new URL(window.location);
+                        this.filter = url.searchParams.get('filter') || 'personal';
+                        this.searchQuery = url.searchParams.get('q') || '';
+
+                        // Reset items and page to reload fresh state
+                        this.page = 1;
+                        this.items = [];
+                        this.loadItems();
+                    });
+
+                    this.loadItems();
+                },
+
+                handleSearchInput(event) {
+                    // If called from clear button
+                    if (!event.target && this.searchQuery === '') {
+                        this.changeFilter();
+                        return;
+                    }
+
+                    // If triggered by user action (Enter or Button click) OR if query is non-empty
+                    if (this.searchQuery || event.target) {
+                        this.changeFilter();
+                    }
+                    if (event && event.preventDefault) event.preventDefault();
+                },
+
+                async loadItems(append = false) {
+                    // Generate unique request ID
+                    const requestId = ++this.currentRequestId;
+
+                    if (append) {
+                        this.isLoadingMore = true;
+                    } else {
+                        this.isLoading = true;
+                    }
+
+                    try {
+                        const limit = 24;
+                        // Determine target page: next page if appending, otherwise reset to 1
+                        const targetPage = append ? this.page + 1 : 1;
+                        const offset = (targetPage - 1) * limit;
+
+                        let url = `/api/library/items/?type=all&limit=${limit}&offset=${offset}&include_urls=true`;
+
+                        if (this.filter) {
+                            url += `&filter=${this.filter}`;
+                        }
+                        if (this.searchQuery) {
+                            url += `&q=${encodeURIComponent(this.searchQuery)}`;
+                        }
+
+                        const response = await fetch(url);
+
+                        // Check if request is stale
+                        if (requestId !== this.currentRequestId) return;
+
+                        const data = await response.json();
+
+                        if (data.items) {
+                            if (append) {
+                                this.items = [...this.items, ...data.items];
+                            } else {
+                                this.items = data.items;
+                            }
+                            this.hasMore = data.has_more;
+
+                            // Only update page number on successful fetch
+                            this.page = targetPage;
+                        }
+                    } catch (e) {
+                        if (requestId === this.currentRequestId) {
+                            console.error('Error loading items:', e);
+                        }
+                    } finally {
+                        if (requestId === this.currentRequestId) {
+                            this.isLoading = false;
+                            this.isLoadingMore = false;
+                        }
+                    }
+                },
+
+                loadMore() {
+                    // Do not increment optimistic page here; loadItems handles it
+                    this.loadItems(true);
+                },
+
+                changeFilter() {
+                    this.page = 1;
+                    this.items = [];
+                    // Update URL without reload
+                    const url = new URL(window.location);
+                    url.searchParams.set('filter', this.filter);
+                    if (this.searchQuery) {
+                        url.searchParams.set('q', this.searchQuery);
+                    } else {
+                        url.searchParams.delete('q');
+                    }
+                    window.history.pushState({}, '', url);
+                    this.loadItems();
+                },
+
+                getTypeLabel(type) {
+                    const map = {
+                        'video': 'Video',
+                        'image': 'Imagen',
+                        'audio': 'Audio',
+                        'music': 'Música',
+                        'script': 'Guión'
+                    };
+                    return map[type] || type;
+                },
+
+                getStatusLabel(status) {
+                    const map = {
+                        'completed': 'Completado',
+                        'processing': 'Procesando',
+                        'generating': 'Generando',
+                        'error': 'Error',
+                        'cancelled': 'Cancelado',
+                        'pending': 'Pendiente'
+                    };
+                    return map[status] || status;
+                },
+
+                formatDate(isoString) {
+                    if (!isoString) return '';
+                    const date = new Date(isoString);
+                    return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                }
+            }
+        }
+
+        // Fallback for tools modal if not using Alpine for that part (but x-data is on root now)
+        // Actually tools modal is inside the loop? No, tools_section.html is outside.
+        // Ensure tools_section.html doesn't conflict. It uses `x-data="{ toolsModalOpen: false }"` inside.
+        // Nested x-data scopes are fine in Alpine.
+    </script>
+    {% endblock %}

@@ -36,7 +36,7 @@ Este documento describe la **refactorización arquitectónica completa** del pro
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │  Mixins: Breadcrumb, SuccessMessage, Service          │ │
 │  └────────────────────────────────────────────────────────┘ │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │ 
 │  │  Dashboard   │  │   Projects   │  │    Videos    │     │
 │  │    Views     │  │    Views     │  │    Views     │     │
 │  │  (ListView)  │  │ (CRUD Views) │  │ (CRUD+Gen)   │     │
