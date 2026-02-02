@@ -80,6 +80,7 @@ document.addEventListener('alpine:init', () => {
         
         // Template selector state
         selectedTemplate: null,
+        manimAnimationType: 'quote', // Nuevo: rastrear tipo de animación manim
         defaultTemplateId: '{{ default_template_id|default_if_none:""|escapejs }}',
         templateModalOpen: false,
         templateList: [],
@@ -94,7 +95,72 @@ document.addEventListener('alpine:init', () => {
         voiceSearch: '',
         selectedVoice: null,
         
+        // Manim design selector state
+        manimDesignModalOpen: false,
+        // Cada diseño mapea a un tipo de animación de Manim
+        manimDesigns: [
+            {
+                id: 'quote_standard',
+                name: 'Cita (Texto)',
+                category: 'Tipografía y Texto',
+                description: 'Animación de texto para citas o frases destacadas.',
+                container_color: '#FFFFFF',
+                text_color: '#111827',
+                font_family: 'normal',
+                animation_type: 'quote',
+                active: true
+            },
+            {
+                id: 'bar_chart_standard',
+                name: 'Gráfico Clásico',
+                category: 'Gráficos de Datos',
+                description: 'Visualización tradicional con ejes X e Y.',
+                container_color: '#F9FAFB',
+                text_color: '#111827',
+                font_family: 'normal',
+                animation_type: 'bar_chart',
+                active: true
+            },
+            {
+                id: 'bar_chart_modern',
+                name: 'Gráfico Moderno',
+                category: 'Gráficos de Datos',
+                description: 'Diseño limpio sin ejes, igual a la previsualización.',
+                container_color: '#1E293B',
+                text_color: '#FFFFFF',
+                font_family: 'normal',
+                animation_type: 'modern_bar_chart',
+                active: true
+            },
+            {
+                id: 'line_chart_placeholder',
+                name: 'Gráfico de Líneas',
+                category: 'Gráficos de Datos',
+                description: 'Visualización de tendencias y series temporales.',
+                container_color: '#F9FAFB',
+                text_color: '#94A3B8',
+                font_family: 'normal',
+                animation_type: 'line_chart',
+                active: false
+            },
+            {
+                id: 'pie_chart_placeholder',
+                name: 'Gráfico de Tarta',
+                category: 'Gráficos de Datos',
+                description: 'Representación de proporciones y porcentajes.',
+                container_color: '#F9FAFB',
+                text_color: '#94A3B8',
+                font_family: 'normal',
+                animation_type: 'pie_chart',
+                active: false
+            },
+        ],
+        selectedManimDesignId: null,
+        selectedManimDesignName: '',
+        selectedManimDesign: null,
+        
         init() {
+            console.log('Creation Sidebar Initialized. Active Tab:', this.activeTab);
             // Cargar prompt desde caché al inicializar
             this.loadPromptFromCache();
             
@@ -108,6 +174,24 @@ document.addEventListener('alpine:init', () => {
             if (this.defaultTemplateId && this.defaultTemplateId.trim() !== '') {
                 this.loadDefaultTemplate();
             }
+            
+            // Verificar si hay un modelo ya seleccionado en el dropdown
+            this.$nextTick(() => {
+                const modelSelect = document.getElementById('model-select');
+                if (modelSelect && modelSelect.value) {
+                    this.selectedModel = modelSelect.value;
+                    // Aplicar lógica de cambio de modelo
+                    this.onModelChange();
+                }
+                
+                // Escuchar cambios en el dropdown de modelos
+                if (modelSelect) {
+                    modelSelect.addEventListener('change', () => {
+                        this.selectedModel = modelSelect.value;
+                        this.onModelChange();
+                    });
+                }
+            });
         },
         
         loadPromptFromCache() {
@@ -282,16 +366,96 @@ document.addEventListener('alpine:init', () => {
             this.templateModalOpen = false;
         },
         
+        openManimDesignModal() {
+            this.manimDesignModalOpen = true;
+        },
+        
+        applyManimDesign(design) {
+            if (!design) return;
+            
+            this.selectedManimDesignId = design.id;
+            this.selectedManimDesignName = design.name || '';
+            this.selectedManimDesign = design;
+            this.manimAnimationType = design.animation_type || 'quote';
+            
+            console.log('[DEBUG] Manim Design Applied:', {
+                id: this.selectedManimDesignId,
+                name: this.selectedManimDesignName,
+                animation_type: this.manimAnimationType,
+                design: design
+            });
+            
+            // Aplicar colores del diseño si existen
+            if (design.container_color) {
+                const cp = document.getElementById('container-color-picker');
+                const ci = document.querySelector('input[name="container_color"]');
+                const ct = document.getElementById('container-color-text');
+                const cv = document.getElementById('container-color-preview');
+                if (cp) cp.value = design.container_color;
+                if (ci) ci.value = design.container_color;
+                if (ct) ct.value = design.container_color;
+                if (cv) cv.style.backgroundColor = design.container_color;
+            }
+            if (design.text_color) {
+                const tp = document.getElementById('text-color-picker');
+                const ti = document.querySelector('input[name="text_color"]');
+                const tt = document.getElementById('text-color-text');
+                const tv = document.getElementById('text-color-preview');
+                if (tp) tp.value = design.text_color;
+                if (ti) ti.value = design.text_color;
+                if (tt) tt.value = design.text_color;
+                if (tv) tv.style.backgroundColor = design.text_color;
+            }
+
+            // Guardar tipo de animación seleccionada (quote, bar_chart, etc.)
+            const manimTypeInput = document.getElementById('manim-animation-type-input');
+            if (manimTypeInput) {
+                manimTypeInput.value = this.manimAnimationType;
+                // Disparar evento para que otros componentes (como el formulario clásico) se enteren
+                manimTypeInput.dispatchEvent(new Event('change'));
+                manimTypeInput.dispatchEvent(new Event('input'));
+            }
+            
+            // Si el modelo actual es manim-quote, actualizar campos dinámicos
+            if (this.selectedModel === 'manim-quote') {
+                let url = '/videos/form-fields/?model_id=manim-quote&manim_animation_type=' + this.manimAnimationType;
+                
+                if (typeof htmx !== 'undefined') {
+                    console.log('Updating dynamic fields for Manim type (creation sidebar):', this.manimAnimationType);
+                    htmx.ajax('GET', url, {
+                        target: '#dynamic-fields-container',
+                        swap: 'innerHTML'
+                    });
+                }
+                
+                // Actualizar labels del prompt (vía función global si existe)
+                if (typeof updateScriptFieldForModel === 'function') {
+                    updateScriptFieldForModel('manim-quote');
+                }
+            }
+            
+            // Trigger preview refresh
+            if (typeof renderLivePreview === 'function') {
+                renderLivePreview();
+            }
+            
+            this.manimDesignModalOpen = false;
+        },
+        
         getServiceDisplayName(service) {
             const names = { 'sora': 'Sora', 'gemini_veo': 'Gemini Veo', 'higgsfield': 'Higgsfield', 'gemini_image': 'Gemini Image', 'agent': 'Agent' };
             return names[service] || service || '';
         },
         
         async loadModels(type) {
+            console.log('loadModels: fetching models for type:', type);
             this.loading = true;
             try {
                 const response = await fetch('/api/models/config/?type=' + type + '&grouped=true');
+                if (!response.ok) throw new Error('API Error: ' + response.status);
                 const data = await response.json();
+                
+                console.log('loadModels: data received:', data);
                 
                 // Mostrar toast si viene en el response
                 if (data.toast) {
@@ -301,14 +465,19 @@ document.addEventListener('alpine:init', () => {
                 }
                 if (data.models) {
                     this.models = data.models;
+                    // También cargar versión plana
                     const allResponse = await fetch('/api/models/config/?type=' + type);
-                    const allData = await allResponse.json();
-                    if (allData.models) {
-                        this.allModels = {};
-                        allData.models.forEach(model => {
-                            this.allModels[model.id] = model;
-                        });
+                    if (allResponse.ok) {
+                        const allData = await allResponse.json();
+                        if (allData.models) {
+                            this.allModels = {};
+                            allData.models.forEach(model => {
+                                this.allModels[model.id] = model;
+                            });
+                        }
                     }
+                } else {
+                    console.warn('loadModels: No data.models found');
                 }
             } catch (error) {
                 console.error('Error loading models:', error);
@@ -334,9 +503,27 @@ document.addEventListener('alpine:init', () => {
                     `;
                 }
                 
+                // Para Manim, autoseleccionar el diseño de cita texto
+                if (this.selectedModel === 'manim-quote') {
+                    // Buscar el diseño de cita y aplicarlo automáticamente
+                    const quoteDesign = this.manimDesigns.find(d => d.id === 'quote_standard');
+                    if (quoteDesign) {
+                        this.applyManimDesign(quoteDesign);
+                        return; // Salir aquí para evitar recarga doble
+                    }
+                }
+                
                 // Cargar campos dinámicos vía HTMX
                 if (typeof htmx !== 'undefined') {
-                    const url = '/videos/form-fields/?model_id=' + this.selectedModel;
+                    let url = '/videos/form-fields/?model_id=' + encodeURIComponent(this.selectedModel);
+                    
+                    // Para Manim, pasar también el tipo de animación seleccionado (diseño)
+                    if (this.selectedModel === 'manim-quote') {
+                        const manimTypeInput = document.getElementById('manim-animation-type-input');
+                        const manimType = manimTypeInput && manimTypeInput.value ? manimTypeInput.value : 'quote';
+                        url += '&manim_animation_type=' + encodeURIComponent(manimType);
+                    }
+                    
                     htmx.ajax('GET', url, {
                         target: '#dynamic-fields-container',
                         swap: 'innerHTML'
@@ -489,7 +676,9 @@ document.addEventListener('alpine:init', () => {
         },
         
         async submitForm() {
-            if (!this.selectedModel || !this.prompt) {
+            const isBarChart = this.selectedModel === 'manim-quote' && (this.manimAnimationType === 'bar_chart' || this.manimAnimationType === 'modern_bar_chart');
+            
+            if (!this.selectedModel || (!this.prompt && !isBarChart)) {
                 this.showError('Por favor selecciona un modelo y escribe un prompt');
                 return;
             }
@@ -568,7 +757,7 @@ document.addEventListener('alpine:init', () => {
                 }
                 
                 // Calidad (para Manim Quote)
-                const qualityInput = document.querySelector('select[name="quality"]');
+                const qualityInput = document.getElementById('quality-input');
                 if (qualityInput && qualityInput.value) {
                     settings.quality = qualityInput.value;
                 }
@@ -595,6 +784,64 @@ document.addEventListener('alpine:init', () => {
                 const fontFamilyInput = document.getElementById('font-family-input');
                 if (fontFamilyInput && fontFamilyInput.value) {
                     settings.font_family = fontFamilyInput.value;
+                }
+                
+                // Tipo de animación de Manim (cita, bar_chart, etc.)
+                const manimTypeInput = document.getElementById('manim-animation-type-input');
+                let manimType = manimTypeInput && manimTypeInput.value ? manimTypeInput.value : 'quote';
+                settings.manim_animation_type = manimType;
+                
+                // Si es bar_chart o modern_bar_chart, recoger datos específicos y empaquetar en prompt
+                if (this.selectedModel === 'manim-quote' && (manimType === 'bar_chart' || manimType === 'modern_bar_chart')) {
+                    const values = [];
+                    const labels = [];
+                    const bar_colors = [];
+                    const top_texts = [];
+                    
+                    // Contar cuántas barras hay buscando los inputs generados
+                    let barCount = 0;
+                    while (document.querySelector(`input[name="bar_label_${barCount + 1}"]:not(#bar-manager-modal input)`)) {
+                        barCount++;
+                    }
+                    
+                    for (let i = 1; i <= barCount; i++) {
+                        const lInput = document.querySelector(`input[name="bar_label_${i}"]:not(#bar-manager-modal input)`);
+                        const vInput = document.querySelector(`input[name="bar_value_${i}"]:not(#bar-manager-modal input)`);
+                        const cInput = document.querySelector(`input[name="bar_color_${i}"]:not(#bar-manager-modal input)`);
+                        const ttInput = document.querySelector(`input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`);
+                        
+                        labels.push(lInput ? lInput.value || `Barra ${i}` : `Barra ${i}`);
+                        values.push(vInput ? parseFloat(vInput.value) || 0 : 0);
+                        bar_colors.push(cInput ? cInput.value : '#0066CC');
+                        top_texts.push(ttInput ? ttInput.value || '' : '');
+                    }
+                    
+                    const cTitle = document.getElementById('chart_title');
+                    const xL = document.getElementById('x_axis_label');
+                    const yL = document.getElementById('y_axis_label');
+                    const bWInput = document.querySelector('input[name="bar_width"]');
+                    const sLInput = document.querySelector('input[name="show_labels"]');
+                    
+                    const chartData = {
+                        title: cTitle ? cTitle.value : 'Gráfico de Barras',
+                        x_label: xL ? xL.value : 'Categorías',
+                        y_label: yL ? yL.value : 'Valores',
+                        values: values,
+                        labels: labels,
+                        bar_colors: bar_colors,
+                        top_texts: top_texts,
+                        bar_width: bWInput ? parseFloat(bWInput.value) : 0.8,
+                        show_labels: sLInput ? sLInput.checked : true
+                    };
+                    
+                    // Sobreescribir el prompt con el JSON de datos
+                    this.prompt = JSON.stringify(chartData);
+                }
+                
+                // Para Manim, añadir animation_type a settings (escalable para nuevos tipos)
+                if (this.selectedModel === 'manim-quote') {
+                    settings.manim_animation_type = this.manimAnimationType;
+                    console.log('[DEBUG] Enviando animation_type:', this.manimAnimationType);
                 }
                 
                 // Campos específicos del modelo (HeyGen) - soportar tanto select como input text
@@ -904,6 +1151,113 @@ document.addEventListener('alpine:init', () => {
                    x-show="!selectedModel || (selectedModel && !selectedModel.includes('heygen') && selectedModel !== 'manim-quote')">
         </div>
         
+        <!-- Sección MANIM DESIGN (solo para Manim) -->
+        <div x-show="activeTab === 'video' && selectedModel === 'manim-quote'">
+            <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">MANIM DESIGN</label>
+            
+            <!-- Botón selector (similar al de Prompt Template) -->
+            <button type="button"
+                    @click="openManimDesignModal()"
+                    class="w-full border-2 rounded-lg overflow-hidden bg-white hover:border-gray-400 transition-colors"
+                    :class="selectedManimDesignId ? 'border-gray-400' : 'border-gray-300 border-dashed'">
+                
+                <!-- Preview Area -->
+                <div class="aspect-video bg-gray-900 flex items-center justify-center relative overflow-hidden rounded-lg transition-colors p-4"
+                     :style="selectedManimDesign ? `background-color: ${selectedManimDesign.container_color}` : ''"
+                     :class="selectedManimDesign ? '' : 'bg-gray-900'">
+                    
+                    <!-- Placeholder cuando no hay diseño -->
+                    <template x-if="!selectedManimDesignId">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i class="fas fa-film text-3xl text-gray-400 opacity-50"></i>
+                        </div>
+                    </template>
+                    
+                    <!-- Visual Representations (Adapted for selectedManimDesign) -->
+                    <!-- Quote -->
+                    <template x-if="selectedManimDesign && selectedManimDesign.animation_type === 'quote'">
+                        <div class="w-full space-y-2">
+                            <div class="w-1/3 h-0.5 rounded-full bg-black/10 mx-auto"></div>
+                            <div class="w-full h-0.5 rounded-full bg-black/20"></div>
+                            <div class="w-full h-0.5 rounded-full bg-black/20"></div>
+                            <div class="w-2/3 h-0.5 rounded-full bg-black/20 mx-auto"></div>
+                            <div class="w-1/4 h-0.5 rounded-full bg-black/10 mx-auto"></div>
+                        </div>
+                    </template>
+
+                    <!-- Classic Bar Chart -->
+                    <template x-if="selectedManimDesign && selectedManimDesign.animation_type === 'bar_chart'">
+                        <div class="relative w-full h-12 flex flex-col justify-end px-2">
+                            <div class="absolute left-0 bottom-0 top-0 w-px bg-black/20"></div>
+                            <div class="absolute left-0 right-0 bottom-0 h-px bg-black/20"></div>
+                            <div class="flex items-end gap-1.5 justify-center">
+                                <div class="w-1.5 h-6 rounded-t-[1px] bg-black/20"></div>
+                                <div class="w-1.5 h-10 rounded-t-[1px] bg-black/40"></div>
+                                <div class="w-1.5 h-8 rounded-t-[1px] bg-black/30"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Modern Bar Chart -->
+                    <template x-if="selectedManimDesign && selectedManimDesign.animation_type === 'modern_bar_chart'">
+                        <div class="w-full h-full flex flex-col items-center justify-center p-2">
+                            <div class="w-full h-full border border-black/5 rounded-lg flex flex-col items-center justify-center bg-white/50 backdrop-blur-sm shadow-sm relative overflow-hidden">
+                                <div class="flex items-end gap-2 h-8">
+                                    <div class="w-2 h-4 rounded-sm bg-black/30"></div>
+                                    <div class="w-2 h-7 rounded-sm bg-black/50"></div>
+                                    <div class="w-2 h-5 rounded-sm bg-black/40"></div>
+                                </div>
+                                <div class="mt-2 w-1/2 h-0.5 bg-black/10 rounded-full"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="selectedManimDesign && selectedManimDesign.animation_type === 'line_chart'">
+                        <div class="w-full h-12 flex items-center justify-center">
+                            <svg class="w-full h-full text-black/20" viewBox="0 0 100 40" fill="none" preserveAspectRatio="none">
+                                <path d="M0 35 L20 25 L40 30 L60 10 L80 20 L100 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                    </template>
+
+                    <template x-if="selectedManimDesign && selectedManimDesign.animation_type === 'pie_chart'">
+                        <div class="w-12 h-12 rounded-full border-[8px] border-black/10 relative">
+                            <div class="absolute inset-[-8px] rounded-full border-[8px] border-black/20 border-t-transparent border-r-transparent rotate-45"></div>
+                        </div>
+                    </template>
+                    
+                    <!-- Texto del diseño seleccionado -->
+                    <div class="absolute bottom-0 left-0 right-0 pb-4 pl-4 z-10 pointer-events-none">
+                        <div class="text-white font-bold text-lg uppercase tracking-tight mb-1" 
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+                             x-show="selectedManimDesignName"
+                             x-text="selectedManimDesignName.toUpperCase()"></div>
+                        <div x-show="!selectedManimDesignName" 
+                             class="text-gray-300 text-xs font-medium tracking-wide"
+                             style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);">
+                             Selecciona un grafo
+                        </div>
+                    </div>
+                    
+                    <!-- Botón Change -->
+                    <span @click.stop="openManimDesignModal()"
+                          class="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md text-xs font-medium text-white shadow-lg hover:bg-black/80 transition-all z-20 flex items-center gap-1.5 cursor-pointer"
+                          style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        Change
+                    </span>
+                </div>
+            </button>
+            
+            <!-- Hidden input para el tipo de animación de Manim -->
+            <input type="hidden" 
+                   name="manim_animation_type" 
+                   id="manim-animation-type-input"
+                   value="quote">
+        </div>
+        
         <!-- Sección MODEL -->
         <div>
             <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">MODEL</label>
@@ -998,7 +1352,7 @@ document.addEventListener('alpine:init', () => {
         </div>
         
         <!-- Sección PROMPT -->
-        <div>
+        <div x-show="selectedModel !== 'manim-quote' || (manimAnimationType !== 'bar_chart' && manimAnimationType !== 'modern_bar_chart')">
             <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">PROMPT</label>
             <div class="relative">
                 <textarea x-model="prompt"
@@ -1031,8 +1385,8 @@ document.addEventListener('alpine:init', () => {
         <!-- Botón Generar con Costo Estimado -->
         <div class="pt-3 sm:pt-4 border-t border-gray-200">
             <button @click="submitForm()"
-                    :disabled="!selectedModel || !prompt || submitting"
-                    :class="(!selectedModel || !prompt || submitting) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'"
+                    :disabled="!selectedModel || (!prompt && (selectedModel !== 'manim-quote' || (manimAnimationType !== 'bar_chart' && manimAnimationType !== 'modern_bar_chart'))) || submitting"
+                    :class="(!selectedModel || (!prompt && (selectedModel !== 'manim-quote' || (manimAnimationType !== 'bar_chart' && manimAnimationType !== 'modern_bar_chart'))) || submitting) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'"
                     class="w-full bg-black text-white py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm sm:text-base">
                 <span x-show="!submitting">Generar</span>
                 <span x-show="submitting">Generando...</span>
@@ -1183,6 +1537,164 @@ document.addEventListener('alpine:init', () => {
                 <div x-show="!selectedTemplate"></div>
                 <button type="button"
                         @click="templateModalOpen = false"
+                        class="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de diseños Manim -->
+    <div x-show="manimDesignModalOpen"
+         x-cloak
+         @click.self="manimDesignModalOpen = false"
+         @keydown.escape.window="manimDesignModalOpen = false"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        
+        <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col"
+             @click.stop
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center p-6 border-b">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-film mr-2"></i>Diseños para Manim
+                </h3>
+                <button type="button" @click="manimDesignModalOpen = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Categorías y Grid de diseños -->
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                <div class="space-y-8">
+                    <template x-for="categoryName in [...new Set(manimDesigns.map(d => d.category))]" :key="categoryName">
+                        <div class="space-y-4">
+                            <!-- Category Header -->
+                            <div class="flex items-center gap-3">
+                                <span class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]" x-text="categoryName"></span>
+                                <div class="h-px bg-gray-200 flex-1"></div>
+                            </div>
+
+                            <!-- Category Grid -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <template x-for="design in manimDesigns.filter(d => d.category === categoryName)" :key="design.id">
+                                    <div class="relative group">
+                                        <button type="button"
+                                                @click="design.active ? applyManimDesign(design) : null"
+                                                class="w-full relative bg-white border border-gray-200 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col h-full"
+                                                :class="[
+                                                    design.active ? 'hover:shadow-2xl hover:border-black cursor-pointer' : 'cursor-default opacity-60 grayscale',
+                                                    selectedManimDesignId === design.id ? 'ring-2 ring-black border-black' : ''
+                                                ]">
+                                            
+                                            <!-- Preview Box -->
+                                            <div class="aspect-video w-full relative overflow-hidden flex items-center justify-center p-6 transition-colors"
+                                                 :class="design.active ? 'group-hover:bg-white' : ''"
+                                                 :style="`background-color: ${design.container_color}`">
+                                                
+                                                <!-- Visual Representations -->
+                                                <!-- Quote -->
+                                                <template x-if="design.animation_type === 'quote'">
+                                                    <div class="w-full space-y-2">
+                                                        <div class="w-1/3 h-0.5 rounded-full bg-black/10 mx-auto"></div>
+                                                        <div class="w-full h-0.5 rounded-full bg-black/20"></div>
+                                                        <div class="w-full h-0.5 rounded-full bg-black/20"></div>
+                                                        <div class="w-2/3 h-0.5 rounded-full bg-black/20 mx-auto"></div>
+                                                        <div class="w-1/4 h-0.5 rounded-full bg-black/10 mx-auto"></div>
+                                                    </div>
+                                                </template>
+
+                                                <!-- Classic Bar Chart (With Axes) -->
+                                                <template x-if="design.animation_type === 'bar_chart'">
+                                                    <div class="relative w-full h-12 flex flex-col justify-end px-2">
+                                                        <div class="absolute left-0 bottom-0 top-0 w-px bg-black/20"></div>
+                                                        <div class="absolute left-0 right-0 bottom-0 h-px bg-black/20"></div>
+                                                        <div class="flex items-end gap-1.5 justify-center">
+                                                            <div class="w-1.5 h-6 rounded-t-[1px] bg-black/20"></div>
+                                                            <div class="w-1.5 h-10 rounded-t-[1px] bg-black/40"></div>
+                                                            <div class="w-1.5 h-8 rounded-t-[1px] bg-black/30"></div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+
+                                                <!-- Modern Bar Chart (Card Style & Floating) -->
+                                                <template x-if="design.animation_type === 'modern_bar_chart'">
+                                                    <div class="w-full h-full flex flex-col items-center justify-center p-2">
+                                                        <div class="w-full h-full border border-black/5 rounded-lg flex flex-col items-center justify-center bg-white/50 backdrop-blur-sm shadow-sm relative overflow-hidden">
+                                                            <div class="flex items-end gap-2 h-8">
+                                                                <div class="w-2 h-4 rounded-sm bg-black/30"></div>
+                                                                <div class="w-2 h-7 rounded-sm bg-black/50"></div>
+                                                                <div class="w-2 h-5 rounded-sm bg-black/40"></div>
+                                                            </div>
+                                                            <div class="mt-2 w-1/2 h-0.5 bg-black/10 rounded-full"></div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+
+                                                <template x-if="design.animation_type === 'line_chart'">
+                                                    <div class="w-full h-12 flex items-center justify-center">
+                                                        <svg class="w-full h-full text-black/20" viewBox="0 0 100 40" fill="none" preserveAspectRatio="none">
+                                                            <path d="M0 35 L20 25 L40 30 L60 10 L80 20 L100 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        </svg>
+                                                    </div>
+                                                </template>
+
+                                                <template x-if="design.animation_type === 'pie_chart'">
+                                                    <div class="w-12 h-12 rounded-full border-[8px] border-black/10 relative">
+                                                        <div class="absolute inset-[-8px] rounded-full border-[8px] border-black/20 border-t-transparent border-r-transparent rotate-45"></div>
+                                                    </div>
+                                                </template>
+
+                                                <!-- Status Badge -->
+                                                <div x-show="!design.active" 
+                                                     class="absolute inset-0 bg-white/40 flex items-center justify-center backdrop-blur-[1px]">
+                                                    <span class="bg-white/90 border border-gray-200 px-3 py-1 rounded-full text-[9px] font-black text-gray-400 uppercase tracking-widest shadow-sm">
+                                                        Próximamente
+                                                    </span>
+                                                </div>
+
+                                                <!-- Active Selection Badge -->
+                                                <div x-show="selectedManimDesignId === design.id" 
+                                                     class="absolute top-3 right-3 bg-black text-white p-1 rounded-full shadow-lg">
+                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+
+                                            <!-- Info Box -->
+                                            <div class="p-4 flex flex-col gap-1.5 bg-white flex-1">
+                                                <h4 class="text-[10px] font-black text-gray-900 uppercase tracking-widest" x-text="design.name"></h4>
+                                                <p class="text-[10px] text-gray-400 leading-tight font-medium line-clamp-2" x-text="design.description"></p>
+                                                
+                                                <div x-show="design.active" class="mt-auto pt-4 flex items-center justify-between">
+                                                    <span class="text-[8px] font-bold text-gray-300 uppercase tracking-tighter"
+                                                          x-text="design.animation_type === 'quote' ? 'Estructura Texto' : 'Estructura Datos'"></span>
+                                                    <i class="fas fa-arrow-right text-gray-200 group-hover:text-black group-hover:translate-x-1 transition-all text-[10px]"></i>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="flex justify-end items-center p-4 border-t bg-gray-50">
+                <button type="button"
+                        @click="manimDesignModalOpen = false"
                         class="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
                     Cerrar
                 </button>

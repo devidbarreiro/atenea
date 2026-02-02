@@ -52,7 +52,7 @@
                window.addEventListener('notification-sidebar-closed', () => { notificationSidebarOpen = false; });
            "
            :class="isMobile ? (creationSidebarOpen ? 'translate-x-0' : '-translate-x-full') : ''"
-           class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-40 lg:z-30 flex flex-col transition-all duration-300"
+           class="fixed top-0 bottom-0 w-80 bg-white border-r border-gray-200 z-[100] flex flex-col transition-all duration-300"
            :style="isMobile ? (creationSidebarOpen ? 'left: ' + sidebarWidth + 'px' : 'left: -320px') : 'left: ' + sidebarWidth + 'px'"
            x-show="!isMobile || creationSidebarOpen"
            x-cloak>
