@@ -1553,11 +1553,21 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
         }
         
         if animation_type == 'quote':
+            display_time = request.POST.get('display_time')
+            try:
+                display_time_val = float(display_time) if display_time else None
+            except (ValueError, TypeError):
+                display_time_val = None
             config.update({
                 'author': request.POST.get('author', ''),
-                'display_time': float(request.POST.get('display_time')) if request.POST.get('display_time') else None,
+                'display_time': display_time_val,
             })
         elif animation_type in ['bar_chart', 'modern_bar_chart']:
+            try:
+                bar_width = float(request.POST.get('bar_width', 0.8))
+            except (ValueError, TypeError):
+                bar_width = 0.8
+            
             # Estructurar datos para el gráfico de barras (Clásico o Moderno)
             try:
                 num_bars = int(request.POST.get('num_bars', 0))
@@ -1568,11 +1578,6 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
             values = []
             bar_colors = []
             top_texts = []
-            
-            # Recopilar datos de barras dinámicas
-            # Nota: El JS envía bar_label_1 ... bar_label_N
-            # Si num_bars viene a 0 pero hay inputs, intenta detectar max index?
-            # Por ahora confiamos en el hidden input num_bars actualizado por JS
             
             for i in range(1, num_bars + 1):
                 label = request.POST.get(f'bar_label_{i}', f'Item {i}')
@@ -1592,10 +1597,9 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
             
             config.update({
                 'title': request.POST.get('chart_title', 'Gráfico de Barras'),
-                # Standardized keys for both Python scripts
                 'x_axis_label': request.POST.get('x_axis_label', 'Categorías'),
                 'y_axis_label': request.POST.get('y_axis_label', 'Valores'),
-                'bar_width': float(request.POST.get('bar_width', 0.8)),
+                'bar_width': bar_width,
                 'show_labels': request.POST.get('show_labels') == 'on',
                 'labels': labels,
                 'values': values,
@@ -1773,54 +1777,62 @@ class VideoCreatePartialView(ServiceMixin, FormView):
     def _build_manim_quote_config(self, request):
         """Configuración para Manim Quote y Bar Chart"""
         # Determinar el tipo de animación
-        animation_type = request.POST.get('manim_animation_type') or 'quote'
+        animation_type = request.POST.get('manim_animation_type', 'quote')
         
-        if animation_type == 'bar_chart':
-            # Configuración específica para gráficos de barras
-            config = {
-                'animation_type': 'bar_chart',
-                'quality': request.POST.get('quality', 'k'),
-            }
+        config = {
+            'animation_type': animation_type,
+            'model_id': 'manim-quote',
+            'quality': request.POST.get('quality', 'k'),
+            'font_family': request.POST.get('font_family', 'normal'),
+            'text_color': request.POST.get('text_color_text', request.POST.get('text_color', '#FFFFFF')),
+            'container_color': request.POST.get('container_color_text', request.POST.get('container_color', '#0066CC')),
+        }
+        
+        if animation_type in ['bar_chart', 'modern_bar_chart']:
+            # Estructurar datos para el gráfico de barras (Clásico o Moderno)
+            try:
+                num_bars = int(request.POST.get('num_bars', 0))
+            except (ValueError, TypeError):
+                num_bars = 0
             
-            # Recopilar datos de las barras
-            num_bars = int(request.POST.get('num_bars', 3))
-            values = []
             labels = []
+            values = []
             bar_colors = []
+            top_texts = []
             
             for i in range(1, num_bars + 1):
-                value = request.POST.get(f'bar_value_{i}')
-                label = request.POST.get(f'bar_label_{i}')
-                color = request.POST.get(f'bar_color_{i}')
+                label = request.POST.get(f'bar_label_{i}', f'Item {i}')
+                value_str = request.POST.get(f'bar_value_{i}', '0')
+                try:
+                    value = float(value_str) if value_str.strip() else 0.0
+                except (ValueError, TypeError):
+                    value = 0.0
+                    
+                color = request.POST.get(f'bar_color_{i}', '#0066CC')
+                top_text = request.POST.get(f'bar_top_text_{i}', '')
                 
-                if value is not None:
-                    try:
-                        values.append(float(value))
-                    except (ValueError, TypeError):
-                        values.append(0.0)
-                else:
-                    values.append(0.0)
-                
-                labels.append(label or f'Barra {i}')
-                bar_colors.append(color or '#0066CC')
+                labels.append(label)
+                values.append(value)
+                bar_colors.append(color)
+                top_texts.append(top_text)
             
-            config['values'] = values
-            config['labels'] = labels
-            config['bar_colors'] = bar_colors
-            config['title'] = request.POST.get('chart_title', '')
-            config['x_axis_label'] = request.POST.get('x_axis_label', '')
-            config['y_axis_label'] = request.POST.get('y_axis_label', '')
+            config.update({
+                'title': request.POST.get('chart_title', 'Gráfico de Barras'),
+                'x_axis_label': request.POST.get('x_axis_label', 'Categorías'),
+                'y_axis_label': request.POST.get('y_axis_label', 'Valores'),
+                'bar_width': float(request.POST.get('bar_width', 0.8)),
+                'show_labels': request.POST.get('show_labels') == 'on',
+                'labels': labels,
+                'values': values,
+                'bar_colors': bar_colors,
+                'top_texts': top_texts,
+            })
             
         else:
             # Configuración para citas (quote)
-            config = {
-                'animation_type': 'quote',
+            config.update({
                 'author': request.POST.get('author'),
-                'quality': request.POST.get('quality', 'k'),
-                'container_color': request.POST.get('container_color') or request.POST.get('container_color_text'),
-                'text_color': request.POST.get('text_color') or request.POST.get('text_color_text'),
-                'font_family': request.POST.get('font_family', 'normal'),
-            }
+            })
         
         # Duración opcional - siempre intentar parsearla si existe
         duration = request.POST.get('duration')

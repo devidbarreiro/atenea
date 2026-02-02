@@ -24,7 +24,19 @@ class ModernBarChartAnimation(BaseManimAnimation):
         except json.JSONDecodeError:
             data_config = {}
             
-        values = data_config.get('values', [60, 80, 45, 90])
+        raw_values = data_config.get('values', [60, 80, 45, 90])
+        
+        # Validate/Coerce values to numeric
+        values = []
+        for v in raw_values:
+            try:
+                values.append(float(v))
+            except (ValueError, TypeError):
+                continue
+        
+        if not values:
+            logger.warning("[MODERN_BARCHART] No valid numeric values found. Using defaults.")
+            values = [60, 80, 45, 90]
         labels = data_config.get('labels', ["A", "B", "C", "D"])
         title_str = data_config.get('title', '')
         bar_colors = data_config.get('bar_colors', ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"])

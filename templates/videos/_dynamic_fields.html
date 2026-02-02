@@ -590,6 +590,17 @@
         renderLivePreview();
     }, 200);
 
+    // Helper for XSS prevention (Global Scope)
+    function escapeHtml(text) {
+      if (!text) return text;
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     function renderLivePreview() {
         // Expose to window for other components
         window.renderLivePreview = renderLivePreview;
@@ -635,17 +646,6 @@
         const manimTypeInput = document.getElementById('manim-animation-type-input');
         const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
         const isModern = manimType === 'modern_bar_chart';
-        
-        // Helper for XSS prevention
-        function escapeHtml(text) {
-          if (!text) return text;
-          return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-        }
 
         function generateSvg(w, h, isLarge) {
             const padX = isLarge ? 100 : 50;
@@ -827,27 +827,66 @@ if (typeof window.ManimBarManager === 'undefined') {
                 const hiddenTopText = document.querySelector(`form input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`);
                 if (hiddenTopText && hiddenTopText.value) topTextValue = hiddenTopText.value;
         
-                const barHtml = `
-                    <div class="flex items-center gap-2">
-                        <input type="color" name="bar_color_${i}" value="${colorValue}"
-                               oninput="ManimBarManager.syncSidebarInput(${i}, 'color', this.value)"
-                               class="w-3 h-3 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm shadow-inner">
-                        <div class="flex-1 flex flex-col min-w-0">
-                            <input type="text" name="bar_label_${i}" value="${labelValue}"
-                                   oninput="ManimBarManager.syncSidebarInput(${i}, 'label', this.value)"
-                                   class="w-full p-0 text-[10px] font-bold text-gray-900 border-none bg-transparent focus:ring-0 placeholder-gray-300 truncate" placeholder="Nombre">
-                        </div>
-                        <input type="number" name="bar_value_${i}" value="${valueValue}" step="0.1"
-                               oninput="ManimBarManager.syncSidebarInput(${i}, 'value', this.value)"
-                               class="w-12 p-0 text-[10px] font-black text-gray-900 border-none bg-transparent focus:ring-0 text-right" placeholder="0.0">
-                    </div>
-                    <div class="pl-5">
-                        <input type="text" name="bar_top_text_${i}" value="${topTextValue}"
-                               oninput="ManimBarManager.syncSidebarInput(${i}, 'top_text', this.value)"
-                               class="w-full p-0 text-[8px] text-gray-400 font-medium border-none bg-transparent focus:ring-0 transition-all hover:text-gray-600 truncate" placeholder="Texto sup.">
-                    </div>
-                `;
-                barDiv.innerHTML = barHtml;
+                const barHtml = document.createElement('div');
+                
+                // --- Row 1: Flex Container (Color | Label | Value) ---
+                const row1 = document.createElement('div');
+                row1.className = 'flex items-center gap-2';
+                
+                // Color Input
+                const colorInput = document.createElement('input');
+                colorInput.type = 'color';
+                colorInput.name = `bar_color_${i}`;
+                colorInput.value = colorValue;
+                colorInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'color', this.value)`);
+                colorInput.className = 'w-3 h-3 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm shadow-inner';
+                
+                // Label Container
+                const labelContainer = document.createElement('div');
+                labelContainer.className = 'flex-1 flex flex-col min-w-0';
+                
+                // Label Input
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.name = `bar_label_${i}`;
+                labelInput.value = labelValue; // Safe assignment
+                labelInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'label', this.value)`);
+                labelInput.className = 'w-full p-0 text-[10px] font-bold text-gray-900 border-none bg-transparent focus:ring-0 placeholder-gray-300 truncate';
+                labelInput.placeholder = 'Nombre';
+                
+                labelContainer.appendChild(labelInput);
+                
+                // Value Input
+                const valueInput = document.createElement('input');
+                valueInput.type = 'number';
+                valueInput.name = `bar_value_${i}`;
+                valueInput.value = valueValue; // Safe assignment
+                valueInput.step = '0.1';
+                valueInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'value', this.value)`);
+                valueInput.className = 'w-12 p-0 text-[10px] font-black text-gray-900 border-none bg-transparent focus:ring-0 text-right';
+                valueInput.placeholder = '0.0';
+
+                row1.appendChild(colorInput);
+                row1.appendChild(labelContainer);
+                row1.appendChild(valueInput);
+                
+                // --- Row 2: Top Text (Optional) ---
+                const row2 = document.createElement('div');
+                row2.className = 'pl-5';
+                
+                const topTextInput = document.createElement('input');
+                topTextInput.type = 'text';
+                topTextInput.name = `bar_top_text_${i}`;
+                topTextInput.value = topTextValue; // Safe assignment
+                topTextInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'top_text', this.value)`);
+                topTextInput.className = 'w-full p-0 text-[8px] text-gray-400 font-medium border-none bg-transparent focus:ring-0 transition-all hover:text-gray-600 truncate';
+                topTextInput.placeholder = 'Texto sup.';
+                
+                row2.appendChild(topTextInput);
+                
+                // Assemble Bar Element
+                barDiv.appendChild(row1);
+                barDiv.appendChild(row2);
                 container.appendChild(barDiv);
             }
             
@@ -934,43 +973,96 @@ if (typeof window.ManimBarManager === 'undefined') {
                 const barDiv = document.createElement('div');
                 barDiv.className = 'group flex items-center gap-4 p-4 bg-white border border-gray-100 rounded-2xl transition-all hover:border-black hover:shadow-md';
                 
-                const barHtml = `
-                    <div class="flex-shrink-0 relative">
-                        <input type="color" name="bar_color_${i}" value="${currentColor}"
-                               oninput="if(typeof renderLivePreview === 'function') renderLivePreview()"
-                               class="w-5 h-5 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm hover:scale-110 transition-transform">
-                    </div>
-        
-                    <div class="flex-1 grid grid-cols-12 gap-1">
-                        <div class="col-span-4 flex flex-col gap-1">
-                            <span class="text-[8px] font-black text-gray-300 uppercase tracking-widest">Etiqueta</span>
-                            <input type="text" name="bar_label_${i}" placeholder="Nombre" value="${currentLabel}"
-                                   oninput="if(typeof renderLivePreview === 'function') renderLivePreview()"
-                                   class="w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-bold text-gray-900">
-                        </div>
-                        <div class="col-span-3 flex flex-col gap-1">
-                            <span class="text-[8px] font-black text-gray-300 uppercase tracking-widest">Valor</span>
-                            <input type="number" name="bar_value_${i}" step="0.1" placeholder="0.0" value="${currentValue}"
-                                   oninput="if(typeof renderLivePreview === 'function') renderLivePreview()"
-                                   class="w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-black text-gray-900">
-                        </div>
-                        <div class="col-span-5 flex flex-col gap-1">
-                            <span class="text-[8px] font-black text-gray-300 uppercase tracking-widest">Texto Supp</span>
-                            <input type="text" name="bar_top_text_${i}" placeholder="Ej: 80%" value="${currentTopText}"
-                                   oninput="if(typeof renderLivePreview === 'function') renderLivePreview()"
-                                   class="w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-medium text-gray-900">
-                        </div>
-                    </div>
-        
-                    ${this.currentBarCount > this.minBars ? `
-                    <button type="button" onclick="ManimBarManager.removeBar(${i})" 
-                            class="w-8 h-8 flex items-center justify-center text-gray-200 hover:text-black hover:bg-gray-100 transition-all rounded-full" title="Eliminar">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                        </svg>
-                    </button>` : ''}
-                `;
-                barDiv.innerHTML = barHtml;
+                // --- DOM Creation Logic ---
+                
+                // Helper to update hidden inputs when modal inputs change
+                const syncToHidden = (field, val) => {
+                     const hidden = document.querySelector(`form input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                     if (hidden) hidden.value = val;
+                     if (typeof renderLivePreview === 'function') renderLivePreview();
+                };
+
+                const createInputWrapper = (colSpan, labelText, inputType, name, placeholder, value) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = `col-span-${colSpan} flex flex-col gap-1`;
+                    
+                    const label = document.createElement('span');
+                    label.className = 'text-[8px] font-black text-gray-300 uppercase tracking-widest';
+                    label.textContent = labelText;
+                    
+                    const input = document.createElement('input');
+                    input.type = inputType;
+                    input.name = name;
+                    input.placeholder = placeholder;
+                    input.value = value;
+                    input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-bold text-gray-900';
+                    
+                    if (inputType === 'number') {
+                         input.step = '0.1';
+                         input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-black text-gray-900';
+                    }
+                    if (name.includes('top_text')) {
+                        input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-medium text-gray-900';
+                    }
+                    
+                    input.oninput = function() {
+                        const fieldType = name.replace(`bar_`, '').replace(`_${i}`, ''); 
+                        const shortField = fieldType; 
+                        syncToHidden(shortField, this.value);
+                    };
+                    
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(input);
+                    return wrapper;
+                };
+
+                // 1. Icono de Color
+                const colorDiv = document.createElement('div');
+                colorDiv.className = 'flex-shrink-0 relative';
+                
+                const colorInput = document.createElement('input');
+                colorInput.type = 'color';
+                colorInput.name = `bar_color_${i}`;
+                colorInput.value = currentColor;
+                colorInput.className = 'w-5 h-5 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm hover:scale-110 transition-transform';
+                colorInput.oninput = function() {
+                    syncToHidden('color', this.value);
+                };
+                
+                colorDiv.appendChild(colorInput);
+                
+                // 2. Grid de campos
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'flex-1 grid grid-cols-12 gap-1';
+                
+                const labelWrapper = createInputWrapper(4, 'Etiqueta', 'text', `bar_label_${i}`, 'Nombre', currentLabel);
+                const valueWrapper = createInputWrapper(3, 'Valor', 'number', `bar_value_${i}`, '0.0', currentValue);
+                const topTextWrapper = createInputWrapper(5, 'Texto Supp', 'text', `bar_top_text_${i}`, 'Ej: 80%', currentTopText);
+
+                gridDiv.appendChild(labelWrapper);
+                gridDiv.appendChild(valueWrapper);
+                gridDiv.appendChild(topTextWrapper);
+                
+                // 3. Delete Button (Condition check)
+                let delDiv = null;
+                if (this.currentBarCount > this.minBars) {
+                    delDiv = document.createElement('div');
+                    delDiv.className = 'flex-shrink-0';
+                    
+                    const delBtn = document.createElement('button');
+                    delBtn.type = 'button';
+                    delBtn.onclick = function() { ManimBarManager.removeBar(i); };                    
+                    delBtn.className = 'w-8 h-8 flex items-center justify-center text-gray-200 hover:text-black hover:bg-gray-100 transition-all rounded-full';
+                    delBtn.title = 'Eliminar';
+                    delBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>';
+                    
+                    delDiv = delBtn;
+                }
+
+                barDiv.appendChild(colorDiv);
+                barDiv.appendChild(gridDiv);
+                if (delDiv) barDiv.appendChild(delDiv);
+                
                 container.appendChild(barDiv);
             }
         
