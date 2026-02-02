@@ -1557,8 +1557,8 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
                 'author': request.POST.get('author', ''),
                 'display_time': float(request.POST.get('display_time')) if request.POST.get('display_time') else None,
             })
-        elif animation_type == 'bar_chart':
-            # Estructurar datos para el gráfico de barras
+        elif animation_type in ['bar_chart', 'modern_bar_chart']:
+            # Estructurar datos para el gráfico de barras (Clásico o Moderno)
             try:
                 num_bars = int(request.POST.get('num_bars', 0))
             except (ValueError, TypeError):
@@ -1567,6 +1567,12 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
             labels = []
             values = []
             bar_colors = []
+            top_texts = []
+            
+            # Recopilar datos de barras dinámicas
+            # Nota: El JS envía bar_label_1 ... bar_label_N
+            # Si num_bars viene a 0 pero hay inputs, intenta detectar max index?
+            # Por ahora confiamos en el hidden input num_bars actualizado por JS
             
             for i in range(1, num_bars + 1):
                 label = request.POST.get(f'bar_label_{i}', f'Item {i}')
@@ -1577,18 +1583,24 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
                     value = 0.0
                     
                 color = request.POST.get(f'bar_color_{i}', '#0066CC')
+                top_text = request.POST.get(f'bar_top_text_{i}', '')
                 
                 labels.append(label)
                 values.append(value)
                 bar_colors.append(color)
+                top_texts.append(top_text)
             
             config.update({
                 'title': request.POST.get('chart_title', 'Gráfico de Barras'),
-                'x_label': request.POST.get('x_axis_label', 'Categorías'),
-                'y_label': request.POST.get('y_axis_label', 'Valores'),
+                # Standardized keys for both Python scripts
+                'x_axis_label': request.POST.get('x_axis_label', 'Categorías'),
+                'y_axis_label': request.POST.get('y_axis_label', 'Valores'),
+                'bar_width': float(request.POST.get('bar_width', 0.8)),
+                'show_labels': request.POST.get('show_labels') == 'on',
                 'labels': labels,
                 'values': values,
                 'bar_colors': bar_colors,
+                'top_texts': top_texts,
             })
             
         return config

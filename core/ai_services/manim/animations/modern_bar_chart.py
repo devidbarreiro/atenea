@@ -19,12 +19,9 @@ class ModernBarChartAnimation(BaseManimAnimation):
     def construct(self):
         # 1. Obtener datos
         prompt_text = self._get_config_value('text', '{}')
-        logger.info(f"[DEBUG-MODERN-BARCHART] prompt_text recibido: {prompt_text[:200] if prompt_text else 'None'}")
         try:
             data_config = json.loads(prompt_text) if prompt_text.strip() else {}
-            logger.info(f"[DEBUG-MODERN-BARCHART] data_config parseado: {data_config}")
-        except json.JSONDecodeError as e:
-            logger.error(f"[DEBUG-MODERN-BARCHART] Error parseando JSON: {e}")
+        except json.JSONDecodeError:
             data_config = {}
             
         values = data_config.get('values', [60, 80, 45, 90])
@@ -59,7 +56,17 @@ class ModernBarChartAnimation(BaseManimAnimation):
 
         chart_height = 4.5
         chart_width = 9
+        
+        # --- Safeguards ---
         max_val = max(values) if values else 1
+        if max_val == 0:
+            max_val = 1 # Prevent division by zero if all values are 0
+            
+        # Ensure bar_colors is a valid non-empty list
+        if isinstance(bar_colors, str):
+            bar_colors = [bar_colors]
+        if not bar_colors or not isinstance(bar_colors, list):
+            bar_colors = ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"] # Default Palette
         
         # Espaciado
         user_bar_width = data_config.get('bar_width', self._get_config_value('bar_width', 0.8))

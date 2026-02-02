@@ -141,13 +141,21 @@
 
         {# Calidad #}
         {% if supports.quality %}
+        {% with default_q=supports.quality.0 %}
         <div class="relative flex-shrink-0" x-data="{ open: false }">
             <button type="button" @click="open = !open" @click.away="open = false"
                     class="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
                 <svg class="w-3 h-3 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
                 </svg>
-                <span class="text-gray-700 font-medium" id="quality-display">4K</span>
+                <span class="text-gray-700 font-medium" id="quality-display">
+                    {% if default_q == 'l' %}Baja
+                    {% elif default_q == 'm' %}Media
+                    {% elif default_q == 'h' %}Alta
+                    {% elif default_q == 'k' %}4K
+                    {% else %}{{ default_q|upper }}
+                    {% endif %}
+                </span>
             </button>
             <div x-show="open" x-cloak
                  class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[150px] py-1">
@@ -163,8 +171,9 @@
                 </button>
                 {% endfor %}
             </div>
-            <input type="hidden" name="quality" id="quality-input" value="k">
+            <input type="hidden" name="quality" id="quality-input" value="{{ default_q }}">
         </div>
+        {% endwith %}
         {% endif %}
 
         {# Color del Contenedor (para Manim Quote) #}
@@ -188,11 +197,11 @@
                         <div class="flex items-center gap-2">
                             <input type="color" name="container_color" id="container-color-picker" value="#0066CC"
                                    class="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                                   onchange="document.getElementById('container-color-text').value = this.value; document.getElementById('container-color-preview').style.backgroundColor = this.value; renderLivePreview();">
+                                   onchange="document.getElementById('container-color-text').value = this.value; document.getElementById('container-color-preview').style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview();">
                             <input type="text" name="container_color_text" id="container-color-text" value="#0066CC" pattern="^#[0-9A-Fa-f]{6}$"
                                    placeholder="#0066CC"
                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                   oninput="const picker = document.getElementById('container-color-picker'); const preview = document.getElementById('container-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; renderLivePreview(); }">
+                                   oninput="const picker = document.getElementById('container-color-picker'); const preview = document.getElementById('container-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview(); }">
                         </div>
                     </div>
                 </div>
@@ -219,11 +228,11 @@
                         <div class="flex items-center gap-2">
                             <input type="color" name="text_color" id="text-color-picker" value="#FFFFFF"
                                    class="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                                   onchange="document.getElementById('text-color-text').value = this.value; document.getElementById('text-color-preview').style.backgroundColor = this.value; renderLivePreview();">
+                                   onchange="document.getElementById('text-color-text').value = this.value; document.getElementById('text-color-preview').style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview();">
                             <input type="text" name="text_color_text" id="text-color-text" value="#FFFFFF" pattern="^#[0-9A-Fa-f]{6}$"
                                    placeholder="#FFFFFF"
                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                   oninput="const picker = document.getElementById('text-color-picker'); const preview = document.getElementById('text-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; renderLivePreview(); }">
+                                   oninput="const picker = document.getElementById('text-color-picker'); const preview = document.getElementById('text-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview(); }">
                         </div>
                     </div>
                 </div>
@@ -626,6 +635,17 @@
         const manimTypeInput = document.getElementById('manim-animation-type-input');
         const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
         const isModern = manimType === 'modern_bar_chart';
+        
+        // Helper for XSS prevention
+        function escapeHtml(text) {
+          if (!text) return text;
+          return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+        }
 
         function generateSvg(w, h, isLarge) {
             const padX = isLarge ? 100 : 50;
@@ -645,42 +665,48 @@
             const fontSizeAxes = isLarge ? 20 : 10;
             const fontSizeLabels = isLarge ? 16 : 8;
             const markerSize = isLarge ? 12 : 6;
+            
+            const escTitle = escapeHtml(title);
+            const escXLabel = escapeHtml(xLabel);
+            const escYLabel = escapeHtml(yLabel);
+            const escTextColor = escapeHtml(textColor);
+            const escBgColor = escapeHtml(bgColor);
 
             let svgHtml = `
-                <svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" style="background-color: ${bgColor}; font-family: sans-serif;">
+                <svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" style="background-color: ${escBgColor}; font-family: sans-serif;">
                     <defs>
                         <marker id="arrowhead" markerWidth="${markerSize}" markerHeight="${markerSize*0.7}" 
                         refX="${markerSize}" refY="${markerSize*0.35}" orient="auto">
-                          <polygon points="0 0, ${markerSize} ${markerSize*0.35}, 0 ${markerSize*0.7}" fill="${textColor}" />
+                          <polygon points="0 0, ${markerSize} ${markerSize*0.35}, 0 ${markerSize*0.7}" fill="${escTextColor}" />
                         </marker>
                     </defs>
 
                     <!-- Card Background (Modern Only) -->
                     ${isModern ? `
-                    <rect x="15" y="15" width="${w-30}" height="${h-30}" fill="${bgColor}" rx="${isLarge ? 24 : 12}" stroke="${textColor}" stroke-width="1.5" stroke-opacity="0.15" />
+                    <rect x="15" y="15" width="${w-30}" height="${h-30}" fill="${escBgColor}" rx="${isLarge ? 24 : 12}" stroke="${escTextColor}" stroke-width="1.5" stroke-opacity="0.15" />
                     ` : ''}
 
                     <!-- Título -->
-                    <text x="${w/2}" y="${isLarge ? 50 : 25}" text-anchor="middle" font-size="${fontSizeTitle}" font-weight="900" fill="${textColor}" style="letter-spacing: 0.05em;">${title.toUpperCase()}</text>
+                    <text x="${w/2}" y="${isLarge ? 50 : 25}" text-anchor="middle" font-size="${fontSizeTitle}" font-weight="900" fill="${escTextColor}" style="letter-spacing: 0.05em;">${escTitle.toUpperCase()}</text>
                     
                     ${!isModern ? `
                     <!-- Ejes (con flechas estilo Manim) -->
-                    <line x1="${startX}" y1="${endY}" x2="${w - (isLarge ? 40 : 20)}" y2="${endY}" stroke="${textColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
-                    <line x1="${startX}" y1="${endY}" x2="${startX}" y2="${startY - (isLarge ? 20 : 10)}" stroke="${textColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
+                    <line x1="${startX}" y1="${endY}" x2="${w - (isLarge ? 40 : 20)}" y2="${endY}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
+                    <line x1="${startX}" y1="${endY}" x2="${startX}" y2="${startY - (isLarge ? 20 : 10)}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
                     
                     <!-- Ticks y Valores Eje Y -->
                     ${[0, 0.25, 0.5, 0.75, 1].map(p => {
                         const val = Math.round(maxVal * p * 10) / 10;
                         const yTick = endY - (maxVal * p * scale);
                         return `
-                        <line x1="${startX - (isLarge ? 10 : 5)}" y1="${yTick}" x2="${startX}" y2="${yTick}" stroke="${textColor}" stroke-width="${isLarge ? 2 : 1}" />
-                        <text x="${startX - (isLarge ? 20 : 10)}" y="${yTick + (isLarge ? 6 : 3)}" text-anchor="end" font-size="${fontSizeLabels}" font-weight="bold" fill="${textColor}" opacity="0.6">${val}</text>
+                        <line x1="${startX - (isLarge ? 10 : 5)}" y1="${yTick}" x2="${startX}" y2="${yTick}" stroke="${escTextColor}" stroke-width="${isLarge ? 2 : 1}" />
+                        <text x="${startX - (isLarge ? 20 : 10)}" y="${yTick + (isLarge ? 6 : 3)}" text-anchor="end" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.6">${val}</text>
                         `;
                     }).join('')}
 
                     <!-- Labels Ejes -->
-                    <text x="${w/2}" y="${h-(isLarge ? 20 : 10)}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${textColor}" opacity="0.4">${xLabel}</text>
-                    <text x="${isLarge ? 30 : 15}" y="${h/2}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${textColor}" opacity="0.4" transform="rotate(-90, ${isLarge ? 30 : 15}, ${h/2})">${yLabel}</text>
+                    <text x="${w/2}" y="${h-(isLarge ? 20 : 10)}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4">${escXLabel}</text>
+                    <text x="${isLarge ? 30 : 15}" y="${h/2}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4" transform="rotate(-90, ${isLarge ? 30 : 15}, ${h/2})">${escYLabel}</text>
                     ` : ''}
             `;
 
@@ -688,9 +714,12 @@
                 const x = (isModern ? (isLarge ? 40 : 20) : startX) + (i * barGap) + (barGap - actualBarW) / 2;
                 const barH = bar.value * scale;
                 const y = endY - barH;
+                
+                const escBarLabel = escapeHtml(bar.label);
+                const escBarColor = escapeHtml(bar.color);
 
                 svgHtml += `
-                    <rect x="${x}" y="${y}" width="${actualBarW}" height="${barH}" fill="${bar.color}" rx="${isModern ? (isLarge ? 10 : 5) : 0}">
+                    <rect x="${x}" y="${y}" width="${actualBarW}" height="${barH}" fill="${escBarColor}" rx="${isModern ? (isLarge ? 10 : 5) : 0}">
                         <animate attributeName="height" from="0" to="${barH}" dur="0.6s" fill="freeze" />
                         <animate attributeName="y" from="${endY}" to="${y}" dur="0.6s" fill="freeze" />
                     </rect>
@@ -698,14 +727,15 @@
 
                 // Label de barra
                 svgHtml += `
-                    <text x="${x + actualBarW/2}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${textColor}" opacity="0.8">${bar.label}</text>
+                    <text x="${x + actualBarW/2}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escBarLabel}</text>
                 `;
 
                 // Top Label (Valor)
                 if (showLabels) {
                     const displayTop = bar.topText || bar.value;
+                    const escDisplayTop = escapeHtml(displayTop);
                     svgHtml += `
-                        <text x="${x + actualBarW/2}" y="${y-(isLarge ? 15 : 8)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="900" fill="${textColor}">${displayTop}</text>
+                        <text x="${x + actualBarW/2}" y="${y-(isLarge ? 15 : 8)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="900" fill="${escTextColor}">${escDisplayTop}</text>
                     `;
                 }
             });

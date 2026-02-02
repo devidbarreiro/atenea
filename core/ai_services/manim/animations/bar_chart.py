@@ -34,23 +34,63 @@ class BarChartAnimation(BaseManimAnimation):
         
         # 2. Configuración predeterminada / Merge de JSON
         # Prioridad: data_config (lo que viene del sidebar actualmente) > settings de base
-        values = data_config.get('values', self._get_config_value('values', [10, 20, 30, 40]))
-        labels = data_config.get('labels', self._get_config_value('labels', ["Q1", "Q2", "Q3", "Q4"]))
+        
+        # --- ROBUST INPUT HANDLING ---
+        # Retrieve raw values first
+        raw_values = data_config.get('values', self._get_config_value('values', [10, 20, 30, 40]))
+        
+        # Validate/Coerce values to float/int
+        if not isinstance(raw_values, list):
+            # If it's a string (e.g. "10,20,30"), try to split (though JSON load should handle standard lists)
+            if isinstance(raw_values, str):
+                try:
+                    raw_values = [float(x.strip()) for x in raw_values.split(',') if x.strip()]
+                except ValueError:
+                    raw_values = []
+            else:
+                raw_values = [] # Unrecognized format
+
+        # Filter out non-numeric entries (just in case) and convert
+        clean_values = []
+        for v in raw_values:
+            try:
+                clean_values.append(float(v))
+            except (ValueError, TypeError):
+                continue
+                
+        # Handle empty or invalid values list (Avoid Manim crash on empty chart)
+        if not clean_values:
+            logger.warning("[BARCHART] No valid numeric values found. Using default placeholder.")
+            clean_values = [0]
+            
+        values = clean_values
+        
+        # Sync labels length with validated values
+        raw_labels = data_config.get('labels', self._get_config_value('labels', ["Q1", "Q2", "Q3", "Q4"]))
+        if not isinstance(raw_labels, list):
+             raw_labels = [str(raw_labels)]
+             
+        # Labels should match values count. If fewer labels, cycle or use blank? 
+        # Better: use what we have, fill rest with empty, or truncate.
+        # Original logic was truncating. Let's truncate or extend safely.
+        
+        labels = []
+        for i in range(len(values)):
+            if i < len(raw_labels):
+                labels.append(str(raw_labels[i]))
+            else:
+                labels.append(f"Label {i+1}")
+                
         title_str = data_config.get('title', self._get_config_value('title', 'Gráfico de Barras'))
-        y_label = data_config.get('y_label', 'Valores')
-        x_label = data_config.get('x_label', 'Categorías')
+        y_label = data_config.get('y_axis_label', data_config.get('y_label', 'Valores')) # Support both keys
+        x_label = data_config.get('x_axis_label', data_config.get('x_label', 'Categorías')) # Support both keys
         
         # Si bar_colors viene como lista de hex strings en JSON, Manim los aceptará directamente
         bar_colors = data_config.get('bar_colors', self._get_config_value('bar_colors', [BLUE, GREEN, YELLOW, RED]))
         if isinstance(bar_colors, str):
             bar_colors = [bar_colors]
-        
-        # 3. Validar consistencia
-        if len(labels) != len(values):
-            # Ajustar labels si faltan o sobran
-            min_len = min(len(labels), len(values))
-            labels = labels[:min_len]
-            values = values[:min_len]
+        if not bar_colors: # If empty list
+             bar_colors = [BLUE]
         
         # --- Configuración de Fuente ---
         font_family = self._get_config_value('font_family', 'Arial')
