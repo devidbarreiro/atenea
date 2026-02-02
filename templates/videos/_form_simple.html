@@ -298,6 +298,79 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePromptVisibilityForBarChart();
     }
     
+    // Centralized function to bind Manim type change logic
+    function bindManimTypeChange(inputElement, modelSelect) {
+        if (!inputElement) return;
+        
+        // Remove existing listener if possible (though difficult with anonymous functions)
+        // We rely on HTMX swapping elements to clean up old listeners usually,
+        // but for re-binding we just ensure we attach to the *current* element.
+        
+        inputElement.addEventListener('change', function() {
+            const currentModel = modelSelect ? modelSelect.value : '';
+            console.log('ManIM type changed (bindManimTypeChange):', this.value);
+            
+            // Pequeño delay para asegurar actualización
+            setTimeout(function() {
+                updateScriptFieldForModel(currentModel);
+                
+                if (inputElement.value === 'bar_chart' || inputElement.value === 'modern_bar_chart') {
+                    setTimeout(function() {
+                        if (typeof updateBarPreview === 'function') {
+                            updateBarPreview();
+                        }
+                        updatePromptVisibilityForBarChart();
+                    }, 50);
+                }
+            }, 50);
+        });
+    }
+
+    // Observer para vigilar cambios en el tipo de animación
+    window.setupManimTypeObserver = function() {
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        if (!manimTypeInput) {
+            console.log('ManIM type input not found, will retry...');
+            setTimeout(setupManimTypeObserver, 100);
+            return;
+        }
+        
+        // Check guard to avoid duplicate observers
+        if (manimTypeInput.hasAttribute('data-manim-observer-attached')) {
+            console.log('⚠️ ManIM observer already attached, skipping.');
+            return;
+        }
+        
+        console.log('Setting up ManIM type observer');
+        
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                    const newValue = manimTypeInput.value;
+                    console.log('ManIM type changed via observer:', newValue);
+                    updatePromptVisibilityForBarChart();
+                }
+            });
+        });
+        
+        observer.observe(manimTypeInput, {
+            attributes: true,
+            attributeFilter: ['value']
+        });
+        
+        // Listeners for manual changes
+        manimTypeInput.addEventListener('input', function() {
+            console.log('ManIM type input event:', this.value);
+            updatePromptVisibilityForBarChart();
+        });
+        
+        // Mark as attached
+        manimTypeInput.setAttribute('data-manim-observer-attached', 'true');
+        
+        // Initial check
+        updatePromptVisibilityForBarChart();
+    };
+
     // Escuchar cuando HTMX actualiza los campos dinámicos
     document.body.addEventListener('htmx:afterSwap', function(event) {
         if (event.detail.target.id === 'dynamic-fields' || event.detail.target.id === 'dynamic-fields-container') {
@@ -306,45 +379,33 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 updateScriptFieldForModel(currentModel);
                 
-                // Verificar si hay que inicializar barras
+                // Re-bind listeners to the potentially new/replaced input
                 const manimTypeInput = document.getElementById('manim-animation-type-input');
-                if (manimTypeInput && (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart')) {
-                    setTimeout(function() {
-                        if (typeof updateBarPreview === 'function') {
-                            updateBarPreview();
-                        }
-                        // Forzar actualización del prompt
-                        updatePromptVisibilityForBarChart();
-                    }, 100);
+                if (manimTypeInput) {
+                     bindManimTypeChange(manimTypeInput, modelSelect);
+                     
+                     // Verify initial state for bar chart
+                     if (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart') {
+                        setTimeout(function() {
+                            if (typeof updateBarPreview === 'function') {
+                                updateBarPreview();
+                            }
+                            updatePromptVisibilityForBarChart();
+                        }, 100);
+                    }
                 }
                 
                 // Configurar observer nuevamente después de HTMX
+                // (HTMX swap might have replaced the input, so re-run setup)
                 setupManimTypeObserver();
             }, 50);
         }
     });
     
-    // Escuchar cambios en el tipo de animación de Manim
+    // Initial listener binding
     const manimTypeInput = document.getElementById('manim-animation-type-input');
     if (manimTypeInput) {
-        manimTypeInput.addEventListener('change', function() {
-            const currentModel = modelSelect.value;
-            // Pequeño delay para asegurar que el valor se haya actualizado
-            setTimeout(function() {
-                updateScriptFieldForModel(currentModel);
-                
-                // Si cambió a bar_chart, inicializar las barras
-                if (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart') {
-                    setTimeout(function() {
-                        if (typeof updateBarPreview === 'function') {
-                            updateBarPreview();
-                        }
-                        // Forzar actualización del prompt
-                        updatePromptVisibilityForBarChart();
-                    }, 50);
-                }
-            }, 50);
-        });
+        bindManimTypeChange(manimTypeInput, modelSelect);
     }
 });
 </script>

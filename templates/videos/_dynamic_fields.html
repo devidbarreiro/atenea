@@ -10,6 +10,19 @@
     }
 </style>
 
+<script>
+    // Helper for XSS prevention (Global Scope - Defined once for all blocks)
+    window.escapeHtml = function(text) {
+      if (!text) return text;
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+</script>
+
     <!-- Campos dinámicos según capacidades del modelo -->
 
 {# Contenedor para botones de configuración horizontal #}
@@ -589,17 +602,6 @@
         initializeBarsIfNeeded();
         renderLivePreview();
     }, 200);
-
-    // Helper for XSS prevention (Global Scope)
-    function escapeHtml(text) {
-      if (!text) return text;
-      return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
 
     function renderLivePreview() {
         // Expose to window for other components
@@ -1373,7 +1375,6 @@ function updateImagePreview(input, previewId) {
             toggleReferenceFields(modelId);
         }
     }
-// function escapeHtml already defined above
 
 // Renderizar preview de cita en tiempo real
 window.renderQuotePreview = function() {
