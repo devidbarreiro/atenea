@@ -175,6 +175,61 @@
                                                             </a>
                                                         </div>
                                                     </template>
+
+                                                    <!-- Search Results (Stock/Library) -->
+                                                    <template x-if="result[1] && result[1].items && result[1].items.length > 0">
+                                                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                            <template x-for="(item, itemIdx) in result[1].items" :key="item.id || itemIdx">
+                                                                <div class="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex flex-col">
+                                                                    <!-- Thumbnail/Preview -->
+                                                                    <template x-if="item.thumbnail || item.url || item.preview_url">
+                                                                        <div class="aspect-video bg-gray-200 relative group">
+                                                                            <template x-if="item.type === 'video'">
+                                                                                <div class="w-full h-full relative">
+                                                                                    <video :src="item.url || item.preview_url" controls class="w-full h-full object-cover"></video>
+                                                                                </div>
+                                                                            </template>
+                                                                            <template x-if="item.type === 'image'">
+                                                                                <img :src="item.thumbnail || item.url || item.preview_url" class="w-full h-full object-cover">
+                                                                            </template>
+                                                                            <template x-if="item.type === 'audio'">
+                                                                                <div class="w-full h-full flex items-center justify-center bg-purple-100 p-4">
+                                                                                    <audio controls class="w-full">
+                                                                                        <source :src="item.url || item.preview_url" type="audio/mpeg">
+                                                                                    </audio>
+                                                                                </div>
+                                                                            </template>
+                                                                        </div>
+                                                                    </template>
+
+                                                                    <!-- Info -->
+                                                                    <div class="p-3 flex-1 flex flex-col">
+                                                                        <h4 class="text-sm font-medium text-gray-900 line-clamp-2 mb-1" x-text="item.title"></h4>
+                                                                        <div class="flex items-center gap-2 mb-3">
+                                                                            <span class="text-xs px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-500 capitalize" x-text="item.type"></span>
+                                                                            <template x-if="item.source">
+                                                                                <span class="text-xs text-gray-400" x-text="item.source"></span>
+                                                                            </template>
+                                                                        </div>
+
+                                                                        <!-- Action Buttons -->
+                                                                        <div class="mt-auto flex gap-2">
+                                                                            <template x-if="item.download_url">
+                                                                                <a :href="item.download_url" target="_blank" class="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-100 flex-1 text-center font-medium transition-colors">
+                                                                                    Descargar
+                                                                                </a>
+                                                                            </template>
+                                                                            <template x-if="!item.download_url && (item.url || item.preview_url || item.detail_url)">
+                                                                                <a :href="item.detail_url || item.url || item.preview_url" target="_blank" class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded hover:bg-gray-200 flex-1 text-center font-medium transition-colors">
+                                                                                    Ver
+                                                                                </a>
+                                                                            </template>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
                                                 </div>
                                             </template>
                                         </div>
