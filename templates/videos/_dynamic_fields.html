@@ -747,6 +747,12 @@
         const bgColor = document.querySelector('input[name="container_color"]')?.value || '#FFFFFF';
         const textColor = document.querySelector('input[name="text_color"]')?.value || '#111827';
 
+        // Determine chart type early (before using isLineChart)
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
+        const isModern = manimType === 'modern_bar_chart';
+        const isLineChart = manimType === 'line_chart';
+
         const bars = [];
         let maxVal = 10;
         
@@ -770,12 +776,6 @@
             if (largeContainer) largeContainer.innerHTML = '<p class="text-sm text-gray-300">Configura el gráfico en el panel derecho</p>';
             return;
         }
-
-        const manimTypeInput = document.getElementById('manim-animation-type-input');
-        const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
-        const isModern = manimType === 'modern_bar_chart';
-
-        const isLineChart = manimType === 'line_chart';
 
         // Obtener valores de grosor si existen
         const pointRadiusInput = document.getElementById('point-radius-input');

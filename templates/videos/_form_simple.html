@@ -149,6 +149,12 @@ console.log('✅ updatePromptVisibilityForBarChart assigned to window at', new D
 
 // Observer para vigilar cambios en el tipo de animación
 function setupManimTypeObserver() {
+    // Idempotency guard: prevent multiple observer registrations
+    if (window._manimTypeObserverCreated) {
+        console.log('ManIM type observer already created, skipping...');
+        return;
+    }
+    
     const manimTypeInput = document.getElementById('manim-animation-type-input');
     if (!manimTypeInput) {
         console.log('ManIM type input not found, will retry...');
@@ -157,6 +163,7 @@ function setupManimTypeObserver() {
     }
     
     console.log('Setting up ManIM type observer');
+    window._manimTypeObserverCreated = true;
     
     // Usar MutationObserver para vigilar cambios en el atributo value
     const observer = new MutationObserver(function(mutations) {

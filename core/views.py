@@ -53,6 +53,7 @@ from django.utils.crypto import get_random_string
 from django.conf import settings
 import logging
 import re
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -1545,7 +1546,7 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
         
         config = {
             'animation_type': animation_type,
-            'model_id': 'manim-quote',
+            'model_id': request.POST.get('model_id', 'manim-quote'),
             'quality': request.POST.get('quality', 'k'),
             'font_family': request.POST.get('font_family', 'normal'),
             'text_color': request.POST.get('text_color_text', request.POST.get('text_color', '#FFFFFF')),
@@ -1796,14 +1797,14 @@ class VideoCreatePartialView(ServiceMixin, FormView):
         
         config = {
             'animation_type': animation_type,
-            'model_id': 'manim-quote',
+            'model_id': request.POST.get('model_id', 'manim-quote'),
             'quality': request.POST.get('quality', 'k'),
             'font_family': request.POST.get('font_family', 'normal'),
             'text_color': request.POST.get('text_color_text', request.POST.get('text_color', '#FFFFFF')),
             'container_color': request.POST.get('container_color_text', request.POST.get('container_color', '#0066CC')),
         }
         
-        if animation_type in ['bar_chart', 'modern_bar_chart']:
+        if animation_type in ['bar_chart', 'modern_bar_chart', 'line_chart']:
             # Estructurar datos para el gráfico de barras (Clásico o Moderno)
             try:
                 num_bars = int(request.POST.get('num_bars', 0))
@@ -2605,6 +2606,8 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             return HttpResponse('<p class="text-red-500">Modelo no encontrado</p>')
         
         supports = capabilities.get('supports', {})
+        # Deepcopy to avoid leaking state (modifying shared dict)
+        supports = copy.deepcopy(supports)
         service = capabilities.get('service', '')
 
         # Tipo de animación para modelos Manim (quote, bar_chart, etc.)

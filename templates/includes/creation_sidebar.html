@@ -391,9 +391,9 @@ document.addEventListener('alpine:init', () => {
                 const ci = document.querySelector('input[name="container_color"]');
                 const ct = document.getElementById('container-color-text');
                 const cv = document.getElementById('container-color-preview');
-                if (cp) cp.value = design.container_color;
+                if (cp) { cp.value = design.container_color; cp.dispatchEvent(new Event('input', { bubbles: true })); }
                 if (ci) ci.value = design.container_color;
-                if (ct) ct.value = design.container_color;
+                if (ct) { ct.value = design.container_color; ct.dispatchEvent(new Event('input', { bubbles: true })); }
                 if (cv) cv.style.backgroundColor = design.container_color;
             }
             if (design.text_color) {
@@ -401,9 +401,9 @@ document.addEventListener('alpine:init', () => {
                 const ti = document.querySelector('input[name="text_color"]');
                 const tt = document.getElementById('text-color-text');
                 const tv = document.getElementById('text-color-preview');
-                if (tp) tp.value = design.text_color;
+                if (tp) { tp.value = design.text_color; tp.dispatchEvent(new Event('input', { bubbles: true })); }
                 if (ti) ti.value = design.text_color;
-                if (tt) tt.value = design.text_color;
+                if (tt) { tt.value = design.text_color; tt.dispatchEvent(new Event('input', { bubbles: true })); }
                 if (tv) tv.style.backgroundColor = design.text_color;
             }
 
@@ -418,7 +418,7 @@ document.addEventListener('alpine:init', () => {
             
             // Si el modelo actual es manim-quote, actualizar campos dinámicos
             if (this.selectedModel === 'manim-quote') {
-                let url = '/videos/form-fields/?model_id=manim-quote&manim_animation_type=' + this.manimAnimationType;
+                let url = '/videos/form-fields/?model_id=manim-quote&manim_animation_type=' + encodeURIComponent(this.manimAnimationType);
                 
                 if (typeof htmx !== 'undefined') {
                     console.log('Updating dynamic fields for Manim type (creation sidebar):', this.manimAnimationType);

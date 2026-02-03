@@ -27,7 +27,7 @@ class LineChartAnimation(BaseManimAnimation):
         # Datos por defecto si no hay input válido
         raw_values = data_config.get('values', [20, 55, 40, 75, 60, 90])
         labels = data_config.get('labels', ["Ene", "Feb", "Mar", "Abr", "May", "Jun"])
-        title_str = data_config.get('title', 'Evolución Mensual')
+        title_str = data_config.get('title', '')
         line_color = data_config.get('line_color', "#000000") # Negro
         point_color = data_config.get('point_color', "#FFFFFF")
         point_radius = data_config.get('point_radius', 0.1) # Default bigger than dot
@@ -60,8 +60,10 @@ class LineChartAnimation(BaseManimAnimation):
         val_range = max_val - min_val if max_val != min_val else 10
         
         # Ajustar rango para que no toque los bordes exactos (margen vertical 10%)
-        y_bottom = 0 # Asumimos base 0 para visualización más limpia, o min_val si queremos zoom
-        y_top = max_val * 1.1
+        y_bottom = 0 # Asumimos base 0 para visualización más limpia
+        
+        # Guard against zero division if all values are 0
+        y_top = max(1, max_val * 1.1)
         
         # Función para mapear valor a coordenada Y local
         def get_y(val):
