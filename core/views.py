@@ -1562,7 +1562,7 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
                 'author': request.POST.get('author', ''),
                 'display_time': display_time_val,
             })
-        elif animation_type in ['bar_chart', 'modern_bar_chart']:
+        elif animation_type in ['bar_chart', 'modern_bar_chart', 'line_chart']:
             try:
                 bar_width = float(request.POST.get('bar_width', 0.8))
             except (ValueError, TypeError):
@@ -1606,6 +1606,21 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
                 'bar_colors': bar_colors,
                 'top_texts': top_texts,
             })
+
+            if animation_type == 'line_chart':
+                if bar_colors:
+                    config['line_color'] = bar_colors[0]
+                
+                # Configuración extra para Line Chart
+                try:
+                    point_radius = float(request.POST.get('point_radius', 0.1))
+                    line_width = float(request.POST.get('line_width', 4))
+                except (ValueError, TypeError):
+                    point_radius = 0.1
+                    line_width = 4
+                
+                config['point_radius'] = point_radius
+                config['line_width'] = line_width
             
         return config
 
@@ -2596,6 +2611,10 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
         manim_animation_type = None
         if service == 'manim':
             manim_animation_type = request.GET.get('manim_animation_type') or 'quote'
+            
+            # Ajustar supports según el tipo de animación
+            if manim_animation_type == 'modern_bar_chart':
+                supports['bar_width'] = True
         
         # Generar opciones de duración si solo hay min/max sin options
         if supports.get('duration') and not supports['duration'].get('options') and not supports['duration'].get('fixed'):

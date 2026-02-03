@@ -280,6 +280,50 @@
             <input type="hidden" name="font_family" id="font-family-input" value="normal">
         </div>
         {% endif %}
+
+        {# Color Puntos (Solo Line Chart) - Hidden by default #}
+        <div id="point-color-wrapper" class="relative flex-shrink-0 {% if manim_animation_type != 'line_chart' %}hidden{% endif %}" x-data="{ open: false }">
+            <button type="button" @click="open = !open" 
+                    title="Color de Puntos"
+                    class="flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <div class="w-2 h-2 rounded-full border border-gray-500 bg-white"></div>
+                <div class="w-3.5 h-3.5 rounded border border-gray-400 flex-shrink-0" id="point-color-preview-btn" style="background-color: #FFFFFF;"></div>
+                <span class="ml-1 font-medium text-gray-700">Puntos</span>
+            </button>
+            <div x-show="open" x-cloak @click.away="open = false" x-transition
+                 class="absolute z-[100] mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[180px] p-3">
+                <div>
+                     <label class="block text-xs font-medium text-gray-700 mb-2">Color Puntos</label>
+                     <div class="flex items-center gap-2">
+                        <input type="color" name="point_color" id="point-color-input" value="#FFFFFF"
+                               class="h-8 w-10 border border-gray-300 rounded cursor-pointer"
+                               onchange="document.getElementById('point-color-preview-btn').style.backgroundColor = this.value; renderLivePreview();">
+                     </div>
+                </div>
+            </div>
+        </div>
+
+        {# Color Línea (Solo Line Chart) - Hidden by default #}
+        <div id="line-color-wrapper" class="relative flex-shrink-0 {% if manim_animation_type != 'line_chart' %}hidden{% endif %}" x-data="{ open: false }">
+            <button type="button" @click="open = !open" 
+                    title="Color de Línea"
+                    class="flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <svg class="w-3.5 h-3.5 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <div class="w-3.5 h-3.5 rounded border border-gray-400 flex-shrink-0" id="line-color-preview-btn" style="background-color: #FFFFFF;"></div>
+                <span class="ml-1 font-medium text-gray-700">Línea</span>
+            </button>
+            <div x-show="open" x-cloak @click.away="open = false" x-transition
+                 class="absolute z-[100] mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[180px] p-3">
+                <div>
+                     <label class="block text-xs font-medium text-gray-700 mb-2">Color Línea</label>
+                     <div class="flex items-center gap-2">
+                        <input type="color" name="line_color" id="line-color-input" value="#FFFFFF"
+                               class="h-8 w-10 border border-gray-300 rounded cursor-pointer"
+                               onchange="document.getElementById('line-color-preview-btn').style.backgroundColor = this.value; renderLivePreview();">
+                     </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -457,7 +501,7 @@
 {% endif %}
 
 {# Campos específicos para gráficos de barras #}
-{% if manim_animation_type|default:'quote' == 'bar_chart' or manim_animation_type == 'modern_bar_chart' %}
+{% if manim_animation_type|default:'quote' == 'bar_chart' or manim_animation_type == 'modern_bar_chart' or manim_animation_type == 'line_chart' %}
 <div class="space-y-4">
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <h4 class="text-sm font-medium text-gray-900 flex items-center gap-2">
@@ -514,19 +558,46 @@
 
             {# Opciones Extra (Fix overlap: use space-y instead of tight grid) #}
             <div class="flex flex-col gap-5 py-4 border-t border-gray-100 mt-2">
-                {# Ancho de barras solo para bar_chart clásico #}
-                {% if manim_animation_type == 'bar_chart' %}
-                <div class="flex flex-col gap-2">
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ancho de Barras</label>
-                    <div class="flex items-center gap-4">
-                        <input type="range" name="bar_width" min="0.1" max="1.0" step="0.1" value="0.8" 
-                               class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
-                               oninput="this.nextElementSibling.innerText = this.value; renderLivePreview()">
-                        <span class="text-[10px] font-black text-gray-900 w-6 text-center bg-gray-50 py-1 rounded border border-gray-100">0.8</span>
+                
+                {# Configuración de Tamaño de Puntos y Líneas (Solo Line Chart) #}
+                <div id="line-chart-settings" class="{% if manim_animation_type != 'line_chart' %}hidden{% endif %}">
+                    <div class="flex flex-col gap-4">
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tamaño Puntos</label>
+                                <span id="point-radius-display" class="text-[10px] font-black text-gray-900 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">0.1</span>
+                            </div>
+                            <input type="range" name="point_radius" id="point-radius-input" 
+                                   min="0.05" max="0.3" step="0.01" value="0.1"
+                                   class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="document.getElementById('point-radius-display').textContent = this.value; renderLivePreview()">
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Grosor Línea</label>
+                                <span id="line-width-display" class="text-[10px] font-black text-gray-900 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">4px</span>
+                            </div>
+                            <input type="range" name="line_width" id="line-width-input" 
+                                   min="1" max="10" step="1" value="4"
+                                   class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="document.getElementById('line-width-display').textContent = this.value + 'px'; renderLivePreview()">
+                        </div>
+                         </div>
+                    </div>
+
+                {# Ancho de barras para bar_chart clásico y moderno #}
+                <div id="bar-width-settings" class="{% if manim_animation_type != 'bar_chart' and manim_animation_type != 'modern_bar_chart' %}hidden{% endif %}">
+                    <div class="flex flex-col gap-2">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ancho de Barras</label>
+                        <div class="flex items-center gap-4">
+                            <input type="range" name="bar_width" min="0.1" max="1.0" step="0.1" value="0.8" 
+                                   class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="this.nextElementSibling.innerText = this.value; renderLivePreview()">
+                            <span class="text-[10px] font-black text-gray-900 w-6 text-center bg-gray-50 py-1 rounded border border-gray-100">0.8</span>
+                        </div>
                     </div>
                 </div>
-                {% endif %}
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between {% if manim_animation_type == 'line_chart' %}hidden{% endif %}" id="show-labels-toggle-container">
                     <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Etiquetas Sup.</label>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" name="show_labels" value="true" class="sr-only peer" checked onchange="renderLivePreview()">
@@ -548,40 +619,95 @@
 
         {# Botón para abrir modal (como una barra adicional) #}
         <div class="mt-3">
-            <button type="button" 
+            <button type="button" id="config-bars-btn"
                     onclick="openBarManagerModal()"
                     class="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-dashed border-gray-300 rounded-lg hover:border-black hover:bg-gray-50 transition-all text-xs font-medium text-gray-600 hover:text-black">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
                 </svg>
-                Configurar Datos de Barras
+                Configurar Datos
             </button>
         </div>
     </div>
 
     <script>
-    // Inicializar las barras cuando se cargan los campos dinámicos
+    // Lógica centralizada de visibilidad
+    function updateFieldVisibility() {
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        // Si no hay input (ej. carga inicial parcial), intentar fallback o salir
+        const manimType = manimTypeInput ? manimTypeInput.value : '{{ manim_animation_type|default:"quote" }}';
+        
+        const barWidthSettings = document.getElementById('bar-width-settings');
+        const lineChartSettings = document.getElementById('line-chart-settings');
+        const showLabelsToggle = document.getElementById('show-labels-toggle-container');
+        const configBtn = document.getElementById('config-bars-btn');
+        const sidebarContainer = document.getElementById('live-chart-preview');
+        const emptyPreviewSidebar = document.getElementById('empty-preview-sidebar');
+        
+        // Color Wrappers
+        const pointColorWrapper = document.getElementById('point-color-wrapper');
+        const lineColorWrapper = document.getElementById('line-color-wrapper');
+
+        if (manimType === 'line_chart') {
+            if (barWidthSettings) barWidthSettings.classList.add('hidden');
+            if (lineChartSettings) lineChartSettings.classList.remove('hidden');
+            if (showLabelsToggle) showLabelsToggle.classList.add('hidden');
+            
+            // Show custom color pickers
+            if (pointColorWrapper) pointColorWrapper.classList.remove('hidden');
+            if (lineColorWrapper) lineColorWrapper.classList.remove('hidden');
+            
+            // Texto botón
+            if (configBtn) configBtn.innerHTML = `
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                Configurar Datos de Puntos`;
+            
+            // Mensaje vacío
+            if (emptyPreviewSidebar) emptyPreviewSidebar.innerText = 'Configura algunos puntos para ver la preview';
+
+        } else if (manimType === 'bar_chart' || manimType === 'modern_bar_chart') {
+            if (barWidthSettings) barWidthSettings.classList.remove('hidden');
+            if (lineChartSettings) lineChartSettings.classList.add('hidden');
+            if (showLabelsToggle) showLabelsToggle.classList.remove('hidden');
+            
+            // Texto botón
+            if (configBtn) configBtn.innerHTML = `
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                Configurar Datos de Barras`;
+
+             // Mensaje vacío fallback
+             if (emptyPreviewSidebar) emptyPreviewSidebar.innerText = 'Configura algunas barras para ver la preview';
+             
+             // Hide line chart colors
+             if (pointColorWrapper) pointColorWrapper.classList.add('hidden');
+             if (lineColorWrapper) lineColorWrapper.classList.add('hidden');
+        } else {
+            // Ocultar todo si no es gráfico
+             if (barWidthSettings) barWidthSettings.classList.add('hidden');
+             if (lineChartSettings) lineChartSettings.classList.add('hidden');
+             if (pointColorWrapper) pointColorWrapper.classList.add('hidden');
+             if (lineColorWrapper) lineColorWrapper.classList.add('hidden');
+        }
+        
+        if (manimType === 'bar_chart' || manimType === 'modern_bar_chart' || manimType === 'line_chart') {
+             updateBarPreview();
+             renderLivePreview();
+        }
+    }
+
+    // Inicializar
     document.addEventListener('DOMContentLoaded', function() {
-        // Pequeño delay para asegurar que el DOM esté listo
-        setTimeout(function() {
-            // Solo inicializar si estamos en modo bar_chart
-            const manimType = '{{ manim_animation_type|default:"quote" }}';
-            if (manimType === 'bar_chart' || manimType === 'modern_bar_chart') {
-                updateBarPreview();
-            }
-        }, 100);
+        setTimeout(updateFieldVisibility, 100);
     });
 
-    // También inicializar cuando HTMX recarga los campos dinámicos
+    // Re-ejecutar en HTMX events
     document.addEventListener('htmx:afterSwap', function(event) {
         if (event.detail.target.id === 'dynamic-fields' || event.detail.target.id === 'dynamic-fields-container') {
-            setTimeout(function() {
-                const manimType = '{{ manim_animation_type|default:"quote" }}';
-                if (manimType === 'bar_chart' || manimType === 'modern_bar_chart') {
-                    updateBarPreview();
-                    renderLivePreview();
-                }
-            }, 100);
+             setTimeout(updateFieldVisibility, 100);
         }
     });
 
@@ -589,7 +715,7 @@
     // cuando se selecciona bar_chart
     function initializeBarsIfNeeded() {
         const manimTypeInput = document.getElementById('manim-animation-type-input');
-        if (manimTypeInput && (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart')) {
+        if (manimTypeInput && (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart' || manimTypeInput.value === 'line_chart')) {
             const container = document.getElementById('bar-preview-container');
             if (container && container.children.length === 0) {
                 updateBarPreview();
@@ -640,7 +766,7 @@
         }
 
         if (bars.length === 0) {
-            if (sidebarContainer) sidebarContainer.innerHTML = '<p class="text-[10px] text-gray-300 font-medium">Configura algunas barras para ver la preview</p>';
+            if (sidebarContainer) sidebarContainer.innerHTML = `<p id="empty-preview-sidebar" class="text-[10px] text-gray-300 font-medium">Configura ${isLineChart ? 'algunos puntos' : 'algunas barras'} para ver la preview</p>`;
             if (largeContainer) largeContainer.innerHTML = '<p class="text-sm text-gray-300">Configura el gráfico en el panel derecho</p>';
             return;
         }
@@ -648,6 +774,22 @@
         const manimTypeInput = document.getElementById('manim-animation-type-input');
         const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
         const isModern = manimType === 'modern_bar_chart';
+
+        const isLineChart = manimType === 'line_chart';
+
+        // Obtener valores de grosor si existen
+        const pointRadiusInput = document.getElementById('point-radius-input');
+        const lineWidthInput = document.getElementById('line-width-input');
+        const pointRadius = pointRadiusInput ? parseFloat(pointRadiusInput.value) : 0.1;
+        // Escalar visualmente para el SVG (factor arbitrario para que se vea bien)
+        const visualPointRadius = pointRadius * 60; 
+        const visualLineWidth = lineWidthInput ? parseFloat(lineWidthInput.value) : 4;
+
+        // Nuevos colores
+        const pointColorInput = document.getElementById('point-color-input');
+        const lineColorInput = document.getElementById('line-color-input');
+        const pointColor = pointColorInput ? pointColorInput.value : '#FFFFFF';
+        const lineColor = lineColorInput ? lineColorInput.value : '#FFFFFF';
 
         function generateSvg(w, h, isLarge) {
             const padX = isLarge ? 100 : 50;
@@ -661,7 +803,7 @@
             const actualMax = maxVal * 1.1 || 1;
             const scale = chartH / actualMax;
             const barGap = (isModern ? (w - (isLarge ? 80 : 40)) : chartW) / (bars.length || 1);
-            const actualBarW = barGap * (isModern ? 0.7 : barWidth);
+            const actualBarW = barGap * barWidth;
 
             const fontSizeTitle = isLarge ? 28 : 14;
             const fontSizeAxes = isLarge ? 20 : 10;
@@ -691,7 +833,7 @@
                     <!-- Título -->
                     <text x="${w/2}" y="${isLarge ? 50 : 25}" text-anchor="middle" font-size="${fontSizeTitle}" font-weight="900" fill="${escTextColor}" style="letter-spacing: 0.05em;">${escTitle.toUpperCase()}</text>
                     
-                    ${!isModern ? `
+                    ${!isModern && !isLineChart ? `
                     <!-- Ejes (con flechas estilo Manim) -->
                     <line x1="${startX}" y1="${endY}" x2="${w - (isLarge ? 40 : 20)}" y2="${endY}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
                     <line x1="${startX}" y1="${endY}" x2="${startX}" y2="${startY - (isLarge ? 20 : 10)}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
@@ -707,40 +849,81 @@
                     }).join('')}
 
                     <!-- Labels Ejes -->
-                    <text x="${w/2}" y="${h-(isLarge ? 20 : 10)}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4">${escXLabel}</text>
-                    <text x="${isLarge ? 30 : 15}" y="${h/2}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4" transform="rotate(-90, ${isLarge ? 30 : 15}, ${h/2})">${escYLabel}</text>
+                    ${!isLineChart ? `<text x="${w/2}" y="${h-(isLarge ? 20 : 10)}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4">${escXLabel}</text>
+                    <text x="${isLarge ? 30 : 15}" y="${h/2}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4" transform="rotate(-90, ${isLarge ? 30 : 15}, ${h/2})">${escYLabel}</text>` : ''}
                     ` : ''}
             `;
 
-            bars.forEach((bar, i) => {
-                const x = (isModern ? (isLarge ? 40 : 20) : startX) + (i * barGap) + (barGap - actualBarW) / 2;
-                const barH = bar.value * scale;
-                const y = endY - barH;
-                
-                const escBarLabel = escapeHtml(bar.label);
-                const escBarColor = escapeHtml(bar.color);
+                if (isLineChart) {
+                    // Generar puntos para Polyline
+                    const pointCoords = bars.map((bar, i) => {
+                        const x = isLarge ? 50 + (i * ((w - 100) / (Math.max(1, bars.length - 1)))) : 25 + (i * ((w - 50) / (Math.max(1, bars.length - 1))));
+                        const barH = (bar.value || 0) * scale;
+                        const y = endY - barH;
+                        return { x, y };
+                    });
+
+                    const pointsStr = pointCoords.map(p => `${p.x},${p.y}`).join(' ');
+
+                    // Area Bajo la Curva (Polygon)
+                    // Empieza abajo-izquierda, recorre puntos, baja abajo-derecha
+                    const firstX = pointCoords[0].x;
+                    const lastX = pointCoords[pointCoords.length - 1].x;
+                    const areaPoints = `${firstX},${endY} ${pointsStr} ${lastX},${endY}`;
+                    
+                    // Color principal para el relleno (usamos el del primer punto o texto)
+                    const mainColor = bars[0]?.color || escTextColor;
 
                 svgHtml += `
-                    <rect x="${x}" y="${y}" width="${actualBarW}" height="${barH}" fill="${escBarColor}" rx="${isModern ? (isLarge ? 10 : 5) : 0}">
-                        <animate attributeName="height" from="0" to="${barH}" dur="0.6s" fill="freeze" />
-                        <animate attributeName="y" from="${endY}" to="${y}" dur="0.6s" fill="freeze" />
-                    </rect>
+                    <polygon points="${areaPoints}" fill="${lineColor}" fill-opacity="0.2" stroke="none" />
+                    <polyline points="${pointsStr}" fill="none" stroke="${lineColor}" stroke-width="${visualLineWidth}" stroke-linecap="round" stroke-linejoin="round" />
                 `;
 
-                // Label de barra
-                svgHtml += `
-                    <text x="${x + actualBarW/2}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escBarLabel}</text>
-                `;
-
-                // Top Label (Valor)
-                if (showLabels) {
-                    const displayTop = bar.topText || bar.value;
-                    const escDisplayTop = escapeHtml(displayTop);
+                // Puntos
+                bars.forEach((bar, i) => {
+                    const p = pointCoords[i];
+                    // Punto con color de punto y borde de linea
                     svgHtml += `
-                        <text x="${x + actualBarW/2}" y="${y-(isLarge ? 15 : 8)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="900" fill="${escTextColor}">${escDisplayTop}</text>
+                        <circle cx="${p.x}" cy="${p.y}" r="${visualPointRadius}" fill="${pointColor}" stroke="${lineColor}" stroke-width="${visualLineWidth * 0.5}" />
                     `;
+                         // Label de barra
+                        svgHtml += `
+                            <text x="${p.x}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escapeHtml(bar.label)}</text>
+                        `;
+                    });
+
+                } else {
+                    // Lógica para Bar Charts (Clásico y Moderno)
+                    bars.forEach((bar, i) => {
+                        const x = (isModern ? (isLarge ? 40 : 20) : startX) + (i * barGap) + (barGap - actualBarW) / 2;
+                        const barH = bar.value * scale;
+                        const y = endY - barH;
+                        
+                        const escBarLabel = escapeHtml(bar.label);
+                        const escBarColor = escapeHtml(bar.color);
+
+                        svgHtml += `
+                            <rect x="${x}" y="${y}" width="${actualBarW}" height="${barH}" fill="${escBarColor}" rx="${isModern ? (isLarge ? 10 : 5) : 0}">
+                                <animate attributeName="height" from="0" to="${barH}" dur="0.6s" fill="freeze" />
+                                <animate attributeName="y" from="${endY}" to="${y}" dur="0.6s" fill="freeze" />
+                            </rect>
+                        `;
+
+                        // Label de barra
+                        svgHtml += `
+                            <text x="${x + actualBarW/2}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escBarLabel}</text>
+                        `;
+
+                        // Top Label (Valor)
+                        if (showLabels) {
+                            const displayTop = bar.topText || bar.value;
+                            const escDisplayTop = escapeHtml(displayTop);
+                            svgHtml += `
+                                <text x="${x + actualBarW/2}" y="${y-(isLarge ? 15 : 8)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="900" fill="${escTextColor}">${escDisplayTop}</text>
+                            `;
+                        }
+                    });
                 }
-            });
 
             svgHtml += `</svg>`;
             return svgHtml;
@@ -795,12 +978,35 @@ if (typeof window.ManimBarManager === 'undefined') {
         currentBarCount: 3,
         maxBars: 8,
         minBars: 1,
+        isLineChart: false, // Flag para controlar UI específica
         COLOR_PALETTE: [
             '#3B82F6', '#EF4444', '#10B981', '#F59E0B', 
             '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'
         ],
         
+        updateState: function() {
+            const manimTypeInput = document.getElementById('manim-animation-type-input');
+            this.isLineChart = manimTypeInput && manimTypeInput.value === 'line_chart';
+        },
+
+        saveCurrentModalState: function() {
+             // Sincronizar explícitamente todos los inputs del modal a los hidden inputs antes de re-renderizar
+             if (this.currentBarCount > 0) {
+                 for (let i = 1; i <= this.currentBarCount; i++) {
+                     const fields = ['label', 'value', 'color', 'top_text'];
+                     fields.forEach(field => {
+                         const modalInput = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${i}"]`);
+                         if (modalInput) {
+                             const hiddenInput = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                             if (hiddenInput) hiddenInput.value = modalInput.value;
+                         }
+                     });
+                 }
+             }
+        },
+
         updateBarPreview: function() {
+            this.updateState();
             const container = document.getElementById('bar-preview-container');
             if (!container) return; // Protección contra TypeError
             
@@ -808,15 +1014,15 @@ if (typeof window.ManimBarManager === 'undefined') {
         
             for (let i = 1; i <= this.currentBarCount; i++) {
                 // Obtener valores actuales (con fallbacks)
-                let labelValue = `Barra ${i}`;
+                let labelValue = `${this.isLineChart ? 'Punto' : 'Barra'} ${i}`;
                 let valueValue = (Math.random() * 10).toFixed(2);
                 
                 // Usar color de la paleta por defecto según el índice
                 let colorValue = this.COLOR_PALETTE[(i - 1) % this.COLOR_PALETTE.length];
         
-                const hiddenLabel = document.querySelector(`form input[name="bar_label_${i}"]:not(#bar-manager-modal input)`);
-                const hiddenValue = document.querySelector(`form input[name="bar_value_${i}"]:not(#bar-manager-modal input)`);
-                const hiddenColor = document.querySelector(`form input[name="bar_color_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenLabel = document.querySelector(`#dynamic-fields-container input[name="bar_label_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenValue = document.querySelector(`#dynamic-fields-container input[name="bar_value_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenColor = document.querySelector(`#dynamic-fields-container input[name="bar_color_${i}"]:not(#bar-manager-modal input)`);
         
                 if (hiddenLabel && hiddenLabel.value) labelValue = hiddenLabel.value;
                 if (hiddenValue && hiddenValue.value) valueValue = hiddenValue.value;
@@ -826,7 +1032,7 @@ if (typeof window.ManimBarManager === 'undefined') {
                 barDiv.className = 'group flex flex-col gap-2 p-3 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-black transition-all';
                 
                 let topTextValue = '';
-                const hiddenTopText = document.querySelector(`form input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenTopText = document.querySelector(`#dynamic-fields-container input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`);
                 if (hiddenTopText && hiddenTopText.value) topTextValue = hiddenTopText.value;
         
                 const barHtml = document.createElement('div');
@@ -835,13 +1041,16 @@ if (typeof window.ManimBarManager === 'undefined') {
                 const row1 = document.createElement('div');
                 row1.className = 'flex items-center gap-2';
                 
-                // Color Input
-                const colorInput = document.createElement('input');
-                colorInput.type = 'color';
-                colorInput.name = `bar_color_${i}`;
-                colorInput.value = colorValue;
-                colorInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'color', this.value)`);
-                colorInput.className = 'w-3 h-3 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm shadow-inner';
+                // Color Input (Conditional)
+                if (!this.isLineChart) {
+                    const colorInput = document.createElement('input');
+                    colorInput.type = 'color';
+                    colorInput.name = `bar_color_${i}`;
+                    colorInput.value = colorValue;
+                    colorInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'color', this.value)`);
+                    colorInput.className = 'w-3 h-3 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm shadow-inner';
+                    row1.appendChild(colorInput);
+                }
                 
                 // Label Container
                 const labelContainer = document.createElement('div');
@@ -868,27 +1077,31 @@ if (typeof window.ManimBarManager === 'undefined') {
                 valueInput.className = 'w-12 p-0 text-[10px] font-black text-gray-900 border-none bg-transparent focus:ring-0 text-right';
                 valueInput.placeholder = '0.0';
 
-                row1.appendChild(colorInput);
+                
                 row1.appendChild(labelContainer);
                 row1.appendChild(valueInput);
                 
-                // --- Row 2: Top Text (Optional) ---
+                // --- Row 2: Top Text (Optional, hidden for Line Chart) ---
                 const row2 = document.createElement('div');
                 row2.className = 'pl-5';
                 
-                const topTextInput = document.createElement('input');
-                topTextInput.type = 'text';
-                topTextInput.name = `bar_top_text_${i}`;
-                topTextInput.value = topTextValue; // Safe assignment
-                topTextInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'top_text', this.value)`);
-                topTextInput.className = 'w-full p-0 text-[8px] text-gray-400 font-medium border-none bg-transparent focus:ring-0 transition-all hover:text-gray-600 truncate';
-                topTextInput.placeholder = 'Texto sup.';
-                
-                row2.appendChild(topTextInput);
+                if (!this.isLineChart) {
+                    const topTextInput = document.createElement('input');
+                    topTextInput.type = 'text';
+                    topTextInput.name = `bar_top_text_${i}`;
+                    topTextInput.value = topTextValue; // Safe assignment
+                    topTextInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'top_text', this.value)`);
+                    topTextInput.className = 'w-full p-0 text-[8px] text-gray-400 font-medium border-none bg-transparent focus:ring-0 transition-all hover:text-gray-600 truncate';
+                    topTextInput.placeholder = 'Texto sup.';
+                    
+                    row2.appendChild(topTextInput);
+                }
                 
                 // Assemble Bar Element
                 barDiv.appendChild(row1);
-                barDiv.appendChild(row2);
+                if (!this.isLineChart && row2.childElementCount > 0) {
+                     barDiv.appendChild(row2);
+                }
                 container.appendChild(barDiv);
             }
             
@@ -897,7 +1110,7 @@ if (typeof window.ManimBarManager === 'undefined') {
         },
         
         syncSidebarInput: function(barIndex, field, value) {
-            const hiddenInput = document.querySelector(`form input[name="bar_${field}_${barIndex}"]:not(#bar-manager-modal input)`);
+            const hiddenInput = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${barIndex}"]:not(#bar-manager-modal input)`);
             if (hiddenInput) hiddenInput.value = value;
             
             const modalInput = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${barIndex}"]`);
@@ -907,19 +1120,21 @@ if (typeof window.ManimBarManager === 'undefined') {
         },
 
         addBar: function() {
+            this.updateState();
+            this.saveCurrentModalState(); // Guardar antes de añadir
             if (this.currentBarCount < this.maxBars) {
                 this.currentBarCount++;
                 const nextColor = this.COLOR_PALETTE[(this.currentBarCount - 1) % this.COLOR_PALETTE.length];
-                const form = document.querySelector('form');
+                const container = document.getElementById('dynamic-fields-container');
                 
                 // Helper para crear inputs ocultos
                 const ensureHiddenInput = (name, val) => {
-                    let input = document.querySelector(`form input[name="${name}"]:not(#bar-manager-modal input)`);
+                    let input = document.querySelector(`#dynamic-fields-container input[name="${name}"]:not(#bar-manager-modal input)`);
                     if (!input) {
                         input = document.createElement('input');
                         input.type = 'hidden';
                         input.name = name;
-                        form.appendChild(input);
+                        container.appendChild(input);
                     }
                     input.value = val;
                     return input;
@@ -929,18 +1144,21 @@ if (typeof window.ManimBarManager === 'undefined') {
                 ensureHiddenInput(`bar_value_${this.currentBarCount}`, '10.0');
 
                 this.updateModalFields();
-                this.updateBarPreview();
+                this.updateBarPreview(); // Esto es necesario para ver el nuevo input sidebar
             }
         },
 
         removeBar: function(barIndex = null) {
-            if (this.currentBarCount > this.minBars) {
+            this.updateState();
+            this.saveCurrentModalState(); // Guardar antes de eliminar
+             if (this.currentBarCount > this.minBars) {
                 if (barIndex !== null) {
                     for (let i = barIndex; i < this.currentBarCount; i++) {
                         const fields = ['label', 'value', 'color', 'top_text'];
                         fields.forEach(field => {
-                            const next = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${i + 1}"]`);
-                            const current = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${i}"]`);
+                            const next = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i + 1}"]:not(#bar-manager-modal input)`);
+                            const current = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                            // Copiar valor de hidden inputs ya que saveCurrentModalState los actualizó
                             if (next && current) current.value = next.value;
                         });
                     }
@@ -952,6 +1170,7 @@ if (typeof window.ManimBarManager === 'undefined') {
         },
 
         updateModalFields: function() {
+            this.updateState();
             const container = document.getElementById('modal-bar-fields-container');
             if (!container) return;
             container.innerHTML = '';
@@ -959,11 +1178,11 @@ if (typeof window.ManimBarManager === 'undefined') {
             for (let i = 1; i <= this.currentBarCount; i++) {
                 // Recuperar valores o defaults
                 const getVal = (name, def) => {
-                    const el = document.querySelector(`form input[name="${name}"]:not(#bar-manager-modal input)`);
+                    const el = document.querySelector(`#dynamic-fields-container input[name="${name}"]:not(#bar-manager-modal input)`);
                     return el && el.value ? el.value : def;
                 };
 
-                let currentLabel = getVal(`bar_label_${i}`, `Barra ${i}`);
+                let currentLabel = getVal(`bar_label_${i}`, `${this.isLineChart ? 'Punto' : 'Barra'} ${i}`);
                 let currentValue = getVal(`bar_value_${i}`, '10.0');
                 
                 // Usar color de la paleta por defecto según el índice
@@ -979,7 +1198,7 @@ if (typeof window.ManimBarManager === 'undefined') {
                 
                 // Helper to update hidden inputs when modal inputs change
                 const syncToHidden = (field, val) => {
-                     const hidden = document.querySelector(`form input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                     const hidden = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
                      if (hidden) hidden.value = val;
                      if (typeof renderLivePreview === 'function') renderLivePreview();
                 };
@@ -1018,20 +1237,23 @@ if (typeof window.ManimBarManager === 'undefined') {
                     return wrapper;
                 };
 
-                // 1. Icono de Color
-                const colorDiv = document.createElement('div');
-                colorDiv.className = 'flex-shrink-0 relative';
-                
-                const colorInput = document.createElement('input');
-                colorInput.type = 'color';
-                colorInput.name = `bar_color_${i}`;
-                colorInput.value = currentColor;
-                colorInput.className = 'w-5 h-5 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm hover:scale-110 transition-transform';
-                colorInput.oninput = function() {
-                    syncToHidden('color', this.value);
-                };
-                
-                colorDiv.appendChild(colorInput);
+                // 1. Icono de Color (Solo si no es Line Chart)
+                if (!this.isLineChart) {
+                    const colorDiv = document.createElement('div');
+                    colorDiv.className = 'flex-shrink-0 relative';
+                    
+                    const colorInput = document.createElement('input');
+                    colorInput.type = 'color';
+                    colorInput.name = `bar_color_${i}`;
+                    colorInput.value = currentColor;
+                    colorInput.className = 'w-5 h-5 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm hover:scale-110 transition-transform';
+                    colorInput.oninput = function() {
+                        syncToHidden('color', this.value);
+                    };
+                    
+                    colorDiv.appendChild(colorInput);
+                    barDiv.appendChild(colorDiv);
+                }
                 
                 // 2. Grid de campos
                 const gridDiv = document.createElement('div');
@@ -1039,11 +1261,20 @@ if (typeof window.ManimBarManager === 'undefined') {
                 
                 const labelWrapper = createInputWrapper(4, 'Etiqueta', 'text', `bar_label_${i}`, 'Nombre', currentLabel);
                 const valueWrapper = createInputWrapper(3, 'Valor', 'number', `bar_value_${i}`, '0.0', currentValue);
-                const topTextWrapper = createInputWrapper(5, 'Texto Supp', 'text', `bar_top_text_${i}`, 'Ej: 80%', currentTopText);
-
+                // Ajustar spans si no hay color o texto
+                if (this.isLineChart) {
+                     labelWrapper.className = `col-span-8 flex flex-col gap-1`;
+                     valueWrapper.className = `col-span-4 flex flex-col gap-1`;
+                }
+                
                 gridDiv.appendChild(labelWrapper);
                 gridDiv.appendChild(valueWrapper);
-                gridDiv.appendChild(topTextWrapper);
+                
+                // Ocultar wrapper de Top Text si es lince_chart
+                if (!this.isLineChart) {
+                    const topTextWrapper = createInputWrapper(5, 'Texto Supp', 'text', `bar_top_text_${i}`, 'Ej: 80%', currentTopText);
+                    gridDiv.appendChild(topTextWrapper);
+                }
                 
                 // 3. Delete Button (Condition check)
                 let delDiv = null;
@@ -1061,7 +1292,6 @@ if (typeof window.ManimBarManager === 'undefined') {
                     delDiv = delBtn;
                 }
 
-                barDiv.appendChild(colorDiv);
                 barDiv.appendChild(gridDiv);
                 if (delDiv) barDiv.appendChild(delDiv);
                 
@@ -1078,12 +1308,15 @@ if (typeof window.ManimBarManager === 'undefined') {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                 </div>
-                <span class="text-[10px] font-bold text-gray-400 group-hover:text-black uppercase tracking-widest transition-all">Añadir nueva barra</span>
+                <span class="text-[10px] font-bold text-gray-400 group-hover:text-black uppercase tracking-widest transition-all">Añadir ${this.isLineChart ? 'nuevo punto' : 'nueva barra'}</span>
             `;
             container.appendChild(addBarDiv);
         },
         
         openModal: function() {
+            // Actualizar flag
+            this.updateState();
+            
             this.updateModalFields();
             const modal = document.getElementById('bar-manager-modal');
             if (modal) {
@@ -1094,8 +1327,8 @@ if (typeof window.ManimBarManager === 'undefined') {
 
         closeModal: function() {
             // Sincronizar modal -> inputs ocultos
-            const form = document.querySelector('form');
-            if (form) {
+            const container = document.getElementById('dynamic-fields-container');
+            if (container) {
                 for (let i = 1; i <= this.currentBarCount; i++) {
                     const getModalVal = (name) => {
                         const el = document.querySelector(`#bar-manager-modal input[name="${name}"]`);
@@ -1103,12 +1336,12 @@ if (typeof window.ManimBarManager === 'undefined') {
                     };
                     const setHiddenVal = (name, val) => {
                         if (val === null) return;
-                        let input = form.querySelector(`input[name="${name}"]:not(#bar-manager-modal input)`);
+                        let input = container.querySelector(`input[name="${name}"]:not(#bar-manager-modal input)`);
                         if (!input) {
                             input = document.createElement('input');
                             input.type = 'hidden';
                             input.name = name;
-                            form.appendChild(input);
+                            container.appendChild(input);
                         }
                         input.value = val;
                     };
@@ -1122,7 +1355,7 @@ if (typeof window.ManimBarManager === 'undefined') {
                 // Limpiar sobrantes
                 for (let i = this.currentBarCount + 1; i <= this.maxBars; i++) {
                     ['label', 'value', 'color', 'top_text'].forEach(f => {
-                         const el = form.querySelector(`input[name="bar_${f}_${i}"]:not(#bar-manager-modal input)`);
+                         const el = container.querySelector(`input[name="bar_${f}_${i}"]:not(#bar-manager-modal input)`);
                          if (el) el.remove();
                     });
                 }

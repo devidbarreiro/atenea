@@ -82,8 +82,8 @@ class ModernBarChartAnimation(BaseManimAnimation):
         
         # Espaciado
         user_bar_width = data_config.get('bar_width', self._get_config_value('bar_width', 0.8))
-        bar_spacing = chart_width / (n_bars + 1)
-        bar_width = min(0.9, bar_spacing * user_bar_width)
+        bar_spacing = chart_width / max(1, n_bars)
+        bar_width = bar_spacing * user_bar_width
         
         bars = VGroup()
         bar_labels = VGroup()
@@ -107,7 +107,7 @@ class ModernBarChartAnimation(BaseManimAnimation):
             )
             
             # Posicionar (alinear base abajo)
-            x_pos = -chart_width/2 + (i + 1) * bar_spacing
+            x_pos = -chart_width/2 + (i + 0.5) * bar_spacing
             rect.move_to([x_pos, -chart_height/2 + h/2, 0])
             bars.add(rect)
             
@@ -134,7 +134,7 @@ class ModernBarChartAnimation(BaseManimAnimation):
             self.play(Write(title))
         
         self.play(
-            Create(bars, run_time=1.5, lag_ratio=0.2),
+            AnimationGroup(*[GrowFromEdge(bar, DOWN) for bar in bars], lag_ratio=0, run_time=1.5),
             FadeIn(bar_labels, shift=UP * 0.3, run_time=1),
         )
         
