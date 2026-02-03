@@ -122,7 +122,11 @@ function updatePromptVisibilityForBarChart() {
         return;
     }
     
-    const isBarChart = manimTypeInput && (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart');
+    const isBarChart = manimTypeInput && (
+        manimTypeInput.value === 'bar_chart' ||
+        manimTypeInput.value === 'modern_bar_chart' ||
+        manimTypeInput.value === 'line_chart'
+    );
     console.log('🔍 isBarChart:', isBarChart);
     
     if (isBarChart) {
@@ -164,6 +168,14 @@ function setupManimTypeObserver() {
     
     console.log('Setting up ManIM type observer');
     window._manimTypeObserverCreated = true;
+
+    // Guard to prevent stacking observers
+    if (manimTypeInput.dataset.manimObserverAttached === 'true') {
+        updatePromptVisibilityForBarChart();
+        return;
+    }
+    manimTypeInput.dataset.manimObserverAttached = 'true';
+    
     
     // Usar MutationObserver para vigilar cambios en el atributo value
     const observer = new MutationObserver(function(mutations) {
@@ -219,7 +231,7 @@ function updateScriptFieldForModel(modelId) {
     }
     
     // Usar la función dedicada para bar_chart
-    if (modelId === 'manim-quote' && (manimType === 'bar_chart' || manimType === 'modern_bar_chart')) {
+    if (modelId === 'manim-quote' && (manimType === 'bar_chart' || manimType === 'modern_bar_chart' || manimType === 'line_chart')) {
         updatePromptVisibilityForBarChart();
         return;
     }
@@ -300,7 +312,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // También verificar el estado inicial del tipo de animación
     const initialManimTypeInput = document.getElementById('manim-animation-type-input');
-    if (initialManimTypeInput && (initialManimTypeInput.value === 'bar_chart' || initialManimTypeInput.value === 'modern_bar_chart')) {
+    if (initialManimTypeInput && (initialManimTypeInput.value === 'bar_chart' || initialManimTypeInput.value === 'modern_bar_chart' || initialManimTypeInput.value === 'line_chart')) {
         console.log('Initial state: bar_chart detected, updating prompt');
         updatePromptVisibilityForBarChart();
     }
@@ -321,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 updateScriptFieldForModel(currentModel);
                 
-                if (inputElement.value === 'bar_chart' || inputElement.value === 'modern_bar_chart') {
+                if (inputElement.value === 'bar_chart' || inputElement.value === 'modern_bar_chart' || inputElement.value === 'line_chart') {
                     setTimeout(function() {
                         if (typeof updateBarPreview === 'function') {
                             updateBarPreview();
@@ -392,7 +404,7 @@ document.addEventListener('DOMContentLoaded', function() {
                      bindManimTypeChange(manimTypeInput, modelSelect);
                      
                      // Verify initial state for bar chart
-                     if (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart') {
+                     if (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart' || manimTypeInput.value === 'line_chart') {
                         setTimeout(function() {
                             if (typeof updateBarPreview === 'function') {
                                 updateBarPreview();

@@ -81,7 +81,7 @@ class BarChartAnimation(BaseManimAnimation):
             else:
                 labels.append(f"Label {i+1}")
                 
-        title_str = data_config.get('title', self._get_config_value('title', 'Gráfico de Barras'))
+        title_str = data_config.get('title', self._get_config_value('title', ' '))
         y_label = data_config.get('y_axis_label', data_config.get('y_label', 'Valores')) # Support both keys
         x_label = data_config.get('x_axis_label', data_config.get('x_label', 'Categorías')) # Support both keys
         

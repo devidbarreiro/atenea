@@ -432,6 +432,11 @@ document.addEventListener('alpine:init', () => {
                 if (typeof updateScriptFieldForModel === 'function') {
                     updateScriptFieldForModel('manim-quote');
                 }
+                
+                // Renderizar preview (vía función global si existe)
+                if (typeof renderQuotePreview === 'function') {
+                    renderQuotePreview();
+                }
             }
             
             // Trigger preview refresh

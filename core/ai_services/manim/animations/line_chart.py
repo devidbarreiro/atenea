@@ -20,8 +20,13 @@ class LineChartAnimation(BaseManimAnimation):
         # 1. Obtener y procesar datos
         prompt_text = self._get_config_value('text', '{}')
         try:
-            data_config = json.loads(prompt_text) if prompt_text.strip() else {}
-        except json.JSONDecodeError:
+            if isinstance(prompt_text, dict):
+                data_config = prompt_text
+            elif isinstance(prompt_text, str):
+                data_config = json.loads(prompt_text) if prompt_text.strip() else {}
+            else:
+                data_config = {}
+        except (json.JSONDecodeError, TypeError, AttributeError):
             data_config = {}
             
         # Datos por defecto si no hay input válido

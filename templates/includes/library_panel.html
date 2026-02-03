@@ -250,6 +250,23 @@ document.addEventListener('alpine:init', () => {
                 },
                 popstate: () => {
                     this.selectedItem = null;
+                },
+                toggleLivePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = false;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null; // Cerrar detalle si está abierto
+                        setTimeout(() => {
+                            if (window.renderLivePreview) window.renderLivePreview();
+                        }, 100);
+                    }
+                },
+                toggleQuotePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = true;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null;
+                    }
                 }
             };
             
@@ -258,27 +275,8 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('item-created', this._handlers.itemCreated);
             window.addEventListener('video-status-changed', this._handlers.videoStatusChanged);
             window.addEventListener('popstate', this._handlers.popstate);
-
-            // Escuchar toggle de live preview
-            window.addEventListener('toggle-live-preview', (e) => {
-                this.livePreviewOpen = e.detail.open;
-                this.showQuoteUnavailable = false;
-                if (this.livePreviewOpen) {
-                    this.selectedItem = null; // Cerrar detalle si está abierto
-                    setTimeout(() => {
-                        if (window.renderLivePreview) window.renderLivePreview();
-                    }, 100);
-                }
-            });
-
-            // Escuchar toggle de quote preview (muestra mensaje no disponible)
-            window.addEventListener('toggle-quote-preview', (e) => {
-                this.livePreviewOpen = e.detail.open;
-                this.showQuoteUnavailable = true;
-                if (this.livePreviewOpen) {
-                    this.selectedItem = null;
-                }
-            });
+            window.addEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+            window.addEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
         },
         
         // === MÉTODOS DE SELECCIÓN Y CLICK ===
@@ -324,6 +322,8 @@ document.addEventListener('alpine:init', () => {
                 window.removeEventListener('item-created', this._handlers.itemCreated);
                 window.removeEventListener('video-status-changed', this._handlers.videoStatusChanged);
                 window.removeEventListener('popstate', this._handlers.popstate);
+                window.removeEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+                window.removeEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
             }
             
             // Limpiar polling
