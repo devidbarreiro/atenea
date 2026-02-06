@@ -135,6 +135,22 @@ class BaseManimAnimation(Scene, ABC):
         """
         pass
     
+    @classmethod
+    def get_parameters(cls) -> dict:
+        """
+        Retorna la definición de parámetros que acepta esta animación.
+        Formato:
+        {
+            "param_name": {
+                "type": "string|int|float|bool|list",
+                "description": "Descripción del parámetro",
+                "default": valor_por_defecto (opcional),
+                "required": True/False (opcional, default False)
+            }
+        }
+        """
+        return {}
+
     def setup_background(self, color: str = "#D3D3D3"):
         """Configura el color de fondo de la escena"""
         self.camera.background_color = color

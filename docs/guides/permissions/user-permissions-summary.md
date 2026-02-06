@@ -261,8 +261,4 @@ function selectContentType(type) {
 2. **Frontend**: Probar sincronización de checkboxes admin con usuarios reales
 3. **Auditoría**: Revisar otros endpoints que puedan mutar usuarios (APIs, webhooks)
 4. **Documentación**: Agregar al manual de usuario cómo crear/gestionar roles
-<<<<<<< HEAD
 5. **UX**: Considerar mensajes más descriptivos cuando se intenta acceder sin permiso
-=======
-5. **UX**: Considerar mensajes más descriptivos cuando se intenta acceder sin permiso
->>>>>>> f5abafd (Role-based permissions system, automatic password creation with link sent to set password and activate account, views for users without permissions, bug fixes, visual improvements)

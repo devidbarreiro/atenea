@@ -14,7 +14,7 @@ from core.models import Project
 @tool
 def create_video_tool(
     prompt: str,
-    service: Literal['gemini_veo', 'sora', 'heygen'] = 'gemini_veo',
+    service: Literal['gemini_veo', 'sora', 'heygen', 'manim'] = 'gemini_veo',
     title: Optional[str] = None,
     project_id: Optional[int] = None,
     user_id: int = None,
@@ -25,16 +25,19 @@ def create_video_tool(
     # Parámetros para HeyGen
     avatar_id: Optional[str] = None,
     voice_id: Optional[str] = None,
-        # Parámetros para Sora
-        sora_model: Optional[str] = None,  # 'sora-2' por defecto
-        sora_size: Optional[str] = None,  # '1280x720' por defecto
+    # Parámetros para Sora
+    sora_model: Optional[str] = None,  # 'sora-2' por defecto
+    sora_size: Optional[str] = None,  # '1280x720' por defecto
+    # Parámetros para Manim
+    manim_template_type: Optional[str] = None,  # Tipo de template (ej: 'bar_chart')
+    manim_parameters: Optional[dict] = None,  # Diccionario de parámetros
 ) -> Dict:
     """
-    Crea un video usando diferentes servicios de IA (Gemini Veo, Sora, HeyGen).
+    Crea un video usando diferentes servicios de IA (Gemini Veo, Sora, HeyGen, Manim).
     
     Args:
-        prompt: Descripción del video a generar (o guión para HeyGen)
-        service: Servicio a usar ('gemini_veo', 'sora', 'heygen')
+        prompt: Descripción del video a generar (o guión para HeyGen/Manim)
+        service: Servicio a usar ('gemini_veo', 'sora', 'heygen', 'manim')
         title: Título opcional para el video
         project_id: ID del proyecto donde crear el video (opcional)
         user_id: ID del usuario que crea el video (requerido)
@@ -52,9 +55,9 @@ def create_video_tool(
         sora_model: Modelo de Sora ('sora-2' por defecto)
         sora_size: Tamaño del video ('1280x720' por defecto)
         
-        # Parámetros para Vuela AI
-        vuela_voice_id: ID de voz de Vuela AI
-        vuela_voice_style: Estilo de voz ('narrative', 'expressive', 'dynamic')
+        # Parámetros para Manim
+        manim_template_type: Tipo de animación de Manim (ej: 'modern_bar_chart', 'quote', 'line_chart')
+        manim_parameters: Diccionario con los valores específicos del esquema de la animación (ej: {'values': [10, 20], 'title': 'Ventas'})
     
     Returns:
         Dict con status, video_id, title, message, preview_url, detail_url, status_current
@@ -125,6 +128,19 @@ def create_video_tool(
                 'voice_speed': 1.0,
                 'voice_pitch': 50,
                 'voice_emotion': 'Excited'
+            }
+        elif service == 'manim':
+            if not manim_template_type:
+                return {
+                    'status': 'error',
+                    'message': 'manim_template_type es requerido para Manim. Usa list_manim_templates_tool para ver opciones.'
+                }
+            
+            video_type = 'manim_video'
+            config = {
+                'animation_type': manim_template_type,
+                'parameters': manim_parameters or {},
+                'quality': 'k'
             }
         else:
             return {'status': 'error', 'message': f'Servicio no soportado: {service}'}

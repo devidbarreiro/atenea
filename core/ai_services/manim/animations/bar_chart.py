@@ -10,8 +10,55 @@ from ..registry import register_animation
 class BarChartAnimation(BaseManimAnimation):
     """Animación de gráfico de barras personalizable"""
     
+    
     def get_animation_type(self) -> str:
         return 'bar_chart'
+
+    @classmethod
+    def get_parameters(cls) -> dict:
+        return {
+            "title": {
+                "type": "string",
+                "description": "Título del gráfico",
+                "default": " "
+            },
+            "values": {
+                "type": "list<float>",
+                "description": "Lista de valores numéricos para las barras",
+                "default": [10, 20, 30, 40],
+                "required": True
+            },
+            "labels": {
+                "type": "list<string>",
+                "description": "Etiquetas para cada barra (eje X)",
+                "default": ["Q1", "Q2", "Q3", "Q4"]
+            },
+            "bar_colors": {
+                "type": "list<string>",
+                "description": "Colores de las barras en hex o nombres (ej: ['#FF0000', 'BLUE'])",
+                "default": ["BLUE", "GREEN", "YELLOW", "RED"]
+            },
+            "y_axis_label": {
+                "type": "string",
+                "description": "Etiqueta del eje Y",
+                "default": "Valores"
+            },
+            "x_axis_label": {
+                "type": "string",
+                "description": "Etiqueta del eje X",
+                "default": "Categorías"
+            },
+            "container_color": {
+                "type": "string",
+                "description": "Color de fondo del video (hex)",
+                "default": "#ECEFF1"
+            },
+            "text_color": {
+                "type": "string",
+                "description": "Color del texto (hex)",
+                "default": "#FFFFFF"
+            }
+        }
     
     def construct(self):
         import json
@@ -35,9 +82,16 @@ class BarChartAnimation(BaseManimAnimation):
         # 2. Configuración predeterminada / Merge de JSON
         # Prioridad: data_config (lo que viene del sidebar actualmente) > settings de base
         
+        # Helper para obtener parámetros
+        def get_param(key, default=None):
+            val = self._get_config_value(key)
+            if val is not None:
+                return val
+            return data_config.get(key, default)
+
         # --- ROBUST INPUT HANDLING ---
         # Retrieve raw values first
-        raw_values = data_config.get('values', self._get_config_value('values', [10, 20, 30, 40]))
+        raw_values = get_param('values', [10, 20, 30, 40])
         
         # Validate/Coerce values to float/int
         if not isinstance(raw_values, list):
@@ -66,7 +120,7 @@ class BarChartAnimation(BaseManimAnimation):
         values = clean_values
         
         # Sync labels length with validated values
-        raw_labels = data_config.get('labels', self._get_config_value('labels', ["Q1", "Q2", "Q3", "Q4"]))
+        raw_labels = get_param('labels', ["Q1", "Q2", "Q3", "Q4"])
         if not isinstance(raw_labels, list):
              raw_labels = [str(raw_labels)]
              
@@ -81,12 +135,12 @@ class BarChartAnimation(BaseManimAnimation):
             else:
                 labels.append(f"Label {i+1}")
                 
-        title_str = data_config.get('title', self._get_config_value('title', ' '))
-        y_label = data_config.get('y_axis_label', data_config.get('y_label', 'Valores')) # Support both keys
-        x_label = data_config.get('x_axis_label', data_config.get('x_label', 'Categorías')) # Support both keys
+        title_str = get_param('title', ' ')
+        y_label = get_param('y_axis_label', get_param('y_label', 'Valores'))
+        x_label = get_param('x_axis_label', get_param('x_label', 'Categorías'))
         
         # Si bar_colors viene como lista de hex strings en JSON, Manim los aceptará directamente
-        bar_colors = data_config.get('bar_colors', self._get_config_value('bar_colors', [BLUE, GREEN, YELLOW, RED]))
+        bar_colors = get_param('bar_colors', [BLUE, GREEN, YELLOW, RED])
         if isinstance(bar_colors, str):
             bar_colors = [bar_colors]
         if not bar_colors: # If empty list
@@ -113,7 +167,7 @@ class BarChartAnimation(BaseManimAnimation):
         text_kwargs['color'] = text_color_hex
         
         # 4. Crear Gráfico
-        bar_width = data_config.get('bar_width', self._get_config_value('bar_width', 0.8))
+        bar_width = get_param('bar_width', 0.8)
         
         chart = BarChart(
             values=values,
@@ -148,8 +202,8 @@ class BarChartAnimation(BaseManimAnimation):
         self.play(FadeIn(x_axis_label), FadeIn(y_axis_label))
         
         # Mostrar valores encima de las barras (opcional)
-        show_labels = data_config.get('show_labels', self._get_config_value('show_labels', True))
-        bar_top_texts = data_config.get('top_texts', self._get_config_value('top_texts', []))
+        show_labels = get_param('show_labels', True)
+        bar_top_texts = get_param('top_texts', [])
         
         if show_labels:
             if any(bar_top_texts):

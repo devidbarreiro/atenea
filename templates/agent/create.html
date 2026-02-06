@@ -93,6 +93,22 @@
             </div>
         </div>
 
+        <!-- Generar Píldora Card -->
+        <div id="script-pill-card" 
+             onclick="selectContentType('script-pill')"
+             class="content-card cursor-pointer bg-white rounded-lg border-2 border-purple-600 p-6 hover:shadow-xl transition-all duration-300">
+            <div class="flex flex-col items-center text-center">
+                <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Generar Píldora</h3>
+                <p class="text-gray-600 text-sm">Crea videos educativos cortos tipo "Píldora" con segmentos</p>
+                <span class="mt-2 text-xs font-medium text-purple-600 bg-purple-50 px-3 py-1 rounded-full">Nuevo</span>
+            </div>
+        </div>
+
         <!-- Upload PDF Card (Disabled) -->
         <div class="content-card bg-gray-100 rounded-lg border-2 border-gray-300 p-6 opacity-50 cursor-not-allowed">
             <div class="flex flex-col items-center text-center">
@@ -105,6 +121,34 @@
                 <p class="text-gray-500 text-sm">Sube un documento con tu guión</p>
                 <span class="mt-2 text-xs font-medium text-gray-500 bg-gray-200 px-3 py-1 rounded-full">Próximamente</span>
             </div>
+        </div>
+    </div>
+
+    <!-- Pills Script Form -->
+    <div id="script-pill-form" class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 hidden">
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Guión de Píldora</h2>
+        <p class="text-gray-600 mb-6">Pega tu guión completo aquí. Nosotros lo dividiremos en segmentos.</p>
+        
+        <div class="mb-6">
+            <label for="pill_script_content" class="block text-sm font-medium text-gray-700 mb-2">
+                Contenido del Guión
+            </label>
+            <textarea 
+                id="pill_script_content" 
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                rows="10"
+                placeholder="Escribe o pega aquí el guión completo del video..."
+                required
+            ></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3">
+            <button type="button" onclick="resetSelection()" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">
+                Volver
+            </button>
+            <button type="button" id="btn-process-pill-step1" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors shadow-sm">
+                Procesar Guión
+            </button>
         </div>
     </div>
 
@@ -560,14 +604,17 @@
 <script>
 function selectContentType(type) {
     // Resetear todos los cards
-    document.getElementById('script-manual-card').classList.remove('border-blue-600');
+    document.getElementById('script-manual-card').classList.remove('border-blue-600', 'border-purple-600');
     document.getElementById('script-manual-card').classList.add('border-gray-300');
     document.getElementById('script-ai-card').classList.remove('border-blue-600');
     document.getElementById('script-ai-card').classList.add('border-gray-300');
+    document.getElementById('script-pill-card').classList.remove('border-purple-600');
+    document.getElementById('script-pill-card').classList.add('border-gray-300');
     
     // Ocultar todos los forms
     document.getElementById('script-manual-form').classList.add('hidden');
     document.getElementById('script-ai-form').classList.add('hidden');
+    document.getElementById('script-pill-form').classList.add('hidden');
     
     // Mostrar el form seleccionado
     if (type === 'script-manual') {
@@ -580,7 +627,27 @@ function selectContentType(type) {
         document.getElementById('script-ai-card').classList.remove('border-gray-300');
         document.getElementById('script-ai-form').classList.remove('hidden');
         document.getElementById('script-ai-form').scrollIntoView({ behavior: 'smooth' });
+    } else if (type === 'script-pill') {
+        document.getElementById('script-pill-card').classList.add('border-purple-600');
+        document.getElementById('script-pill-card').classList.remove('border-gray-300');
+        document.getElementById('script-pill-form').classList.remove('hidden');
+        document.getElementById('script-pill-form').scrollIntoView({ behavior: 'smooth' });
     }
+}
+
+function resetSelection() {
+    // Resetear todos los cards
+    document.getElementById('script-manual-card').classList.remove('border-blue-600', 'border-purple-600');
+    document.getElementById('script-manual-card').classList.add('border-gray-300');
+    document.getElementById('script-ai-card').classList.remove('border-blue-600');
+    document.getElementById('script-ai-card').classList.add('border-gray-300');
+    document.getElementById('script-pill-card').classList.remove('border-purple-600');
+    document.getElementById('script-pill-card').classList.add('border-gray-300');
+    
+    // Ocultar todos los forms
+    document.getElementById('script-manual-form').classList.add('hidden');
+    document.getElementById('script-ai-form').classList.add('hidden');
+    document.getElementById('script-pill-form').classList.add('hidden');
 }
 
 // Por defecto, seleccionar "Escribir con IA"

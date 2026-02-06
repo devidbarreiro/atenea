@@ -13,35 +13,97 @@ logger = logging.getLogger(__name__)
 class ModernBarChartAnimation(BaseManimAnimation):
     """Gráfico de barras minimalista sin ejes, estilo tarjeta"""
     
+    
     def get_animation_type(self) -> str:
         return 'modern_bar_chart'
+
+    @classmethod
+    def get_parameters(cls) -> dict:
+        return {
+            "title": {
+                "type": "string",
+                "description": "Título del gráfico",
+                "default": ""
+            },
+            "values": {
+                "type": "list<float>",
+                "description": "Lista de valores numéricos para las barras",
+                "default": [60, 80, 45, 90],
+                "required": True
+            },
+            "labels": {
+                "type": "list<string>",
+                "description": "Etiquetas inferiores (A, B, C...)",
+                "default": ["A", "B", "C", "D"]
+            },
+            "bar_colors": {
+                "type": "list<string>",
+                "description": "Lista de colores hex para las barras",
+                "default": ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"]
+            },
+            "show_labels": {
+                "type": "boolean",
+                "description": "Mostrar valores numéricos sobre las barras",
+                "default": True
+            },
+            "top_texts": {
+                "type": "list<string>",
+                "description": "Textos personalizados sobre las barras (opcional)",
+                "default": []
+            },
+            "bar_width": {
+                "type": "float",
+                "description": "Ancho relativo de las barras (0.1 a 1.0)",
+                "default": 0.8
+            },
+            "container_color": {
+                "type": "string",
+                "description": "Color de fondo (hex)",
+                "default": "#1E293B"
+            },
+            "text_color": {
+                "type": "string",
+                "description": "Color del texto (hex)",
+                "default": "#FFFFFF"
+            }
+        }
     
     def construct(self):
         # 1. Obtener datos
         prompt_text = self._get_config_value('text', '{}')
         try:
-            data_config = json.loads(prompt_text) if prompt_text.strip() else {}
-        except json.JSONDecodeError:
+            data_config = json.loads(prompt_text) if prompt_text and prompt_text.strip() and prompt_text.strip().startswith('{') else {}
+        except (json.JSONDecodeError, AttributeError):
             data_config = {}
             
-        raw_values = data_config.get('values', [60, 80, 45, 90])
+        # Helper para obtener parámetros (prioridad: config directo > json en text > default)
+        def get_param(key, default=None):
+            val = self._get_config_value(key)
+            if val is not None:
+                return val
+            return data_config.get(key, default)
+            
+        raw_values = get_param('values', [60, 80, 45, 90])
         
         # Validate/Coerce values to numeric
         values = []
-        for v in raw_values:
-            try:
-                values.append(float(v))
-            except (ValueError, TypeError):
-                continue
+        if isinstance(raw_values, list):
+            for v in raw_values:
+                try:
+                    values.append(float(v))
+                except (ValueError, TypeError):
+                    continue
         
         if not values:
             logger.warning("[MODERN_BARCHART] No valid numeric values found. Using defaults.")
             values = [60, 80, 45, 90]
-        labels = data_config.get('labels', ["A", "B", "C", "D"])
-        title_str = data_config.get('title', '')
-        bar_colors = data_config.get('bar_colors', ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"])
-        show_labels = data_config.get('show_labels', True)
-        top_texts = data_config.get('top_texts', [])
+
+        labels = get_param('labels', ["A", "B", "C", "D"])
+        title_str = get_param('title', '')
+        bar_colors = get_param('bar_colors', ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"])
+        show_labels = get_param('show_labels', True)
+        top_texts = get_param('top_texts', [])
+        user_bar_width = get_param('bar_width', 0.8)
         
         # Colores y fuentes
         bg_color = self._get_config_value('container_color', '#1E293B')

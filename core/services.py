@@ -820,10 +820,8 @@ class VideoService:
                 external_id = self._generate_higgsfield_video(video)
             elif video.type.startswith('kling_'):
                 external_id = self._generate_kling_video(video)
-            elif video.type == 'manim_quote':
-                external_id = self._generate_manim_quote_video(video)
-            elif video.type == 'manim_intro_slide':
-                external_id = self._generate_manim_intro_slide_video(video)
+            elif video.type in ['manim_quote', 'manim_intro_slide', 'manim_video']:
+                external_id = self._generate_manim_video(video)
             else:
                 raise ValidationException(f'Tipo de video no soportado: {video.type}')
             
@@ -1269,8 +1267,8 @@ class VideoService:
         
         return response.get('task_id')
     
-    def _generate_manim_quote_video(self, video: Video) -> str:
-        """Genera video con Manim (cita u otros diseños como bar_chart)"""
+    def _generate_manim_video(self, video: Video) -> str:
+        """Genera video con Manim (soporta cualquier template registrado)"""
         from core.ai_services.manim import ManimClient
         
         client = ManimClient()
@@ -1298,6 +1296,11 @@ class VideoService:
             'container_color': container_color or '#0066CC',
             'text_color': text_color or '#FFFFFF',
         }
+        
+        # Mezclar con otros parámetros que vengan explícitamente en el config
+        # Esto permite que agentes pasen parámetros estructurados
+        if video.config.get('parameters'):
+            manim_config.update(video.config.get('parameters'))
         
         # Añadir campos adicionales si existen (author, font_family, etc.)
         if author:

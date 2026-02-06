@@ -13,8 +13,50 @@ logger = logging.getLogger(__name__)
 class LineChartAnimation(BaseManimAnimation):
     """Gráfico de líneas elegante y minimalista"""
     
+    
     def get_animation_type(self) -> str:
         return 'line_chart'
+
+    @classmethod
+    def get_parameters(cls) -> dict:
+        return {
+            "title": {
+                "type": "string",
+                "description": "Título del gráfico",
+                "default": ""
+            },
+            "values": {
+                "type": "list<float>",
+                "description": "Lista de valores numéricos para la línea",
+                "default": [20, 55, 40, 75, 60, 90],
+                "required": True
+            },
+            "labels": {
+                "type": "list<string>",
+                "description": "Etiquetas para el eje X (meses, años, etc)",
+                "default": ["Ene", "Feb", "Mar", "Abr", "May", "Jun"]
+            },
+            "line_color": {
+                "type": "string",
+                "description": "Color de la línea (hex)",
+                "default": "#000000"
+            },
+            "point_color": {
+                "type": "string",
+                "description": "Color de los puntos (hex)",
+                "default": "#FFFFFF"
+            },
+            "container_color": {
+                "type": "string",
+                "description": "Color de fondo del video (hex)",
+                "default": "#1E293B"
+            },
+            "text_color": {
+                "type": "string",
+                "description": "Color del texto (hex)",
+                "default": "#FFFFFF"
+            }
+        }
     
     def construct(self):
         # 1. Obtener y procesar datos
@@ -29,14 +71,21 @@ class LineChartAnimation(BaseManimAnimation):
         except (json.JSONDecodeError, TypeError, AttributeError):
             data_config = {}
             
+        # Helper para obtener parámetros
+        def get_param(key, default=None):
+            val = self._get_config_value(key)
+            if val is not None:
+                return val
+            return data_config.get(key, default)
+
         # Datos por defecto si no hay input válido
-        raw_values = data_config.get('values', [20, 55, 40, 75, 60, 90])
-        labels = data_config.get('labels', ["Ene", "Feb", "Mar", "Abr", "May", "Jun"])
-        title_str = data_config.get('title', '')
-        line_color = data_config.get('line_color', "#000000") # Negro
-        point_color = data_config.get('point_color', "#FFFFFF")
-        point_radius = data_config.get('point_radius', 0.1) # Default bigger than dot
-        line_width = data_config.get('line_width', 4)
+        raw_values = get_param('values', [20, 55, 40, 75, 60, 90])
+        labels = get_param('labels', ["Ene", "Feb", "Mar", "Abr", "May", "Jun"])
+        title_str = get_param('title', '')
+        line_color = get_param('line_color', "#000000") # Negro
+        point_color = get_param('point_color', "#FFFFFF")
+        point_radius = get_param('point_radius', 0.1) # Default bigger than dot
+        line_width = get_param('line_width', 4)
         
         # Validar valores numéricos
         values = []

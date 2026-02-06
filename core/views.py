@@ -11283,7 +11283,6 @@ class UploadItemView(LoginRequiredMixin, ServiceMixin, View):
             return redirect('core:library')
 
 
-<<<<<<< HEAD
 # ====================
 # PILLS (Script Editor with Segments)
 # ====================
@@ -11294,7 +11293,11 @@ class PillsEditorView(LoginRequiredMixin, View):
     
     def get(self, request):
         return render(request, self.template_name)
-=======
+
+# ====================
+# PASSWORD RESET
+# ====================
+
 class PasswordResetRequestView(View):
     def get(self, request):
         return render(request, 'login/password_reset_form.html', {'hide_header': True})
@@ -11384,4 +11387,3 @@ class SceneDeleteView(View):
         except Exception as e:
             logger.error(f"Error al eliminar escena {scene_id}: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
->>>>>>> ba8b2a0c2692d5308c0d94647f811782322aa26f

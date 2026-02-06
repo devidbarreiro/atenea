@@ -11,8 +11,44 @@ from ..registry import register_animation
 class IntroSlideAnimation(BaseManimAnimation):
     """Animación de cortinilla de entrada profesional"""
     
+    
     def get_animation_type(self) -> str:
         return 'intro_slide'
+
+    @classmethod
+    def get_parameters(cls) -> dict:
+        return {
+            "title": {
+                "type": "string",
+                "description": "Título principal (parte superior)",
+                "required": True
+            },
+            "central_text": {
+                "type": "string",
+                "description": "Texto central destacado",
+                "default": ""
+            },
+            "footer": {
+                "type": "string",
+                "description": "Texto al pie (parte inferior)",
+                "default": ""
+            },
+            "bg_color": {
+                "type": "string",
+                "description": "Color de fondo principal (hex)",
+                "default": "#E5E5E5"
+            },
+            "title_color": {
+                "type": "string",
+                "description": "Color del título (hex)",
+                "default": "#1A1A1A"
+            },
+            "central_text_color": {
+                "type": "string",
+                "description": "Color del texto central (hex)",
+                "default": "#1A1A1A"
+            }
+        }
     
     def construct(self):
         # Obtener datos desde configuración

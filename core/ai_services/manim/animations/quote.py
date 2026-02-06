@@ -11,8 +11,39 @@ from ..registry import register_animation
 class QuoteAnimation(BaseManimAnimation):
     """Animación de cita profesional"""
     
+    
     def get_animation_type(self) -> str:
         return 'quote'
+
+    @classmethod
+    def get_parameters(cls) -> dict:
+        return {
+            "text": {
+                "type": "string",
+                "description": "Texto principal de la cita",
+                "required": True
+            },
+            "author": {
+                "type": "string",
+                "description": "Autor de la cita (opcional)",
+                "default": None
+            },
+            "container_color": {
+                "type": "string",
+                "description": "Color de fondo de la tarjeta (hex)",
+                "default": "#0066CC"
+            },
+            "text_color": {
+                "type": "string",
+                "description": "Color del texto (hex)",
+                "default": "#FFFFFF"
+            },
+            "font_family": {
+                "type": "string",
+                "description": "Estilo de fuente ('normal', 'bold', 'italic', 'bold_italic')",
+                "default": "normal"
+            }
+        }
     
     def construct(self):
         # Obtener datos desde configuración (pasada al constructor)
