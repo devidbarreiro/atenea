@@ -111,14 +111,12 @@
                            class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                             <span>🎙️</span> Audio
                         </a>
-                        <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:script_create' project.uuid %}"
-                                @click="open = false"
-                                class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                            <span>📝</span> Guión
-                        </button>
+                        <div class="w-full text-left block px-4 py-2 text-sm text-gray-400 opacity-50 cursor-not-allowed flex items-center justify-between group">
+                            <div class="flex items-center gap-2">
+                                <span>📝</span> Guión
+                            </div>
+                            <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                        </div>
                         <div class="border-t border-gray-200 my-2"></div>
                         <a href="{% url 'core:agent_create' project.uuid %}" 
                            class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
@@ -405,12 +403,8 @@
                                     ☰
                                 </button>
                             </div>
-                            <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
-                                    hx-target="#project-dynamic-content"
-                                    hx-swap="innerHTML"
-                                    hx-push-url="{% url 'core:script_create' project.uuid %}"
-                                    class="bg-black text-white hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                                + Guión
+                            <button disabled class="bg-gray-100 text-gray-400 cursor-not-allowed px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1">
+                                + Guión <span class="bg-gray-200 text-gray-600 px-1 py-0.5 rounded text-[10px]">Próximamente</span>
                             </button>
                         </div>
                     </div>
@@ -431,12 +425,8 @@
                         <div class="text-5xl mb-4 opacity-30">📝</div>
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">No hay guiones</h3>
                         <p class="text-sm text-gray-600 mb-4">Comienza creando tu primer guión</p>
-                        <button hx-get="{% url 'core:script_create_partial' project.uuid %}"
-                                hx-target="#project-dynamic-content"
-                                hx-swap="innerHTML"
-                                hx-push-url="{% url 'core:script_create' project.uuid %}"
-                                class="inline-block bg-black text-white hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                            Crear Guión
+                        <button disabled class="inline-block bg-gray-100 text-gray-400 cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                            Crear Guión <span class="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded text-xs">Próximamente</span>
                         </button>
                     </div>
                     {% endif %}

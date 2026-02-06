@@ -30,6 +30,34 @@ document.addEventListener('alpine:init', () => {
         const cachedItems = window._getLibraryCacheSync(activeTab, projectId);
         
         return {
+        // Helper para estilos de audio
+        getAudioBackground(item) {
+            if (!item) return {};
+            let style = {};
+            let classes = [];
+            
+            if (item.status === 'processing' || item.status === 'generating' || item.status === 'pending') {
+                style.backgroundColor = '#fff7ed';
+                style.borderColor = '#fdba74'; // orange-300
+                classes.push('animate-pulse', 'border-2');
+            } else if (item.status === 'error') {
+                style.backgroundColor = '#fee2e2';
+                style.borderColor = '#fca5a5'; // red-300
+                classes.push('border-2');
+            } else if (item.status === 'cancelled') {
+                style.backgroundColor = '#f3f4f6';
+                style.borderColor = '#d1d5db'; // gray-300
+                classes.push('border-2', 'border-dashed');
+            } else if (item.status === 'pending') {
+                style.backgroundColor = '#eff6ff'; // blue-50
+                style.borderColor = '#93c5fd'; // blue-300
+                classes.push('border-2', 'border-dashed');
+            } else {
+                style.background = item.background_style || item.audio_background || 'linear-gradient(135deg, `#f3e7e9` 0%, `#e3eeff` 100%)';
+            }
+            return { style, class: classes.join(' ') };
+        },
+
         // Estado de la biblioteca - CARGAR DESDE CACHÉ INSTANTÁNEAMENTE
         items: cachedItems || [],
         loading: cachedItems ? false : true, // No loading si hay caché
@@ -58,6 +86,9 @@ document.addEventListener('alpine:init', () => {
         // Modal de mover
         moveModal: { open: false, item: null },
         
+        // Modal de compartir
+        shareModal: { open: false, item: null },
+
         // Modal de editar imagen
         editModal: { open: false, item: null, loading: false },
         
@@ -74,6 +105,24 @@ document.addEventListener('alpine:init', () => {
         upscaleFactor: 'x4',
         outputMimeType: 'image/png',
         
+        // Estado de Live Preview (Grande)
+        livePreviewOpen: false,
+        showQuoteUnavailable: false,
+        
+        openShareModal(item, e) {
+            if (e) e.stopPropagation();
+            this.shareModal = { open: true, item: item };
+        },
+
+        copyShareLink() {
+            const link = window.location.origin + '/share/' + this.shareModal.item.type + '/' + this.shareModal.item.id + '/';
+            navigator.clipboard.writeText(link).then(() => {
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: { message: 'Enlace copiado al portapapeles', type: 'success' }
+                }));
+            });
+        },
+
         async openCreateVideoModal(item) {
             this.createVideoModal = { open: true, item: item, loading: false };
             this.selectedVideoModel = null;
@@ -201,6 +250,23 @@ document.addEventListener('alpine:init', () => {
                 },
                 popstate: () => {
                     this.selectedItem = null;
+                },
+                toggleLivePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = false;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null; // Cerrar detalle si está abierto
+                        setTimeout(() => {
+                            if (window.renderLivePreview) window.renderLivePreview();
+                        }, 100);
+                    }
+                },
+                toggleQuotePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = true;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null;
+                    }
                 }
             };
             
@@ -209,6 +275,8 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('item-created', this._handlers.itemCreated);
             window.addEventListener('video-status-changed', this._handlers.videoStatusChanged);
             window.addEventListener('popstate', this._handlers.popstate);
+            window.addEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+            window.addEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
         },
         
         // === MÉTODOS DE SELECCIÓN Y CLICK ===
@@ -254,6 +322,8 @@ document.addEventListener('alpine:init', () => {
                 window.removeEventListener('item-created', this._handlers.itemCreated);
                 window.removeEventListener('video-status-changed', this._handlers.videoStatusChanged);
                 window.removeEventListener('popstate', this._handlers.popstate);
+                window.removeEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+                window.removeEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
             }
             
             // Limpiar polling
@@ -448,11 +518,13 @@ document.addEventListener('alpine:init', () => {
                         // Si cambiaron los IDs, reemplazar los primeros items
                         this.items = [...filteredItems, ...this.items.slice(this.pageSize)];
                     } else {
-                        // Si no cambiaron IDs, solo actualizar URLs
+                        // Si no cambiaron IDs, actualizar URLs (incluso si ya existen, para refrescar expiradas)
                         const urlMap = new Map(filteredItems.map(i => [i.id, i.signed_url]));
                         this.items = this.items.map(item => {
-                            if (!item.signed_url && urlMap.has(item.id)) {
-                                return { ...item, signed_url: urlMap.get(item.id) };
+                            const newUrl = urlMap.get(item.id);
+                            if (newUrl) {
+                                // Actualizar URL si existe en la respuesta (refrescar expiradas)
+                                return { ...item, signed_url: newUrl };
                             }
                             return item;
                         });
@@ -922,21 +994,56 @@ document.addEventListener('alpine:init', () => {
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
             <!-- Header con selector de vista -->
-            <div class="px-6 py-4 flex items-center justify-end bg-white flex-shrink-0">
+            <div x-show="!livePreviewOpen" class="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex items-center justify-end bg-white flex-shrink-0">
                 {% include 'includes/view_mode_selector.html' %}
             </div>
             
             <!-- Contenido -->
-            <div class="flex-1 overflow-y-auto p-6 relative"> 
+            <div class="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 relative"> 
+                <!-- Large Chart Preview Overlay -->
+                <div x-show="livePreviewOpen" 
+                     x-cloak
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 scale-95"
+                     x-transition:enter-end="opacity-100 scale-100"
+                     class="absolute inset-0 bg-white z-[60] flex flex-col p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest">Previsualización Completa</h3>
+                        <button @click="livePreviewOpen = false" 
+                                class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-xs font-bold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Cerrar Preview
+                        </button>
+                    </div>
+                    <div id="live-chart-preview-large" class="flex-1 w-full rounded-2xl overflow-hidden bg-white shadow-xl border border-gray-100 flex items-center justify-center relative">
+                        <!-- Mensaje de no disponible para Quotes -->
+                        <div x-show="showQuoteUnavailable" class="absolute inset-0 z-10 bg-gray-50 flex flex-col items-center justify-center p-8 text-center">
+                            <i class="fas fa-eye-slash text-4xl text-gray-300 mb-4"></i>
+                            <h4 class="text-base font-bold text-gray-900 mb-2">Previsualización no disponible</h4>
+                            <p class="text-sm text-gray-500 max-w-sm">Este diseño no soporta previsualización en tiempo real en pantalla completa.</p>
+                        </div>
+                        
+                        <!-- Contenido del gráfico (se oculta si es quote) -->
+                        <div x-show="!showQuoteUnavailable" class="w-full h-full flex items-center justify-center">
+                            <p class="text-gray-300">Generando preview...</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <p class="text-[10px] text-gray-400 font-medium">Esta es una representación visual aproximada. El resultado final en Manim puede tener variaciones sutiles.</p>
+                    </div>
+                </div>
+
                 <!-- Loading -->
-                <div x-show="loading" class="text-center py-16">
+                <div x-show="loading && !livePreviewOpen" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
                     <p class="mt-4 text-sm text-gray-500">Cargando...</p>
                 </div>
                 
                 <!-- Grid -->
-                <div x-show="!loading && items.length > 0 && viewMode === 'grid'" 
-                     class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
+                <div x-show="!loading && items.length > 0 && viewMode === 'grid' && !livePreviewOpen" 
+                     class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
                                 menuOpen: false, 
@@ -1048,17 +1155,38 @@ document.addEventListener('alpine:init', () => {
                                 
                                 <!-- Audio -->
                                 <div x-show="item.type === 'audio'" 
-                                     class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100">
-                                    <svg class="w-16 h-16 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                                    </svg>
+                                     class="w-full h-full flex items-center justify-center"
+                                     :class="getAudioBackground(item).class"
+                                     :style="getAudioBackground(item).style">
+                                    <!-- Icons based on status -->
+                                    <template x-if="item.status === 'processing' || item.status === 'generating'">
+                                        <svg class="w-12 h-12 text-orange-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'error'">
+                                        <svg class="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="item.status === 'pending'">
+                                        <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="!['processing', 'generating', 'error', 'pending'].includes(item.status)">
+                                        <svg class="w-16 h-16 text-black opacity-75" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                                        </svg>
+                                    </template>
                                 </div>
                                 
                                 <!-- Processing -->
-                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-gray-50">
+                                <div x-show="item.status === 'processing'" class="w-full h-full flex items-center justify-center bg-orange-50 border-2 border-orange-200">
                                     <div class="text-center">
                                         <span class="inline-block animate-spin text-4xl mb-2">⚙️</span>
-                                        <p class="text-xs text-gray-500">Procesando...</p>
+                                        <p class="text-xs text-orange-700 font-medium">Procesando...</p>
                                     </div>
                                 </div>
 
@@ -1096,6 +1224,13 @@ document.addEventListener('alpine:init', () => {
                                             </svg>
                                             Descargar
                                         </button>
+                                        <button @click="openShareModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                                            </svg>
+                                            Compartir
+                                        </button>
                                         
                                         <!-- Move -->
                                         <button @click="openMoveModal(item, $event); menuOpen = false" 
@@ -1122,7 +1257,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Vista de Lista -->
-                <div x-show="!loading && items.length > 0 && viewMode === 'list'" 
+                <div x-show="!loading && items.length > 0 && viewMode === 'list' && !livePreviewOpen" 
                      class="space-y-2 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
@@ -1162,7 +1297,7 @@ document.addEventListener('alpine:init', () => {
                                     }
                                 }
                             }"
-                            class="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all cursor-pointer"
+                            class="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all cursor-pointer"
                             :class="{
                                 'ring-2 ring-blue-500 border-blue-500': isSelected(),
                                 'hover:border-gray-300': !isSelected()
@@ -1170,7 +1305,7 @@ document.addEventListener('alpine:init', () => {
                             @click="handleMainClick(item)">
                             
                             <!-- Thumbnail pequeño -->
-                            <div class="w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                            <div class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
                                 <template x-if="item.type === 'video' && item.signed_url">
                                     <video :src="item.signed_url" class="w-full h-full object-cover" preload="metadata"></video>
                                 </template>
@@ -1178,8 +1313,9 @@ document.addEventListener('alpine:init', () => {
                                     <img :src="item.signed_url" :alt="item.title" class="w-full h-full object-cover">
                                 </template>
                                 <template x-if="item.type === 'audio'">
-                                    <div class="w-full h-full flex items-center justify-center bg-gray-50">
-                                        <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                    <div class="w-full h-full flex items-center justify-center"
+                                         :style="{ background: item.audio_background || '#f9fafb' }">
+                                        <svg class="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
                                         </svg>
                                     </div>
@@ -1199,9 +1335,10 @@ document.addEventListener('alpine:init', () => {
                                               'bg-green-100 text-green-700': item.status === 'completed',
                                               'bg-yellow-100 text-yellow-700': item.status === 'processing',
                                               'bg-red-100 text-red-700': item.status === 'error',
+                                              'bg-gray-200 text-gray-600': item.status === 'cancelled',
                                               'bg-gray-100 text-gray-700': item.status === 'pending'
                                           }"
-                                          x-text="item.status === 'completed' ? 'Completado' : item.status === 'processing' ? 'Procesando' : item.status === 'error' ? 'Error' : 'Pendiente'">
+                                          x-text="item.status === 'completed' ? 'Completado' : item.status === 'processing' ? 'Procesando' : item.status === 'error' ? 'Error' : item.status === 'cancelled' ? 'Cancelado' : 'Pendiente'">
                                     </span>
                                 </div>
                                 
@@ -1222,19 +1359,19 @@ document.addEventListener('alpine:init', () => {
                             
                             <!-- Información -->
                             <div class="flex-1 min-w-0">
-                                <h3 class="font-semibold text-gray-900 mb-1 truncate" x-text="item.title"></h3>
-                                <div class="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                                <h3 class="font-semibold text-sm sm:text-base text-gray-900 mb-1 truncate" x-text="item.title" :title="item.title"></h3>
+                                <div class="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2 flex-wrap">
                                     <span x-text="item.type === 'video' ? '🎬 Video' : item.type === 'image' ? '🖼️ Imagen' : '🔊 Audio'"></span>
-                                    <span>•</span>
-                                    <span x-text="new Date(item.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })"></span>
+                                    <span class="hidden sm:inline">•</span>
+                                    <span class="text-xs sm:text-sm" x-text="new Date(item.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })"></span>
                                     <template x-if="item.project">
-                                        <span>
+                                        <span class="hidden sm:inline-flex items-center gap-1">
                                             <span>•</span>
                                             <span x-text="item.project.name"></span>
                                         </span>
                                     </template>
                                 </div>
-                                <p class="text-sm text-gray-600 line-clamp-2" 
+                                <p class="text-xs sm:text-sm text-gray-600 line-clamp-2 hidden sm:block" 
                                    x-text="item.type === 'video' ? (item.script || 'Sin descripción') : item.type === 'image' ? (item.prompt || 'Sin descripción') : (item.prompt || 'Sin descripción')">
                                 </p>
                             </div>
@@ -1260,6 +1397,13 @@ document.addEventListener('alpine:init', () => {
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                                             </svg>
                                             Descargar
+                                        </button>
+                                        <button @click="openShareModal(item, $event); menuOpen = false" 
+                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                                            </svg>
+                                            Compartir
                                         </button>
                                         <button @click="openMoveModal(item, $event); menuOpen = false" 
                                                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
@@ -1327,13 +1471,13 @@ document.addEventListener('alpine:init', () => {
     
     <!-- ========== VISTA: DETALLE DEL ITEM ========== -->
     <template x-if="selectedItem && !loadingDetail">
-        <div class="h-full flex">
+        <div class="h-full flex flex-col lg:flex-row">
             <!-- Panel Izquierdo: Media -->
-            <div class="flex-1 flex items-center justify-center bg-gray-100 p-8 relative overflow-hidden">
+            <div class="flex-1 flex items-center justify-center bg-gray-100 p-3 sm:p-4 lg:p-8 relative overflow-hidden min-h-[40vh] lg:min-h-0">
                 <!-- Botón volver -->
                 <button @click="closeDetail()" 
-                        class="absolute top-4 left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute top-2 left-2 sm:top-3 sm:left-3 lg:top-4 lg:left-4 p-2 bg-white rounded-full shadow hover:bg-gray-50 z-10">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
@@ -1341,30 +1485,33 @@ document.addEventListener('alpine:init', () => {
                 <!-- Navegación -->
                 <button x-show="navigation && navigation.prev"
                         @click="navigateTo('prev')"
-                        class="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute left-2 sm:left-3 lg:left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </button>
                 
                 <button x-show="navigation && navigation.next"
                         @click="navigateTo('next')"
-                        class="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="absolute right-2 sm:right-3 lg:right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-50 z-10">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                     </svg>
                 </button>
                 
                 <!-- Video -->
-                <video x-show="selectedItem.type === 'video' && selectedItem.signed_url" 
-                       :src="selectedItem.signed_url" 
-                       controls 
-                       class="max-w-full max-h-full rounded-lg shadow-lg"></video>
+                <div x-show="selectedItem.type === 'video' && selectedItem.signed_url" class="w-full h-full flex items-center justify-center">
+                    <video :src="selectedItem.signed_url" 
+                           controls 
+                           class="max-w-full max-h-full rounded-lg shadow-lg mx-auto">
+                        
+                    </video>
+                </div>
                 
                 <!-- Image -->
                 <div class="flex-1 flex items-center justify-center bg-gray-100 relative overflow-hidden"> 
                     <div x-show="selectedItem.type === 'image' && selectedItem.signed_url" 
-                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-8"
+                         class="relative overflow-hidden flex items-center justify-center bg-transparent p-3 sm:p-4 lg:p-8"
                          x-data="imageZoom" 
                          x-key="selectedItem.id"> 
 
@@ -1378,15 +1525,24 @@ document.addEventListener('alpine:init', () => {
                                  alt="Visualización detallada">
                         </div>
                     </div>
-                </div>
-                
-                <!-- Audio -->
-                <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md">
-                    <div class="bg-white rounded-lg p-8 shadow-lg text-center">
-                        <svg class="w-24 h-24 mx-auto text-purple-500 mb-6" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
-                        </svg>
-                        <audio x-show="selectedItem.signed_url" :src="selectedItem.signed_url" controls class="w-full"></audio>
+                    <!-- Audio -->
+                    <div x-show="selectedItem.type === 'audio'" class="w-full max-w-md mx-auto relative z-10">
+                        <div class="bg-white rounded-lg p-8 shadow-lg text-center relative overflow-hidden"
+                             :class="getAudioBackground(selectedItem).class"
+                             :style="getAudioBackground(selectedItem).style">
+                            
+                            <!-- Processing Overlay -->
+                            <div x-show="selectedItem.status === 'processing' || selectedItem.status === 'generating'" 
+                                 class="absolute inset-0 flex flex-col items-center justify-center bg-orange-50/90 z-20">
+                                <span class="inline-block animate-spin text-5xl mb-4">⚙️</span>
+                                <p class="text-orange-800 font-semibold">Procesando...</p>
+                            </div>
+
+                            <svg class="w-24 h-24 mx-auto text-black mb-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path>
+                            </svg>
+                            <audio x-show="selectedItem.signed_url" :src="selectedItem.signed_url" controls class="w-full"></audio>
+                        </div>
                     </div>
                 </div>
                 
@@ -1400,21 +1556,29 @@ document.addEventListener('alpine:init', () => {
             </div>
             
             <!-- Panel Derecho: Info -->
-            <div class="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
+            <div class="w-full lg:w-72 bg-white border-t lg:border-l border-gray-200 flex flex-col lg:h-full flex-1 lg:flex-none overflow-hidden min-h-0">
                 <!-- Header -->
-                <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                    <span class="text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
+                <div class="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <span class="text-xs sm:text-sm text-gray-500" x-text="formatDate(selectedItem.created_at)"></span>
                     <div class="flex items-center gap-1">
+                        <button @click="openShareModal(selectedItem)"
+                                x-show="['video', 'image', 'audio'].includes(selectedItem.type) && selectedItem.status === 'completed'"
+                                class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg"
+                                title="Compartir">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                            </svg>
+                        </button>
                          <a x-bind:href="'/api/items/' + selectedItem.type + '/' + selectedItem.id + '/download/'" 
-                            class="p-2 hover:bg-gray-100 rounded-lg" 
+                            class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" 
                             title="Descargar"
                             x-show="selectedItem.signed_url">
-                             <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                              </svg>
                          </a>
-                        <button @click="closeDetail()" class="p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button @click="closeDetail()" class="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg" title="Cerrar">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
@@ -1422,7 +1586,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Content -->
-                <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-5">
                     <!-- PROMPT TEMPLATE (sin título, solo preview) -->
                     <div x-show="selectedItem.prompt_template">
                         <div class="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -1488,7 +1652,41 @@ document.addEventListener('alpine:init', () => {
                     
                     <!-- PROMPT -->
                     <div>
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">PROMPT</h3>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-xs font-semibold text-gray-500 uppercase">PROMPT</h3>
+                            <button 
+                                x-data="{ copied: false }"
+                                @click="
+                                    const textToCopy = selectedItem.prompt || selectedItem.script || selectedItem.text;
+                                    if(textToCopy) {
+                                        navigator.clipboard.writeText(textToCopy)
+                                            .then(() => {
+                                                copied = true;
+                                                setTimeout(() => copied = false, 2000);
+                                            })
+                                            .catch(err => {
+                                                console.error('Error al copiar:', err);
+                                                alert('No se pudo copiar el texto al portapapeles');
+                                            });
+                                    }
+                                "
+                                x-show="selectedItem.prompt || selectedItem.script || selectedItem.text"
+                                class="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded flex items-center gap-1 transition-colors shadow-sm"
+                                title="Copiar texto">
+                                <span x-show="!copied" class="flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Copiar
+                                </span>
+                                <span x-show="copied" x-cloak class="flex items-center gap-1 text-green-600 font-medium">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    ¡Copiado!
+                                </span>
+                            </button>
+                        </div>
                         <p class="text-sm text-gray-800 whitespace-pre-wrap" x-text="selectedItem.prompt || selectedItem.script || selectedItem.text || 'Sin prompt'"></p>
                     </div>
                     
@@ -1538,8 +1736,9 @@ document.addEventListener('alpine:init', () => {
                         <span :class="{
                             'bg-yellow-100 text-yellow-800': selectedItem.status === 'processing',
                             'bg-red-100 text-red-800': selectedItem.status === 'error',
+                            'bg-gray-200 text-gray-600': selectedItem.status === 'cancelled',
                             'bg-gray-100 text-gray-800': selectedItem.status === 'pending'
-                        }" class="px-3 py-1 rounded-full text-xs font-medium" x-text="selectedItem.status_display"></span>
+                        }" class="px-3 py-1 rounded-full text-xs font-medium" x-text="selectedItem.status_display || (selectedItem.status === 'cancelled' ? 'Cancelado' : selectedItem.status)"></span>
                         <p x-show="selectedItem.error_message" class="mt-2 text-sm text-red-600" x-text="selectedItem.error_message"></p>
                     </div>
                     
@@ -1620,6 +1819,95 @@ document.addEventListener('alpine:init', () => {
         </div>
     </template>
     
+    <!-- ========== MODAL DE COMPARTIR ========== -->
+    <div x-show="shareModal.open && shareModal.item"
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog"
+         aria-modal="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity"
+             @click="shareModal = { open: false, item: null }"></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl"
+                 @click.stop>
+
+                <!-- Header -->
+                <div class="px-6 py-5 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900" x-text="shareModal.item ? 'Compartir ' + (shareModal.item.type === 'video' ? 'Video' : shareModal.item.type === 'image' ? 'Imagen' : 'Audio') : 'Compartir'"></h3>
+                    <p class="mt-1 text-sm text-gray-500" x-text="shareModal.item ? shareModal.item.title : ''"></p>
+                </div>
+
+                <!-- Content -->
+                <div class="p-6 space-y-6">
+                    <!-- Public Link -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Enlace Público</label>
+                        <div class="flex gap-2">
+                            <input type="text"
+                                   readonly
+                                   :value="window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/'"
+                                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600 focus:outline-none">
+                            <button @click="copyShareLink()"
+                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Social Media Links -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">Redes Sociales</label>
+                        <div class="flex justify-center gap-4">
+                            <!-- Twitter/X -->
+                            <a :href="'https://twitter.com/intent/tweet?url=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/') + '&text=' + encodeURIComponent(shareModal.item ? shareModal.item.title : '')"
+                               target="_blank"
+                               class="p-3 bg-gray-100 hover:bg-black hover:text-white rounded-full transition-colors"
+                               title="Compartir en X">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                            </a>
+
+                            <!-- Facebook -->
+                            <a :href="'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                               target="_blank"
+                               class="p-3 bg-gray-100 hover:bg-blue-600 hover:text-white rounded-full transition-colors"
+                               title="Compartir en Facebook">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                            </a>
+
+                            <!-- LinkedIn -->
+                            <a :href="'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                               target="_blank"
+                               class="p-3 bg-gray-100 hover:bg-blue-700 hover:text-white rounded-full transition-colors"
+                               title="Compartir en LinkedIn">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                            </a>
+
+                            <!-- WhatsApp -->
+                            <a :href="'https://api.whatsapp.com/send?text=' + encodeURIComponent((shareModal.item ? shareModal.item.title : '') + ' ' + window.location.origin + '/share/' + (shareModal.item ? shareModal.item.type : 'video') + '/' + (shareModal.item ? shareModal.item.id : '') + '/')"
+                               target="_blank"
+                               class="p-3 bg-gray-100 hover:bg-green-500 hover:text-white rounded-full transition-colors"
+                               title="Compartir en WhatsApp">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                    <button type="button"
+                            @click="shareModal = { open: false, item: null }"
+                            class="w-full px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== MODAL DE ELIMINAR ========== -->
     <div x-show="deleteModal.open" 
          x-cloak

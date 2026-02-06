@@ -102,10 +102,12 @@
                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <span>🎙️</span> Audio
                     </a>
-                    <a href="{% url 'core:script_create' project.uuid %}"
-                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                        <span>📝</span> Guión
-                    </a>
+                    <div class="block px-4 py-2 text-sm text-gray-400 opacity-50 cursor-not-allowed flex items-center justify-between group">
+                        <div class="flex items-center gap-2">
+                            <span>📝</span> Guión
+                        </div>
+                        <span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Próximamente</span>
+                    </div>
                     <div class="border-t border-gray-200 my-2"></div>
                     <a href="{% url 'core:agent_create' project.uuid %}" 
                        class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">

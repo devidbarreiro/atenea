@@ -15,6 +15,8 @@ from core.agents.tools.create_image_tool import create_image_tool
 from core.agents.tools.create_quote_tool import create_quote_tool
 from core.agents.tools.list_avatars_tool import list_avatars_tool
 from core.agents.tools.list_voices_tool import list_voices_tool
+from core.agents.tools.search_library_tool import search_library_tool
+from core.agents.tools.search_stock_tool import search_stock_tool
 from core.monitoring.langsmith_config import setup_langsmith
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,9 @@ class CreationAgent:
             create_video_tool,
             create_quote_tool,
             list_avatars_tool,
-            list_voices_tool
+            list_voices_tool,
+            search_library_tool,
+            search_stock_tool
         ]
         
         # Bind tools al LLM
@@ -101,6 +105,18 @@ HERRAMIENTAS DISPONIBLES:
    - Ejemplo: "Dame voces en español"
    - Ejemplo: "Lista voces femeninas"
    - Parámetros: gender ('male', 'female'), language (ej: 'es', 'en'), limit
+
+6. BUSCAR EN BIBLIOTECA: search_library_tool - Busca contenido existente en la biblioteca del usuario
+   - Ejemplo: "Busca videos sobre dinosaurios"
+   - Ejemplo: "Encuentra imágenes que tengan 'playa' en el prompt"
+   - Ejemplo: "Busca audios o guiones sobre 'marketing'"
+   - Parámetros: query (texto a buscar), item_type ('video', 'image', 'audio', 'script', opcional), limit
+
+7. BUSCAR CONTENIDO DE STOCK: search_stock_tool - Busca imágenes, videos o audio en bibliotecas de stock (Freepik, Pexels, Pixabay, etc.)
+   - Ejemplo: "Busca imágenes de stock de 'perros jugando'"
+   - Ejemplo: "Encuentra videos de stock de 'paisaje urbano nocturno'"
+   - Ejemplo: "Busca música de stock de 'jazz suave'"
+   - Parámetros: query (texto a buscar), media_type ('image', 'video', 'audio', default: 'image'), limit
 
 INSTRUCCIONES:
 - Siempre pasa user_id={user_id} a todas las tools
@@ -303,7 +319,31 @@ IMPORTANTE - REGLAS CRÍTICAS:
         except Exception as e:
             logger.error(f"Error en CreationAgent.chat: {e}", exc_info=True)
             return {
-                'answer': f'Lo siento, ocurrió un error: {str(e)}',
+                'answer': self._handle_error(e),
                 'tool_results': []
             }
+
+    def _handle_error(self, error: Exception) -> str:
+        """
+        Procesa errores y devuelve mensajes amigables para el usuario
+        """
+        error_str = str(error)
+        
+        # Error de contexto excedido (OpenAI)
+        if "context_length_exceeded" in error_str:
+            return "⚠️ **Memoria llena**: La conversación es demasiado larga y ha superado el límite de memoria del asistente. Por favor, **inicia un nuevo chat** para continuar."
+            
+        # Error de Rate Limit
+        if "rate_limit_exceeded" in error_str or "429" in error_str:
+             return "⏳ **Demasiadas peticiones**: El sistema está recibiendo muchas solicitudes. Por favor, espera un momento antes de intentar de nuevo."
+             
+        # Error genérico de OpenAI
+        if "openai" in error_str.lower() and "error" in error_str.lower():
+            if "400" in error_str:
+                return "❌ **Error en la solicitud**: Hubo un problema con el mensaje enviado. Intenta reformular tu petición."
+            if "500" in error_str or "503" in error_str:
+                return "🔧 **Error del servicio**: El proveedor de IA está experimentando problemas temporales. Inténtalo de nuevo en unos minutos."
+        
+        # Error por defecto
+        return f"Lo siento, ocurrió un error inesperado. Si persiste, prueba a iniciar un nuevo chat.\n\n*Detalle técnico: {error_str[:100]}...*"
 

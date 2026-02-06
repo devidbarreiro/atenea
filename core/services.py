@@ -604,7 +604,7 @@ class VideoService:
         except Exception as e:
             logger.error(f"Error al subir avatar: {e}")
             raise StorageException(f"Error al subir imagen: {str(e)}")
-    
+
     def upload_veo_input_image(
         self,
         image: UploadedFile,
@@ -1270,33 +1270,52 @@ class VideoService:
         return response.get('task_id')
     
     def _generate_manim_quote_video(self, video: Video) -> str:
-        """Genera video de cita con Manim"""
+        """Genera video con Manim (cita u otros diseños como bar_chart)"""
         from core.ai_services.manim import ManimClient
         
         client = ManimClient()
         
-        # Obtener configuración
-        quote = video.script  # El texto de la cita va en script
+        # Determinar tipo de animación de Manim (por defecto 'quote' para compatibilidad)
+        animation_type = (video.config or {}).get('animation_type') or 'quote'
+        
+        # Configuración común
+        quality = video.config.get('quality', 'k')  # Default: máxima calidad
+        container_color = video.config.get('container_color')  # Color del contenedor / fondo
+        text_color = video.config.get('text_color')  # Color del texto
+        
+        # Inicializar variables para metadata (evitar UnboundLocalError)
         author = video.config.get('author')
         duration = video.config.get('duration')
-        quality = video.config.get('quality', 'k')  # Default: máxima calidad
-        container_color = video.config.get('container_color')  # Color del contenedor
-        text_color = video.config.get('text_color')  # Color del texto
-        font_family = video.config.get('font_family')  # Tipo de fuente
-        display_time = video.config.get('display_time')  # Tiempo de visualización en pantalla
         
-        # Generar video localmente
         # Usar video.id como unique_id para evitar colisiones entre renders simultáneos
-        result = client.generate_quote_video(
-            quote=quote,
-            author=author,
-            duration=duration,
+        unique_id = str(video.id)
+        
+        # Configuración para pasar a Manim
+        # Para animaciones de datos (bar_chart, modern_bar_chart, etc.), el script contiene el JSON
+        # Para animaciones de texto (quote), el script contiene el texto
+        manim_config = {
+            'text': video.script or '',
+            'container_color': container_color or '#0066CC',
+            'text_color': text_color or '#FFFFFF',
+        }
+        
+        # Añadir campos adicionales si existen (author, font_family, etc.)
+        if author:
+            manim_config['author'] = author
+        if duration:
+            manim_config['duration'] = duration
+        if video.config.get('font_family'):
+            manim_config['font_family'] = video.config.get('font_family')
+        if video.config.get('display_time'):
+            manim_config['display_time'] = video.config.get('display_time')
+        
+        # Generar video usando el animation_type del config
+        # Esto es escalable: cualquier nuevo tipo registrado funcionará automáticamente
+        result = client.generate_video(
+            animation_type=animation_type,
+            config=manim_config,
             quality=quality,
-            container_color=container_color,
-            text_color=text_color,
-            font_family=font_family,
-            display_time=display_time,
-            unique_id=str(video.id)  # ID único por video para evitar colisiones
+            unique_id=unique_id,
         )
         
         video_path = result['video_path']
@@ -2865,6 +2884,51 @@ class ImageService:
         
         logger.info(f"Upscale de imagen {original_image.uuid} encolado. Nueva imagen: {upscaled_image.uuid}. Task UUID: {task.uuid}")
         return task
+
+    def get_image_with_signed_urls(self, image: Image) -> Dict:
+        """
+        Obtiene una imagen con todas sus URLs firmadas generadas
+        
+        Args:
+            image: Imagen a procesar
+        
+        Returns:
+            Dict con imagen y URLs firmadas
+        """
+        result = {
+            'image': image,
+            'signed_url': None,
+            'upscaled_url': None,
+            'removed_bg_url': None
+        }
+        metadata = image.metadata or {}
+        
+        # URL firmada de la imagen principal
+        if image.status == 'completed' and image.gcs_path:
+            try:
+                result['signed_url'] = gcs_storage.get_signed_url(image.gcs_path)
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada: {e}")
+        
+        # URL de imagen escalada (si existe confirmación en metadata o config)
+        if metadata.get('upscaled_gcs_path'):
+            try:
+                result['upscaled_url'] = gcs_storage.get_signed_url(
+                    metadata['upscaled_gcs_path']
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para imagen escalada: {e}")
+                
+        # URL de imagen sin fondo (si existe confirmación en metadata o config)
+        if metadata.get('removed_bg_gcs_path'):
+            try:
+                result['removed_bg_url'] = gcs_storage.get_signed_url(
+                    metadata['removed_bg_gcs_path']
+                )
+            except Exception as e:
+                logger.error(f"Error al generar URL firmada para imagen sin fondo: {e}")
+        
+        return result
 
 
 # ====================

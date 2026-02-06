@@ -3,6 +3,7 @@
 {% block title %}Configure Scenes{% if project %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block content %}
+<div class="hidden">{% csrf_token %}</div>
 <div class="max-w-7xl mx-auto">
     <!-- Progress Bar -->
     <div class="mb-8">
@@ -84,7 +85,7 @@
         <div class="space-y-6 mb-8">
             {% for scene_data in scenes_with_urls %}
             {% with scene=scene_data.scene %}
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" x-data="{ expanded: false }">
+            <div id="scene-card-{{ scene.id }}" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" x-data="{ expanded: false }">
                 <!-- Scene Header -->
                 <div class="flex items-start gap-6">
                     <!-- Checkbox -->
@@ -175,17 +176,47 @@
                                     <label class="text-xs text-gray-500 mb-1">Est. Audio</label>
                                     <span id="estimated-duration-{{ scene.id }}" class="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded cursor-help" title="Duración estimada del audio según el guión (calculada automáticamente). Compara con la duración del video configurada arriba. Si el audio estimado es mayor que la duración del video, el audio puede cortarse.">~-s</span>
                                 </div>
-                                <button 
-                                    onclick="openInspector({{ scene.id }})"
-                                    class="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
-                                    🔧 Inspector
-                                </button>
                             </div>
                         </div>
 
                         <!-- Script Text Preview (Click to edit in Inspector) -->
                         <div class="mt-4">
-                            <label class="text-sm font-medium text-gray-700 mb-1 block">Texto del Guión</label>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-sm font-medium text-gray-700">Texto del Guión</label>
+                                <div class="flex items-center gap-2">
+                                    <!-- Inspector Button -->
+                                    <button 
+                                        onclick="openInspector({{ scene.id }})"
+                                        class="px-2 py-0.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded flex items-center gap-1 transition-colors shadow-sm"
+                                        title="Abrir Inspector">
+                                        <span>🔧 Inspector</span>
+                                    </button>
+
+                                    <!-- Delete Button -->
+                                    <button 
+                                        onclick="deleteScene({{ scene.id }})" 
+                                        class="px-2 py-0.5 text-xs bg-red-50 text-red-500 hover:bg-red-100 border border-gray-200 hover:border-red-200 rounded flex items-center gap-1 transition-colors shadow-sm"
+                                        title="Eliminar escena">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                        <span>Eliminar</span>
+                                    </button>
+
+                                    <!-- Copy Button -->
+                                    <button 
+                                        onclick="copyConfigureSceneScript(event, '{{ scene.script_text|escapejs }}')"
+                                        class="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded flex items-center gap-1 transition-colors shadow-sm"
+                                        title="Copiar guión">
+                                        <span class="copy-icon">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="copy-text hidden text-green-600 font-medium">Copiado! ✓</span>
+                                    </button>
+                                </div>
+                            </div>
                             <div class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-700 cursor-pointer hover:border-blue-400 transition-colors"
                                  onclick="openInspector({{ scene.id }})">
                                 <p class="line-clamp-3">{{ scene.script_text }}</p>
@@ -284,6 +315,17 @@
                     <label class="text-sm font-medium text-gray-700">🎙️ Guión/Narración (para Audio)</label>
                     <div class="flex items-center gap-2">
                         <button type="button" 
+                                onclick="copyInspectorText('inspector-script-text', this)"
+                                class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors flex items-center gap-1"
+                                title="Copiar texto del guión">
+                            <span class="copy-icon">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </span>
+                            <span class="copy-text hidden text-green-600 font-bold">Copiado! ✓</span>
+                        </button>
+                        <button type="button" 
                                 onclick="toggleVoiceTagsHelp()"
                                 class="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
                                 title="Ayuda con tags de voz">
@@ -329,7 +371,20 @@
             <div>
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm font-medium text-gray-700">🎬 Prompt Visual (para Video)</label>
-                    <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 caracteres</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" 
+                                onclick="copyInspectorText('inspector-visual-prompt', this)"
+                                class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors flex items-center gap-1"
+                                title="Copiar prompt visual">
+                            <span class="copy-icon">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </span>
+                            <span class="copy-text hidden text-green-600 font-bold">Copiado! ✓</span>
+                        </button>
+                        <span id="inspector-visual-char-count" class="text-xs text-gray-500">0 caracteres</span>
+                    </div>
                 </div>
                 <textarea 
                     id="inspector-visual-prompt"
@@ -581,6 +636,117 @@ try {
 // ==================
 // FUNCIONES GLOBALES (deben estar antes de cualquier uso en onclick/onchange)
 // ==================
+
+
+function deleteScene(sceneId) {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta escena? Esta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    console.log(`Eliminando escena ${sceneId}...`);
+    
+    // Obtener token CSRF de forma robusta
+    let csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+    if (!csrfToken) {
+        const match = document.cookie.match(/csrftoken=([\w-]+)/);
+        if (match) csrfToken = match[1];
+    }
+    
+    // Fallback simple si no encontramos CSRF y estamos en dev (Django a veces lo inyecta en cookies)
+    if (!csrfToken) {
+        console.warn("CSRF token no encontrado en DOM, intentando continuar (puede fallar si Django lo requiere estricto)");
+    }
+    
+    fetch(`/scenes/${sceneId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log(`✓ Escena ${sceneId} eliminada`);
+            // Buscar la tarjeta por ID específico o intentar fallback
+            let card = document.getElementById(`scene-card-${sceneId}`);
+            
+            if (!card) {
+                // Fallback: intentar por checkbox
+                const checkbox = document.getElementById(`scene-checkbox-${sceneId}`);
+                if (checkbox) card = checkbox.closest('.bg-white');
+            }
+            
+            if (card) {
+                card.style.transition = 'all 0.5s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(100px)';
+                setTimeout(() => {
+                    card.remove();
+                }, 500);
+            } else {
+                 console.warn('No se encontró el elemento DOM para eliminar, recargando...');
+                 location.reload();
+            }
+        } else {
+            console.error(`Error al eliminar escena ${sceneId}:`, data.message);
+            alert('Error al eliminar escena: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error(`Error en fetch para eliminar escena ${sceneId}:`, error);
+        alert('Error al eliminar escena: ' + error.message);
+    });
+}
+
+function copyConfigureSceneScript(event, text) {
+    event.stopPropagation(); // Prevenir abrir el inspector
+    const button = event.currentTarget; // Capturar el botón antes del async
+    
+    if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const icon = button.querySelector('.copy-icon');
+            const feedback = button.querySelector('.copy-text');
+            
+            if (icon && feedback) {
+                icon.classList.add('hidden');
+                feedback.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    icon.classList.remove('hidden');
+                    feedback.classList.add('hidden');
+                }, 2000);
+            }
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+        });
+    }
+}
+
+function copyInspectorText(elementId, btn) {
+    const text = document.getElementById(elementId).value;
+    
+    if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const icon = btn.querySelector('.copy-icon');
+            const feedback = btn.querySelector('.copy-text');
+            
+            if (icon && feedback) {
+                icon.classList.add('hidden');
+                feedback.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    icon.classList.remove('hidden');
+                    feedback.classList.add('hidden');
+                }, 2000);
+            }
+        }).catch(err => {
+            console.error('Error al copiar del inspector:', err);
+            alert('No se pudo copiar el texto');
+        });
+    }
+}
+
 
 // Abrir inspector (FUNCIÓN GLOBAL - debe estar disponible antes de que se renderice el HTML)
 function openInspector(sceneId) {

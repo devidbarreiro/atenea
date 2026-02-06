@@ -38,6 +38,14 @@ Ejemplo de uso:
                 </svg>
                 <span style="font-size: 0.75rem;">Procesando...</span>
             </div>
+        {% elif item.status == 'cancelled' %}
+            <div class="video-thumbnail-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                </svg>
+                <span style="font-size: 0.75rem;">Cancelado</span>
+            </div>
         {% else %}
             <div class="video-thumbnail-icon">
                 {% if item_type == 'video' %}
@@ -131,7 +139,14 @@ Ejemplo de uso:
         <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
             <h3 style="font-size: 1rem; font-weight: 600; margin: 0; color: hsl(var(--foreground));">{{ item.title }}</h3>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <span class="badge badge-{{ item.status }}">{{ item.get_status_display }}</span>
+                <span class="px-2 py-0.5 rounded text-xs font-medium 
+                    {% if item.status == 'completed' %}bg-green-100 text-green-700
+                    {% elif item.status == 'processing' %}bg-yellow-100 text-yellow-700
+                    {% elif item.status == 'error' %}bg-red-100 text-red-700
+                    {% elif item.status == 'cancelled' %}bg-gray-200 text-gray-600
+                    {% else %}bg-gray-100 text-gray-700{% endif %}">
+                    {{ item.get_status_display }}
+                </span>
                 {% if item_type == 'video' %}
                     <span class="badge">🎬 Video</span>
                 {% elif item_type == 'image' %}

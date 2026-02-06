@@ -210,6 +210,10 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# Tiempo de expiración de tokens (en segundos)
+# Configurado a 15 minutos (15 * 60)
+PASSWORD_RESET_TIMEOUT = 900
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -453,7 +457,7 @@ AGENT_RATE_LIMIT_PER_PROJECT = config('AGENT_RATE_LIMIT_PER_PROJECT', default=5,
 
 # RAG Assistant
 RAG_ENABLED = config('RAG_ENABLED', default=True, cast=bool)
-RAG_DOCS_PATH = config('RAG_DOCS_PATH', default='docs/api')  # Path relativo a BASE_DIR (solo docs/api)
+RAG_DOCS_PATH = config('RAG_DOCS_PATH', default='docs/public/api')  # Path relativo a BASE_DIR
 RAG_EMBEDDING_PROVIDER = config('RAG_EMBEDDING_PROVIDER', default='openai')  # 'openai' o 'google'
 RAG_EMBEDDING_MODEL = config('RAG_EMBEDDING_MODEL', default='text-embedding-3-small')
 RAG_LLM_PROVIDER = config('RAG_LLM_PROVIDER', default=None)  # None = usar DEFAULT_LLM_PROVIDER

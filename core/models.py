@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Optional, Dict
 import logging
 import uuid
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ VIDEO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 # Tipos de video para el flujo del agente
@@ -73,6 +75,7 @@ IMAGE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 AUDIO_STATUS = [
@@ -80,6 +83,7 @@ AUDIO_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCRIPT_STATUS = [
@@ -87,6 +91,7 @@ SCRIPT_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_STATUS = [
@@ -94,6 +99,7 @@ SCENE_STATUS = [
     ('processing', 'Procesando'),
     ('completed', 'Completado'),
     ('error', 'Error'),
+    ('cancelled', 'Cancelado'),
 ]
 
 SCENE_AI_SERVICES = [
@@ -603,6 +609,36 @@ class Audio(models.Model):
         null=True,
         help_text='Nombre de la voz (para mostrar en UI)'
     )
+    
+    @property
+    def background_gradient(self):
+        """Genera un gradiente determinista basado en el UUID"""
+        colors = [
+            ('#FF9A9E', '#FECFEF'), ('#a18cd1', '#fbc2eb'), ('#fbc2eb', '#a6c1ee'),
+            ('#84fab0', '#8fd3f4'), ('#fccb90', '#d57eeb'), ('#e0c3fc', '#8ec5fc'),
+            ('#f093fb', '#f5576c'), ('#4facfe', '#00f2fe'), ('#43e97b', '#38f9d7'),
+            ('#fa709a', '#fee140'), ('#a8edea', '#fed6e3'), ('#d299c2', '#fef9d7'),
+        ]
+        # Usar el UUID para generar un índice determinista
+        hash_val = int(hashlib.md5(str(self.uuid).encode()).hexdigest(), 16)
+        c1, c2 = colors[hash_val % len(colors)]
+        return f"linear-gradient(135deg, {c1} 0%, {c2} 100%)"
+
+    @property
+    def background_style(self):
+        """Retorna el estilo CSS de fondo según el estado"""
+        if self.status in ['processing', 'generating']:
+            return '#fff7ed' # orange-50
+        elif self.status == 'error':
+            return '#fee2e2' # red-100
+        elif self.status == 'cancelled':
+            return '#f3f4f6' # gray-100
+        elif self.status == 'pending':
+            return '#eff6ff' # blue-50
+        
+        # Completado o default
+        return self.background_gradient
+    
     model_id = models.CharField(
         max_length=100,
         default='eleven_turbo_v2_5',
@@ -1619,17 +1655,13 @@ class UserCredits(models.Model):
     
     @property
     def credits_remaining(self):
-        """Créditos restantes del mes"""
-        # Si el límite es 0, es ilimitado
-        if self.monthly_limit == 0:
-            return Decimal('999999999')  # Valor muy alto para representar ilimitado
         return max(Decimal('0'), self.monthly_limit - self.current_month_usage)
     
     @property
     def usage_percentage(self):
         """Porcentaje de uso mensual"""
         if self.monthly_limit == 0:
-            return 0
+            return 100 if self.current_month_usage > 0 else 0
         return min(100, (self.current_month_usage / self.monthly_limit) * 100)
 
 

@@ -343,7 +343,7 @@ class FreepikClient:
             
             parsed_item = {
                 'id': str(item.get('id', '')),
-                'title': item.get('title', 'Sin título'),
+                'title': item.get('title') or item.get('filename') or item.get('name') or 'Sin título',
                 'type': item.get('type', ''),
                 'thumbnail': '',
                 'preview': '',
@@ -351,8 +351,24 @@ class FreepikClient:
                 'orientation': '',
                 'width': 0,
                 'height': 0,
-                'is_premium': is_premium
+                'is_premium': is_premium,
+                'author': '',
+                'author_url': ''
             }
+            
+            # Extraer información del autor (con multiples fallbacks)
+            author_data = item.get('author') or item.get('owner') or item.get('creator') or {}
+            
+            if author_data and isinstance(author_data, dict):
+                parsed_item['author'] = author_data.get('name') or author_data.get('username') or 'Desconocido'
+                parsed_item['author_url'] = author_data.get('url') or author_data.get('website') or author_data.get('slug') or ''
+                
+                # Debug logging para autor
+                if len(parsed) < 3:
+                     logger.debug(f"  Author found: {parsed_item['author']} (Source: {author_data})")
+            else:
+                if len(parsed) < 3:
+                     logger.debug(f"  No author dict found in item {item_id}. Keys available: {list(item.keys())}")
             
             # Extraer thumbnail - puede estar en diferentes lugares
             if 'thumbnails' in item and item['thumbnails']:

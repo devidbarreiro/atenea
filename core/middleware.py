@@ -21,6 +21,7 @@ class LoginRequiredMiddleware:
                 reverse('core:login'),
                 reverse('core:logout'),
                 reverse('core:no_permissions'),
+                reverse('core:password_reset_request'),
             ])
         except Exception:
             # If URL reversing fails during some startup phase, default to empty set
@@ -44,6 +45,14 @@ class LoginRequiredMiddleware:
         
         # Allow WebSocket connections (tienen su propia autenticación)
         if request.path.startswith('/ws/'):
+            return self.get_response(request)
+
+        # Allow Password Reset Confirm (path contains token)
+        if request.path.startswith('/password-reset/confirm/'):
+            return self.get_response(request)
+
+        # Allow public video sharing
+        if request.path.startswith('/share/video/'):
             return self.get_response(request)
 
         # Allow exempt urls for everyone (important so logout isn't blocked for no-perm users)

@@ -263,7 +263,13 @@ class PixabayClient:
             params['min_height'] = min_height
         
         logger.info(f"Buscando videos en Pixabay con parámetros: {params}")
-        return self._make_request('GET', '/videos/', params=params)
+        response = self._make_request('GET', '/videos/', params=params)
+        logger.debug(f"Pixabay Video Response Keys: {list(response.keys())}")
+        if 'hits' in response:
+             logger.debug(f"Pixabay Video Hits: {len(response['hits'])}")
+             if len(response['hits']) > 0:
+                 logger.debug(f"First Hit Sample: {response['hits'][0]}")
+        return response
     
     def parse_images(self, results: Dict) -> List[Dict]:
         """
