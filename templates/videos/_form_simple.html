@@ -27,7 +27,7 @@
             id="model-select"
             required
             hx-get="{% url 'core:dynamic_form_fields' %}"
-            hx-target="#dynamic-fields"
+            hx-target="#dynamic-fields-container"
             hx-trigger="change"
             hx-include="[name='model_id']"
             hx-indicator="#loading-indicator"
@@ -49,7 +49,6 @@
         <textarea 
             name="script" 
             id="script-textarea"
-            required 
             rows="5"
             placeholder="Describe el video que quieres generar..."
             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
@@ -58,7 +57,7 @@
     </div>
     
     <!-- Campos Dinámicos (se cargan vía HTMX) -->
-    <div id="dynamic-fields">
+    <div id="dynamic-fields-container">
         <!-- Los campos se cargarán aquí cuando se seleccione un modelo -->
         <p class="text-sm text-gray-400 italic">Selecciona un modelo para ver las opciones disponibles</p>
     </div>
@@ -99,28 +98,173 @@
 </form>
 
 <script>
-// Debug: Verificar que HTMX esté cargado
-document.addEventListener('DOMContentLoaded', function() {
-    const modelSelect = document.getElementById('model-select');
+// Función global para ocultar/mostrar prompt basado en bar_chart
+// (Duplicada aquí para asegurar disponibilidad en el contexto del formulario)
+function updatePromptVisibilityForBarChart() {
+    console.log('🔍 updatePromptVisibilityForBarChart called at', new Date().toISOString());
+    
     const scriptLabel = document.getElementById('script-label');
     const scriptTextarea = document.getElementById('script-textarea');
     const scriptHelp = document.getElementById('script-help');
+    const manimTypeInput = document.getElementById('manim-animation-type-input');
     
-    function updateScriptFieldForModel(modelId) {
-        if (modelId === 'manim-quote') {
-            // Personalizar para Manim Quote
-            scriptLabel.innerHTML = 'Texto de la cita <span class="text-red-500">*</span>';
-            scriptTextarea.placeholder = 'Escribe el texto de la cita que quieres animar...';
-            scriptHelp.textContent = 'Escribe el texto de la cita. Puedes incluir saltos de línea para dividir en múltiples líneas.';
-            scriptTextarea.rows = 4;
-        } else {
-            // Restaurar valores por defecto
-            scriptLabel.innerHTML = 'Prompt / Guión <span class="text-red-500">*</span>';
-            scriptTextarea.placeholder = 'Describe el video que quieres generar...';
-            scriptHelp.textContent = 'Sé específico y descriptivo. Incluye detalles sobre movimiento, estilo, colores, etc.';
-            scriptTextarea.rows = 5;
-        }
+    console.log('🔍 Elements found:', {
+        scriptLabel: !!scriptLabel,
+        scriptTextarea: !!scriptTextarea,
+        scriptHelp: !!scriptHelp,
+        manimTypeInput: !!manimTypeInput,
+        manimTypeValue: manimTypeInput?.value
+    });
+    
+    if (!scriptLabel || !scriptTextarea || !scriptHelp) {
+        console.log('❌ Script elements not found, retrying in 100ms...');
+        setTimeout(updatePromptVisibilityForBarChart, 100);
+        return;
     }
+    
+    const isBarChart = manimTypeInput && (
+        manimTypeInput.value === 'bar_chart' ||
+        manimTypeInput.value === 'modern_bar_chart' ||
+        manimTypeInput.value === 'line_chart'
+    );
+    console.log('🔍 isBarChart:', isBarChart);
+    
+    if (isBarChart) {
+        console.log('✅ HIDING prompt for bar_chart');
+        scriptLabel.style.display = 'none';
+        scriptTextarea.style.display = 'none';
+        scriptHelp.style.display = 'none';
+        scriptTextarea.removeAttribute('required');
+    } else {
+        console.log('✅ SHOWING prompt (not bar_chart)');
+        scriptLabel.style.display = 'block';
+        scriptTextarea.style.display = 'block';
+        scriptHelp.style.display = 'block';
+        scriptTextarea.setAttribute('required', 'required');
+    }
+}
+
+// Hacer la función global disponible
+window.updatePromptVisibilityForBarChart = updatePromptVisibilityForBarChart;
+console.log('✅ updatePromptVisibilityForBarChart assigned to window at', new Date().toISOString());
+
+// Hacer la función global disponible
+// (Ahora asignada en creation_sidebar.html)
+
+// Observer para vigilar cambios en el tipo de animación
+function setupManimTypeObserver() {
+    // Idempotency guard: prevent multiple observer registrations
+    if (window._manimTypeObserverCreated) {
+        console.log('ManIM type observer already created, skipping...');
+        return;
+    }
+    
+    const manimTypeInput = document.getElementById('manim-animation-type-input');
+    if (!manimTypeInput) {
+        console.log('ManIM type input not found, will retry...');
+        setTimeout(setupManimTypeObserver, 100);
+        return;
+    }
+    
+    console.log('Setting up ManIM type observer');
+    window._manimTypeObserverCreated = true;
+
+    // Guard to prevent stacking observers
+    if (manimTypeInput.dataset.manimObserverAttached === 'true') {
+        updatePromptVisibilityForBarChart();
+        return;
+    }
+    manimTypeInput.dataset.manimObserverAttached = 'true';
+    
+    
+    // Usar MutationObserver para vigilar cambios en el atributo value
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                const newValue = manimTypeInput.value;
+                console.log('ManIM type changed via observer:', newValue);
+                updatePromptVisibilityForBarChart();
+            }
+        });
+    });
+    
+    observer.observe(manimTypeInput, {
+        attributes: true,
+        attributeFilter: ['value']
+    });
+    
+    // También vigilar cambios via input/change events
+    manimTypeInput.addEventListener('change', function() {
+        console.log('ManIM type changed via event:', this.value);
+        updatePromptVisibilityForBarChart();
+    });
+    
+    manimTypeInput.addEventListener('input', function() {
+        console.log('ManIM type input event:', this.value);
+        updatePromptVisibilityForBarChart();
+    });
+    
+    // Verificar estado inicial
+    updatePromptVisibilityForBarChart();
+}
+
+// Función global para actualizar el campo de script según el modelo
+function updateScriptFieldForModel(modelId) {
+    const scriptLabel = document.getElementById('script-label');
+    const scriptTextarea = document.getElementById('script-textarea');
+    const scriptHelp = document.getElementById('script-help');
+    const manimTypeInput = document.getElementById('manim-animation-type-input');
+    const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
+    
+    console.log('🔍 updateScriptFieldForModel called:', {
+        modelId,
+        manimType,
+        manimTypeInput: !!manimTypeInput,
+        scriptLabel: !!scriptLabel,
+        scriptTextarea: !!scriptTextarea,
+        scriptHelp: !!scriptHelp
+    });
+    
+    if (!scriptLabel || !scriptTextarea || !scriptHelp) {
+        console.log('❌ Script elements not found, skipping update');
+        return;
+    }
+    
+    // Usar la función dedicada para bar_chart
+    if (modelId === 'manim-quote' && (manimType === 'bar_chart' || manimType === 'modern_bar_chart' || manimType === 'line_chart')) {
+        updatePromptVisibilityForBarChart();
+        return;
+    }
+    
+    if (modelId === 'manim-quote') {
+        console.log('✅ Showing prompt for manim-quote');
+        scriptLabel.style.display = 'block';
+        scriptTextarea.style.display = 'block';
+        scriptHelp.style.display = 'block';
+        scriptLabel.innerHTML = 'Texto de la cita <span class="text-red-500">*</span>';
+        scriptTextarea.placeholder = 'Escribe el texto de la cita que quieres animar...';
+        scriptHelp.textContent = 'Escribe el texto de la cita. Puedes incluir saltos de línea para dividir en múltiples líneas.';
+        scriptTextarea.rows = 4;
+        // Añadir required
+        scriptTextarea.setAttribute('required', 'required');
+    } else {
+        // Restaurar valores por defecto
+        console.log('✅ Showing default prompt');
+        scriptLabel.style.display = 'block';
+        scriptTextarea.style.display = 'block';
+        scriptHelp.style.display = 'block';
+        scriptLabel.innerHTML = 'Prompt / Guión <span class="text-red-500">*</span>';
+        scriptTextarea.placeholder = 'Describe el video que quieres generar...';
+        scriptHelp.textContent = 'Sé específico y descriptivo. Incluye detalles sobre movimiento, estilo, colores, etc.';
+        scriptTextarea.rows = 5;
+        // Añadir required
+        scriptTextarea.setAttribute('required', 'required');
+    }
+}
+
+// Debug: Verificar que HTMX esté cargado
+document.addEventListener('DOMContentLoaded', function() {
+    const modelSelect = document.getElementById('model-select');
     
     if (modelSelect) {
         modelSelect.addEventListener('change', function() {
@@ -128,20 +272,159 @@ document.addEventListener('DOMContentLoaded', function() {
             updateScriptFieldForModel(this.value);
         });
         
-        // Verificar HTMX
-        if (typeof htmx === 'undefined') {
-            console.error('HTMX no está cargado!');
+        // Ejecutar al cargar la página para el modelo inicialmente seleccionado
+        updateScriptFieldForModel(modelSelect.value);
+    }
+    
+    // Configurar observer para ManIM type
+    setupManimTypeObserver();
+    
+    // Verificar estado inicial del prompt para bar_chart
+    setTimeout(function() {
+        console.log('Checking initial bar_chart state...');
+        if (typeof updatePromptVisibilityForBarChart === 'function') {
+            updatePromptVisibilityForBarChart();
         } else {
-            console.log('HTMX está cargado correctamente');
+            console.log('updatePromptVisibilityForBarChart not available yet');
+        }
+    }, 100);
+    
+    // Listen for custom events from the sidebar
+    window.addEventListener('manimDesignChanged', function(event) {
+        console.log('🎯 Received manimDesignChanged event:', event.detail);
+        const animationType = event.detail.animationType;
+        
+        // Update the hidden input
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        if (manimTypeInput) {
+            manimTypeInput.value = animationType;
+            console.log('✅ Updated manimTypeInput to:', animationType);
+        }
+        
+        // Update prompt visibility
+        if (typeof updatePromptVisibilityForBarChart === 'function') {
+            updatePromptVisibilityForBarChart();
+        } else {
+            console.log('❌ updatePromptVisibilityForBarChart function not available');
+        }
+    });
+
+    
+    // También verificar el estado inicial del tipo de animación
+    const initialManimTypeInput = document.getElementById('manim-animation-type-input');
+    if (initialManimTypeInput && (initialManimTypeInput.value === 'bar_chart' || initialManimTypeInput.value === 'modern_bar_chart' || initialManimTypeInput.value === 'line_chart')) {
+        console.log('Initial state: bar_chart detected, updating prompt');
+        updatePromptVisibilityForBarChart();
+    }
+    
+    // Centralized function to bind Manim type change logic
+    function bindManimTypeChange(inputElement, modelSelect) {
+        if (!inputElement) return;
+        
+        // Remove existing listener if possible (though difficult with anonymous functions)
+        // We rely on HTMX swapping elements to clean up old listeners usually,
+        // but for re-binding we just ensure we attach to the *current* element.
+        
+        inputElement.addEventListener('change', function() {
+            const currentModel = modelSelect ? modelSelect.value : '';
+            console.log('ManIM type changed (bindManimTypeChange):', this.value);
             
-            // Escuchar cuando HTMX actualiza los campos dinámicos
-            document.body.addEventListener('htmx:afterSwap', function(event) {
-                if (event.detail.target.id === 'dynamic-fields') {
-                    const currentModel = modelSelect.value;
-                    updateScriptFieldForModel(currentModel);
+            // Pequeño delay para asegurar actualización
+            setTimeout(function() {
+                updateScriptFieldForModel(currentModel);
+                
+                if (inputElement.value === 'bar_chart' || inputElement.value === 'modern_bar_chart' || inputElement.value === 'line_chart') {
+                    setTimeout(function() {
+                        if (typeof updateBarPreview === 'function') {
+                            updateBarPreview();
+                        }
+                        updatePromptVisibilityForBarChart();
+                    }, 50);
+                }
+            }, 50);
+        });
+    }
+
+    // Observer para vigilar cambios en el tipo de animación
+    window.setupManimTypeObserver = function() {
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        if (!manimTypeInput) {
+            console.log('ManIM type input not found, will retry...');
+            setTimeout(setupManimTypeObserver, 100);
+            return;
+        }
+        
+        // Check guard to avoid duplicate observers
+        if (manimTypeInput.hasAttribute('data-manim-observer-attached')) {
+            console.log('⚠️ ManIM observer already attached, skipping.');
+            return;
+        }
+        
+        console.log('Setting up ManIM type observer');
+        
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                    const newValue = manimTypeInput.value;
+                    console.log('ManIM type changed via observer:', newValue);
+                    updatePromptVisibilityForBarChart();
                 }
             });
+        });
+        
+        observer.observe(manimTypeInput, {
+            attributes: true,
+            attributeFilter: ['value']
+        });
+        
+        // Listeners for manual changes
+        manimTypeInput.addEventListener('input', function() {
+            console.log('ManIM type input event:', this.value);
+            updatePromptVisibilityForBarChart();
+        });
+        
+        // Mark as attached
+        manimTypeInput.setAttribute('data-manim-observer-attached', 'true');
+        
+        // Initial check
+        updatePromptVisibilityForBarChart();
+    };
+
+    // Escuchar cuando HTMX actualiza los campos dinámicos
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'dynamic-fields' || event.detail.target.id === 'dynamic-fields-container') {
+            const currentModel = modelSelect.value;
+            // Pequeño delay para asegurar que el input hidden se haya actualizado
+            setTimeout(function() {
+                updateScriptFieldForModel(currentModel);
+                
+                // Re-bind listeners to the potentially new/replaced input
+                const manimTypeInput = document.getElementById('manim-animation-type-input');
+                if (manimTypeInput) {
+                     bindManimTypeChange(manimTypeInput, modelSelect);
+                     
+                     // Verify initial state for bar chart
+                     if (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart' || manimTypeInput.value === 'line_chart') {
+                        setTimeout(function() {
+                            if (typeof updateBarPreview === 'function') {
+                                updateBarPreview();
+                            }
+                            updatePromptVisibilityForBarChart();
+                        }, 100);
+                    }
+                }
+                
+                // Configurar observer nuevamente después de HTMX
+                // (HTMX swap might have replaced the input, so re-run setup)
+                setupManimTypeObserver();
+            }, 50);
         }
+    });
+    
+    // Initial listener binding
+    const manimTypeInput = document.getElementById('manim-animation-type-input');
+    if (manimTypeInput) {
+        bindManimTypeChange(manimTypeInput, modelSelect);
     }
 });
 </script>

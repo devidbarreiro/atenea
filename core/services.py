@@ -1268,33 +1268,52 @@ class VideoService:
         return response.get('task_id')
     
     def _generate_manim_quote_video(self, video: Video) -> str:
-        """Genera video de cita con Manim"""
+        """Genera video con Manim (cita u otros diseños como bar_chart)"""
         from core.ai_services.manim import ManimClient
         
         client = ManimClient()
         
-        # Obtener configuración
-        quote = video.script  # El texto de la cita va en script
+        # Determinar tipo de animación de Manim (por defecto 'quote' para compatibilidad)
+        animation_type = (video.config or {}).get('animation_type') or 'quote'
+        
+        # Configuración común
+        quality = video.config.get('quality', 'k')  # Default: máxima calidad
+        container_color = video.config.get('container_color')  # Color del contenedor / fondo
+        text_color = video.config.get('text_color')  # Color del texto
+        
+        # Inicializar variables para metadata (evitar UnboundLocalError)
         author = video.config.get('author')
         duration = video.config.get('duration')
-        quality = video.config.get('quality', 'k')  # Default: máxima calidad
-        container_color = video.config.get('container_color')  # Color del contenedor
-        text_color = video.config.get('text_color')  # Color del texto
-        font_family = video.config.get('font_family')  # Tipo de fuente
-        display_time = video.config.get('display_time')  # Tiempo de visualización en pantalla
         
-        # Generar video localmente
         # Usar video.id como unique_id para evitar colisiones entre renders simultáneos
-        result = client.generate_quote_video(
-            quote=quote,
-            author=author,
-            duration=duration,
+        unique_id = str(video.id)
+        
+        # Configuración para pasar a Manim
+        # Para animaciones de datos (bar_chart, modern_bar_chart, etc.), el script contiene el JSON
+        # Para animaciones de texto (quote), el script contiene el texto
+        manim_config = {
+            'text': video.script or '',
+            'container_color': container_color or '#0066CC',
+            'text_color': text_color or '#FFFFFF',
+        }
+        
+        # Añadir campos adicionales si existen (author, font_family, etc.)
+        if author:
+            manim_config['author'] = author
+        if duration:
+            manim_config['duration'] = duration
+        if video.config.get('font_family'):
+            manim_config['font_family'] = video.config.get('font_family')
+        if video.config.get('display_time'):
+            manim_config['display_time'] = video.config.get('display_time')
+        
+        # Generar video usando el animation_type del config
+        # Esto es escalable: cualquier nuevo tipo registrado funcionará automáticamente
+        result = client.generate_video(
+            animation_type=animation_type,
+            config=manim_config,
             quality=quality,
-            container_color=container_color,
-            text_color=text_color,
-            font_family=font_family,
-            display_time=display_time,
-            unique_id=str(video.id)  # ID único por video para evitar colisiones
+            unique_id=unique_id,
         )
         
         video_path = result['video_path']

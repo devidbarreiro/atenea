@@ -105,6 +105,10 @@ document.addEventListener('alpine:init', () => {
         upscaleFactor: 'x4',
         outputMimeType: 'image/png',
         
+        // Estado de Live Preview (Grande)
+        livePreviewOpen: false,
+        showQuoteUnavailable: false,
+        
         openShareModal(item, e) {
             if (e) e.stopPropagation();
             this.shareModal = { open: true, item: item };
@@ -246,6 +250,23 @@ document.addEventListener('alpine:init', () => {
                 },
                 popstate: () => {
                     this.selectedItem = null;
+                },
+                toggleLivePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = false;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null; // Cerrar detalle si está abierto
+                        setTimeout(() => {
+                            if (window.renderLivePreview) window.renderLivePreview();
+                        }, 100);
+                    }
+                },
+                toggleQuotePreview: (e) => {
+                    this.livePreviewOpen = e.detail.open;
+                    this.showQuoteUnavailable = true;
+                    if (this.livePreviewOpen) {
+                        this.selectedItem = null;
+                    }
                 }
             };
             
@@ -254,6 +275,8 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('item-created', this._handlers.itemCreated);
             window.addEventListener('video-status-changed', this._handlers.videoStatusChanged);
             window.addEventListener('popstate', this._handlers.popstate);
+            window.addEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+            window.addEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
         },
         
         // === MÉTODOS DE SELECCIÓN Y CLICK ===
@@ -299,6 +322,8 @@ document.addEventListener('alpine:init', () => {
                 window.removeEventListener('item-created', this._handlers.itemCreated);
                 window.removeEventListener('video-status-changed', this._handlers.videoStatusChanged);
                 window.removeEventListener('popstate', this._handlers.popstate);
+                window.removeEventListener('toggle-live-preview', this._handlers.toggleLivePreview);
+                window.removeEventListener('toggle-quote-preview', this._handlers.toggleQuotePreview);
             }
             
             // Limpiar polling
@@ -969,20 +994,55 @@ document.addEventListener('alpine:init', () => {
     <template x-if="!selectedItem && !loadingDetail">
         <div class="h-full flex flex-col">
             <!-- Header con selector de vista -->
-            <div class="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex items-center justify-end bg-white flex-shrink-0">
+            <div x-show="!livePreviewOpen" class="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex items-center justify-end bg-white flex-shrink-0">
                 {% include 'includes/view_mode_selector.html' %}
             </div>
             
             <!-- Contenido -->
             <div class="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 relative"> 
+                <!-- Large Chart Preview Overlay -->
+                <div x-show="livePreviewOpen" 
+                     x-cloak
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 scale-95"
+                     x-transition:enter-end="opacity-100 scale-100"
+                     class="absolute inset-0 bg-white z-[60] flex flex-col p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest">Previsualización Completa</h3>
+                        <button @click="livePreviewOpen = false" 
+                                class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-xs font-bold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Cerrar Preview
+                        </button>
+                    </div>
+                    <div id="live-chart-preview-large" class="flex-1 w-full rounded-2xl overflow-hidden bg-white shadow-xl border border-gray-100 flex items-center justify-center relative">
+                        <!-- Mensaje de no disponible para Quotes -->
+                        <div x-show="showQuoteUnavailable" class="absolute inset-0 z-10 bg-gray-50 flex flex-col items-center justify-center p-8 text-center">
+                            <i class="fas fa-eye-slash text-4xl text-gray-300 mb-4"></i>
+                            <h4 class="text-base font-bold text-gray-900 mb-2">Previsualización no disponible</h4>
+                            <p class="text-sm text-gray-500 max-w-sm">Este diseño no soporta previsualización en tiempo real en pantalla completa.</p>
+                        </div>
+                        
+                        <!-- Contenido del gráfico (se oculta si es quote) -->
+                        <div x-show="!showQuoteUnavailable" class="w-full h-full flex items-center justify-center">
+                            <p class="text-gray-300">Generando preview...</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <p class="text-[10px] text-gray-400 font-medium">Esta es una representación visual aproximada. El resultado final en Manim puede tener variaciones sutiles.</p>
+                    </div>
+                </div>
+
                 <!-- Loading -->
-                <div x-show="loading" class="text-center py-16">
+                <div x-show="loading && !livePreviewOpen" class="text-center py-16">
                     <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
                     <p class="mt-4 text-sm text-gray-500">Cargando...</p>
                 </div>
                 
                 <!-- Grid -->
-                <div x-show="!loading && items.length > 0 && viewMode === 'grid'" 
+                <div x-show="!loading && items.length > 0 && viewMode === 'grid' && !livePreviewOpen" 
                      class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 
@@ -1197,7 +1257,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
                 
                 <!-- Vista de Lista -->
-                <div x-show="!loading && items.length > 0 && viewMode === 'list'" 
+                <div x-show="!loading && items.length > 0 && viewMode === 'list' && !livePreviewOpen" 
                      class="space-y-2 pb-20">
                     <template x-for="item in items" :key="item.id">
                         <div x-data="{ 

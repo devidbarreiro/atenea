@@ -10,6 +10,7 @@ Soporta múltiples usuarios simultáneos usando paths únicos por request.
 import logging
 import os
 import threading
+import shutil
 import uuid
 from pathlib import Path
 from typing import Dict, Optional, Any
@@ -22,6 +23,10 @@ from . import animations  # noqa: F401
 from .registry import AnimationRegistry
 
 logger = logging.getLogger(__name__)
+
+class ManimEnvironmentError(Exception):
+    """Excepción para errores de configuración del entorno (dependencias faltantes)"""
+    pass
 
 # Lock global para operaciones críticas de Manim (si es necesario)
 _manim_lock = threading.Lock()
@@ -40,6 +45,37 @@ class ManimClient:
     def __init__(self):
         """Inicializa el cliente Manim"""
         self.module_path = Path(__file__).parent
+        self._dependencies_verified = False
+
+    def _verify_dependencies(self):
+        """
+        Verifica que las dependencias externas (FFmpeg, etc.) estén instaladas
+        
+        Raises:
+            ManimEnvironmentError: Si faltan dependencias críticas
+        """
+        if self._dependencies_verified:
+            return
+
+        dependencies = {
+            'ffmpeg': 'Requerido para codificar video y audio.',
+            'ffprobe': 'Requerido para analizar archivos multimedia.',
+        }
+        
+        missing = []
+        for cmd, reason in dependencies.items():
+            if not shutil.which(cmd):
+                missing.append(f"- {cmd}: {reason}")
+        
+        if missing:
+            msg = "No se encontraron dependencias críticas de Manim en el sistema:\n" + "\n".join(missing)
+            msg += "\n\nPor favor, instala FFmpeg y asegúrate de que esté en tu PATH de Windows."
+            msg += "\nDescárgalo de: https://ffmpeg.org/download.html"
+            logger.error(msg)
+            raise ManimEnvironmentError(msg)
+        
+        self._dependencies_verified = True
+        logger.info("Dependencias de Manim verificadas correctamente.")
     
     def generate_video(
         self,
@@ -52,22 +88,11 @@ class ManimClient:
         """
         Genera un video usando Manim con el tipo de animación especificado
         
-        Args:
-            animation_type: Tipo de animación (ej: 'quote', 'bar_chart', 'histogram')
-            config: Configuración específica del tipo de animación
-            quality: Calidad de renderizado (l/m/h/k, default: k)
-            scene_name: Nombre de la escena (opcional, usa el nombre de la clase por defecto)
-            unique_id: ID único para este render (opcional, se genera automáticamente si no se proporciona)
-                      Útil para evitar colisiones cuando múltiples usuarios renderizan simultáneamente
-        
-        Returns:
-            Dict con 'video_path' (ruta local del video generado)
-        
-        Raises:
-            ValueError: Si el tipo de animación no está registrado o calidad inválida
-            FileNotFoundError: Si el directorio raíz no existe
-            Exception: Si falla la generación
+        ... (docstring truncada) ...
         """
+        # Verificar dependencias antes de empezar
+        self._verify_dependencies()
+
         # Validar calidad
         valid_qualities = ['l', 'm', 'h', 'k']
         if quality not in valid_qualities:

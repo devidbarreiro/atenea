@@ -1,6 +1,29 @@
 {% load static %}
 
-{# Campos dinámicos según capacidades del modelo #}
+<style>
+    @keyframes slide-in-right {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+    .animate-slide-in-right {
+        animation: slide-in-right 0.3s ease-out forwards;
+    }
+</style>
+
+<script>
+    // Helper for XSS prevention (Global Scope - Defined once for all blocks)
+    window.escapeHtml = function(text) {
+      if (!text) return text;
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+</script>
+
+    <!-- Campos dinámicos según capacidades del modelo -->
 
 {# Contenedor para botones de configuración horizontal #}
 {% if supports.duration or supports.aspect_ratio or supports.resolution or supports.audio or supports.container_color or supports.text_color or supports.font_family %}
@@ -129,6 +152,43 @@
         </div>
         {% endif %}
 
+        {# Calidad #}
+        {% if supports.quality %}
+        {% with default_q=supports.quality.0 %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }">
+            <button type="button" @click="open = !open" @click.away="open = false"
+                    class="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <svg class="w-3 h-3 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                <span class="text-gray-700 font-medium" id="quality-display">
+                    {% if default_q == 'l' %}Baja
+                    {% elif default_q == 'm' %}Media
+                    {% elif default_q == 'h' %}Alta
+                    {% elif default_q == 'k' %}4K
+                    {% else %}{{ default_q|upper }}
+                    {% endif %}
+                </span>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[150px] py-1">
+                {% for q in supports.quality %}
+                <button type="button" @click="document.getElementById('quality-input').value = '{{ q }}'; document.getElementById('quality-display').textContent = '{% if q == 'l' %}Baja{% elif q == 'm' %}Media{% elif q == 'h' %}Alta{% elif q == 'k' %}4K{% else %}{{ q|upper }}{% endif %}'; open = false;"
+                        class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100">
+                    {% if q == 'l' %}Baja (480p)
+                    {% elif q == 'm' %}Media (720p)
+                    {% elif q == 'h' %}Alta (1080p)
+                    {% elif q == 'k' %}4K (2160p)
+                    {% else %}{{ q|upper }}
+                    {% endif %}
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="quality" id="quality-input" value="{{ default_q }}">
+        </div>
+        {% endwith %}
+        {% endif %}
+
         {# Color del Contenedor (para Manim Quote) #}
         {% if supports.container_color %}
         <div class="relative flex-shrink-0" x-data="{ open: false }">
@@ -150,11 +210,11 @@
                         <div class="flex items-center gap-2">
                             <input type="color" name="container_color" id="container-color-picker" value="#0066CC"
                                    class="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                                   onchange="document.getElementById('container-color-text').value = this.value; document.getElementById('container-color-preview').style.backgroundColor = this.value;">
+                                   onchange="document.getElementById('container-color-text').value = this.value; document.getElementById('container-color-preview').style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview();">
                             <input type="text" name="container_color_text" id="container-color-text" value="#0066CC" pattern="^#[0-9A-Fa-f]{6}$"
                                    placeholder="#0066CC"
                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                   oninput="const picker = document.getElementById('container-color-picker'); const preview = document.getElementById('container-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; }">
+                                   oninput="const picker = document.getElementById('container-color-picker'); const preview = document.getElementById('container-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview(); }">
                         </div>
                     </div>
                 </div>
@@ -181,11 +241,11 @@
                         <div class="flex items-center gap-2">
                             <input type="color" name="text_color" id="text-color-picker" value="#FFFFFF"
                                    class="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                                   onchange="document.getElementById('text-color-text').value = this.value; document.getElementById('text-color-preview').style.backgroundColor = this.value;">
+                                   onchange="document.getElementById('text-color-text').value = this.value; document.getElementById('text-color-preview').style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview();">
                             <input type="text" name="text_color_text" id="text-color-text" value="#FFFFFF" pattern="^#[0-9A-Fa-f]{6}$"
                                    placeholder="#FFFFFF"
                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                   oninput="const picker = document.getElementById('text-color-picker'); const preview = document.getElementById('text-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; }">
+                                   oninput="const picker = document.getElementById('text-color-picker'); const preview = document.getElementById('text-color-preview'); if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) { picker.value = this.value; preview.style.backgroundColor = this.value; if (typeof renderLivePreview === 'function') renderLivePreview(); }">
                         </div>
                     </div>
                 </div>
@@ -220,6 +280,50 @@
             <input type="hidden" name="font_family" id="font-family-input" value="normal">
         </div>
         {% endif %}
+
+        {# Color Puntos (Solo Line Chart) - Hidden by default #}
+        <div id="point-color-wrapper" class="relative flex-shrink-0 {% if manim_animation_type != 'line_chart' %}hidden{% endif %}" x-data="{ open: false }">
+            <button type="button" @click="open = !open" 
+                    title="Color de Puntos"
+                    class="flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <div class="w-2 h-2 rounded-full border border-gray-500 bg-white"></div>
+                <div class="w-3.5 h-3.5 rounded border border-gray-400 flex-shrink-0" id="point-color-preview-btn" style="background-color: #FFFFFF;"></div>
+                <span class="ml-1 font-medium text-gray-700">Puntos</span>
+            </button>
+            <div x-show="open" x-cloak @click.away="open = false" x-transition
+                 class="absolute z-[100] mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[180px] p-3">
+                <div>
+                     <label class="block text-xs font-medium text-gray-700 mb-2">Color Puntos</label>
+                     <div class="flex items-center gap-2">
+                        <input type="color" name="point_color" id="point-color-input" value="#FFFFFF"
+                               class="h-8 w-10 border border-gray-300 rounded cursor-pointer"
+                               onchange="document.getElementById('point-color-preview-btn').style.backgroundColor = this.value; renderLivePreview();">
+                     </div>
+                </div>
+            </div>
+        </div>
+
+        {# Color Línea (Solo Line Chart) - Hidden by default #}
+        <div id="line-color-wrapper" class="relative flex-shrink-0 {% if manim_animation_type != 'line_chart' %}hidden{% endif %}" x-data="{ open: false }">
+            <button type="button" @click="open = !open" 
+                    title="Color de Línea"
+                    class="flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-xs h-[28px]">
+                <svg class="w-3.5 h-3.5 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <div class="w-3.5 h-3.5 rounded border border-gray-400 flex-shrink-0" id="line-color-preview-btn" style="background-color: #FFFFFF;"></div>
+                <span class="ml-1 font-medium text-gray-700">Línea</span>
+            </button>
+            <div x-show="open" x-cloak @click.away="open = false" x-transition
+                 class="absolute z-[100] mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[180px] p-3">
+                <div>
+                     <label class="block text-xs font-medium text-gray-700 mb-2">Color Línea</label>
+                     <div class="flex items-center gap-2">
+                        <input type="color" name="line_color" id="line-color-input" value="#FFFFFF"
+                               class="h-8 w-10 border border-gray-300 rounded cursor-pointer"
+                               onchange="document.getElementById('line-color-preview-btn').style.backgroundColor = this.value; renderLivePreview();">
+                     </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -396,49 +500,933 @@
 </div>
 {% endif %}
 
-{# Autor (para Manim Quote) #}
-{% if supports.author %}
-<div class="mb-4">
-    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">AUTOR <span class="text-gray-400 font-normal">(Opcional)</span></label>
-    <input type="text" name="author"
-           placeholder="Nombre del autor (opcional)"
-           class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-</div>
-{% endif %}
+{# Campos específicos para gráficos de barras #}
+{% if manim_animation_type|default:'quote' == 'bar_chart' or manim_animation_type == 'modern_bar_chart' or manim_animation_type == 'line_chart' %}
+<div class="space-y-4">
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <h4 class="text-sm font-medium text-gray-900 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            Configuración del Gráfico
+        </h4>
 
-{# Calidad (para Manim Quote) #}
-{% if supports.quality %}
-<div class="mb-4">
-    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">CALIDAD</label>
-    <select name="quality"
-            class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-        {% for q in supports.quality %}
-            <option value="{{ q }}" {% if q == 'k' %}selected{% endif %}>
-                {% if q == 'l' %}Baja (480p)
-                {% elif q == 'm' %}Media (720p)
-                {% elif q == 'h' %}Alta (1080p)
-                {% elif q == 'k' %}4K Máxima (2160p)
-                {% else %}{{ q|upper }}
-                {% endif %}
-            </option>
-        {% endfor %}
-    </select>
-</div>
-{% endif %}
+        <!-- Real-Time Live Preview -->
+        <div class="mt-4 mb-6 relative">
+            <div id="live-chart-preview" class="aspect-[16/9] w-full bg-white rounded-2xl overflow-hidden flex items-center justify-center shadow-lg border border-gray-100">
+                <!-- SVG será inyectado aquí -->
+                <p class="text-[10px] text-gray-300 font-medium">Cargando visualización...</p>
+            </div>
+            
+            <!-- Botón para expandir -->
+            <button type="button" 
+                    @click="window.dispatchEvent(new CustomEvent('toggle-live-preview', { detail: { open: true } }))"
+                    class="w-full mt-3 py-2 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl flex items-center justify-center gap-2 transition-all group">
+                <svg class="w-3.5 h-3.5 text-gray-500 group-hover:text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                </svg>
+                <span class="text-[10px] font-bold text-gray-500 group-hover:text-black uppercase tracking-widest">Ver Preview Completa</span>
+            </button>
+        </div>
 
-{# Tiempo en pantalla (para Manim Quote) #}
-{% if supports.display_time %}
-<div class="mb-4">
-    <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">TIEMPO EN PANTALLA <span class="text-gray-400 font-normal">(Opcional)</span></label>
-    <div class="flex items-center gap-2">
-        <input type="number" name="display_time" min="1" max="60" step="0.5"
-               placeholder="Auto"
-               class="flex-1 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
-        <span class="text-sm text-gray-500">segundos</span>
+        <!-- Títulos y Ejes -->
+        <div class="grid grid-cols-1 gap-4 mt-4">
+            <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Título del Gráfico</label>
+                <input type="text" id="chart_title" name="chart_title" placeholder="Ej: Crecimiento Anual" 
+                       oninput="renderLivePreview()"
+                       class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:ring-1 focus:ring-black focus:border-black transition-all font-medium">
+            </div>
+            
+            {# Ejes solo para bar_chart clásico #}
+            {% if manim_animation_type == 'bar_chart' %}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Eje X (Cat.)</label>
+                    <input type="text" id="x_axis_label" name="x_axis_label" placeholder="Categorías" 
+                           oninput="renderLivePreview()"
+                           class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:ring-1 focus:ring-black focus:border-black transition-all font-medium">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Eje Y (Val.)</label>
+                    <input type="text" id="y_axis_label" name="y_axis_label" placeholder="Valores" 
+                           oninput="renderLivePreview()"
+                           class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:ring-1 focus:ring-black focus:border-black transition-all font-medium">
+                </div>
+            </div>
+            {% endif %}
+
+            {# Opciones Extra (Fix overlap: use space-y instead of tight grid) #}
+            <div class="flex flex-col gap-5 py-4 border-t border-gray-100 mt-2">
+                
+                {# Configuración de Tamaño de Puntos y Líneas (Solo Line Chart) #}
+                <div id="line-chart-settings" class="{% if manim_animation_type != 'line_chart' %}hidden{% endif %}">
+                    <div class="flex flex-col gap-4">
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tamaño Puntos</label>
+                                <span id="point-radius-display" class="text-[10px] font-black text-gray-900 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">0.1</span>
+                            </div>
+                            <input type="range" name="point_radius" id="point-radius-input" 
+                                   min="0.05" max="0.3" step="0.01" value="0.1"
+                                   class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="document.getElementById('point-radius-display').textContent = this.value; renderLivePreview()">
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Grosor Línea</label>
+                                <span id="line-width-display" class="text-[10px] font-black text-gray-900 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">4px</span>
+                            </div>
+                            <input type="range" name="line_width" id="line-width-input" 
+                                   min="1" max="10" step="1" value="4"
+                                   class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="document.getElementById('line-width-display').textContent = this.value + 'px'; renderLivePreview()">
+                        </div>
+                         </div>
+                    </div>
+
+                {# Ancho de barras para bar_chart clásico y moderno #}
+                <div id="bar-width-settings" class="{% if manim_animation_type != 'bar_chart' and manim_animation_type != 'modern_bar_chart' %}hidden{% endif %}">
+                    <div class="flex flex-col gap-2">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ancho de Barras</label>
+                        <div class="flex items-center gap-4">
+                            <input type="range" name="bar_width" min="0.1" max="1.0" step="0.1" value="0.8" 
+                                   class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+                                   oninput="this.nextElementSibling.innerText = this.value; renderLivePreview()">
+                            <span class="text-[10px] font-black text-gray-900 w-6 text-center bg-gray-50 py-1 rounded border border-gray-100">0.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between {% if manim_animation_type == 'line_chart' %}hidden{% endif %}" id="show-labels-toggle-container">
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Etiquetas Sup.</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="show_labels" value="true" class="sr-only peer" checked onchange="renderLivePreview()">
+                        <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
+                        <span class="ms-3 text-[10px] font-bold text-gray-500">Mostrar</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-4 border-t border-gray-100 mt-2">
+            <h5 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Capas de Datos</h5>
+        </div>
+
+        {# Vista previa de barras #}
+        <div id="bar-preview-container" class="space-y-2">
+            {# Las barras se mostrarán aquí como preview #}
+        </div>
+
+        {# Botón para abrir modal (como una barra adicional) #}
+        <div class="mt-3">
+            <button type="button" id="config-bars-btn"
+                    onclick="openBarManagerModal()"
+                    class="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-dashed border-gray-300 rounded-lg hover:border-black hover:bg-gray-50 transition-all text-xs font-medium text-gray-600 hover:text-black">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                Configurar Datos
+            </button>
+        </div>
     </div>
-    <p class="text-xs text-gray-500 mt-1">Tiempo que la cita permanece visible antes del corte.</p>
+
+    <script>
+    // Lógica centralizada de visibilidad
+    function updateFieldVisibility() {
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        // Si no hay input (ej. carga inicial parcial), intentar fallback o salir
+        const manimType = manimTypeInput ? manimTypeInput.value : '{{ manim_animation_type|default:"quote" }}';
+        
+        const barWidthSettings = document.getElementById('bar-width-settings');
+        const lineChartSettings = document.getElementById('line-chart-settings');
+        const showLabelsToggle = document.getElementById('show-labels-toggle-container');
+        const configBtn = document.getElementById('config-bars-btn');
+        const sidebarContainer = document.getElementById('live-chart-preview');
+        const emptyPreviewSidebar = document.getElementById('empty-preview-sidebar');
+        
+        // Color Wrappers
+        const pointColorWrapper = document.getElementById('point-color-wrapper');
+        const lineColorWrapper = document.getElementById('line-color-wrapper');
+
+        if (manimType === 'line_chart') {
+            if (barWidthSettings) barWidthSettings.classList.add('hidden');
+            if (lineChartSettings) lineChartSettings.classList.remove('hidden');
+            if (showLabelsToggle) showLabelsToggle.classList.add('hidden');
+            
+            // Show custom color pickers
+            if (pointColorWrapper) pointColorWrapper.classList.remove('hidden');
+            if (lineColorWrapper) lineColorWrapper.classList.remove('hidden');
+            
+            // Texto botón
+            if (configBtn) configBtn.innerHTML = `
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                Configurar Datos de Puntos`;
+            
+            // Mensaje vacío
+            if (emptyPreviewSidebar) emptyPreviewSidebar.innerText = 'Configura algunos puntos para ver la preview';
+
+        } else if (manimType === 'bar_chart' || manimType === 'modern_bar_chart') {
+            if (barWidthSettings) barWidthSettings.classList.remove('hidden');
+            if (lineChartSettings) lineChartSettings.classList.add('hidden');
+            if (showLabelsToggle) showLabelsToggle.classList.remove('hidden');
+            
+            // Texto botón
+            if (configBtn) configBtn.innerHTML = `
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10"></path>
+                </svg>
+                Configurar Datos de Barras`;
+
+             // Mensaje vacío fallback
+             if (emptyPreviewSidebar) emptyPreviewSidebar.innerText = 'Configura algunas barras para ver la preview';
+             
+             // Hide line chart colors
+             if (pointColorWrapper) pointColorWrapper.classList.add('hidden');
+             if (lineColorWrapper) lineColorWrapper.classList.add('hidden');
+        } else {
+            // Ocultar todo si no es gráfico
+             if (barWidthSettings) barWidthSettings.classList.add('hidden');
+             if (lineChartSettings) lineChartSettings.classList.add('hidden');
+             if (pointColorWrapper) pointColorWrapper.classList.add('hidden');
+             if (lineColorWrapper) lineColorWrapper.classList.add('hidden');
+        }
+        
+        if (manimType === 'bar_chart' || manimType === 'modern_bar_chart' || manimType === 'line_chart') {
+             updateBarPreview();
+             renderLivePreview();
+        }
+    }
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(updateFieldVisibility, 100);
+    });
+
+    // Re-ejecutar en HTMX events
+    document.addEventListener('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'dynamic-fields' || event.detail.target.id === 'dynamic-fields-container') {
+             setTimeout(updateFieldVisibility, 100);
+        }
+    });
+
+    // Inicialización adicional para asegurar que las barras se muestren
+    // cuando se selecciona bar_chart
+    function initializeBarsIfNeeded() {
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        if (manimTypeInput && (manimTypeInput.value === 'bar_chart' || manimTypeInput.value === 'modern_bar_chart' || manimTypeInput.value === 'line_chart')) {
+            const container = document.getElementById('bar-preview-container');
+            if (container && container.children.length === 0) {
+                updateBarPreview();
+            }
+        }
+    }
+
+    // Ejecutar inicialización adicional después de un delay
+    setTimeout(() => {
+        initializeBarsIfNeeded();
+        renderLivePreview();
+    }, 200);
+
+    function renderLivePreview() {
+        // Expose to window for other components
+        window.renderLivePreview = renderLivePreview;
+        
+        const sidebarContainer = document.getElementById('live-chart-preview');
+        const largeContainer = document.getElementById('live-chart-preview-large');
+        
+        if (!sidebarContainer && !largeContainer) return;
+
+        // Recoger datos
+        const title = document.getElementById('chart_title')?.value || 'Sin Título';
+        const xLabel = document.getElementById('x_axis_label')?.value || '';
+        const yLabel = document.getElementById('y_axis_label')?.value || '';
+        const barWidth = parseFloat(document.querySelector('input[name="bar_width"]')?.value || 0.8);
+        const showLabels = document.querySelector('input[name="show_labels"]')?.checked;
+        const bgColor = document.querySelector('input[name="container_color"]')?.value || '#FFFFFF';
+        const textColor = document.querySelector('input[name="text_color"]')?.value || '#111827';
+
+        // Determine chart type early (before using isLineChart)
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        const manimType = manimTypeInput ? manimTypeInput.value : 'quote';
+        const isModern = manimType === 'modern_bar_chart';
+        const isLineChart = manimType === 'line_chart';
+
+        const bars = [];
+        let maxVal = 10;
+        
+        let barCount = 0;
+        while (document.querySelector(`input[name="bar_label_${barCount + 1}"]:not(#bar-manager-modal input)`)) {
+            barCount++;
+        }
+
+        for (let i = 1; i <= barCount; i++) {
+            const label = document.querySelector(`input[name="bar_label_${i}"]:not(#bar-manager-modal input)`)?.value || `B${i}`;
+            const value = parseFloat(document.querySelector(`input[name="bar_value_${i}"]:not(#bar-manager-modal input)`)?.value || 0);
+            const color = document.querySelector(`input[name="bar_color_${i}"]:not(#bar-manager-modal input)`)?.value || '#0066CC';
+            const topText = document.querySelector(`input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`)?.value || '';
+            
+            bars.push({ label, value, color, topText });
+            if (value > maxVal) maxVal = value;
+        }
+
+        if (bars.length === 0) {
+            if (sidebarContainer) sidebarContainer.innerHTML = `<p id="empty-preview-sidebar" class="text-[10px] text-gray-300 font-medium">Configura ${isLineChart ? 'algunos puntos' : 'algunas barras'} para ver la preview</p>`;
+            if (largeContainer) largeContainer.innerHTML = '<p class="text-sm text-gray-300">Configura el gráfico en el panel derecho</p>';
+            return;
+        }
+
+        // Obtener valores de grosor si existen
+        const pointRadiusInput = document.getElementById('point-radius-input');
+        const lineWidthInput = document.getElementById('line-width-input');
+        const pointRadius = pointRadiusInput ? parseFloat(pointRadiusInput.value) : 0.1;
+        // Escalar visualmente para el SVG (factor arbitrario para que se vea bien)
+        const visualPointRadius = pointRadius * 60; 
+        const visualLineWidth = lineWidthInput ? parseFloat(lineWidthInput.value) : 4;
+
+        // Nuevos colores
+        const pointColorInput = document.getElementById('point-color-input');
+        const lineColorInput = document.getElementById('line-color-input');
+        const pointColor = pointColorInput ? pointColorInput.value : '#FFFFFF';
+        const lineColor = lineColorInput ? lineColorInput.value : '#FFFFFF';
+
+        function generateSvg(w, h, isLarge) {
+            const padX = isLarge ? 100 : 50;
+            const padY = isLarge ? 80 : 40;
+            const chartW = w - (padX + (isLarge ? 60 : 30));
+            const chartH = h - (padY * 2);
+            
+            const startX = isModern ? (isLarge ? 40 : 20) : padX;
+            const startY = padY;
+            const endY = h - padY;
+            const actualMax = maxVal * 1.1 || 1;
+            const scale = chartH / actualMax;
+            const barGap = (isModern ? (w - (isLarge ? 80 : 40)) : chartW) / (bars.length || 1);
+            const actualBarW = barGap * barWidth;
+
+            const fontSizeTitle = isLarge ? 28 : 14;
+            const fontSizeAxes = isLarge ? 20 : 10;
+            const fontSizeLabels = isLarge ? 16 : 8;
+            const markerSize = isLarge ? 12 : 6;
+            
+            const escTitle = escapeHtml(title);
+            const escXLabel = escapeHtml(xLabel);
+            const escYLabel = escapeHtml(yLabel);
+            const escTextColor = escapeHtml(textColor);
+            const escBgColor = escapeHtml(bgColor);
+
+            let svgHtml = `
+                <svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" style="background-color: ${escBgColor}; font-family: sans-serif;">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="${markerSize}" markerHeight="${markerSize*0.7}" 
+                        refX="${markerSize}" refY="${markerSize*0.35}" orient="auto">
+                          <polygon points="0 0, ${markerSize} ${markerSize*0.35}, 0 ${markerSize*0.7}" fill="${escTextColor}" />
+                        </marker>
+                    </defs>
+
+                    <!-- Card Background (Modern Only) -->
+                    ${isModern ? `
+                    <rect x="15" y="15" width="${w-30}" height="${h-30}" fill="${escBgColor}" rx="${isLarge ? 24 : 12}" stroke="${escTextColor}" stroke-width="1.5" stroke-opacity="0.15" />
+                    ` : ''}
+
+                    <!-- Título -->
+                    <text x="${w/2}" y="${isLarge ? 50 : 25}" text-anchor="middle" font-size="${fontSizeTitle}" font-weight="900" fill="${escTextColor}" style="letter-spacing: 0.05em;">${escTitle.toUpperCase()}</text>
+                    
+                    ${!isModern && !isLineChart ? `
+                    <!-- Ejes (con flechas estilo Manim) -->
+                    <line x1="${startX}" y1="${endY}" x2="${w - (isLarge ? 40 : 20)}" y2="${endY}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
+                    <line x1="${startX}" y1="${endY}" x2="${startX}" y2="${startY - (isLarge ? 20 : 10)}" stroke="${escTextColor}" stroke-width="${isLarge ? 3 : 1.5}" marker-end="url(#arrowhead)" />
+                    
+                    <!-- Ticks y Valores Eje Y -->
+                    ${[0, 0.25, 0.5, 0.75, 1].map(p => {
+                        const val = Math.round(maxVal * p * 10) / 10;
+                        const yTick = endY - (maxVal * p * scale);
+                        return `
+                        <line x1="${startX - (isLarge ? 10 : 5)}" y1="${yTick}" x2="${startX}" y2="${yTick}" stroke="${escTextColor}" stroke-width="${isLarge ? 2 : 1}" />
+                        <text x="${startX - (isLarge ? 20 : 10)}" y="${yTick + (isLarge ? 6 : 3)}" text-anchor="end" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.6">${val}</text>
+                        `;
+                    }).join('')}
+
+                    <!-- Labels Ejes -->
+                    ${!isLineChart ? `<text x="${w/2}" y="${h-(isLarge ? 20 : 10)}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4">${escXLabel}</text>
+                    <text x="${isLarge ? 30 : 15}" y="${h/2}" text-anchor="middle" font-size="${fontSizeAxes}" font-weight="bold" fill="${escTextColor}" opacity="0.4" transform="rotate(-90, ${isLarge ? 30 : 15}, ${h/2})">${escYLabel}</text>` : ''}
+                    ` : ''}
+            `;
+
+                if (isLineChart) {
+                    // Generar puntos para Polyline
+                    const pointCoords = bars.map((bar, i) => {
+                        const x = isLarge ? 50 + (i * ((w - 100) / (Math.max(1, bars.length - 1)))) : 25 + (i * ((w - 50) / (Math.max(1, bars.length - 1))));
+                        const barH = (bar.value || 0) * scale;
+                        const y = endY - barH;
+                        return { x, y };
+                    });
+
+                    const pointsStr = pointCoords.map(p => `${p.x},${p.y}`).join(' ');
+
+                    // Area Bajo la Curva (Polygon)
+                    // Empieza abajo-izquierda, recorre puntos, baja abajo-derecha
+                    const firstX = pointCoords[0].x;
+                    const lastX = pointCoords[pointCoords.length - 1].x;
+                    const areaPoints = `${firstX},${endY} ${pointsStr} ${lastX},${endY}`;
+                    
+                    // Color principal para el relleno (usamos el del primer punto o texto)
+                    const mainColor = bars[0]?.color || escTextColor;
+
+                svgHtml += `
+                    <polygon points="${areaPoints}" fill="${lineColor}" fill-opacity="0.2" stroke="none" />
+                    <polyline points="${pointsStr}" fill="none" stroke="${lineColor}" stroke-width="${visualLineWidth}" stroke-linecap="round" stroke-linejoin="round" />
+                `;
+
+                // Puntos
+                bars.forEach((bar, i) => {
+                    const p = pointCoords[i];
+                    // Punto con color de punto y borde de linea
+                    svgHtml += `
+                        <circle cx="${p.x}" cy="${p.y}" r="${visualPointRadius}" fill="${pointColor}" stroke="${lineColor}" stroke-width="${visualLineWidth * 0.5}" />
+                    `;
+                         // Label de barra
+                        svgHtml += `
+                            <text x="${p.x}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escapeHtml(bar.label)}</text>
+                        `;
+                    });
+
+                } else {
+                    // Lógica para Bar Charts (Clásico y Moderno)
+                    bars.forEach((bar, i) => {
+                        const x = (isModern ? (isLarge ? 40 : 20) : startX) + (i * barGap) + (barGap - actualBarW) / 2;
+                        const barH = bar.value * scale;
+                        const y = endY - barH;
+                        
+                        const escBarLabel = escapeHtml(bar.label);
+                        const escBarColor = escapeHtml(bar.color);
+
+                        svgHtml += `
+                            <rect x="${x}" y="${y}" width="${actualBarW}" height="${barH}" fill="${escBarColor}" rx="${isModern ? (isLarge ? 10 : 5) : 0}">
+                                <animate attributeName="height" from="0" to="${barH}" dur="0.6s" fill="freeze" />
+                                <animate attributeName="y" from="${endY}" to="${y}" dur="0.6s" fill="freeze" />
+                            </rect>
+                        `;
+
+                        // Label de barra
+                        svgHtml += `
+                            <text x="${x + actualBarW/2}" y="${endY + (isLarge ? 35 : 18)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="bold" fill="${escTextColor}" opacity="0.8">${escBarLabel}</text>
+                        `;
+
+                        // Top Label (Valor)
+                        if (showLabels) {
+                            const displayTop = bar.topText || bar.value;
+                            const escDisplayTop = escapeHtml(displayTop);
+                            svgHtml += `
+                                <text x="${x + actualBarW/2}" y="${y-(isLarge ? 15 : 8)}" text-anchor="middle" font-size="${fontSizeLabels}" font-weight="900" fill="${escTextColor}">${escDisplayTop}</text>
+                            `;
+                        }
+                    });
+                }
+
+            svgHtml += `</svg>`;
+            return svgHtml;
+        }
+
+        if (sidebarContainer) sidebarContainer.innerHTML = generateSvg(320, 180, false);
+        if (largeContainer) largeContainer.innerHTML = generateSvg(800, 450, true);
+    }
+    </script>
+
+{# Modal para gestionar barras - Reposicionado a la derecha para no tapar la preview #}
+<div id="bar-manager-modal" class="fixed inset-0 hidden z-[10000] pointer-events-none">
+    <div class="absolute right-0 top-0 bottom-0 bg-white shadow-2xl w-full sm:max-w-xs flex flex-col overflow-hidden border-l border-gray-100 animate-slide-in-right pointer-events-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center p-5 border-b border-gray-100">
+            <div>
+                <h3 class="text-xs font-bold text-gray-900 uppercase tracking-widest">Datos del Gráfico</h3>
+                <p class="text-[10px] text-gray-500 mt-0.5">Gestiona las etiquetas y valores de cada barra</p>
+            </div>
+            <button type="button" onclick="closeBarManagerModal()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-black transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Contenido -->
+        <div class="flex-1 overflow-y-auto p-4">
+            <div class="space-y-2">
+                <div id="modal-bar-fields-container" class="space-y-2">
+                    {# Los campos se generarán dinámicamente con JavaScript #}
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-5 border-t border-gray-100 bg-white flex justify-center">
+            <button type="button" 
+                    onclick="closeBarManagerModal()" 
+                    class="px-8 py-2.5 bg-black text-white text-xs font-bold rounded-full hover:bg-gray-800 transition-all shadow-lg shadow-black/10">
+                GUARDAR CAMBIOS
+            </button>
+        </div>
+    </div>
 </div>
 {% endif %}
+
+<script>
+// Usar un namespace global para evitar colisiones en recargas HTMX
+if (typeof window.ManimBarManager === 'undefined') {
+    window.ManimBarManager = {
+        currentBarCount: 3,
+        maxBars: 8,
+        minBars: 1,
+        isLineChart: false, // Flag para controlar UI específica
+        COLOR_PALETTE: [
+            '#3B82F6', '#EF4444', '#10B981', '#F59E0B', 
+            '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'
+        ],
+        
+        updateState: function() {
+            const manimTypeInput = document.getElementById('manim-animation-type-input');
+            this.isLineChart = manimTypeInput && manimTypeInput.value === 'line_chart';
+        },
+
+        saveCurrentModalState: function() {
+             // Sincronizar explícitamente todos los inputs del modal a los hidden inputs antes de re-renderizar
+             if (this.currentBarCount > 0) {
+                 for (let i = 1; i <= this.currentBarCount; i++) {
+                     const fields = ['label', 'value', 'color', 'top_text'];
+                     fields.forEach(field => {
+                         const modalInput = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${i}"]`);
+                         if (modalInput) {
+                             const hiddenInput = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                             if (hiddenInput) hiddenInput.value = modalInput.value;
+                         }
+                     });
+                 }
+             }
+        },
+
+        updateBarPreview: function() {
+            this.updateState();
+            const container = document.getElementById('bar-preview-container');
+            if (!container) return; // Protección contra TypeError
+            
+            container.innerHTML = '';
+        
+            for (let i = 1; i <= this.currentBarCount; i++) {
+                // Obtener valores actuales (con fallbacks)
+                let labelValue = `${this.isLineChart ? 'Punto' : 'Barra'} ${i}`;
+                let valueValue = (Math.random() * 10).toFixed(2);
+                
+                // Usar color de la paleta por defecto según el índice
+                let colorValue = this.COLOR_PALETTE[(i - 1) % this.COLOR_PALETTE.length];
+        
+                const hiddenLabel = document.querySelector(`#dynamic-fields-container input[name="bar_label_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenValue = document.querySelector(`#dynamic-fields-container input[name="bar_value_${i}"]:not(#bar-manager-modal input)`);
+                const hiddenColor = document.querySelector(`#dynamic-fields-container input[name="bar_color_${i}"]:not(#bar-manager-modal input)`);
+        
+                if (hiddenLabel && hiddenLabel.value) labelValue = hiddenLabel.value;
+                if (hiddenValue && hiddenValue.value) valueValue = hiddenValue.value;
+                if (hiddenColor && hiddenColor.value) colorValue = hiddenColor.value;
+        
+                const barDiv = document.createElement('div');
+                barDiv.className = 'group flex flex-col gap-2 p-3 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-black transition-all';
+                
+                let topTextValue = '';
+                const hiddenTopText = document.querySelector(`#dynamic-fields-container input[name="bar_top_text_${i}"]:not(#bar-manager-modal input)`);
+                if (hiddenTopText && hiddenTopText.value) topTextValue = hiddenTopText.value;
+        
+                const barHtml = document.createElement('div');
+                
+                // --- Row 1: Flex Container (Color | Label | Value) ---
+                const row1 = document.createElement('div');
+                row1.className = 'flex items-center gap-2';
+                
+                // Color Input (Conditional)
+                if (!this.isLineChart) {
+                    const colorInput = document.createElement('input');
+                    colorInput.type = 'color';
+                    colorInput.name = `bar_color_${i}`;
+                    colorInput.value = colorValue;
+                    colorInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'color', this.value)`);
+                    colorInput.className = 'w-3 h-3 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm shadow-inner';
+                    row1.appendChild(colorInput);
+                }
+                
+                // Label Container
+                const labelContainer = document.createElement('div');
+                labelContainer.className = 'flex-1 flex flex-col min-w-0';
+                
+                // Label Input
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.name = `bar_label_${i}`;
+                labelInput.value = labelValue; // Safe assignment
+                labelInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'label', this.value)`);
+                labelInput.className = 'w-full p-0 text-[10px] font-bold text-gray-900 border-none bg-transparent focus:ring-0 placeholder-gray-300 truncate';
+                labelInput.placeholder = 'Nombre';
+                
+                labelContainer.appendChild(labelInput);
+                
+                // Value Input
+                const valueInput = document.createElement('input');
+                valueInput.type = 'number';
+                valueInput.name = `bar_value_${i}`;
+                valueInput.value = valueValue; // Safe assignment
+                valueInput.step = '0.1';
+                valueInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'value', this.value)`);
+                valueInput.className = 'w-12 p-0 text-[10px] font-black text-gray-900 border-none bg-transparent focus:ring-0 text-right';
+                valueInput.placeholder = '0.0';
+
+                
+                row1.appendChild(labelContainer);
+                row1.appendChild(valueInput);
+                
+                // --- Row 2: Top Text (Optional, hidden for Line Chart) ---
+                const row2 = document.createElement('div');
+                row2.className = 'pl-5';
+                
+                if (!this.isLineChart) {
+                    const topTextInput = document.createElement('input');
+                    topTextInput.type = 'text';
+                    topTextInput.name = `bar_top_text_${i}`;
+                    topTextInput.value = topTextValue; // Safe assignment
+                    topTextInput.setAttribute('oninput', `ManimBarManager.syncSidebarInput(${i}, 'top_text', this.value)`);
+                    topTextInput.className = 'w-full p-0 text-[8px] text-gray-400 font-medium border-none bg-transparent focus:ring-0 transition-all hover:text-gray-600 truncate';
+                    topTextInput.placeholder = 'Texto sup.';
+                    
+                    row2.appendChild(topTextInput);
+                }
+                
+                // Assemble Bar Element
+                barDiv.appendChild(row1);
+                if (!this.isLineChart && row2.childElementCount > 0) {
+                     barDiv.appendChild(row2);
+                }
+                container.appendChild(barDiv);
+            }
+            
+            // Actualizar preview visual real-time
+            if (typeof renderLivePreview === 'function') renderLivePreview();
+        },
+        
+        syncSidebarInput: function(barIndex, field, value) {
+            const hiddenInput = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${barIndex}"]:not(#bar-manager-modal input)`);
+            if (hiddenInput) hiddenInput.value = value;
+            
+            const modalInput = document.querySelector(`#bar-manager-modal input[name="bar_${field}_${barIndex}"]`);
+            if (modalInput) modalInput.value = value;
+            
+            if (typeof renderLivePreview === 'function') renderLivePreview();
+        },
+
+        addBar: function() {
+            this.updateState();
+            this.saveCurrentModalState(); // Guardar antes de añadir
+            if (this.currentBarCount < this.maxBars) {
+                this.currentBarCount++;
+                const nextColor = this.COLOR_PALETTE[(this.currentBarCount - 1) % this.COLOR_PALETTE.length];
+                const container = document.getElementById('dynamic-fields-container');
+                
+                // Helper para crear inputs ocultos
+                const ensureHiddenInput = (name, val) => {
+                    let input = document.querySelector(`#dynamic-fields-container input[name="${name}"]:not(#bar-manager-modal input)`);
+                    if (!input) {
+                        input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = name;
+                        container.appendChild(input);
+                    }
+                    input.value = val;
+                    return input;
+                };
+
+                ensureHiddenInput(`bar_color_${this.currentBarCount}`, nextColor);
+                ensureHiddenInput(`bar_value_${this.currentBarCount}`, '10.0');
+
+                this.updateModalFields();
+                this.updateBarPreview(); // Esto es necesario para ver el nuevo input sidebar
+            }
+        },
+
+        removeBar: function(barIndex = null) {
+            this.updateState();
+            this.saveCurrentModalState(); // Guardar antes de eliminar
+             if (this.currentBarCount > this.minBars) {
+                if (barIndex !== null) {
+                    for (let i = barIndex; i < this.currentBarCount; i++) {
+                        const fields = ['label', 'value', 'color', 'top_text'];
+                        fields.forEach(field => {
+                            const next = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i + 1}"]:not(#bar-manager-modal input)`);
+                            const current = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                            // Copiar valor de hidden inputs ya que saveCurrentModalState los actualizó
+                            if (next && current) current.value = next.value;
+                        });
+                    }
+                }
+                this.currentBarCount--;
+                this.updateModalFields();
+                this.updateBarPreview();
+            }
+        },
+
+        updateModalFields: function() {
+            this.updateState();
+            const container = document.getElementById('modal-bar-fields-container');
+            if (!container) return;
+            container.innerHTML = '';
+        
+            for (let i = 1; i <= this.currentBarCount; i++) {
+                // Recuperar valores o defaults
+                const getVal = (name, def) => {
+                    const el = document.querySelector(`#dynamic-fields-container input[name="${name}"]:not(#bar-manager-modal input)`);
+                    return el && el.value ? el.value : def;
+                };
+
+                let currentLabel = getVal(`bar_label_${i}`, `${this.isLineChart ? 'Punto' : 'Barra'} ${i}`);
+                let currentValue = getVal(`bar_value_${i}`, '10.0');
+                
+                // Usar color de la paleta por defecto según el índice
+                const defaultColor = this.COLOR_PALETTE[(i - 1) % this.COLOR_PALETTE.length];
+                let currentColor = getVal(`bar_color_${i}`, defaultColor);
+                
+                let currentTopText = getVal(`bar_top_text_${i}`, '');
+
+                const barDiv = document.createElement('div');
+                barDiv.className = 'group flex items-center gap-4 p-4 bg-white border border-gray-100 rounded-2xl transition-all hover:border-black hover:shadow-md';
+                
+                // --- DOM Creation Logic ---
+                
+                // Helper to update hidden inputs when modal inputs change
+                const syncToHidden = (field, val) => {
+                     const hidden = document.querySelector(`#dynamic-fields-container input[name="bar_${field}_${i}"]:not(#bar-manager-modal input)`);
+                     if (hidden) hidden.value = val;
+                     if (typeof renderLivePreview === 'function') renderLivePreview();
+                };
+
+                const createInputWrapper = (colSpan, labelText, inputType, name, placeholder, value) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = `col-span-${colSpan} flex flex-col gap-1`;
+                    
+                    const label = document.createElement('span');
+                    label.className = 'text-[8px] font-black text-gray-300 uppercase tracking-widest';
+                    label.textContent = labelText;
+                    
+                    const input = document.createElement('input');
+                    input.type = inputType;
+                    input.name = name;
+                    input.placeholder = placeholder;
+                    input.value = value;
+                    input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-bold text-gray-900';
+                    
+                    if (inputType === 'number') {
+                         input.step = '0.1';
+                         input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-black text-gray-900';
+                    }
+                    if (name.includes('top_text')) {
+                        input.className = 'w-full px-0 py-0 text-xs border-none bg-transparent focus:ring-0 placeholder-gray-200 font-medium text-gray-900';
+                    }
+                    
+                    input.oninput = function() {
+                        const fieldType = name.replace(`bar_`, '').replace(`_${i}`, ''); 
+                        const shortField = fieldType; 
+                        syncToHidden(shortField, this.value);
+                    };
+                    
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(input);
+                    return wrapper;
+                };
+
+                // 1. Icono de Color (Solo si no es Line Chart)
+                if (!this.isLineChart) {
+                    const colorDiv = document.createElement('div');
+                    colorDiv.className = 'flex-shrink-0 relative';
+                    
+                    const colorInput = document.createElement('input');
+                    colorInput.type = 'color';
+                    colorInput.name = `bar_color_${i}`;
+                    colorInput.value = currentColor;
+                    colorInput.className = 'w-5 h-5 rounded-full border-none bg-transparent cursor-pointer overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full shadow-sm hover:scale-110 transition-transform';
+                    colorInput.oninput = function() {
+                        syncToHidden('color', this.value);
+                    };
+                    
+                    colorDiv.appendChild(colorInput);
+                    barDiv.appendChild(colorDiv);
+                }
+                
+                // 2. Grid de campos
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'flex-1 grid grid-cols-12 gap-1';
+                
+                const labelWrapper = createInputWrapper(4, 'Etiqueta', 'text', `bar_label_${i}`, 'Nombre', currentLabel);
+                const valueWrapper = createInputWrapper(3, 'Valor', 'number', `bar_value_${i}`, '0.0', currentValue);
+                // Ajustar spans si no hay color o texto
+                if (this.isLineChart) {
+                     labelWrapper.className = `col-span-8 flex flex-col gap-1`;
+                     valueWrapper.className = `col-span-4 flex flex-col gap-1`;
+                }
+                
+                gridDiv.appendChild(labelWrapper);
+                gridDiv.appendChild(valueWrapper);
+                
+                // Ocultar wrapper de Top Text si es lince_chart
+                if (!this.isLineChart) {
+                    const topTextWrapper = createInputWrapper(5, 'Texto Supp', 'text', `bar_top_text_${i}`, 'Ej: 80%', currentTopText);
+                    gridDiv.appendChild(topTextWrapper);
+                }
+                
+                // 3. Delete Button (Condition check)
+                let delDiv = null;
+                if (this.currentBarCount > this.minBars) {
+                    delDiv = document.createElement('div');
+                    delDiv.className = 'flex-shrink-0';
+                    
+                    const delBtn = document.createElement('button');
+                    delBtn.type = 'button';
+                    delBtn.onclick = function() { ManimBarManager.removeBar(i); };                    
+                    delBtn.className = 'w-8 h-8 flex items-center justify-center text-gray-200 hover:text-black hover:bg-gray-100 transition-all rounded-full';
+                    delBtn.title = 'Eliminar';
+                    delBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>';
+                    
+                    delDiv = delBtn;
+                }
+
+                barDiv.appendChild(gridDiv);
+                if (delDiv) barDiv.appendChild(delDiv);
+                
+                container.appendChild(barDiv);
+            }
+        
+            // Botón añadir
+            const addBarDiv = document.createElement('div');
+            addBarDiv.className = 'flex items-center justify-center gap-2 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-xl hover:bg-gray-100 hover:border-gray-400 cursor-pointer transition-all group';
+            addBarDiv.onclick = () => this.addBar();
+            addBarDiv.innerHTML = `
+                <div class="w-5 h-5 flex items-center justify-center bg-white rounded-full border border-gray-200 text-gray-400 group-hover:text-black group-hover:border-black transition-all">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                </div>
+                <span class="text-[10px] font-bold text-gray-400 group-hover:text-black uppercase tracking-widest transition-all">Añadir ${this.isLineChart ? 'nuevo punto' : 'nueva barra'}</span>
+            `;
+            container.appendChild(addBarDiv);
+        },
+        
+        openModal: function() {
+            // Actualizar flag
+            this.updateState();
+            
+            this.updateModalFields();
+            const modal = document.getElementById('bar-manager-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        },
+
+        closeModal: function() {
+            // Sincronizar modal -> inputs ocultos
+            const container = document.getElementById('dynamic-fields-container');
+            if (container) {
+                for (let i = 1; i <= this.currentBarCount; i++) {
+                    const getModalVal = (name) => {
+                        const el = document.querySelector(`#bar-manager-modal input[name="${name}"]`);
+                        return el ? el.value : null;
+                    };
+                    const setHiddenVal = (name, val) => {
+                        if (val === null) return;
+                        let input = container.querySelector(`input[name="${name}"]:not(#bar-manager-modal input)`);
+                        if (!input) {
+                            input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = name;
+                            container.appendChild(input);
+                        }
+                        input.value = val;
+                    };
+
+                    setHiddenVal(`bar_label_${i}`, getModalVal(`bar_label_${i}`));
+                    setHiddenVal(`bar_value_${i}`, getModalVal(`bar_value_${i}`));
+                    setHiddenVal(`bar_color_${i}`, getModalVal(`bar_color_${i}`));
+                    setHiddenVal(`bar_top_text_${i}`, getModalVal(`bar_top_text_${i}`));
+                }
+
+                // Limpiar sobrantes
+                for (let i = this.currentBarCount + 1; i <= this.maxBars; i++) {
+                    ['label', 'value', 'color', 'top_text'].forEach(f => {
+                         const el = container.querySelector(`input[name="bar_${f}_${i}"]:not(#bar-manager-modal input)`);
+                         if (el) el.remove();
+                    });
+                }
+            }
+
+            const modal = document.getElementById('bar-manager-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+            this.updateBarPreview(); // Actualizar preview lateral
+        }
+    };
+}
+
+// Alias globales para onclicks en el HTML (estos deben existir globalmente)
+window.updateBarPreview = () => window.ManimBarManager.updateBarPreview();
+window.openBarManagerModal = () => window.ManimBarManager.openModal();
+window.closeBarManagerModal = () => window.ManimBarManager.closeModal();
+
+// Inicialización automática
+(function() {
+    function init() {
+        // Solo para bar charts
+        const manimTypeInput = document.getElementById('manim-animation-type-input');
+        const manimType = manimTypeInput ? manimTypeInput.value : '{{ manim_animation_type|default:"quote" }}';
+        
+        if (manimType === 'bar_chart' || manimType === 'modern_bar_chart') {
+            if (window.ManimBarManager) window.ManimBarManager.updateBarPreview();
+            
+            if (typeof forceUpdatePromptField === 'function') forceUpdatePromptField();
+        }
+    }
+
+    // Ejecutar inmediatamente
+    init();
+
+    // Re-ejecutar en eventos HTMX
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.target.id === 'dynamic-fields-container' || evt.detail.target.id === 'dynamic-fields-container') {
+             setTimeout(init, 50);
+        }
+    });
+})();
+</script>
+
+{# Campos de configuración para Manim (Author, display_time) #}
+<div class="space-y-4 mb-6">
+    {# Autor (solo para quote) #}
+    {% if supports.author and manim_animation_type == 'quote' %}
+    <div class="mb-4">
+        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">AUTOR <span class="text-gray-400 font-normal">(Opcional)</span></label>
+        <input type="text" name="author"
+               placeholder="Nombre del autor (opcional)"
+               class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+    </div>
+    {% endif %}
+
+    {# Tiempo en pantalla (solo para quote) #}
+    {% if supports.display_time and manim_animation_type == 'quote' %}
+    <div class="mb-4">
+        <label class="block text-xs font-semibold text-gray-700 uppercase mb-2">TIEMPO EN PANTALLA</label>
+        <div class="flex items-center gap-2">
+            <input type="number" name="display_time" min="1" max="60" step="0.5"
+                   placeholder="Auto"
+                   class="flex-1 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-black focus:border-black transition-all">
+            <span class="text-sm text-gray-500">segundos</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
 
 
 {# Campos específicos del modelo (avatares, voces, etc.) #}
@@ -620,15 +1608,171 @@ function updateImagePreview(input, previewId) {
             toggleReferenceFields(modelId);
         }
     }
-}
 
-// Inicializar estado de campos al cargar
-document.addEventListener('DOMContentLoaded', function() {
+// Renderizar preview de cita en tiempo real
+window.renderQuotePreview = function() {
+    console.log('[DEBUG-QUOTE] Ejecutando renderQuotePreview');
+    const previewContainer = document.getElementById('live-quote-preview');
+    if (!previewContainer) {
+        console.log('[DEBUG-QUOTE] No se encontró #live-quote-preview');
+        return;
+    }
+
+    // Obtener el texto de la cita desde el prompt principal
+    // Intentar obtener de Alpine data si es posible, o del DOM
+    let quoteText = '';
+    const promptTextarea = document.querySelector('textarea[name="prompt"]');
+    
+    if (promptTextarea) {
+        quoteText = promptTextarea.value.trim();
+        console.log('[DEBUG-QUOTE] Texto encontrado en textarea:', quoteText.substring(0, 20) + '...');
+    } else {
+        console.log('[DEBUG-QUOTE] No se encontró textarea[name="prompt"]');
+    }
+    
+    // Obtener colores
+    const containerColorInput = document.getElementById('container-color-picker');
+    const textColorInput = document.getElementById('text-color-picker');
+    const containerColor = containerColorInput ? containerColorInput.value : '#0066CC';
+    const textColor = textColorInput ? textColorInput.value : '#FFFFFF';
+    
+    console.log('[DEBUG-QUOTE] Colores:', { containerColor, textColor });
+
+    // Si no hay texto, mostrar placeholder
+    if (!quoteText) {
+        previewContainer.style.background = `linear-gradient(135deg, ${containerColor} 0%, ${adjustColor(containerColor, -30)} 100%)`;
+        previewContainer.innerHTML = `
+            <div class="text-center text-white space-y-4">
+                <svg class="w-12 h-12 mx-auto opacity-30" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/>
+                </svg>
+                <p class="text-lg font-medium opacity-60">Escribe tu cita para ver la preview</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Truncar texto si es muy largo
+    const maxLength = 200;
+    const displayText = quoteText.length > maxLength ? quoteText.substring(0, maxLength) + '...' : quoteText;
+    
+    // Helper para ajuste de color
+    function adjustColor(color, amount) {
+        const num = parseInt(color.replace("#",""), 16);
+        const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+        const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
+        const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
+        return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+    }
+
+    // Helper para wrap text
+    function wrapText(text, maxCharsPerLine) {
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = '';
+        for (const word of words) {
+            if ((currentLine + word).length <= maxCharsPerLine) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (currentLine) lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+        return lines.slice(0, 6);
+    }
+
+    // Crear SVG con la cita
+    const svg = `
+        <svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+            <!-- Fondo con gradiente -->
+            <defs>
+                <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:${containerColor};stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:${adjustColor(containerColor, -30)};stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            <rect width="1920" height="1080" fill="url(#bgGradient)"/>
+            
+            <!-- Icono de comillas -->
+            <g transform="translate(960, 300)" opacity="0.15">
+                <path d="M-80,-40 Q-100,-60 -100,-80 Q-100,-120 -60,-120 Q-20,-120 -20,-80 Q-20,-60 -40,-40 L-60,-20 L-40,-20 L-40,20 L-100,20 L-100,-20 Z" 
+                      fill="${textColor}"/>
+                <path d="M20,-40 Q0,-60 0,-80 Q0,-120 40,-120 Q80,-120 80,-80 Q80,-60 60,-40 L40,-20 L60,-20 L60,20 L0,20 L0,-20 Z" 
+                      fill="${textColor}"/>
+            </g>
+            
+            <!-- Texto de la cita -->
+            <text x="960" y="540" 
+                  font-family="Arial, sans-serif" 
+                  font-size="48" 
+                  font-weight="500"
+                  fill="${textColor}" 
+                  text-anchor="middle"
+                  dominant-baseline="middle">
+                ${wrapText(displayText, 40).map((line, i) => 
+                    `<tspan x="960" dy="${i === 0 ? 0 : 60}">${escapeHtml(line)}</tspan>`
+                ).join('')}
+            </text>
+        </svg>
+    `;
+    
+    previewContainer.style.background = 'transparent';
+    previewContainer.innerHTML = svg;
+};
+
+// Inicialización robusta
+(function() {
+    console.log('[DEBUG-QUOTE] Inicializando script de campos dinámicos');
+    
+    // Función de setup centralizada
+    function setupQuotePreview() {
+        if (!document.getElementById('live-quote-preview')) return;
+        
+        console.log('[DEBUG-QUOTE] Configurando listeners');
+        // Render inicial
+        window.renderQuotePreview();
+        
+        const promptTextarea = document.querySelector('textarea[name="prompt"]');
+        if (promptTextarea) {
+            // Eliminar y añadir para evitar duplicados
+            promptTextarea.removeEventListener('input', window.renderQuotePreview);
+            promptTextarea.addEventListener('input', window.renderQuotePreview);
+            console.log('[DEBUG-QUOTE] Listener añadido a textarea prompt');
+        } else {
+            console.error('[DEBUG-QUOTE] No se pudo añadir listener: textarea prompt no encontrado');
+        }
+        
+        // Listeners colores
+        ['container-color-picker', 'text-color-picker'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                // Usar onchange nativo + listener evento
+                el.removeEventListener('input', window.renderQuotePreview);
+                el.addEventListener('input', window.renderQuotePreview);
+                el.removeEventListener('change', window.renderQuotePreview);
+                el.addEventListener('change', window.renderQuotePreview);
+            }
+        });
+    }
+
+    // Ejecutar inmediatamente
+    setupQuotePreview();
+    
+    // Ejecutar cuando HTMX termine el swap (por si acaso)
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Solo si el swap afectó a nuestra área
+        if (evt.target.id === 'dynamic-fields-container' || evt.detail.target.id === 'dynamic-fields-container') {
+             setTimeout(setupQuotePreview, 50);
+        }
+    });
+
+    // Toggle reference fields logic (código original)
     const modelId = '{{ model_id }}';
     if (modelId) {
         toggleReferenceFields(modelId);
     }
-});
+})();
 </script>
 
 {# Costo Estimado - se actualiza dentro del botón Generar #}

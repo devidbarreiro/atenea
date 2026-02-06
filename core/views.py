@@ -53,6 +53,7 @@ from django.utils.crypto import get_random_string
 from django.conf import settings
 import logging
 import re
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -1401,6 +1402,8 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
             config = self._build_veo_config(request, project, video_service)
         elif video_type == 'sora':
             config = self._build_sora_config(request, project, video_service)
+        elif video_type == 'manim_quote':
+            config = self._build_manim_config(request)
         
         return config
     
@@ -1535,6 +1538,94 @@ class VideoCreateView(SidebarProjectsMixin, BreadcrumbMixin, ServiceMixin, FormV
             config['input_reference_mime_type'] = upload_result['mime_type']
         
         return config
+
+    def _build_manim_config(self, request):
+        """Configuración para Manim Animations (Citas, Gráficos, etc.)"""
+        # El tipo exacto de animación (quote, bar_chart, etc.)
+        animation_type = request.POST.get('manim_animation_type', 'quote')
+        
+        config = {
+            'animation_type': animation_type,
+            'model_id': request.POST.get('model_id', 'manim-quote'),
+            'quality': request.POST.get('quality', 'k'),
+            'font_family': request.POST.get('font_family', 'normal'),
+            'text_color': request.POST.get('text_color_text', request.POST.get('text_color', '#FFFFFF')),
+            'container_color': request.POST.get('container_color_text', request.POST.get('container_color', '#0066CC')),
+        }
+        
+        if animation_type == 'quote':
+            display_time = request.POST.get('display_time')
+            try:
+                display_time_val = float(display_time) if display_time else None
+            except (ValueError, TypeError):
+                display_time_val = None
+            config.update({
+                'author': request.POST.get('author', ''),
+                'display_time': display_time_val,
+            })
+        elif animation_type in ['bar_chart', 'modern_bar_chart', 'line_chart']:
+            try:
+                bar_width = float(request.POST.get('bar_width', 0.8))
+            except (ValueError, TypeError):
+                bar_width = 0.8
+            
+            # Estructurar datos para el gráfico de barras (Clásico o Moderno)
+            try:
+                num_bars = int(request.POST.get('num_bars', 0))
+            except (ValueError, TypeError):
+                num_bars = 0
+                
+            labels = []
+            values = []
+            bar_colors = []
+            top_texts = []
+            
+            for i in range(1, num_bars + 1):
+                label = request.POST.get(f'bar_label_{i}', f'Item {i}')
+                value_str = request.POST.get(f'bar_value_{i}', '0')
+                try:
+                    value = float(value_str) if value_str.strip() else 0.0
+                except (ValueError, TypeError):
+                    value = 0.0
+                    
+                color = request.POST.get(f'bar_color_{i}', '#0066CC')
+                top_text = request.POST.get(f'bar_top_text_{i}', '')
+                
+                labels.append(label)
+                values.append(value)
+                bar_colors.append(color)
+                top_texts.append(top_text)
+            
+            config.update({
+                'title': request.POST.get('chart_title', 'Gráfico de Barras'),
+                'x_axis_label': request.POST.get('x_axis_label', 'Categorías'),
+                'y_axis_label': request.POST.get('y_axis_label', 'Valores'),
+                'bar_width': bar_width,
+                'show_labels': request.POST.get('show_labels') == 'on',
+                'labels': labels,
+                'values': values,
+                'bar_colors': bar_colors,
+                'top_texts': top_texts,
+            })
+
+            if animation_type == 'line_chart':
+                if bar_colors:
+                    config['line_color'] = bar_colors[0]
+                
+                # Configuración extra para Line Chart
+                try:
+                    point_radius = float(request.POST.get('point_radius', 0.1))
+                    line_width = float(request.POST.get('line_width', 4))
+                except (ValueError, TypeError):
+                    point_radius = 0.1
+                    line_width = 4
+                
+                config['point_radius'] = point_radius
+                config['line_width'] = line_width
+            
+        return config
+
+
 
 
 class VideoCreatePartialView(ServiceMixin, FormView):
@@ -1700,14 +1791,64 @@ class VideoCreatePartialView(ServiceMixin, FormView):
         return config
     
     def _build_manim_quote_config(self, request):
-        """Configuración para Manim Quote"""
+        """Configuración para Manim Quote y Bar Chart"""
+        # Determinar el tipo de animación
+        animation_type = request.POST.get('manim_animation_type', 'quote')
+        
         config = {
-            'author': request.POST.get('author'),
+            'animation_type': animation_type,
+            'model_id': request.POST.get('model_id', 'manim-quote'),
             'quality': request.POST.get('quality', 'k'),
-            'container_color': request.POST.get('container_color') or request.POST.get('container_color_text'),
-            'text_color': request.POST.get('text_color') or request.POST.get('text_color_text'),
             'font_family': request.POST.get('font_family', 'normal'),
+            'text_color': request.POST.get('text_color_text', request.POST.get('text_color', '#FFFFFF')),
+            'container_color': request.POST.get('container_color_text', request.POST.get('container_color', '#0066CC')),
         }
+        
+        if animation_type in ['bar_chart', 'modern_bar_chart', 'line_chart']:
+            # Estructurar datos para el gráfico de barras (Clásico o Moderno)
+            try:
+                num_bars = int(request.POST.get('num_bars', 0))
+            except (ValueError, TypeError):
+                num_bars = 0
+            
+            labels = []
+            values = []
+            bar_colors = []
+            top_texts = []
+            
+            for i in range(1, num_bars + 1):
+                label = request.POST.get(f'bar_label_{i}', f'Item {i}')
+                value_str = request.POST.get(f'bar_value_{i}', '0')
+                try:
+                    value = float(value_str) if value_str.strip() else 0.0
+                except (ValueError, TypeError):
+                    value = 0.0
+                    
+                color = request.POST.get(f'bar_color_{i}', '#0066CC')
+                top_text = request.POST.get(f'bar_top_text_{i}', '')
+                
+                labels.append(label)
+                values.append(value)
+                bar_colors.append(color)
+                top_texts.append(top_text)
+            
+            config.update({
+                'title': request.POST.get('chart_title', 'Gráfico de Barras'),
+                'x_axis_label': request.POST.get('x_axis_label', 'Categorías'),
+                'y_axis_label': request.POST.get('y_axis_label', 'Valores'),
+                'bar_width': float(request.POST.get('bar_width', 0.8)),
+                'show_labels': request.POST.get('show_labels') == 'on',
+                'labels': labels,
+                'values': values,
+                'bar_colors': bar_colors,
+                'top_texts': top_texts,
+            })
+            
+        else:
+            # Configuración para citas (quote)
+            config.update({
+                'author': request.POST.get('author'),
+            })
         
         # Duración opcional - siempre intentar parsearla si existe
         duration = request.POST.get('duration')
@@ -1718,13 +1859,14 @@ class VideoCreatePartialView(ServiceMixin, FormView):
                 # Si no se puede parsear, dejar que la animación calcule automáticamente
                 pass
         
-        # Tiempo de visualización opcional (segundos que permanece en pantalla)
-        display_time = request.POST.get('display_time')
-        if display_time:
-            try:
-                config['display_time'] = float(display_time)
-            except (ValueError, TypeError):
-                pass
+        # Tiempo de visualización opcional (segundos que permanece en pantalla) - solo para quotes
+        if animation_type == 'quote':
+            display_time = request.POST.get('display_time')
+            if display_time:
+                try:
+                    config['display_time'] = float(display_time)
+                except (ValueError, TypeError):
+                    pass
         
         return config
 
@@ -2464,7 +2606,18 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             return HttpResponse('<p class="text-red-500">Modelo no encontrado</p>')
         
         supports = capabilities.get('supports', {})
+        # Deepcopy to avoid leaking state (modifying shared dict)
+        supports = copy.deepcopy(supports)
         service = capabilities.get('service', '')
+
+        # Tipo de animación para modelos Manim (quote, bar_chart, etc.)
+        manim_animation_type = None
+        if service == 'manim':
+            manim_animation_type = request.GET.get('manim_animation_type') or 'quote'
+            
+            # Ajustar supports según el tipo de animación
+            if manim_animation_type == 'modern_bar_chart':
+                supports['bar_width'] = True
         
         # Generar opciones de duración si solo hay min/max sin options
         if supports.get('duration') and not supports['duration'].get('options') and not supports['duration'].get('fixed'):
@@ -2586,6 +2739,7 @@ class DynamicFormFieldsView(LoginRequiredMixin, View):
             'model_id': model_id,
             'capabilities': capabilities,
             'supports': supports,
+            'manim_animation_type': manim_animation_type,
             'model_specific_fields': model_specific.get('fields', []),
             'model_specific_data': model_specific.get('data', {}),
             'estimated_cost': float(estimated_cost),
@@ -3529,6 +3683,8 @@ class CreateItemAPIView(ServiceMixin, View):
         
         # Para Manim Quote, añadir campos específicos
         if video_type == 'manim_quote':
+            # Tipo de animación de Manim (quote por defecto, o bar_chart, etc.)
+            config['animation_type'] = settings.get('manim_animation_type') or data.get('manim_animation_type') or 'quote'
             config['author'] = settings.get('author') or data.get('author')
             config['quality'] = settings.get('quality') or data.get('quality', 'k')
             config['container_color'] = settings.get('container_color') or data.get('container_color') or '#0066CC'
